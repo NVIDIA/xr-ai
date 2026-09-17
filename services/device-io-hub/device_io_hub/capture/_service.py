@@ -9,6 +9,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -31,6 +32,7 @@ from xr_ai_hub._capture import (
 from ._recorder import SessionRecorder
 from ._return_subscriber import ReturnTrafficSubscriber
 from .config import CaptureConfig
+from .renderer import CaptureRenderer
 
 _RETURN_TRAFFIC_DRAIN_TIMEOUT_S = 30.0
 _RETURN_TRAFFIC_DRAIN_TIMEOUT_REASON = "return_traffic_drain_timeout"
@@ -162,6 +164,16 @@ class CaptureService:
         )
         self._returns = ReturnTrafficSubscriber(config.hub_sub_addr)
         self._recorder = SessionRecorder(config)
+        self._renderer = (
+            CaptureRenderer(
+                gpu_id=config.gpu_id,
+                bitrate=config.bitrate,
+                overlay_seconds=config.overlay_seconds,
+                overlay_lines=config.overlay_lines,
+            )
+            if config.profile == "demo"
+            else None
+        )
         self._video_executor = ThreadPoolExecutor(
             max_workers=config.encoder_workers,
             thread_name_prefix="capture-nvenc",
@@ -169,6 +181,14 @@ class CaptureService:
         self._writer_executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="capture-writer",
+        )
+        self._renderer_executor = (
+            ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="capture-renderer",
+            )
+            if self._renderer is not None
+            else None
         )
         self._frame_workers: dict[tuple[str, str], _FrameWorker] = {}
         self._departed_participants: set[str] = set()
@@ -214,8 +234,8 @@ class CaptureService:
             error = RuntimeError(f"capture task {task.get_name()} stopped unexpectedly")
         self._failure.set_exception(error)
 
-    async def _write(self, function, *args) -> None:
-        await asyncio.get_running_loop().run_in_executor(
+    async def _write(self, function, *args) -> Any:
+        return await asyncio.get_running_loop().run_in_executor(
             self._writer_executor,
             function,
             *args,
@@ -268,12 +288,15 @@ class CaptureService:
             for key, worker in workers:
                 self._frame_workers.pop(key, None)
                 await worker.close()
-            await self._write(
+            bundle = await self._write(
                 self._recorder.end_session,
                 participant_id,
                 pts_us,
                 incomplete_reason,
             )
+            if bundle is not None:
+                await self._render(bundle)
+                await self._write(self._recorder._prune_artifacts)
         finally:
             self._closing_participants.discard(participant_id)
 
@@ -302,6 +325,23 @@ class CaptureService:
             logger.warning("media capture ignored explicit stop in participant session mode")
             return
         await self._finish_session(participant_id, pts_us)
+
+    def _render_bundle(self, bundle: Path) -> None:
+        if self._renderer is None:
+            return
+        try:
+            self._renderer.render(bundle)
+        except Exception as exc:
+            logger.warning("media capture rendering failed path={}: {}", bundle, exc)
+
+    async def _render(self, bundle: Path) -> None:
+        if self._renderer_executor is None:
+            return
+        await asyncio.get_running_loop().run_in_executor(
+            self._renderer_executor,
+            self._render_bundle,
+            bundle,
+        )
 
     async def _on_frame(self, signal: FrameSignal) -> None:
         if (
@@ -430,6 +470,11 @@ class CaptureService:
             return_exceptions=True,
         )
         self._frame_workers.clear()
-        await self._write(self._recorder.close)
+        completed = await self._write(self._recorder.close)
+        for bundle in completed:
+            await self._render(bundle)
+        await self._write(self._recorder._prune_artifacts)
         self._writer_executor.shutdown(wait=True, cancel_futures=False)
+        if self._renderer_executor is not None:
+            self._renderer_executor.shutdown(wait=True, cancel_futures=False)
         self._video_executor.shutdown(wait=True, cancel_futures=False)

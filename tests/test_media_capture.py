@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from device_io_hub.capture import CaptureRenderer
 from device_io_hub.capture import _frontends as frontends_module
 from device_io_hub.capture import _matroska as matroska_module
 from device_io_hub.capture import _mp4 as mp4_module
@@ -247,6 +248,7 @@ def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> 
     config = load_capture_config(path)
 
     assert config.out_dir == str((tmp_path / "artifacts").resolve())
+    assert config.profile == "raw"
     assert config.overlay_seconds == 8
 
 
@@ -401,9 +403,22 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         def EndEncode(self):
             return []
 
+    class FakeDecoder:
+        def Decode(self, packet):
+            if not packet.bsl:
+                return []
+            return [np.vstack((
+                np.full((32, 64), 96, dtype=np.uint8),
+                np.full((16, 64), 128, dtype=np.uint8),
+            ))]
+
     fake_module = types.SimpleNamespace(
         CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+        CreateDecoder=lambda **_kwargs: FakeDecoder(),
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        PacketData=type("PacketData", (), {}),
+        VideoPacketFlag=types.SimpleNamespace(ENDOFSTREAM=1),
+        cudaVideoCodec=types.SimpleNamespace(H264=4),
     )
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
 
@@ -450,13 +465,6 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         DataMessage("alice", CAPTURE_TTS_TOPIC, 1_040_000, b"This is a door."),
     )
     recorder.record_video(_frame(pts_us=1_050_000))
-    session_state = recorder._sessions["alice"]
-    assert tuple(session_state.data_feed)[:2] == (
-        "AGENT agent.response: Hello from the agent",
-        "DEVICE sensor.state: Door open",
-    )
-    assert session_state.data_feed[-1] == "AGENT agent.large: " + "x" * 1_024
-    assert session_state.caption == "AGENT: This is a door."
     packets = recorder._sessions["alice"].video["camera"]._packets
     assert [packet.pts_us for packet in packets] == [1_000_000, 1_050_000]
     recorder.end_session("alice", 1_100_000)
@@ -465,18 +473,22 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert stat.S_IMODE(session.stat().st_mode) & 0o077 == 0
     assert not list(session.rglob("*.pending"))
     manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == 2
-    assert manifest["profile"] == "demo"
+    assert manifest["version"] == 3
+    assert manifest["profile"] == "raw"
+    assert manifest["capture_profile"] == "raw"
     assert manifest["session_mode"] == "participant"
     assert manifest["participant_id"] == "alice"
     assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
     assert manifest["video_tracks"]["camera"][0]["num_frames"] == 2
     segment = manifest["video_tracks"]["camera"][0]
-    assert segment["path"].endswith(".mp4")
-    assert segment["audio_embedded"] is True
-    muxed = (session / segment["path"]).read_bytes()
-    assert muxed[4:8] == b"ftyp"
-    assert muxed.index(b"moov") < muxed.index(b"mdat")
+    assert segment["path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    packet_rows = [
+        json.loads(line)
+        for line in (session / segment["packet_index"]).read_text().splitlines()
+    ]
+    assert [row["pts_us"] for row in packet_rows] == [1_000_000, 1_050_000]
+    assert {row["track_id"] for row in packet_rows} == {"camera"}
     assert (session / segment["raw_path"]).read_bytes().startswith(b"\x00\x00\x00\x01")
     assert (session / "audio" / "device.f32le").read_bytes() == _audio("device").data
     assert (session / "audio" / "agent.f32le").read_bytes() == _audio("agent").data
@@ -499,19 +511,29 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         and event.get("text") == "This is a door."
         for event in events
     )
-    assert encoded_inputs
+    assert len(encoded_inputs) == 2
     assert encoded_inputs[0].shape == (48, 64)
+    assert manifest["renderings"] == {}
+
+    output = CaptureRenderer().render(session)
+    manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
+    rendering = manifest["renderings"]["captioned_mp4"]
+    assert output == session / rendering["path"]
+    assert rendering["source"] == "video/session.264"
+    muxed = output.read_bytes()
+    assert muxed[4:8] == b"ftyp"
+    assert muxed.index(b"moov") < muxed.index(b"mdat")
     assert any(
         frame.shape[0] > 48 and np.any(frame[_frame().height:] == 235)
         for frame in encoded_inputs
     )
     assert finalized_video_inputs == ["session.timeline.mkv.pending"]
     assert finalized_video_pts == [1_000_000, 1_050_000]
-    assert not (session / "video" / "projection.264").exists()
+    assert not (session / "video" / "rendering.264").exists()
     assert not (session / "video" / "session.timeline.mkv.pending").exists()
 
 
-def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
+def test_raw_capture_does_not_attempt_mp4_finalization(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -615,7 +637,8 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     session = next(path.parent for path in tmp_path.rglob("manifest.json"))
     manifest = json.loads((session / "manifest.json").read_text())
     segment = manifest["video_tracks"]["camera"][0]
-    assert manifest["version"] == 2
+    assert manifest["version"] == 3
+    assert manifest["capture_profile"] == "raw"
     assert manifest["profile"] == "raw"
     assert manifest["session_mode"] == "explicit"
     assert manifest["trigger"] == "agent"
@@ -630,7 +653,7 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     assert frame["pts_us"] == 1_000_000
     assert frame["relative_us"] == 0
     assert frame["source_width"] == frame["raw_width"] == 64
-    assert frame["projection_width"] == 64
+    assert "projection_width" not in frame
     transcript = json.loads((session / manifest["transcript"]).read_text())
     assert transcript["relative_us"] == 10_000
     assert transcript["text"] == "Attach the wheel"
@@ -899,8 +922,8 @@ async def test_missing_return_departure_finalizes_incomplete_bundle(
         max_total_bytes=0,
     ))
 
-    async def write_inline(function, *args) -> None:
-        function(*args)
+    async def write_inline(function, *args):
+        return function(*args)
 
     service._write = write_inline  # type: ignore[method-assign]
     try:
@@ -973,16 +996,14 @@ def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
     assert videos[0]["num_frames"] == 3
     assert videos[0]["source_track_ids"] == ["camera", "replacement-camera"]
     assert videos[0]["encoded_dimensions"] == [
-        {"width": 224, "height": 112},
-        {"width": 288, "height": 144},
+        {"width": 64, "height": 32},
+        {"width": 128, "height": 64},
     ]
     assert videos[0]["source_dimensions"] == [
         {"width": 64, "height": 32},
         {"width": 128, "height": 64},
     ]
-    assert [path.name for path in (session / "video").glob("*.mp4")] == [
-        "session.mp4"
-    ]
+    assert not list((session / "video").glob("*.mp4"))
     assert [path.name for path in (session / "video").glob("*.264")] == [
         "session.264"
     ]

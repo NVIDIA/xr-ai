@@ -19,7 +19,7 @@ class CaptureConfig:
     hub_sub_addr: str = "ipc:///tmp/xr_hub_pub"
     hub_push_addr: str = "ipc:///tmp/xr_hub_in"
     out_dir: str = _DEFAULT_OUT_DIR
-    profile: str = "demo"
+    profile: str = "raw"
     session_mode: str = "participant"
     sample_fps: float = 30.0
     bitrate: int = 6_000_000

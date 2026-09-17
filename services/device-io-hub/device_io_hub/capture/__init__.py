@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private media-hub capture service implementation."""
+"""Media-hub capture and derived rendering."""
 
-__all__: list[str] = []
+from .renderer import CaptureRenderer
+
+__all__ = ["CaptureRenderer"]

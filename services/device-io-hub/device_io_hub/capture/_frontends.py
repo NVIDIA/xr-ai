@@ -45,20 +45,6 @@ class _CaptureFrontend(Protocol):
         data_feed: tuple[str, ...],
     ) -> _RenderedFrame: ...
 
-    def finalize_video(
-        self,
-        *,
-        session_root: Path,
-        raw_path: Path,
-        wave_path: Path,
-        audio_start_frame: int,
-        audio_end_frame: int,
-        fps: float,
-        packets: Sequence[VideoPacket],
-        width: int,
-        height: int,
-    ) -> _VideoArtifact: ...
-
 
 class _DemoCaptureFrontend:
     """Render captions and produce the human-viewable session MP4."""
@@ -155,43 +141,5 @@ class _RawCaptureFrontend:
             width=frame.width,
             height=frame.height,
         )
-
-    def finalize_video(
-        self,
-        *,
-        session_root: Path,
-        raw_path: Path,
-        wave_path: Path,
-        audio_start_frame: int,
-        audio_end_frame: int,
-        fps: float,
-        packets: Sequence[VideoPacket],
-        width: int,
-        height: int,
-    ) -> _VideoArtifact:
-        del (
-            session_root,
-            wave_path,
-            audio_start_frame,
-            audio_end_frame,
-            fps,
-            packets,
-            width,
-            height,
-        )
-        return _VideoArtifact(
-            path="video/session.264",
-            size_bytes=raw_path.stat().st_size,
-            audio_embedded=False,
-        )
-
-
-def _make_frontend(*, profile: str, overlay_lines: int) -> _CaptureFrontend:
-    if profile == "demo":
-        return _DemoCaptureFrontend(overlay_lines=overlay_lines)
-    if profile == "raw":
-        return _RawCaptureFrontend()
-    raise ValueError(f"unsupported capture profile: {profile!r}")
-
 
 __all__: list[str] = []

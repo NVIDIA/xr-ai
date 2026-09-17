@@ -194,23 +194,32 @@ uv run --project services/device-io-hub device_io_capture \
   --config services/device-io-hub/media_capture.yaml
 ```
 
-Capture is split into a shared timestamped session writer and a video
-projection. The writer owns participant/session boundaries, NVENC encoding,
-raw float32 audio, the aligned stereo WAV, transcripts, observations, event
-records, retention, and the manifest. The configured `profile` selects one of
-two private projections without duplicating that infrastructure:
+Capture is split into a raw timestamped session writer and a derived capture
+renderer. The writer owns participant/session boundaries, NVENC encoding, raw
+float32 audio, the aligned stereo WAV, transcripts, observations, event
+records, retention, and the manifest. Raw capture is the default. The
+configured `profile` controls only whether rendering follows capture:
 
-- `demo` adds the caption and data panels and produces a fast-start MP4 with
-  H.264 video and 48 kHz stereo AAC-LC audio.
-- `raw` preserves the camera pixels in H.264 and leaves video and audio as
-  separate indexed artifacts for later workflow or SOP processing. It does
-  not require FFmpeg.
+- `raw` writes the canonical camera H.264, audio, transcript, event, and timing
+  artifacts and performs no presentation rendering. It does not require
+  FFmpeg.
+- `demo` writes the same raw bundle, then invokes `CaptureRenderer` after the
+  session closes. The renderer adds caption and data panels and produces a
+  fast-start MP4 with H.264 video and 48 kHz stereo AAC-LC audio.
 
 The canonical `video/session.264` is always encoded from unmodified camera
-pixels. The demo projection performs a second bounded NVENC encode for its
-burned-in panels, uses that temporary stream for the MP4, and removes it after
-finalization. The retained raw stream is therefore suitable for later machine
-processing even when the same bundle also contains a presentation-ready demo.
+pixels. `video/packets.jsonl` records each encoded packet's byte range, source
+track, key-frame state, and exact timestamp. The renderer consumes those raw
+artifacts and the transcript/event timeline, performs a separate NVDEC/NVENC
+pass for its burned-in panels, and records the derived result under
+`renderings.captioned_mp4` in the manifest. It never replaces the raw media.
+
+Render or re-render any completed bundle independently of the capture process:
+
+```
+uv run --project services/device-io-hub device_io_capture_render \
+  ~/.local/share/xr-ai/captures/<session-directory>
+```
 
 `session_mode: participant` records from participant join to leave.
 `session_mode: explicit` creates bundles only between reserved agent start and
@@ -231,6 +240,8 @@ tools.
 Every bundle uses one Unix-microsecond clock and records both absolute and
 session-relative timing. `video/frames.jsonl` indexes source sequence,
 timestamp, track, pixel format, and source/encoded dimensions.
+`video/packets.jsonl` retains the encoded-packet byte ranges and timing needed
+for deterministic derived video.
 `audio/chunks.jsonl` indexes direction, sample format, byte range, duration,
 and timestamps. `transcript.jsonl` contains final STT and spoken TTS text, and
 `observations.jsonl` accepts derived records linked to an exact frame
@@ -239,7 +250,7 @@ timestamp. `events.jsonl` remains the complete directional data timeline, and
 `incomplete_reason` fields distinguish a normally drained session from a
 bounded recovery when the return-traffic departure marker is lost.
 
-In the demo profile, final STT and the text actually sent to TTS appear as the
+In a captioned rendering, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
 the paced media queue, so its caption is timestamped from the first
 corresponding audio chunk rather
@@ -255,19 +266,20 @@ Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
 dedicated threads in the capture process. Recorder overload therefore drops
 capture frames without delaying the hub's publish path. PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
-sets and no B-frames. At session finalization, each stream's chunks are joined
-in timestamp order. For the demo projection, FFmpeg preserves the temporary
-composed H.264 stream, converts the aligned PCM mix to AAC-LC with an explicit
+sets and no B-frames. At session finalization, each raw stream's chunks are
+joined in timestamp order. When requested, the renderer reconstructs captions
+from the bundle timeline. FFmpeg preserves the temporary composed H.264 stream,
+converts the aligned PCM mix to AAC-LC with an explicit
 48 kHz stereo layout, preserves recorded frame timing across sparse or dropped
 frames, resets trimmed audio to the same zero-based timeline, and writes one
 `.mp4` with fast-start metadata. Resolution or
 LiveKit track changes therefore do not create additional playable outputs.
 This does not affect the live path.
 
-The demo profile requires an `ffmpeg` executable on `PATH` with the native AAC
-encoder. It validates that requirement at startup so a session cannot silently
-fall back to an MP4-incompatible PCM or MP3 track. The raw profile has no MP4
-projection and therefore no FFmpeg requirement.
+`CaptureRenderer` and the demo profile require an `ffmpeg` executable on `PATH`
+with the native AAC encoder. They validate that requirement before rendering so
+a session cannot silently fall back to an MP4-incompatible PCM or MP3 track.
+The raw profile has no MP4 projection and therefore no FFmpeg requirement.
 
 ## Per-participant return path
 

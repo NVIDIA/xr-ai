@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import shutil
 import struct
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,25 +19,12 @@ import numpy as np
 from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
-from ._frontends import _CaptureFrontend, _make_frontend, _RawCaptureFrontend
-from ._matroska import VideoPacket
+from ._frontends import _RawCaptureFrontend
+from ._video import _H264TrackWriter, _join_sources, _safe_name, _video_sources
 from .config import CaptureConfig
 
-_MAX_SAFE_NAME = 96
-
-
-_MAX_DATA_FEED_TEXT = 1_024
 _CAPTURE_MARKER_NAME = ".xr-ai-media-capture"
 _CAPTURE_MARKER_CONTENT = "xr-ai media capture session v1\n"
-
-
-def _safe_name(value: str) -> str:
-    cleaned = "".join(char if char.isalnum() or char in "-_." else "_" for char in value)
-    if cleaned == value and 0 < len(cleaned) <= _MAX_SAFE_NAME:
-        return cleaned
-    digest = hashlib.sha256(value.encode()).hexdigest()[:8]
-    prefix = (cleaned or "unnamed")[:_MAX_SAFE_NAME - len(digest) - 1]
-    return f"{prefix}_{digest}"
 
 
 def _target_parts(target: str | None) -> tuple[str, ...]:
@@ -59,17 +44,6 @@ def _target_parts(target: str | None) -> tuple[str, ...]:
 def _write_json_line(stream, value: dict) -> None:
     stream.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n")
     stream.flush()
-
-
-def _encoded_packets(packets: object) -> list[dict]:
-    if not isinstance(packets, list):
-        raise TypeError(f"unexpected PyNvVideoCodec packet collection: {type(packets).__name__}")
-    output: list[dict] = []
-    for packet in packets:
-        if not isinstance(packet, dict) or not isinstance(packet.get("data"), bytes):
-            raise TypeError(f"unexpected PyNvVideoCodec encoded packet: {packet!r}")
-        output.append(packet)
-    return output
 
 
 class _StereoWaveWriter:
@@ -181,150 +155,6 @@ class _AudioTimeline:
     next_frame: int
 
 
-class _H264TrackWriter:
-    """One NVENC stream per participant video track."""
-
-    def __init__(
-        self,
-        *,
-        nvc: object,
-        root: Path,
-        track_id: str,
-        stream_name: str,
-        config: CaptureConfig,
-        frontend: _CaptureFrontend,
-    ) -> None:
-        self._nvc = nvc
-        self._root = root
-        self._track_id = track_id
-        self._stream_name = stream_name
-        self._config = config
-        self._frontend = frontend
-        self._encoder = None
-        self._stream = None
-        self._width = 0
-        self._height = 0
-        self._last_pts_us = 0
-        self._segment_index = 0
-        self._active: dict | None = None
-        self._packets: list[VideoPacket] = []
-        self._submitted_pts: deque[int] = deque()
-        self.segments: list[dict] = []
-
-    def write(
-        self,
-        frame: FrameData,
-        caption: str,
-        data_feed: tuple[str, ...],
-    ) -> tuple[int, int, str] | None:
-        min_interval_us = round(1_000_000 / self._config.sample_fps)
-        if self._last_pts_us and frame.pts_us - self._last_pts_us < min_interval_us:
-            return None
-        rendered = self._frontend.render_frame(
-            frame,
-            caption=caption,
-            data_feed=data_feed,
-        )
-        width = rendered.width
-        height = rendered.height
-        if self._encoder is None or (width, height) != (self._width, self._height):
-            self._start_segment(width, height, frame.pts_us)
-        picture_params = self._nvc.NV_ENC_PIC_PARAMS()
-        picture_params.inputTimeStamp = frame.pts_us
-        self._submitted_pts.append(frame.pts_us)
-        for packet in _encoded_packets(self._encoder.Encode(rendered.pixels, picture_params)):
-            self._write_packet(packet)
-        self._last_pts_us = frame.pts_us
-        self._active["end_us"] = frame.pts_us
-        self._active["num_frames"] += 1
-        return width, height, str(self._active["path"])
-
-    def _start_segment(self, width: int, height: int, pts_us: int) -> None:
-        self._finish_segment()
-        self._width = width
-        self._height = height
-        name = f"{self._stream_name}_{_safe_name(self._track_id)}_{self._segment_index:03d}.264"
-        self._segment_index += 1
-        self._stream = (self._root / name).open("wb")
-        try:
-            self._encoder = self._nvc.CreateEncoder(
-                width,
-                height,
-                "NV12",
-                True,
-                gpu_id=self._config.gpu_id,
-                codec="h264",
-                preset="P4",
-                tuning_info="high_quality",
-                rc="vbr",
-                fps=int(round(self._config.sample_fps)),
-                bitrate=self._config.bitrate,
-                maxbitrate=self._config.bitrate,
-                bf=0,
-                repeat_sps_pps=1,
-            )
-        except Exception:
-            self._stream.close()
-            (self._root / name).unlink(missing_ok=True)
-            self._stream = None
-            raise
-        self._active = {
-            "path": f"video/{name}",
-            "start_us": pts_us,
-            "end_us": pts_us,
-            "num_frames": 0,
-            "width": width,
-            "height": height,
-            "fps": self._config.sample_fps,
-        }
-        self._packets = []
-        self._submitted_pts.clear()
-
-    def _write_packet(self, packet: dict) -> None:
-        payload = packet["data"]
-        offset = self._stream.tell()
-        self._stream.write(payload)
-        picture_type = int(packet.get("picture_type", 0))
-        if not self._submitted_pts:
-            raise ValueError("NVENC emitted more packets than submitted frames")
-        self._packets.append(
-            VideoPacket(
-                offset=offset,
-                size=len(payload),
-                pts_us=self._submitted_pts.popleft(),
-                key_frame=picture_type in (2, 3),
-            )
-        )
-
-    def _finish_segment(self) -> None:
-        if self._encoder is None:
-            return
-        try:
-            for packet in _encoded_packets(self._encoder.EndEncode()):
-                self._write_packet(packet)
-            if self._submitted_pts:
-                raise ValueError(
-                    f"NVENC omitted {len(self._submitted_pts)} submitted frames"
-                )
-        except Exception as exc:
-            logger.warning("media capture NVENC flush failed track={!r}: {}", self._track_id, exc)
-        finally:
-            self._stream.close()
-            self._encoder = None
-            self._stream = None
-        if self._active is not None:
-            path = self._root.parent / self._active["path"]
-            self._active["size_bytes"] = path.stat().st_size
-            self._active["_packets"] = self._packets
-            self.segments.append(self._active)
-            self._active = None
-            self._packets = []
-            self._submitted_pts.clear()
-
-    def close(self) -> None:
-        self._finish_segment()
-
-
 @dataclass
 class _ParticipantSession:
     participant_id: str
@@ -341,10 +171,6 @@ class _ParticipantSession:
     raw_audio: dict[str, object]
     conversation: _StereoWaveWriter
     video: dict[str, _H264TrackWriter] = field(default_factory=dict)
-    projected_video: dict[str, _H264TrackWriter] = field(default_factory=dict)
-    caption: str = ""
-    caption_expires_us: int = 0
-    data_feed: deque[str] = field(default_factory=lambda: deque(maxlen=64))
     dropped_video_frames: int = 0
     event_count: int = 0
     transcript_count: int = 0
@@ -364,10 +190,6 @@ class SessionRecorder:
             raise RuntimeError(f"PyNvVideoCodec is required for media capture: {exc}") from exc
         self._nvc = nvc
         self._config = config
-        self._frontend = _make_frontend(
-            profile=config.profile,
-            overlay_lines=config.overlay_lines,
-        )
         self._raw_frontend = _RawCaptureFrontend()
         self._root = Path(config.out_dir)
         self._root.mkdir(parents=True, exist_ok=True)
@@ -502,12 +324,6 @@ class SessionRecorder:
             topic=message.topic,
             **payload,
         )
-        if text.strip():
-            normalized = " ".join(text.split())[:_MAX_DATA_FEED_TEXT]
-            with session.lock:
-                session.data_feed.append(
-                    f"{direction.upper()} {message.topic}: {normalized}"
-                )
 
     def record_voice_caption(self, source: str, message: DataMessage) -> None:
         session = self._session(message.participant_id, message.pts_us)
@@ -530,11 +346,6 @@ class SessionRecorder:
                 source=source,
                 transcript_id=session.transcript_count,
                 text=text,
-            )
-            session.caption = f"{source.upper()}: {text}" if text else ""
-            session.caption_expires_us = (
-                max(message.pts_us, time.time_ns() // 1_000)
-                + round(self._config.overlay_seconds * 1_000_000)
             )
 
     def record_observation(
@@ -573,13 +384,6 @@ class SessionRecorder:
         session = self._session(participant_id, pts_us)
         self._event(session, "audio_flush", pts_us, direction="agent")
 
-    def caption_for(self, participant_id: str, pts_us: int) -> str:
-        session = self._session(participant_id, pts_us)
-        with session.lock:
-            if pts_us > session.caption_expires_us:
-                return ""
-            return session.caption
-
     def record_video(self, frame: FrameData) -> None:
         session = self._session(frame.participant_id, frame.pts_us)
         with session.lock:
@@ -594,31 +398,10 @@ class SessionRecorder:
                     frontend=self._raw_frontend,
                 )
                 session.video[frame.track_id] = writer
-            caption = "" if frame.pts_us > session.caption_expires_us else session.caption
-            data_feed = tuple(session.data_feed)
-            projected_writer = session.projected_video.get(frame.track_id)
-            if self._frontend.name == "demo" and projected_writer is None:
-                projected_writer = _H264TrackWriter(
-                    nvc=self._nvc,
-                    root=session.root / "video",
-                    track_id=frame.track_id,
-                    stream_name="demo",
-                    config=self._config,
-                    frontend=self._frontend,
-                )
-                session.projected_video[frame.track_id] = projected_writer
         raw_frame = writer.write(frame, "", ())
         if raw_frame is None:
             return
         raw_width, raw_height, raw_segment_path = raw_frame
-        projected_frame = (
-            projected_writer.write(frame, caption, data_feed)
-            if projected_writer is not None
-            else raw_frame
-        )
-        if projected_frame is None:
-            raise RuntimeError("capture projections accepted different frame timestamps")
-        projected_width, projected_height, projected_segment_path = projected_frame
         with session.lock:
             session.frame_count += 1
             _write_json_line(session.video_index, {
@@ -633,9 +416,6 @@ class SessionRecorder:
                 "raw_width": raw_width,
                 "raw_height": raw_height,
                 "raw_encoder_segment_id": Path(raw_segment_path).stem,
-                "projection_width": projected_width,
-                "projection_height": projected_height,
-                "projection_encoder_segment_id": Path(projected_segment_path).stem,
             })
 
     def note_video_drop(self, participant_id: str, pts_us: int) -> None:
@@ -650,22 +430,19 @@ class SessionRecorder:
             return
         with session.lock:
             writer = session.video.get(track_id)
-            projected_writer = session.projected_video.get(track_id)
         if writer is not None:
             writer.close()
-        if projected_writer is not None:
-            projected_writer.close()
 
     def end_session(
         self,
         participant_id: str,
         pts_us: int,
         incomplete_reason: str | None = None,
-    ) -> None:
+    ) -> Path | None:
         with self._lock:
             session = self._sessions.pop(participant_id, None)
         if session is None:
-            return
+            return None
         pts_us = max(session.start_us, pts_us)
         with session.lock:
             complete = incomplete_reason is None
@@ -679,10 +456,8 @@ class SessionRecorder:
             )
             for writer in session.video.values():
                 writer.close()
-            for writer in session.projected_video.values():
-                writer.close()
             session.conversation.close()
-            video_tracks = self._mux_video(session, pts_us)
+            video_tracks = self._mux_video(session)
             for stream in session.raw_audio.values():
                 stream.close()
             session.video_index.close()
@@ -691,9 +466,10 @@ class SessionRecorder:
             session.observations.close()
             session.events.close()
             manifest = {
-                "version": 2,
+                "version": 3,
                 "participant_id": participant_id,
-                "profile": self._frontend.name,
+                "profile": self._config.profile,
+                "capture_profile": "raw",
                 "session_mode": self._config.session_mode,
                 "trigger": session.trigger,
                 "target": session.target,
@@ -710,6 +486,7 @@ class SessionRecorder:
                 },
                 "video_tracks": video_tracks,
                 "video_frame_index": "video/frames.jsonl",
+                "renderings": {},
                 "audio": {
                     "conversation": "audio/conversation.wav",
                     "channels": {"left": "device", "right": "agent"},
@@ -743,53 +520,53 @@ class SessionRecorder:
                 pending_manifest.unlink(missing_ok=True)
                 raise
         logger.info("media capture completed participant={!r} path={}", participant_id, session.root)
-        self._prune_artifacts()
+        return session.root
 
     def _mux_video(
         self,
         session: _ParticipantSession,
-        end_us: int,
     ) -> dict[str, list[dict]]:
-        raw_sources = self._video_sources(session.video)
+        raw_sources = _video_sources(session.video)
         if not raw_sources:
             return {}
         raw_path = session.root / "video" / "session.264"
-        raw_packets = self._join_sources(session.root, raw_sources, raw_path)
-        projected_sources = self._video_sources(session.projected_video)
-        display_sources = projected_sources or raw_sources
-        projection_path: Path | None = None
-        if projected_sources:
-            projection_path = session.root / "video" / "projection.264"
-            display_packets = self._join_sources(
-                session.root,
-                projected_sources,
-                projection_path,
-            )
-        else:
-            display_packets = raw_packets
-
+        raw_packets = _join_sources(session.root, raw_sources, raw_path)
         source_dimensions = sorted({
             (segment["width"], segment["height"])
             for _, segment in raw_sources
         })
         encoded_dimensions = sorted({
             (segment["width"], segment["height"])
-            for _, segment in display_sources
+            for _, segment in raw_sources
         })
         display_segment = max(
-            (segment for _, segment in display_sources),
+            (segment for _, segment in raw_sources),
             key=lambda segment: segment["width"] * segment["height"],
         )
-        track_ids = list(dict.fromkeys(track_id for track_id, _ in display_sources))
+        track_ids = list(dict.fromkeys(track_id for track_id, _ in raw_sources))
+        packet_index_path = session.root / "video" / "packets.jsonl"
+        with packet_index_path.open("w", encoding="utf-8") as packet_index:
+            for packet_id, indexed in enumerate(raw_packets, start=1):
+                packet = indexed.packet
+                _write_json_line(packet_index, {
+                    "packet_id": packet_id,
+                    "track_id": indexed.track_id,
+                    "offset": packet.offset,
+                    "size_bytes": packet.size,
+                    "pts_us": packet.pts_us,
+                    "relative_us": packet.pts_us - session.start_us,
+                    "key_frame": packet.key_frame,
+                })
         combined = {
-            "start_us": min(segment["start_us"] for _, segment in display_sources),
-            "end_us": max(segment["end_us"] for _, segment in display_sources),
-            "num_frames": sum(segment["num_frames"] for _, segment in display_sources),
+            "start_us": min(segment["start_us"] for _, segment in raw_sources),
+            "end_us": max(segment["end_us"] for _, segment in raw_sources),
+            "num_frames": sum(segment["num_frames"] for _, segment in raw_sources),
             "width": display_segment["width"],
             "height": display_segment["height"],
             "fps": self._config.sample_fps,
             "raw_path": "video/session.264",
             "raw_size_bytes": raw_path.stat().st_size,
+            "packet_index": "video/packets.jsonl",
             "source_track_ids": track_ids,
             "source_dimensions": [
                 {"width": width, "height": height}
@@ -801,90 +578,12 @@ class SessionRecorder:
             ],
         }
 
-        wave_path = session.root / "audio" / "conversation.wav"
-        sample_rate = self._config.audio_sample_rate
-        start_frame = round(
-            (combined["start_us"] - session.start_us)
-            * sample_rate
-            / 1_000_000
-        )
-        end_frame = round(
-            (end_us - session.start_us)
-            * sample_rate
-            / 1_000_000
-        )
-        try:
-            artifact = self._frontend.finalize_video(
-                session_root=session.root,
-                raw_path=projection_path or raw_path,
-                wave_path=wave_path,
-                audio_start_frame=start_frame,
-                audio_end_frame=end_frame,
-                fps=combined["fps"],
-                packets=display_packets,
-                width=combined["width"],
-                height=combined["height"],
-            )
-        except Exception as exc:
-            logger.warning("media capture video finalization failed path={}: {}", raw_path, exc)
-            combined["path"] = combined["raw_path"]
-            combined["size_bytes"] = combined["raw_size_bytes"]
-            combined["audio_embedded"] = False
-        else:
-            combined["path"] = artifact.path
-            combined["size_bytes"] = artifact.size_bytes
-            combined["audio_embedded"] = artifact.audio_embedded
-        finally:
-            if projection_path is not None:
-                projection_path.unlink(missing_ok=True)
+        combined["path"] = combined["raw_path"]
+        combined["size_bytes"] = combined["raw_size_bytes"]
+        combined["audio_embedded"] = False
 
         manifest_track = track_ids[0] if len(track_ids) == 1 else "session"
         return {manifest_track: [combined]}
-
-    @staticmethod
-    def _video_sources(
-        writers: dict[str, _H264TrackWriter],
-    ) -> list[tuple[str, dict]]:
-        return sorted(
-            (
-                (track_id, segment)
-                for track_id, writer in writers.items()
-                for segment in writer.segments
-            ),
-            key=lambda item: (item[1]["start_us"], item[0]),
-        )
-
-    @staticmethod
-    def _join_sources(
-        session_root: Path,
-        sources: list[tuple[str, dict]],
-        output_path: Path,
-    ) -> list[VideoPacket]:
-        pending_path = output_path.with_suffix(".264.pending")
-        packets: list[VideoPacket] = []
-        try:
-            with pending_path.open("wb") as output:
-                for _, segment in sources:
-                    source_path = session_root / segment["path"]
-                    offset = output.tell()
-                    with source_path.open("rb") as source:
-                        shutil.copyfileobj(source, output)
-                    packets.extend(
-                        VideoPacket(
-                            offset=offset + packet.offset,
-                            size=packet.size,
-                            pts_us=packet.pts_us,
-                            key_frame=packet.key_frame,
-                        )
-                        for packet in segment["_packets"]
-                    )
-            pending_path.replace(output_path)
-        except Exception:
-            pending_path.unlink(missing_ok=True)
-            raise
-        for _, segment in sources:
-            (session_root / segment["path"]).unlink(missing_ok=True)
-        return sorted(packets, key=lambda packet: packet.pts_us)
 
     def _event(self, session: _ParticipantSession, kind: str, pts_us: int, **fields) -> None:
         with session.lock:
@@ -897,10 +596,14 @@ class SessionRecorder:
                 **fields,
             })
 
-    def close(self) -> None:
+    def close(self) -> list[Path]:
         end_us = time.time_ns() // 1_000
+        completed = []
         for participant_id in list(self._sessions):
-            self.end_session(participant_id, end_us)
+            root = self.end_session(participant_id, end_us)
+            if root is not None:
+                completed.append(root)
+        return completed
 
     def _prune_artifacts(self) -> None:
         cap = self._config.max_total_bytes
