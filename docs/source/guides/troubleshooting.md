@@ -10,6 +10,30 @@ issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
 ## Setup-time issues
 
+### DGX Spark — Docker socket permission denied during model-server cleanup
+
+**Symptom:** launching `model_servers` reports an ownership-inspection failure,
+prints `No persistent servers found running`, and then fails with:
+
+```text
+RuntimeError: could not stop persistent servers outside the profile
+```
+
+**Diagnosis:** run `docker ps` without `sudo` from the same login session. If
+it reports permission denied for `/var/run/docker.sock`, the launcher cannot
+inspect persistent containers. The cleanup exception can have other causes;
+the direct Docker command exposes the socket-access error in this case.
+
+**Cause:** the login session lacks Docker socket access. Startup checks for
+persistent servers outside the selected profile before launching new ones.
+When Docker inspection fails, the empty-result message does not establish that
+no servers are running, and startup aborts because cleanup could not be verified.
+
+**Fix:** complete the Docker group setup and start a new login session as
+described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
+`sudo`, then retry the model-server command. These checks also apply to other
+Linux model-server hosts.
+
 ### DGX Spark — `uv sync` fails to build a wheel
 
 **Symptom:** `uv sync` fails on a DGX Spark system while building NeMo or
@@ -299,18 +323,25 @@ managed cleanup removes them.
 (vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver)=
 ### `vllm_backend: docker` — the NVIDIA runtime is unavailable
 
-**Symptom:** `docker run` exits with a message that the `nvidia` runtime is
-unknown or unavailable, or with an `nvidia-container-cli` initialization error.
+**Symptom:** Docker is reachable, but container startup fails with:
 
-**Cause:** the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted and configured after install), so Docker cannot use
-`--runtime=nvidia`.
+```text
+docker: Error response from daemon: unknown or invalid runtime name: nvidia
+```
 
-**Fix:** install the toolkit and restart docker:
-https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+**Cause:** the Docker daemon has no registered `nvidia` runtime. This can happen
+on DGX Spark even when the NVIDIA Container Toolkit is already installed.
+The model-server wrappers request `--runtime=nvidia` explicitly.
 
-Switch back to `vllm_backend: pip` in the service YAML if you only need the
-local install.
+**Fix:** follow {ref}`docker-host-setup` to install the toolkit if needed,
+register the runtime with `nvidia-ctk`, and restart Docker. Verify that
+`docker info --format '{{json .Runtimes}}'` lists `nvidia`, then run the GPU
+smoke test there before retrying the model servers.
+
+If `nvidia` is listed but startup instead reports an `nvidia-container-cli`
+initialization error, inspect that error for a driver or GPU-access problem.
+Refer to the
+[NVIDIA Container Toolkit troubleshooting guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html).
 
 (hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so)=
 

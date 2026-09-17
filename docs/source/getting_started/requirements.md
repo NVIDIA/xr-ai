@@ -47,17 +47,71 @@ virtual-environment setup needed. If you do not have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI and runtime-configuration steps from there:
+(docker-host-setup)=
+### Docker access and NVIDIA runtime (including DGX Spark)
 
-> https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+Complete these checks on the model-server host before launching a stack. They
+also apply to DGX Spark: having Docker and the NVIDIA Container Toolkit installed
+does not guarantee that your login can access Docker or that its `nvidia` runtime
+is registered.
 
-Quick smoke-test once installed:
+#### Docker access
+
+Run this command without `sudo`, in the same login session that will launch
+`model_servers`:
+
+```bash
+docker ps
+```
+
+The command must succeed; an empty container list is valid. If it reports
+permission denied for `/var/run/docker.sock`, add your user to the Docker group:
+
+```bash
+sudo usermod -aG docker "$USER"
+```
+
+Log out completely and log back in, or disconnect and reconnect your SSH
+session, then retry `docker ps` without `sudo`. Opening another terminal in the
+same desktop session does not refresh its group membership. The `docker` group
+grants root-level privileges; refer to
+[Docker's Linux post-installation instructions](https://docs.docker.com/engine/install/linux-postinstall/)
+for group creation if needed and access details.
+
+#### NVIDIA runtime
+
+Check that the toolkit is installed:
+
+```bash
+nvidia-ctk --version
+```
+
+If the command is missing, follow the Ubuntu installation steps in the
+[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+Install the toolkit once per host. Registering the runtime is a separate step,
+including when the toolkit is already installed:
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker info --format '{{json .Runtimes}}'
+```
+
+Schedule the Docker restart when other container workloads can be interrupted.
+The final command must succeed without `sudo` and list an `nvidia` runtime.
+The model-server wrappers explicitly request that runtime; installing the
+toolkit alone is insufficient.
+
+Verify GPU access from a container, also without `sudo`:
 
 ```bash
 docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
   nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
 ```
+
+The output must list the host GPU. After these checks pass, follow the
+{doc}`model-server quickstart <quickstart>`. For cleanup errors or an unknown
+runtime, refer to {doc}`/guides/troubleshooting`.
 
 ## GPU-profile prerequisites
 
