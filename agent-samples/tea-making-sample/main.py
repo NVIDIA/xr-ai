@@ -19,34 +19,6 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml/tea_making_worker.yaml"
 
-_MODEL_PROCESSES = [
-    Process(
-        "stt",
-        "../../services/stt-server",
-        "stt_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "omni",
-        "../../services/nemotron-omni-llm",
-        "nemotron_omni_llm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "embedding",
-        "../../services/embedding-server",
-        "embedding_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "tts",
-        "../../services/pocket-tts",
-        "pocket_tts_server",
-        launch_mode="reuse",
-    ),
-]
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Tea-making guidance with native XR agents.",
@@ -74,7 +46,6 @@ def _build_processes(worker_config: Path) -> list[Process]:
             "device_io_hub",
             config="yaml/device_io_hub.yaml",
         ),
-        *_MODEL_PROCESSES,
         Process(
             "rag",
             "../../services/rag-service",

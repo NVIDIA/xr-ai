@@ -200,7 +200,13 @@ class _ResponseStream(AsyncIterator[str]):
 
 
 class VoiceAgent(Agent):
-    """Own voice media lifecycle and bridge runtime input and output topics."""
+    """Own voice media lifecycle and bridge runtime input and output topics.
+
+    Startup waits only for explicitly supplied ``probes``, such as an inference
+    warmup or an application capability dependency. STT and TTS health are not
+    polled automatically. Readiness reports initialized application transport
+    after those explicit probes, not availability of every model endpoint.
+    """
 
     def __init__(
         self,

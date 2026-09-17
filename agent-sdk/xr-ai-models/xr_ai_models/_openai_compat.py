@@ -92,8 +92,7 @@ def _request_headers(
 
 
 async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
-    # Remote endpoints (hosted NIM) expose no local /health route; the spec
-    # sets health_check=false, in which case readiness is assumed.
+    # Disabling explicit health probes returns success without an HTTP request.
     if not enabled:
         return True
     try:

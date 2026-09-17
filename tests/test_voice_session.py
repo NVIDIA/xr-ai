@@ -323,7 +323,7 @@ async def test_voice_session_cancels_pipeline_when_ready_file_touch_fails(
     assert transport.endpoint.statuses == []
 
 
-async def test_voice_session_defers_default_transport_until_services_are_ready(
+async def test_voice_session_defers_default_transport_until_explicit_probes_complete(
     monkeypatch,
 ) -> None:
     transports: list[_Transport] = []
@@ -340,10 +340,11 @@ async def test_voice_session_defers_default_transport_until_services_are_ready(
 
     monkeypatch.setattr(session_module, "HubVoiceTransport", make_transport)
     session = VoiceSession(
-        stt=ProbeService(),  # type: ignore[arg-type]
-        tts=ProbeService(),  # type: ignore[arg-type]
+        stt=_Service(),  # type: ignore[arg-type]
+        tts=_Service(),  # type: ignore[arg-type]
         vad=VadConfig(),
         voice_gate=VoiceGateConfig(),
+        probes={"warmup": ProbeService().health},
     )
 
     assert transports == []
@@ -373,6 +374,7 @@ async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None
         tts=tts,  # type: ignore[arg-type]
         vad=VadConfig(),
         voice_gate=VoiceGateConfig(),
+        probes={"capability": stt.health},
     )
 
     with pytest.raises(RuntimeError, match="unavailable"):
@@ -383,3 +385,20 @@ async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None
     assert transports == []
     assert stt.closed == 1
     assert tts.closed == 1
+
+
+async def test_voice_session_starts_without_checking_model_health() -> None:
+    class UnavailableService(_Service):
+        async def health(self) -> bool:
+            raise AssertionError("model health must not gate worker startup")
+
+    transport = _Transport()
+    async with VoiceSession(
+        stt=UnavailableService(),
+        tts=UnavailableService(),
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,
+    ) as session:
+        assert session.transport is transport
+    assert transport.shutdown_called

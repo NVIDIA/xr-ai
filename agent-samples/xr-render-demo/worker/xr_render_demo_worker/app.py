@@ -47,10 +47,6 @@ async def run_app(
         Model GPU memory must settle before LOVR creates its Vulkan device;
         endpoint health returns 200 before the weights are ever exercised.
         """
-        if not await llm.health():
-            return False
-        if not models.llm("agent_llm").health_check:
-            return True
         try:
             await llm.chat(
                 [ChatMessage(role="user", content="Reply with one short sentence.")],
@@ -109,7 +105,7 @@ async def run_app(
                 silero_threshold=config.silero_threshold,
             ),
             voice_gate=load_voice_gate_config(config.voice_gate_yaml),
-            probes={"agent-llm": warmed_llm_probe, "vlm": vlm.health},
+            probes={"agent-llm": warmed_llm_probe},
             ready_file=ready_file,
             closeables=(llm, vlm),
             idle_timeout_secs=config.idle_timeout_secs,

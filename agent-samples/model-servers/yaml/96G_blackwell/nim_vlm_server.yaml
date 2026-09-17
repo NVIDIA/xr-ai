@@ -6,10 +6,8 @@
 # engine accepts a full image prompt: the nemotron-nano-vl NIM builds a
 # 3200-token input cap on this class of GPU, below its own ~3330-token
 # per-image cost, so every image request 500s.
-# To adapt a sample, copy the `vlm` entry from
-# ../models.vlm_llm_nim.json into its active models JSON, change only
-# `deployment.ownership` from `managed` to `reused`, and keep service
-# `vlm-nim` on port 8100.
+# For sample configuration, refer to
+# https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
 image:     nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0
 http_port: 8100

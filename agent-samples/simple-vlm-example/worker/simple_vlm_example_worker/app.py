@@ -51,8 +51,6 @@ async def _warm_vlm(vlm: VLMService) -> bool:
     """Confirm readiness by exercising the production multimodal stream."""
 
     try:
-        if not await vlm.health():
-            return False
         started_at = time.monotonic()
         logger.info(
             "VLM warmup request started image={}x{} max_tokens={}",

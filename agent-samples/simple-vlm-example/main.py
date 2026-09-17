@@ -34,24 +34,6 @@ PROCESSES = [
         config="yaml/device_io_hub.yaml",
     ),
     Process(
-        "stt",
-        "../../services/stt-server",
-        "stt_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "vlm",
-        "../../services/vlm-server",
-        "vlm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "tts",
-        "../../services/pocket-tts",
-        "pocket_tts_server",
-        launch_mode="reuse",
-    ),
-    Process(
         "worker",
         "worker",
         "simple_vlm_example_worker",

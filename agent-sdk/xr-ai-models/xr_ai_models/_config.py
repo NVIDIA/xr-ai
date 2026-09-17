@@ -84,14 +84,14 @@ class EndpointSpec:
     """Default request timeout in seconds."""
 
     readiness: Readiness = "health"
-    """How the client determines whether the endpoint is ready."""
+    """Policy for explicit ``health()`` calls; does not schedule startup probes."""
 
     health_path: str = "/health"
-    """Endpoint path probed for readiness (NIM containers use /v1/health/ready)."""
+    """Path used by explicit HTTP ``health()`` calls (NIM: /v1/health/ready)."""
 
     @property
     def health_check(self) -> bool:
-        """Whether readiness requires a successful endpoint health check."""
+        """Whether an explicit ``health()`` call probes the endpoint."""
 
         return self.readiness == "health"
 
@@ -99,6 +99,11 @@ class EndpointSpec:
 @dataclass(frozen=True)
 class DeploymentSpec:
     """Process ownership for the endpoint that serves a model role.
+
+    Client profiles can omit ``deployment``: the default ``external`` ownership
+    leaves the endpoint's process lifecycle to its operator. Shared model-server
+    profiles use ``managed`` to select processes to launch. Explicit ``reused``
+    metadata remains supported for older profiles.
 
     ``credentials`` names keys the launched service itself needs (e.g.
     NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
@@ -171,7 +176,7 @@ class _RoleSpec:
 
     @property
     def health_check(self) -> bool:
-        """Whether readiness requires a successful endpoint health check."""
+        """Whether an explicit ``health()`` call probes the endpoint."""
 
         return self.endpoint.health_check
 

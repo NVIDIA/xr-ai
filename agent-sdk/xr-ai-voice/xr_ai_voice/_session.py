@@ -90,13 +90,8 @@ class _VoiceSession:
     async def __aenter__(self) -> "_VoiceSession":
         if self._closed:
             raise RuntimeError("voice session is closed")
-        probes = {
-            "stt": self.stt.health,
-            "tts": self.tts.health,
-            **self.probes,
-        }
         try:
-            await wait_for_services(probes)
+            await wait_for_services(self.probes)
             _ = self.transport
         except BaseException:
             await self.close()

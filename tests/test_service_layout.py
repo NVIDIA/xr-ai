@@ -421,30 +421,22 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
             )
 
 
-def test_simple_vlm_reuses_every_model_process() -> None:
+def test_simple_vlm_declares_only_its_hub_and_worker() -> None:
     sample = _load_module(
-        "service_layout_simple_vlm_reuse",
+        "service_layout_simple_vlm",
         "agent-samples/simple-vlm-example/main.py",
     )
-
-    assert {
-        process.name: process.launch_mode
-        for process in sample.PROCESSES
-        if process.name in {"stt", "vlm", "tts"}
-    } == {"stt": "reuse", "vlm": "reuse", "tts": "reuse"}
+    assert [process.name for process in sample.PROCESSES] == ["hub", "worker"]
 
 
-def test_render_demo_reuses_every_model_process() -> None:
+def test_render_demo_declares_only_application_processes() -> None:
     sample = _load_module(
-        "service_layout_render_reuse",
+        "service_layout_render",
         "agent-samples/xr-render-demo/main.py",
     )
-
-    assert {
-        process.name: process.launch_mode
-        for process in sample._build_processes()
-        if process.name in {"stt", "omni", "vlm", "tts"}
-    } == {"stt": "reuse", "omni": "reuse", "vlm": "reuse", "tts": "reuse"}
+    assert [process.name for process in sample._build_processes()] == [
+        "hub", "cloudxr", "video-memory", "scene", "openxr-service", "worker",
+    ]
 
 
 def test_sample_hub_projects_resolve() -> None:
