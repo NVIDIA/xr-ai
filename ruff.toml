@@ -30,7 +30,7 @@ select = ["E", "F", "W", "I"]
 known-first-party = ["_helpers", "_helpers_subprocess"]
 
 [lint.per-file-ignores]
-"agent-samples/model-servers/main.py" = ["F401"]
+"model-server-samples/model-servers/main.py" = ["F401"]
 "agent-samples/xr-render-demo/eval/eval.py" = ["E702", "I001"]
 "agent-samples/xr-render-demo/worker/xr_render_demo_worker/scene_loop.py" = ["E701", "E702", "E741", "I001"]
 "agent-samples/xr-render-demo/worker/xr_render_demo_worker/model_io.py" = ["E701", "E702", "I001"]

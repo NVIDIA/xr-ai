@@ -266,7 +266,7 @@ def test_invalid_deployment_credentials_rejected(
         load_model_deployment(config)
 
 
-_MODEL_SERVERS_YAML = _ROOT / "agent-samples" / "model-servers" / "yaml"
+_MODEL_SERVERS_YAML = _ROOT / "model-server-samples" / "model-servers" / "yaml"
 
 
 @pytest.mark.parametrize(

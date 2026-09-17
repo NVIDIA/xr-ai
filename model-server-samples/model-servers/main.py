@@ -31,11 +31,11 @@ key off the profile filename stem, so custom profiles use the service
 defaults.
 
 How to run:
-    uv run --project agent-samples/model-servers model_servers
-    uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+    uv run --project model-server-samples/model-servers model_servers
+    uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 
 To stop all model servers:
-    uv run --project agent-samples/model-servers model_servers --stop
+    uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
 from pathlib import Path

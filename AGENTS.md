@@ -15,6 +15,7 @@ links. User-facing docs live only under `docs/source/`.
 client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
+model-server-samples/  Shared model-server launch samples
 services/        Hub, model servers, and typed capability services
 utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities
 tests/           Cross-package and integration tests
@@ -62,7 +63,7 @@ The authoritative dependency graph and enforced package limits are in
 
 ## Process and sample layout
 
-Each sample contains a stdlib-style orchestrator and a separately packaged
+Each agent sample contains a stdlib-style orchestrator and a separately packaged
 worker. Optional application-specific capability processes sit beside them.
 
 ```text
@@ -154,11 +155,12 @@ workflows, operations, troubleshooting, and reference material. Do not duplicate
 that content in a README. A README is a concise repository entry point: state
 what the directory contains, link to the canonical documentation, and keep only
 the minimum local information needed before following that link. A top-level
-sample README under `agent-samples/` additionally keeps the exact commands needed
-to start that sample. State the sample directory as the working directory and
-write every command relative to that directory, including commands that invoke a
-sibling sample such as `../model-servers`. It also includes a compact
-configuration entry point: name the sample-owned YAML or JSON files, describe
+sample README under `agent-samples/` or `model-server-samples/` additionally keeps
+the exact commands needed to start that sample. State the sample directory as
+the working directory and write every command relative to it, including commands
+that invoke another sample such as `../../model-server-samples/model-servers`
+from an agent sample. It also includes a compact configuration entry point:
+name the sample-owned YAML or JSON files, describe
 the common settings they own, and show one representative edit. Put exhaustive
 field descriptions, precedence, path resolution, architecture, behavior,
 artifact contracts, extension instructions, and eval methodology in the

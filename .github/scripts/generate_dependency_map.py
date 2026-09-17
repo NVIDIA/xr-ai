@@ -46,6 +46,7 @@ _GROUPS = (
     ("utils", "Utilities"),
     ("services", "Services"),
     ("agent-samples", "Agent samples"),
+    ("model-server-samples", "Model server samples"),
     ("tests", "Tests"),
     ("dependency-manifest", "Dependency manifest"),
 )

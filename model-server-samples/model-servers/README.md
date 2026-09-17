@@ -46,7 +46,7 @@ the checked-in fields and comments.
 
 ## Run
 
-Run all commands from `agent-samples/model-servers/`:
+Run all commands from `model-server-samples/model-servers/`:
 
 ```bash
 uv sync

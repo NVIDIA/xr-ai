@@ -30,8 +30,12 @@ def load_config_catalog(repository_root: Path) -> tuple[SampleConfig, ...]:
     """Discover conventional config sources owned by installed top-level samples."""
 
     configs: list[SampleConfig] = []
-    samples_dir = repository_root / "agent-samples"
-    for project_path in sorted(samples_dir.glob("*/pyproject.toml")):
+    project_paths = sorted(
+        path
+        for category in ("agent-samples", "model-server-samples")
+        for path in (repository_root / category).glob("*/pyproject.toml")
+    )
+    for project_path in project_paths:
         sample_dir = project_path.parent
         yaml_dir = sample_dir / "yaml"
         candidates = {path for path in yaml_dir.rglob("*") if path.is_file() and path.suffix in _CONFIG_SUFFIXES}
@@ -75,7 +79,7 @@ def _directive_type():
                 sample_section = nodes.section(ids=[nodes.make_id(f"config-{sample}")])
                 sample_section += nodes.title(text=sample)
                 for config in configs:
-                    relative_path = config.path.relative_to(Path("agent-samples") / sample)
+                    relative_path = Path(*config.path.parts[2:])
                     file_section = nodes.section(ids=[nodes.make_id(f"config-{sample}-{relative_path.as_posix()}")])
                     file_section += nodes.title(text=relative_path.as_posix())
                     literal = nodes.literal_block(config.content, config.content)

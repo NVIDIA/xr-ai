@@ -188,8 +188,12 @@ def load_cli_catalog(repository_root: Path) -> tuple[CliCommand, ...]:
     """Discover installed commands from top-level sample projects without imports."""
 
     commands: list[CliCommand] = []
-    samples_dir = repository_root / "agent-samples"
-    for project_path in sorted(samples_dir.glob("*/pyproject.toml")):
+    project_paths = sorted(
+        path
+        for category in ("agent-samples", "model-server-samples")
+        for path in (repository_root / category).glob("*/pyproject.toml")
+    )
+    for project_path in project_paths:
         project = tomllib.loads(project_path.read_text(encoding="utf-8"))
         scripts = project.get("project", {}).get("scripts", {})
         for program, target in sorted(scripts.items()):

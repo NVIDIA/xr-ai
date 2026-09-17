@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_MAIN_PATH = _REPO_ROOT / "agent-samples/model-servers/main.py"
+_MAIN_PATH = _REPO_ROOT / "model-server-samples/model-servers/main.py"
 _SPEC = importlib.util.spec_from_file_location("model_servers_main", _MAIN_PATH)
 assert _SPEC and _SPEC.loader
 _model_servers = importlib.util.module_from_spec(_SPEC)
@@ -75,7 +75,7 @@ def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch
 
     processes, _ = _model_servers._build_processes("default", "spark")
 
-    expected_dir = _REPO_ROOT / "agent-samples/model-servers/yaml/spark"
+    expected_dir = _REPO_ROOT / "model-server-samples/model-servers/yaml/spark"
     assert all(Path(process.config).parent == expected_dir for process in processes)
 
 
@@ -144,7 +144,7 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
 @pytest.mark.parametrize(
     "config_path",
     sorted(
-        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
             "*/nim_vlm_server.yaml"
         )
     ),
@@ -159,7 +159,7 @@ def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
 @pytest.mark.parametrize(
     "config_path",
     sorted(
-        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
             "*/nim_llm_server.yaml"
         )
     ),
@@ -242,7 +242,7 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
 
     processes, _ = _model_servers._build_processes(selection)
     process = next(p for p in processes if p.name == service)
-    config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
+    config_path = _REPO_ROOT / "model-server-samples/model-servers" / str(process.config)
 
     assert config_path.name == config_name
     assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
@@ -251,7 +251,7 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
 @pytest.mark.parametrize(
     "profile_path",
     sorted(
-        (_REPO_ROOT / "agent-samples/model-servers/yaml").glob(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
             "*/nemotron_omni_llm_server*.yaml"
         )
     ),
@@ -422,7 +422,7 @@ def test_custom_gpu_profile_must_contain_every_selected_service_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "yaml" / "custom").mkdir(parents=True)
-    profile = _REPO_ROOT / "agent-samples/model-servers/yaml/models.default.json"
+    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
     with pytest.raises(ValueError, match="profile 'custom' is incomplete.*stt_server"):
@@ -435,7 +435,7 @@ def test_selected_service_config_must_declare_http_port(
     config = tmp_path / "yaml" / "custom" / "stt_server.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("host: 0.0.0.0\n", encoding="utf-8")
-    profile = _REPO_ROOT / "agent-samples/model-servers/yaml/models.default.json"
+    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
     with pytest.raises(
@@ -494,7 +494,7 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
     # no variants and falls back to the service defaults.
     assert Path(processes[0].config) == (
         _REPO_ROOT
-        / "agent-samples/model-servers/yaml/dual_48G_ada/vlm_server.yaml"
+        / "model-server-samples/model-servers/yaml/dual_48G_ada/vlm_server.yaml"
     )
 
 
@@ -648,7 +648,7 @@ def test_spark_omni_uses_explicit_kv_cache(
     captured: dict[str, object] = {}
     config_path = (
         _REPO_ROOT
-        / "agent-samples/model-servers/yaml/spark/nemotron_omni_llm_server.yaml"
+        / "model-server-samples/model-servers/yaml/spark/nemotron_omni_llm_server.yaml"
     )
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
@@ -718,7 +718,7 @@ def test_spark_embedding_enables_uma_cold_start_safeguards(
 ) -> None:
     captured: dict[str, object] = {}
     config_path = (
-        _REPO_ROOT / "agent-samples/model-servers/yaml/spark/embedding_server.yaml"
+        _REPO_ROOT / "model-server-samples/model-servers/yaml/spark/embedding_server.yaml"
     )
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
@@ -744,7 +744,7 @@ def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
     for profile in ("96G_blackwell", "dual_48G_ada"):
         config_path = (
             _REPO_ROOT
-            / "agent-samples/model-servers/yaml"
+            / "model-server-samples/model-servers/yaml"
             / profile
             / "embedding_server.yaml"
         )

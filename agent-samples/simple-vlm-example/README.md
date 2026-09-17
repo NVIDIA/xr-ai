@@ -47,7 +47,7 @@ Run all commands from `agent-samples/simple-vlm-example/`. Start the shared
 models first:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -69,7 +69,7 @@ and camera access, and connect. Speak or type a question after the agent reports
 ready.
 
 The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../model-servers model_servers --stop`.
+stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
 
 <!-- Compatibility anchor for a heading consolidated into the documentation. -->
 <a id="relay-visibility"></a>

@@ -34,9 +34,9 @@ _REFERENCE_CONFIG = _PROJECT / "pocket_tts_server.yaml"
 _DEFAULT_PORT = 8105
 _PROFILE_CONFIGS = (
     _REFERENCE_CONFIG,
-    _REPO_ROOT / "agent-samples/model-servers/yaml/spark/pocket_tts_server.yaml",
-    _REPO_ROOT / "agent-samples/model-servers/yaml/96G_blackwell/pocket_tts_server.yaml",
-    _REPO_ROOT / "agent-samples/model-servers/yaml/dual_48G_ada/pocket_tts_server.yaml",
+    _REPO_ROOT / "model-server-samples/model-servers/yaml/spark/pocket_tts_server.yaml",
+    _REPO_ROOT / "model-server-samples/model-servers/yaml/96G_blackwell/pocket_tts_server.yaml",
+    _REPO_ROOT / "model-server-samples/model-servers/yaml/dual_48G_ada/pocket_tts_server.yaml",
 )
 
 
