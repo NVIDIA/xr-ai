@@ -1,11 +1,9 @@
 ---
 name: build-your-app
 description: >-
-  Build an application on the NVIDIA xr-ai stack. Use when creating, adapting,
-  running, or verifying an application, whether or not xr-ai has already been
-  cloned.
+  Build, adapt, run, or verify an application on NVIDIA xr-ai, whether or not
+  the repository has already been cloned.
 ---
-
 <!--
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0

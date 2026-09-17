@@ -928,13 +928,7 @@ async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None
         async with _running_voice(runtime, voice, session):
             await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text="first ", response_id="turn", final=False),
-                participant_id="alice",
-                source="observer",
-            )
-            await runtime.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text="response", response_id="turn"),
+                VoiceOutput(text="first response", response_id="turn"),
                 participant_id="alice",
                 source="observer",
             )

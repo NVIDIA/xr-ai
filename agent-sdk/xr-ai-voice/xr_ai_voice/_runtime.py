@@ -87,7 +87,7 @@ class VoiceOutput(BaseModel):
     """Complete response text or one incremental fragment."""
 
     response_id: str | None = Field(default=None, min_length=1)
-    """Stable stream identifier; output after closure is ignored with a warning."""
+    """Stable stream identifier; reuse after recent closure is ignored and warned."""
 
     final: bool = True
     """Whether this message completes the response."""
@@ -390,6 +390,7 @@ class VoiceAgent(Agent):
                             interrupt=output.interrupt,
                             pts_us=timestamp_us,
                         )
+                    self._remember_closed_stream(key)
                     return
                 if len(self._streams) >= _OPEN_STREAM_CAPACITY:
                     oldest_key = next(iter(self._streams))

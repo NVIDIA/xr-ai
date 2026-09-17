@@ -136,15 +136,20 @@ Use this map to separate reusable scaffolding from the VLM example:
 
 | Files | Reuse | Replace or adapt |
 |---|---|---|
-| `main.py` and the root `pyproject.toml` | Keep the `run_stack` entry point, DeviceIOHub process, worker process, and launcher source entries. | Rename the project, command, logging namespace, worker command, and worker YAML path. Keep only the reused service declarations the application needs. |
+| `main.py` and the root `pyproject.toml` | Keep the `run_stack` entry point, DeviceIOHub process, worker process, and launcher source entries. | Rename the project, command, logging namespace, worker command, and worker YAML path. Add only application-owned service processes. |
 | `yaml/device_io_hub.yaml` | Keep the typed DeviceIOHub configuration shape. | Set the room, ports, web client, and network behavior. |
 | `worker/pyproject.toml`, `__init__.py`, and `__main__.py` | Keep the named-package layout, console entry point, argument parsing, and delegation to `run_app()`. | Rename the distribution, package, and entry point. Remove dependencies only after their imports and features are gone. |
 | `worker/.../config.py` and `yaml/*_worker.yaml` | Keep typed loading and paths resolved relative to the YAML file. | Replace the prompt, frame, model, voice, and application-specific settings with the fields the application consumes. |
 | `worker/.../app.py` | Keep the `AgentRuntime` composition and the `VoiceAgent` lifecycle when the application uses voice. | Replace the VLM warmup, model roles, and paired `CurrentFrameTool` and `StreamingImageQueryTool` composition with the application's services and agents. |
 | `worker/.../agent.py` and `worker/.../prompts/system.txt` | Keep the participant-scoped task ownership, detached-task context and scope, and cancellation patterns. Refer to {doc}`/reference/agent-sdk-runtime`. | Replace the vision question-and-answer workflow, topics, tool calls, and prompt. |
-| `yaml/models.json` | Keep the adapter, endpoint, and deployment separation. | Declare only the logical model roles and endpoints the application needs. |
+| `yaml/models.json` | Keep the adapter and endpoint separation. | Declare only the logical model roles, client adapters, and shared endpoints the application needs. Do not add model-server deployment or readiness settings. |
 | `yaml/voice_gate.yaml` | Keep it when speech input needs wake phrases and follow-up turns. | Tune the behavior or remove it with the voice runtime. |
 | `README.md` | Keep a short configure and run path. | Describe the application, its owned and reused processes, settings, and exact start commands. |
+
+Rewrite the copied README as application-owned documentation. Replace its title
+and the “Simple VLM example” and “This sample” descriptions, and remove links to
+the Simple VLM sample reference. In particular, make sure the name replacements
+did not leave a nonexistent `/reference/my-app.html` link.
 
 The copied DeviceIOHub YAML contains development-only credential placeholders.
 They can remain in place: `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` from the
@@ -188,15 +193,14 @@ uv --config-file ../../uv.toml run my_app
 Open the authenticated web-client URL printed by DeviceIOHub, grant the media
 permissions the application needs, and connect.
 
-The copied `launch_mode="reuse"` entries document local services that must
-already be running; the launcher neither starts nor probes them. The copied
-`VoiceAgent` session checks STT and TTS health plus the supplied VLM warmup
-probe before it announces readiness. An application that replaces the voice
-runtime must own equivalent checks for the services it needs. When a model role
-changes, update `yaml/models.json` and the worker's service construction, then
-update the reuse entries so `PROCESSES` continues to describe the local
-shared-service assumptions. An external endpoint does not need a local reuse
-entry.
+The application launcher owns only DeviceIOHub, the worker, and any other
+application processes. The separate model-server launcher owns shared model
+startup and readiness. The copied worker does not poll the STT, VLM, or TTS
+health endpoints; it explicitly exercises VLM inference as an application
+warmup before announcing readiness. Keep or replace that probe according to the
+capabilities the application must warm or verify. When a model role changes,
+update `yaml/models.json` and the worker's service construction. Do not add
+shared model services to the application's `PROCESSES` list.
 
 ## Verify without hardware
 
@@ -205,7 +209,13 @@ services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:
 
 ```bash
-uv --config-file uv.toml run --project agent-samples/my-app/worker python -c 'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'
+uv --config-file uv.toml run --project agent-samples/my-app/worker \
+  python - <<'PY'
+from pathlib import Path
+from my_app_worker.config import load_config
+
+load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))
+PY
 ```
 
 Exercise model wire behavior with `tests/_stub_openai.py`, which provides an
@@ -232,15 +242,18 @@ Refer to {doc}`testing` for the complete test commands and marker rules.
 
 ## Avoid upstream repository checks
 
-The repository's pre-commit hooks are optional and run only after they are
-installed. When installed, the SPDX hook can add the NVIDIA copyright header to
-staged application files, and a staged `pyproject.toml` triggers the dependency
+Installing the repository's pre-commit hooks enables automatic checks during
+commits. The hooks and their underlying scripts can also be run explicitly.
+When the hooks run, the SPDX hook can add the NVIDIA copyright header to staged
+application files, and a staged `pyproject.toml` triggers the dependency
 generator, which inventories every project in the source tree. The full
-repository documentation and test suites also treat top-level directories
-under `agent-samples/` as repository samples.
+repository documentation and test suites also treat top-level directories under
+`agent-samples/` as repository samples.
 
 For an application that is not a repository sample, leave the repository's
 pre-commit hooks uninstalled and use the focused application test command
-above. To use those hooks or the full repository checks, first edit the SPDX
-hook exclusions, dependency-generator ignore rules, and sample catalogs for the
-chosen application path.
+above. If you choose to use those hooks or other repository-wide checks in your
+fork, first adapt the pre-commit SPDX exclusion and standalone SPDX checker, the
+dependency generator's discovery rules, and the sample catalogs and tests for
+the application path. The checkout's `AGENTS.md` continues to apply; this
+directory is not automatically exempt from its repository-wide instructions.
