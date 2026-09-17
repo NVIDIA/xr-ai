@@ -9,6 +9,8 @@ import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.os.Handler
+import android.os.Looper
 import io.livekit.android.room.track.LocalVideoTrack
 import kotlinx.coroutines.suspendCancellableCoroutine
 import livekit.org.webrtc.VideoFrame
@@ -18,6 +20,8 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+private val rendererCleanupHandler = Handler(Looper.getMainLooper())
 
 internal fun encodeI420Jpeg(i420: ByteBuffer, width: Int, height: Int): ByteArray {
     val ySize = width * height
@@ -108,11 +112,17 @@ internal suspend fun LocalVideoTrack.captureJpeg(): ByteArray =
         lateinit var sink: VideoSink
         sink = VideoSink { frame ->
             if (!completed.compareAndSet(false, true)) return@VideoSink
-            removeRenderer(sink)
-            try {
-                continuation.resume(encodeFrameJpeg(frame))
-            } catch (error: Throwable) {
-                continuation.resumeWithException(error)
+            val result = runCatching { encodeFrameJpeg(frame) }
+            // LiveKit iterates its mutable sink set while invoking this
+            // callback. Posting removal avoids mutating that set in-place and
+            // removes the sink before a temporary track can be disposed.
+            rendererCleanupHandler.post {
+                removeRenderer(sink)
+                if (!continuation.isActive) return@post
+                result.fold(
+                    onSuccess = { continuation.resume(it) },
+                    onFailure = { continuation.resumeWithException(it) },
+                )
             }
         }
         continuation.invokeOnCancellation {

@@ -59,9 +59,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,6 +87,11 @@ import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectR
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ── Color tokens (match web client's CSS variables) ───────────────────────────
@@ -127,6 +131,15 @@ private fun StreamKitTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
+    val requestCameraPermission = rememberCameraPermissionRequester()
+    DisposableEffect(vm, requestCameraPermission) {
+        vm.requestCameraPermission = requestCameraPermission
+        onDispose {
+            if (vm.requestCameraPermission === requestCameraPermission) {
+                vm.requestCameraPermission = null
+            }
+        }
+    }
     Scaffold(
         containerColor = ColorPageBg,
         topBar = {
@@ -155,7 +168,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
                 AgentSection(vm)
                 ConnectionSection(vm)
                 NetworkSection(vm)
-                MediaSection(vm)
+                MediaSection(vm, requestCameraPermission)
                 DataChannelSection(vm)
                 if (vm.receivedMessages.isNotEmpty()) {
                     ReceivedSection(vm)
@@ -172,6 +185,42 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
             )
         }
     }
+}
+
+@Composable
+private fun rememberCameraPermissionRequester(): suspend () -> Boolean {
+    val context = LocalContext.current
+    var pendingRequest by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        pendingRequest?.complete(granted)
+        pendingRequest = null
+    }
+    val request = remember(context, launcher) {
+        suspend {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                true
+            } else {
+                val result = withContext(Dispatchers.Main.immediate) {
+                    pendingRequest ?: CompletableDeferred<Boolean>().also {
+                        pendingRequest = it
+                        launcher.launch(Manifest.permission.CAMERA)
+                    }
+                }
+                result.await()
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingRequest?.cancel()
+            pendingRequest = null
+        }
+    }
+    return request
 }
 
 @Composable
@@ -500,9 +549,13 @@ private fun FieldRow(
 // ── Media section ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun MediaSection(vm: AppViewModel) {
+private fun MediaSection(
+    vm: AppViewModel,
+    requestCameraPermission: suspend () -> Boolean,
+) {
     val isConnected = vm.connectionState == ConnectionState.CONNECTED
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Permission launchers
     val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -510,12 +563,6 @@ private fun MediaSection(vm: AppViewModel) {
     ) { granted ->
         if (granted) vm.startAudio()
     }
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) vm.startCamera()
-    }
-
     SectionCard(title = "Media") {
         // Microphone toggle
         CardRow {
@@ -581,7 +628,9 @@ private fun MediaSection(vm: AppViewModel) {
                             context, Manifest.permission.CAMERA
                         ) == PackageManager.PERMISSION_GRANTED
                         if (hasPerm) vm.startCamera()
-                        else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        else scope.launch {
+                            if (requestCameraPermission()) vm.startCamera()
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
