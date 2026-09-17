@@ -121,8 +121,8 @@ Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 
 - adapter behavior and model-specific wire details;
 - endpoint location, credentials, and health behavior;
-- deployment ownership by the current stack, a reused service, or an external
-  provider.
+- optional deployment metadata for the shared model-server launcher. Consumer
+  profiles omit it and leave endpoint lifecycle to the operator.
 
 Tools are ordinary in-process `Tool` or `AsyncTool` objects. A tool can perform
 local work or call a typed service, but application agents retain ownership of
@@ -142,17 +142,16 @@ ready-file reports only that process's initialization. A premature process
 exit fails the stack and triggers coordinated shutdown. Ready-files order
 process startup; they do not determine whether a client may connect.
 
-Model services use the same ownership model without forcing every sample to
-reload large weights:
+The shared `model-servers` stack owns model services and can keep large weights
+loaded across sample restarts. Its deployment profiles mark services as
+`managed` to select processes to launch. Application samples declare only their
+own hub, workers, and capability services; their model profiles contain adapters
+and endpoints without deployment metadata. For model availability and worker
+startup behavior, refer to {ref}`consumer-model-readiness`.
 
-- **Managed:** the current orchestrator starts and owns the service.
-- **Reused:** the service is expected to be running already, commonly from the
-  shared `model-servers` stack.
-- **External:** XR AI connects to an endpoint it neither starts nor stops.
-
-Heavy model servers can use a persistent launch mode and remain hot across
-sample restarts. The model profile co-locates process ownership and endpoint
-choices used by the orchestrator and worker, reducing configuration drift. The
+Explicit `reused` and `external` model deployment entries remain supported for
+older custom profiles. Neither gives a consuming worker control over a server.
+The model-server profile co-locates process ownership and endpoint choices. The
 launcher does not validate an endpoint's `base_url` against the launched
 service's separate configuration. Detailed startup, shutdown, and persistence
 behavior belongs in {doc}`Launcher and process model
