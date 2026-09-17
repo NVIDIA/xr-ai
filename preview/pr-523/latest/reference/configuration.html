@@ -1382,10 +1382,8 @@ workflow.</p></li>
 <span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
 <span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
 <span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># To adapt a sample, copy the `llm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8110. Duplicate it as</span>
-<span class="c1"># `agent_llm` when the sample uses that role.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># Verify startup and memory use on the target 96 GB Blackwell GPU before</span>
 <span class="c1"># deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
@@ -1451,9 +1449,8 @@ workflow.</p></li>
 <span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
 <span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
 <span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># To adapt a sample, copy the `vlm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8100.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
@@ -1597,10 +1594,8 @@ workflow.</p></li>
 <span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
 <span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
 <span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># To adapt a sample, copy the `llm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8110. Duplicate it as</span>
-<span class="c1"># `agent_llm` when the sample uses that role.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># RTX Ada is not listed for this Omni NIM; verify startup and memory use on</span>
 <span class="c1"># target hardware before deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
@@ -1664,9 +1659,8 @@ workflow.</p></li>
 <span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
 <span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
 <span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># To adapt a sample, copy the `vlm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8100.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># GPU 0 with the embedding server and a demo's CloudXR + LOVR; the</span>
 <span class="c1"># Nemotron NIM and local STT share GPU 1.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
@@ -2025,10 +2019,8 @@ workflow.</p></li>
 <span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
 <span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
 <span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># To adapt a sample, copy the `llm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8110. Duplicate it as</span>
-<span class="c1"># `agent_llm` when the sample uses that role.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># GB10 is not listed for this Omni NIM; verify startup and memory use on target</span>
 <span class="c1"># hardware before deployment.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
@@ -2094,9 +2086,8 @@ workflow.</p></li>
 <span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
 <span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
 <span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># To adapt a sample, copy the `vlm` entry from</span>
-<span class="c1"># ../models.vlm_llm_nim.json into its active models JSON, omit the</span>
-<span class="c1"># `deployment` object and endpoint health settings, and keep port 8100.</span>
+<span class="c1"># For sample configuration, refer to</span>
+<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
 <span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
 <span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>

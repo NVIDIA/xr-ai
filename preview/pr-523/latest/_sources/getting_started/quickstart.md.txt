@@ -133,9 +133,9 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-Only DeviceIOHub and the worker start. Worker readiness includes a short
-1280x720 streaming VLM warmup, without separate STT, TTS, or VLM health polling.
-Wait for the shared model-server launcher to return before starting the sample.
+Only DeviceIOHub and the worker start. For the worker's startup warmup, refer
+to {doc}`/reference/simple-vlm-example`. For readiness and required deployment
+order, refer to {ref}`consumer-model-readiness`.
 The hub prints:
 
 ```
