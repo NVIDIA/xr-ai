@@ -31,7 +31,7 @@ async with make_llm(config, "agent_llm") as llm:
 ```
 
 (profile-contract)=
-A profile names logical roles and separates three concerns:
+A client profile names logical roles and declares adapters and endpoints:
 
 ```json
 {
@@ -41,10 +41,8 @@ A profile names logical roles and separates three concerns:
       "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {
         "base_url": "http://localhost:8108",
-        "timeout": 60.0,
-        "readiness": "health"
-      },
-      "deployment": {"ownership": "reused", "service": "lightning"}
+        "timeout": 60.0
+      }
     }
   }
 }
@@ -52,19 +50,29 @@ A profile names logical roles and separates three concerns:
 
 - `adapter` owns the model name, wire quirks, capabilities, default request
   extras, and reasoning-field normalization.
-- `endpoint` owns connectivity, readiness, timeouts, and environment-variable
-  credentials.
-- `deployment` tells an orchestrator whether the process is managed, reused, or
-  external.
+- `endpoint` owns connectivity, timeouts, and environment-variable credentials.
+  Optional health settings control explicit SDK `health()` calls; they do not
+  cause consumer workers to poll endpoints at startup.
+- Optional `deployment` metadata selects the processes a shared model-server
+  orchestrator manages. Consumer profiles omit it: their endpoints are operated
+  outside the sample, whether locally or remotely. Existing explicit `reused`
+  and `external` entries remain supported for compatibility.
 
 (deployment-profiles)=
 Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
 and `kind: preset:<name>`. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
-are explicit: endpoint credentials use `api_key_env`, while credentials needed
-by a managed service itself use `deployment.credentials`.
+stdlib-only launcher must use the wrapped nested JSON form with `adapter`,
+`endpoint`, and `deployment` objects. Only the worker-side loader accepts omitted
+`deployment` metadata. Launcher credentials are explicit: endpoint credentials
+use `api_key_env`, while credentials needed by a managed service itself use
+`deployment.credentials`.
+
+## Request failures
+
+Applications handle errors from model requests. For worker startup behavior,
+refer to {ref}`consumer-model-readiness`.
 
 ## Built-in adapters
 
@@ -115,18 +123,17 @@ A hosted OpenAI-compatible endpoint changes only the profile:
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY",
-        "readiness": "none"
-      },
-      "deployment": {"ownership": "external"}
+        "api_key_env": "NGC_API_KEY"
+      }
     }
   }
 }
 ```
 
-Use `readiness: none` only when the remote provider has no compatible health
-route. It makes `health()` succeed without a request, preventing an impossible
-local readiness gate.
+For code that calls `health()` explicitly, `readiness: none` makes that call
+succeed without a request; `health_path` selects the HTTP route when probing is
+enabled. Tea making's RAG service requires this configuration for hosted embedding
+endpoints; refer to {ref}`rag-embedding-health`.
 
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
@@ -145,8 +152,9 @@ stt:
 
 STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts `voice` and `sample_rate`. A hosted NVCF endpoint uses TLS,
-`api_key_env`, its `function_id`, and `health_check: false` because it has no
-Riva channel-ready health surface.
+`api_key_env`, and its `function_id`. If custom code explicitly calls `health()`,
+set `health_check: false` for a hosted endpoint without a channel-ready health
+surface. Existing gRPC request deadlines and error propagation are unchanged.
 
 ## Tests
 

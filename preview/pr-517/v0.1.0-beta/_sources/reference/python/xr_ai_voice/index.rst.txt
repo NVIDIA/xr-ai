@@ -187,6 +187,11 @@ Package Contents
 
    Own voice media lifecycle and bridge runtime input and output topics.
 
+   Startup waits only for explicitly supplied ``probes``, such as an inference
+   warmup or an application capability dependency. STT and TTS health are not
+   polled automatically. Readiness reports initialized application transport
+   after those explicit probes, not availability of every model endpoint.
+
 
    .. py:method:: run(runtime: xr_ai_runtime.AgentRuntime, *, source: str = 'voice') -> None
       :async:

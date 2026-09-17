@@ -12,10 +12,12 @@ mechanics shared with other samples, refer to
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, via `xr-ai-launcher`) reuses all
-model processes and starts its application processes serially; each owned
-process touches its ready file before the next starts. `run_stack` is fail-fast:
-any owned process exit terminates the application stack.
+The orchestrator (`xr_render_demo`, via `xr-ai-launcher`) declares and starts
+only its application processes, serially; each process touches its ready file
+before the next starts. The worker connects to shared model endpoints configured
+in `yaml/models.json`. `run_stack` is fail-fast: any owned process exit terminates
+the application stack. The table includes both application processes and their
+shared model services.
 
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
@@ -111,7 +113,7 @@ restart `xr_render_demo` to apply a change.
 | `yaml/cloudxr_runtime.yaml` | CloudXR install state, EULA acceptance, client profile, compositor GPU, and environment overrides |
 | `yaml/xr_render_demo_worker.yaml` | Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection |
 | `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
@@ -125,7 +127,7 @@ settings are independent and must be planned together. Keep
 `allow_sim_pose: false` outside the live eval harness.
 
 Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
-or `vlm`) to an adapter, endpoint, and deployment. Editing it changes which
+or `vlm`) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to {doc}`/guides/customizing-model-servers` for
 server-side model, port, GPU, or memory changes, then restart the persistent
@@ -168,10 +170,11 @@ grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
-There is a deliberate startup ordering constraint: `VoiceAgent` readiness
-blocks on the VLM's `/health` endpoint, which
-returns 200 only after weights are fully loaded. This ensures model memory has
-settled before LOVR starts its Vulkan device, preventing a transient OOM race.
+Start the shared model-server stack and wait for its launcher to return before
+starting the sample. Server wrappers check model loading and service reuse.
+The worker does not poll model health endpoints. It retains a tool-shaped LLM
+inference warmup before announcing readiness so that LLM memory settles before
+LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.
 
 ## STT — parakeet-tdt-0.6b-v3
 

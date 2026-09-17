@@ -475,10 +475,13 @@ and defaults.</p>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns model readiness, hub transport, VAD and STT, voice gating, typed
-text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, VAD and STT, voice gating,
+typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
+<p>For the startup probe contract, refer to <a class="reference internal" href="python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.
+For deployment order and migration of existing applications, refer to
+<a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 <p>Each non-empty final STT result is queued for publication on
 <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before wake-phrase filtering. Accepted speech and
 untopiced typed text become <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages

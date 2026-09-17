@@ -177,7 +177,7 @@ temporary worker configuration with absolute paths. Edit the files under
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
 | `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Wake-word and always-on speech presets |
 | `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
-| `yaml/models.local.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/models.local.json` | Model adapters, shared endpoints, and explicit RAG embedding health settings |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
 Choose a voice preset through `voice_gate_yaml` in
