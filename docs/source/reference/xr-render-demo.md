@@ -173,9 +173,10 @@ slower than the live stream, it replaces old pending frame requests and records
 the drop count rather than adding latency to DeviceIOHub or the agent. The
 process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
 Finalization additionally requires `ffmpeg` on `PATH`; it copies the H.264
-stream, encodes the aligned PCM mix as AAC-LC, normalizes timestamps, and moves
-MP4 metadata ahead of media data for fast-start playback. Omit `--capture` when
-recording is prohibited, and treat the output as sensitive device data.
+stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
+normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
+ahead of media data for fast-start playback. Omit `--capture` when recording is
+prohibited, and treat the output as sensitive device data.
 
 The media-capture service itself also supports a `raw` projection and explicit
 agent-controlled session boundaries. Those modes reuse the same audio,

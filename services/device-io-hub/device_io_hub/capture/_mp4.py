@@ -43,7 +43,7 @@ def mux_h264_aac(
     *,
     ffmpeg_path: str,
     output_path: Path,
-    h264_path: Path,
+    video_path: Path,
     wave_path: Path,
     audio_start_frame: int,
     audio_end_frame: int,
@@ -58,6 +58,7 @@ def mux_h264_aac(
 
     audio_filter = (
         f"[1:a:0]atrim=start_sample={audio_start_frame}:end_sample={audio_end_frame},"
+        "asetpts=PTS-STARTPTS,"
         f"aresample={_MP4_AUDIO_SAMPLE_RATE}:async=1:first_pts=0,"
         "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
         "asetpts=N/SR/TB[audio]"
@@ -69,14 +70,8 @@ def mux_h264_aac(
         "error",
         "-nostdin",
         "-y",
-        "-fflags",
-        "+genpts",
-        "-r",
-        f"{fps:g}",
-        "-f",
-        "h264",
         "-i",
-        str(h264_path),
+        str(video_path),
         "-i",
         str(wave_path),
         "-filter_complex",
@@ -89,6 +84,10 @@ def mux_h264_aac(
         "copy",
         "-tag:v",
         "avc1",
+        "-fps_mode:v",
+        "passthrough",
+        "-copytb",
+        "1",
         "-c:a",
         "aac",
         "-profile:a",

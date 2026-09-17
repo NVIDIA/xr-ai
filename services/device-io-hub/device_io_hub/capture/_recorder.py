@@ -22,17 +22,10 @@ from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
 from ._frontends import _CaptureFrontend, _make_frontend, _RawCaptureFrontend
+from ._matroska import VideoPacket
 from .config import CaptureConfig
 
 _MAX_SAFE_NAME = 96
-
-
-@dataclass(frozen=True, slots=True)
-class _VideoPacket:
-    offset: int
-    size: int
-    pts_us: int
-    key_frame: bool
 
 
 _MAX_DATA_FEED_TEXT = 1_024
@@ -214,7 +207,7 @@ class _H264TrackWriter:
         self._last_pts_us = 0
         self._segment_index = 0
         self._active: dict | None = None
-        self._packets: list[_VideoPacket] = []
+        self._packets: list[VideoPacket] = []
         self._submitted_pts: deque[int] = deque()
         self.segments: list[dict] = []
 
@@ -295,7 +288,7 @@ class _H264TrackWriter:
         if not self._submitted_pts:
             raise ValueError("NVENC emitted more packets than submitted frames")
         self._packets.append(
-            _VideoPacket(
+            VideoPacket(
                 offset=offset,
                 size=len(payload),
                 pts_us=self._submitted_pts.popleft(),
@@ -761,13 +754,19 @@ class SessionRecorder:
         if not raw_sources:
             return {}
         raw_path = session.root / "video" / "session.264"
-        self._join_sources(session.root, raw_sources, raw_path)
+        raw_packets = self._join_sources(session.root, raw_sources, raw_path)
         projected_sources = self._video_sources(session.projected_video)
         display_sources = projected_sources or raw_sources
         projection_path: Path | None = None
         if projected_sources:
             projection_path = session.root / "video" / "projection.264"
-            self._join_sources(session.root, projected_sources, projection_path)
+            display_packets = self._join_sources(
+                session.root,
+                projected_sources,
+                projection_path,
+            )
+        else:
+            display_packets = raw_packets
 
         source_dimensions = sorted({
             (segment["width"], segment["height"])
@@ -822,6 +821,9 @@ class SessionRecorder:
                 audio_start_frame=start_frame,
                 audio_end_frame=end_frame,
                 fps=combined["fps"],
+                packets=display_packets,
+                width=combined["width"],
+                height=combined["height"],
             )
         except Exception as exc:
             logger.warning("media capture video finalization failed path={}: {}", raw_path, exc)
@@ -857,20 +859,32 @@ class SessionRecorder:
         session_root: Path,
         sources: list[tuple[str, dict]],
         output_path: Path,
-    ) -> None:
+    ) -> list[VideoPacket]:
         pending_path = output_path.with_suffix(".264.pending")
+        packets: list[VideoPacket] = []
         try:
             with pending_path.open("wb") as output:
                 for _, segment in sources:
                     source_path = session_root / segment["path"]
+                    offset = output.tell()
                     with source_path.open("rb") as source:
                         shutil.copyfileobj(source, output)
+                    packets.extend(
+                        VideoPacket(
+                            offset=offset + packet.offset,
+                            size=packet.size,
+                            pts_us=packet.pts_us,
+                            key_frame=packet.key_frame,
+                        )
+                        for packet in segment["_packets"]
+                    )
             pending_path.replace(output_path)
         except Exception:
             pending_path.unlink(missing_ok=True)
             raise
         for _, segment in sources:
             (session_root / segment["path"]).unlink(missing_ok=True)
+        return sorted(packets, key=lambda packet: packet.pts_us)
 
     def _event(self, session: _ParticipantSession, kind: str, pts_us: int, **fields) -> None:
         with session.lock:

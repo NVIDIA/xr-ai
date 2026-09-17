@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from device_io_hub.capture import _frontends as frontends_module
+from device_io_hub.capture import _matroska as matroska_module
 from device_io_hub.capture import _mp4 as mp4_module
 from device_io_hub.capture import _service as service_module
 from device_io_hub.capture._compositor import compose_caption
@@ -287,7 +288,7 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     mp4_module.mux_h264_aac(
         ffmpeg_path="/usr/bin/ffmpeg",
         output_path=output_path,
-        h264_path=h264_path,
+        video_path=h264_path,
         wave_path=wave_path,
         audio_start_frame=480,
         audio_end_frame=2_400,
@@ -295,8 +296,11 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     )
 
     command = commands[0]
-    assert command[command.index("-r") + 1] == "30"
+    assert "-r" not in command
+    assert command[command.index("-i") + 1] == str(h264_path)
     assert command[command.index("-c:v") + 1] == "copy"
+    assert command[command.index("-fps_mode:v") + 1] == "passthrough"
+    assert command[command.index("-copytb") + 1] == "1"
     assert command[command.index("-c:a") + 1] == "aac"
     assert command[command.index("-profile:a") + 1] == "aac_low"
     assert command[command.index("-ar:a") + 1] == "48000"
@@ -304,9 +308,54 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     assert command[command.index("-movflags") + 1] == "+faststart"
     audio_filter = command[command.index("-filter_complex") + 1]
     assert "atrim=start_sample=480:end_sample=2400" in audio_filter
+    assert "atrim=start_sample=480:end_sample=2400,asetpts=PTS-STARTPTS" in audio_filter
+    assert audio_filter.index("asetpts=PTS-STARTPTS") < audio_filter.index("aresample=")
     assert "channel_layouts=stereo" in audio_filter
     assert "asetpts=N/SR/TB" in audio_filter
     assert output_path.read_bytes().index(b"moov") < output_path.read_bytes().index(b"mdat")
+
+
+def test_matroska_timeline_preserves_lower_rate_and_dropped_frame_timestamps(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    packet_payload = (
+        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac"
+        b"\x00\x00\x00\x01\x68\xee\x3c\x80"
+        b"\x00\x00\x00\x01\x65frame"
+    )
+    h264_path = tmp_path / "session.264"
+    h264_path.write_bytes(packet_payload * 3)
+    packets = [
+        matroska_module.VideoPacket(
+            offset=index * len(packet_payload),
+            size=len(packet_payload),
+            pts_us=pts_us,
+            key_frame=True,
+        )
+        for index, pts_us in enumerate((1_000_000, 1_066_667, 3_000_000))
+    ]
+    relative_timecodes: list[int] = []
+    original_simple_block = matroska_module._simple_block
+
+    def record_simple_block(track, relative_ms, flags, payload):
+        relative_timecodes.append(relative_ms)
+        return original_simple_block(track, relative_ms, flags, payload)
+
+    monkeypatch.setattr(matroska_module, "_simple_block", record_simple_block)
+    output_path = tmp_path / "timeline.mkv"
+
+    matroska_module.mux_h264(
+        output_path=output_path,
+        h264_path=h264_path,
+        packets=packets,
+        width=64,
+        height=32,
+        fps=30,
+    )
+
+    assert relative_timecodes == [0, 67, 2_000]
+    assert output_path.read_bytes().startswith(b"\x1a\x45\xdf\xa3")
 
 
 def test_capture_requires_ffmpeg_on_path(monkeypatch) -> None:
@@ -334,6 +383,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
 ) -> None:
     encoded_inputs: list[np.ndarray] = []
     finalized_video_inputs: list[str] = []
+    finalized_video_pts: list[int] = []
 
     class FakeEncoder:
         def Encode(self, frame, _params):
@@ -357,10 +407,17 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     )
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
 
+    original_mux_h264 = frontends_module.mux_h264
+
+    def mux_timeline(**kwargs) -> None:
+        finalized_video_pts.extend(packet.pts_us for packet in kwargs["packets"])
+        original_mux_h264(**kwargs)
+
     def finalize(**kwargs) -> None:
-        finalized_video_inputs.append(kwargs["h264_path"].name)
+        finalized_video_inputs.append(kwargs["video_path"].name)
         kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
 
+    monkeypatch.setattr(frontends_module, "mux_h264", mux_timeline)
     monkeypatch.setattr(frontends_module, "mux_h264_aac", finalize)
     config = CaptureConfig(
         out_dir=str(tmp_path),
@@ -448,8 +505,10 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         frame.shape[0] > 48 and np.any(frame[_frame().height:] == 235)
         for frame in encoded_inputs
     )
-    assert finalized_video_inputs == ["projection.264"]
+    assert finalized_video_inputs == ["session.timeline.mkv.pending"]
+    assert finalized_video_pts == [1_000_000, 1_050_000]
     assert not (session / "video" / "projection.264").exists()
+    assert not (session / "video" / "session.timeline.mkv.pending").exists()
 
 
 def test_session_manifest_falls_back_to_raw_video_when_mp4_finalization_fails(
