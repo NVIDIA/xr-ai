@@ -84,13 +84,17 @@ internal class LiveKitBackend(
     // ── Public local preview accessor ─────────────────────────────────────────
 
     /**
-     * Currently published local camera track, or null when stopped.  Used by
+     * Actively capturing local camera track, or null when stopped. Used by
      * `CameraPreviewView` to render the outgoing stream locally; app code
      * goes through that composable rather than touching this directly.
      */
     val localCameraTrack: LocalVideoTrack?
-        get() = room?.localParticipant
-            ?.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack
+        get() {
+            val publication = room?.localParticipant
+                ?.getTrackPublication(Track.Source.CAMERA) ?: return null
+            if (publication.muted) return null
+            return publication.track as? LocalVideoTrack
+        }
 
     /** Initialises a [TextureViewRenderer] with the connected room's EGL
      *  context so it can sink frames from the local camera track. No-op when
