@@ -39,7 +39,7 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
-│   ├── models.json                 ← adapter, endpoint, and deployment specs
+│   ├── models.json                 ← adapter and endpoint specs; optional deployment metadata
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -51,9 +51,13 @@ agent-samples/<name>/
 
 `yaml/models.json` names the logical models the worker needs (`llm`,
 `vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
-adapter, endpoint, and deployment spec. Worker-only profiles may remain in the
-legacy flat JSON or YAML shape; a profile shared with the stdlib-only orchestrator
-uses the wrapped nested JSON shape. The worker passes either form to
+adapter and endpoint spec, with optional deployment metadata. Consumer samples
+omit `deployment` and connect to shared endpoints; the shared model-server
+profiles use it to select managed services. For startup probes, refer to
+{py:class}`~xr_ai_voice.VoiceAgent` and {ref}`consumer-model-readiness`.
+Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
+shared with the stdlib-only orchestrator requires the wrapped nested JSON shape
+including deployment metadata. The worker passes either form to
 `load_models_config(...)` and constructs services with `make_llm`, `make_vlm`,
 `make_stt`, or `make_tts` from `xr_ai_models`. Schema, preset
 table, compatibility formats, and the profile contract are in

@@ -51,7 +51,7 @@ Spark retains the original HTTP STT service directly on port `8103`.
 
 ## Run
 
-Run all commands from `agent-samples/model-servers-nim/`:
+Run all commands from `model-server-samples/model-servers-nim/`:
 
 ```bash
 uv sync
@@ -117,7 +117,7 @@ Start an existing agent sample with its checked-in `yaml/models.json` unchanged.
 For example, after this stack reports ready:
 
 ```bash
-uv run --project ../simple-vlm-example simple_vlm_example
+uv run --project ../../agent-samples/simple-vlm-example simple_vlm_example
 ```
 
 The default ports, model aliases, and protocols match `model-servers`. There is
@@ -225,7 +225,7 @@ After startup, check every endpoint through the same SDK that agents use:
 
 ```bash
 uv run --extra test python smoke_test.py
-uv run --extra test python smoke_test.py --models ../simple-vlm-example/yaml/models.json
+uv run --extra test python smoke_test.py --models ../../agent-samples/simple-vlm-example/yaml/models.json
 ```
 
 The default smoke test loads the original `model-servers` configuration unchanged.

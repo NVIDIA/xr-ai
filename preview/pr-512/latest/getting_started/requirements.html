@@ -526,7 +526,7 @@ install guide and run the CDI and runtime-configuration steps from there:</p>
 <h2>GPU-profile prerequisites<a class="headerlink" href="#gpu-profile-prerequisites" title="Link to this heading">#</a></h2>
 <p>Install before <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> for these targets:</p>
 <ul class="simple">
-<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
+<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
 </ul>
 <p>All GPU profiles default to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code>, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code>, refer to the
@@ -578,7 +578,7 @@ service occupies port 8000. Refer to the <code class="docutils literal notransla
 </section>
 <section id="running-on-other-gpus">
 <h2>Running on other GPUs<a class="headerlink" href="#running-on-other-gpus" title="Link to this heading">#</a></h2>
-<p>A profile (<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
+<p>A profile (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
 that pins two knobs per model server so the stack fits a known configuration:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> — which physical GPU each server runs on (for example,
@@ -599,7 +599,7 @@ them if you have spare VRAM.</p></li>
 the LLM and VLM servers to reduce the KV-cache footprint.</p></li>
 </ol>
 <p>Then select the reviewed profile explicitly:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-directory-name&gt;
 </pre></div>
 </div>

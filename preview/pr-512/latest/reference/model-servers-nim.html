@@ -504,7 +504,7 @@ The voice pipeline can still submit sentences separately.</p>
 <p>Spark retains the original HTTP STT service directly on port <code class="docutils literal notranslate"><span class="pre">8103</span></code>.</p>
 <section id="run">
 <h2>Run<a class="headerlink" href="#run" title="Link to this heading">#</a></h2>
-<p>Run all commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers-nim/</span></code>:</p>
+<p>Run all commands from <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers-nim/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span>--gpu-profile<span class="w"> </span>96G_blackwell<span class="w"> </span>--dry-run
 uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim
@@ -555,7 +555,7 @@ launches then exit when that listener closes.</p>
 <h2>Use with an agent sample<a class="headerlink" href="#use-with-an-agent-sample" title="Link to this heading">#</a></h2>
 <p>Start an existing agent sample with its checked-in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> unchanged.
 For example, after this stack reports ready:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../simple-vlm-example<span class="w"> </span>simple_vlm_example
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
 <p>The default ports, model aliases, and protocols match <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>. There is
@@ -667,7 +667,7 @@ shutdown, restart, and rejection of unhealthy or conflicting listeners:</p>
 </div>
 <p>After startup, check every endpoint through the same SDK that agents use:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py
-uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py<span class="w"> </span>--models<span class="w"> </span>../simple-vlm-example/yaml/models.json
+uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py<span class="w"> </span>--models<span class="w"> </span>../../agent-samples/simple-vlm-example/yaml/models.json
 </pre></div>
 </div>
 <p>The default smoke test loads the original <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> configuration unchanged.

@@ -28,10 +28,20 @@ project, such as `xr-render-demo/scene/scene_service.yaml`. Omit `config=` for
 processes that use their own internal defaults.
 
 Samples that support interchangeable local and hosted models may set
-`models_config` in the worker YAML. `load_model_deployment()` reads the selected
-structured JSON profile using only the standard library and exposes its
-managed, reused, or external service ownership to the orchestrator. The same
-file is loaded by the worker through `xr-ai-models`.
+`models_config` in the worker YAML. The worker SDK's `load_models_config()`
+accepts omitted `deployment` metadata and defaults it to external ownership.
+Consumer samples declare only application processes and let workers connect to
+the configured endpoints; their launchers do not read model profiles.
+
+Launcher profile loaders require the wrapped JSON form with `adapter`,
+`endpoint`, and `deployment` objects for each model. `load_model_deployment()`
+reads the profile selected by the worker YAML, while `load_deployment_profile()`
+reads a profile path directly. Both use only the standard library and expose
+deployment metadata and credential requirements. The shared `model-servers`
+sample uses the direct loader and managed entries to select servers. Legacy
+explicit reused and external deployment entries remain accepted. Refer to
+{ref}`model profile formats <deployment-profiles>` for the worker and launcher
+requirements.
 
 The orchestrator declares the process sequence in code:
 
