@@ -14,12 +14,12 @@ sample's design and operational details.
 
 ## Composition
 
-The orchestrator starts only DeviceIOHub and the worker. The fixed
-`yaml/models.json` profile marks Parakeet STT, Cosmos3 Nano, and Pocket TTS as
-reused services. Start those endpoints together with the shared model-server
-stack.
+The orchestrator starts only DeviceIOHub and the worker. The
+`yaml/models.json` profile configures client adapters and shared endpoints for
+Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+the shared model-server stack.
 
-`VoiceAgent` owns service readiness, hub transport, voice gating, TTS, signals,
+`VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` always invokes `CurrentFrameTool`. The tool uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
@@ -58,7 +58,9 @@ The worker package is under
 Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
-Endpoint health alone is not sufficient for that warmup.
+The warmup retries failed inference requests until one succeeds. It does not
+call a health endpoint first. STT and TTS do not gate worker startup; start the
+shared model-server stack before the sample so speech requests can succeed.
 
 ## Configuration
 
@@ -72,7 +74,7 @@ layout works without command-line configuration arguments.
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Model adapters, endpoints, readiness, and reuse declarations |
+| `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
 
