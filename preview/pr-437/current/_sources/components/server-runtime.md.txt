@@ -258,8 +258,9 @@ contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
 sets and no B-frames. At session finalization, each stream's chunks are joined
 in timestamp order. For the demo projection, FFmpeg preserves the temporary
 composed H.264 stream, converts the aligned PCM mix to AAC-LC with an explicit
-48 kHz stereo layout, regenerates monotonic constant-rate video and audio
-timestamps, and writes one `.mp4` with fast-start metadata. Resolution or
+48 kHz stereo layout, preserves recorded frame timing across sparse or dropped
+frames, resets trimmed audio to the same zero-based timeline, and writes one
+`.mp4` with fast-start metadata. Resolution or
 LiveKit track changes therefore do not create additional playable outputs.
 This does not affect the live path.
 
