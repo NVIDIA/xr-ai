@@ -462,7 +462,7 @@ headers.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>python3-dev
 </pre></div>
 </div>
-<p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
+<p>This applies to the <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code> profile.</p>
 </section>
 <section id="dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">
 <h3>DGX Spark — CUDA allocation fails during a vLLM cold start<a class="headerlink" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start" title="Link to this heading">#</a></h3>
@@ -600,7 +600,7 @@ guide requires, and retain the vLLM image pinned by the reviewed hardware
 profile:</p>
 <p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit installation guide</a></p>
 <p>This applies to the
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
 </section>
 <section id="gpu-service-aborts-with-cudnn-version-incompatibility">
 <h3>GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code><a class="headerlink" href="#gpu-service-aborts-with-cudnn-version-incompatibility" title="Link to this heading">#</a></h3>
@@ -877,7 +877,7 @@ restarts. Refer to <a class="reference internal" href="../components/ai-services
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>For Pocket TTS this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its verified launcher-owned process
@@ -891,7 +891,7 @@ success if server ownership cannot be verified or any target remains running.</p
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/model-servers</span> <span class="pre">model_servers</span></code>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">model-server-samples/model-servers</span> <span class="pre">model_servers</span></code>
 appears to hang at startup the first time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
