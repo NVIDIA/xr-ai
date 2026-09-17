@@ -21,8 +21,8 @@ the sample at the resulting endpoints.
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Deployment profile | `agent-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
-| Hardware profile | `agent-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
+| Deployment profile | `model-server-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
+| Hardware profile | `model-server-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
 | Sample models JSON | `agent-samples/<sample>/yaml/models*.json` | The roles that worker consumes and the endpoints it reuses |
 | Sample worker YAML | `agent-samples/<sample>/yaml/<worker>.yaml` | Application behavior such as prompts, voice gating, timeouts, and capability-service endpoints |
 
@@ -45,14 +45,14 @@ service, but is not integrated into the persistent model stack.
 Copy the closest profile under a new name:
 
 ```bash
-cp agent-samples/model-servers/yaml/models.default.json \
-  agent-samples/model-servers/yaml/models.my-stack.json
+cp model-server-samples/model-servers/yaml/models.default.json \
+  model-server-samples/model-servers/yaml/models.my-stack.json
 ```
 
 Run it by filename stem:
 
 ```bash
-uv run --project agent-samples/model-servers \
+uv run --project model-server-samples/model-servers \
   model_servers --models my-stack
 ```
 
@@ -81,7 +81,7 @@ The profile must retain the wrapped JSON shape:
 Within the shared profile, `managed` means `model-servers` owns that service.
 Roles may share a service; for example, `llm` and `agent_llm` can both name
 `omni`. A service name must have a corresponding row in `_MODEL_SERVICES` in
-`agent-samples/model-servers/main.py`.
+`model-server-samples/model-servers/main.py`.
 
 ## Customize a hardware-specific server
 
@@ -243,7 +243,7 @@ endpoint-only customization.
 Before committing a custom profile:
 
 ```bash
-jq empty agent-samples/model-servers/yaml/models.my-stack.json
+jq empty model-server-samples/model-servers/yaml/models.my-stack.json
 
 uv run --project tests pytest -q \
   tests/test_model_servers.py \
@@ -257,8 +257,8 @@ before launching it. After changing an image, checkpoint, or launch setting,
 stop the old stack once so it cannot continue serving stale configuration:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
-uv run --project agent-samples/model-servers \
+uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers \
   model_servers --models my-stack
 ```
 
