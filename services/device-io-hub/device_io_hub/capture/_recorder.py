@@ -11,6 +11,7 @@ import shutil
 import struct
 import threading
 import time
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -605,11 +606,11 @@ class SessionRecorder:
                 completed.append(root)
         return completed
 
-    def _prune_artifacts(self) -> None:
+    def _prune_artifacts(self, protected: Collection[Path] = ()) -> None:
         cap = self._config.max_total_bytes
         if cap <= 0:
             return
-        active = {session.root for session in self._sessions.values()}
+        active = {session.root for session in self._sessions.values()} | set(protected)
         artifacts = []
         for directory, dirnames, filenames in os.walk(self._root, followlinks=False):
             parent = Path(directory)

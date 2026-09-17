@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import wave
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +84,13 @@ class _DemoCaptureFrontend:
         width: int,
         height: int,
     ) -> _VideoArtifact:
+        with wave.open(str(wave_path), "rb") as audio:
+            available_audio_frames = audio.getnframes()
+        selected_audio_frames = max(
+            0,
+            min(audio_end_frame, available_audio_frames)
+            - min(audio_start_frame, available_audio_frames),
+        )
         relative_path = "video/session.mp4"
         output_path = session_root / relative_path
         pending_path = output_path.with_suffix(".mp4.pending")
@@ -114,7 +122,7 @@ class _DemoCaptureFrontend:
         return _VideoArtifact(
             path=relative_path,
             size_bytes=output_path.stat().st_size,
-            audio_embedded=True,
+            audio_embedded=selected_audio_frames > 0,
         )
 
 

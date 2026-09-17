@@ -42,6 +42,7 @@ class ReturnTrafficSubscriber:
         self._data_callbacks: list[DataCallback] = []
         self._flush_callbacks: list[FlushCallback] = []
         self._departures: dict[tuple[str, int, str], asyncio.Event] = {}
+        self._running = True
 
     def on_audio(self, callback: AudioCallback) -> None:
         self._audio_callbacks.append(callback)
@@ -53,7 +54,7 @@ class ReturnTrafficSubscriber:
         self._flush_callbacks.append(callback)
 
     async def run(self) -> None:
-        while True:
+        while self._running:
             _topic, payload = await self._socket.recv_multipart()
             type_id, message = decode(payload)
             if type_id == MsgType.RETURN_AUDIO:
@@ -67,6 +68,12 @@ class ReturnTrafficSubscriber:
                     await callback(message)
             elif type_id == MsgType.PARTICIPANT_EVENT and not message.joined:
                 self._departure_event(message).set()
+
+    def stop(self) -> None:
+        """Stop after the active callback and release departure waiters."""
+        self._running = False
+        for departure in self._departures.values():
+            departure.set()
 
     async def wait_for_departure(self, event: ParticipantEvent) -> None:
         """Wait until return traffic published before *event* has been handled."""

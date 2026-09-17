@@ -7,10 +7,11 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec
 
 from loguru import logger
 from xr_ai_hub import (
@@ -36,6 +37,7 @@ from .renderer import CaptureRenderer
 
 _RETURN_TRAFFIC_DRAIN_TIMEOUT_S = 30.0
 _RETURN_TRAFFIC_DRAIN_TIMEOUT_REASON = "return_traffic_drain_timeout"
+_P = ParamSpec("_P")
 
 
 def _invalid_audio_reason(chunk: AudioChunk) -> str | None:
@@ -193,18 +195,36 @@ class CaptureService:
         self._frame_workers: dict[tuple[str, str], _FrameWorker] = {}
         self._departed_participants: set[str] = set()
         self._closing_participants: set[str] = set()
+        self._callback_tasks: set[asyncio.Task] = set()
+        self._render_tasks: dict[Path, asyncio.Task[None]] = {}
         self._endpoint_task: asyncio.Task | None = None
         self._return_task: asyncio.Task | None = None
         self._failure: asyncio.Future[None] | None = None
         self._stopped = False
 
-        self._endpoint.on_frame(self._on_frame)
-        self._endpoint.on_audio(self._on_device_audio)
-        self._endpoint.on_data(self._on_device_data)
-        self._endpoint.on_participant(self._on_participant)
-        self._returns.on_audio(self._on_agent_audio)
-        self._returns.on_data(self._on_agent_data)
-        self._returns.on_flush(self._on_agent_flush)
+        self._endpoint.on_frame(self._tracked_callback(self._on_frame))
+        self._endpoint.on_audio(self._tracked_callback(self._on_device_audio))
+        self._endpoint.on_data(self._tracked_callback(self._on_device_data))
+        self._endpoint.on_participant(self._tracked_callback(self._on_participant))
+        self._returns.on_audio(self._tracked_callback(self._on_agent_audio))
+        self._returns.on_data(self._tracked_callback(self._on_agent_data))
+        self._returns.on_flush(self._tracked_callback(self._on_agent_flush))
+
+    def _tracked_callback(
+        self,
+        callback: Callable[_P, Awaitable[None]],
+    ) -> Callable[_P, Awaitable[None]]:
+        async def tracked(*args: _P.args, **kwargs: _P.kwargs) -> None:
+            task = asyncio.current_task()
+            if task is not None:
+                self._callback_tasks.add(task)
+            try:
+                await callback(*args, **kwargs)
+            finally:
+                if task is not None:
+                    self._callback_tasks.discard(task)
+
+        return tracked
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
@@ -295,8 +315,12 @@ class CaptureService:
                 incomplete_reason,
             )
             if bundle is not None:
-                await self._render(bundle)
-                await self._write(self._recorder._prune_artifacts)
+                if self._renderer_executor is None:
+                    await self._prune_artifacts()
+                else:
+                    await asyncio.shield(self._queue_render(bundle))
+            else:
+                await self._prune_artifacts()
         finally:
             self._closing_participants.discard(participant_id)
 
@@ -337,11 +361,48 @@ class CaptureService:
     async def _render(self, bundle: Path) -> None:
         if self._renderer_executor is None:
             return
-        await asyncio.get_running_loop().run_in_executor(
+        future = asyncio.get_running_loop().run_in_executor(
             self._renderer_executor,
             self._render_bundle,
             bundle,
         )
+        try:
+            await asyncio.shield(future)
+        except asyncio.CancelledError:
+            await future
+            raise
+
+    def _queue_render(self, bundle: Path) -> asyncio.Task[None]:
+        task = self._render_tasks.get(bundle)
+        if task is None:
+            task = asyncio.create_task(
+                self._render_and_prune(bundle),
+                name=f"capture-render-{bundle.name}",
+            )
+            self._render_tasks[bundle] = task
+        return task
+
+    async def _render_and_prune(self, bundle: Path) -> None:
+        try:
+            await self._render(bundle)
+        finally:
+            self._render_tasks.pop(bundle, None)
+            await self._prune_artifacts()
+
+    async def _prune_artifacts(self) -> None:
+        await self._write(
+            self._recorder._prune_artifacts,
+            tuple(self._render_tasks),
+        )
+
+    async def _drain_callbacks(self) -> None:
+        current = asyncio.current_task()
+        while pending := {
+            task
+            for task in self._callback_tasks
+            if task is not current and not task.done()
+        }:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def _on_frame(self, signal: FrameSignal) -> None:
         if (
@@ -456,25 +517,37 @@ class CaptureService:
             return
         self._stopped = True
         self._endpoint.stop()
-        for task in (self._endpoint_task, self._return_task):
+        self._returns.stop()
+        for task in (self._endpoint_task,):
             if task is not None and not task.done():
                 task.cancel()
+        if (
+            self._return_task is not None
+            and not self._return_task.done()
+            and self._return_task not in self._callback_tasks
+        ):
+            self._return_task.cancel()
         await asyncio.gather(
             *(task for task in (self._endpoint_task, self._return_task) if task is not None),
             return_exceptions=True,
         )
-        self._endpoint.close()
-        self._returns.close()
+        await asyncio.sleep(0)
+        await self._drain_callbacks()
         await asyncio.gather(
             *(worker.close() for worker in self._frame_workers.values()),
             return_exceptions=True,
         )
         self._frame_workers.clear()
         completed = await self._write(self._recorder.close)
-        for bundle in completed:
-            await self._render(bundle)
-        await self._write(self._recorder._prune_artifacts)
+        render_tasks = set(self._render_tasks.values())
+        if self._renderer_executor is not None:
+            render_tasks.update(self._queue_render(bundle) for bundle in completed)
+        if render_tasks:
+            await asyncio.gather(*render_tasks)
+        await self._prune_artifacts()
         self._writer_executor.shutdown(wait=True, cancel_futures=False)
         if self._renderer_executor is not None:
             self._renderer_executor.shutdown(wait=True, cancel_futures=False)
         self._video_executor.shutdown(wait=True, cancel_futures=False)
+        self._endpoint.close()
+        self._returns.close()

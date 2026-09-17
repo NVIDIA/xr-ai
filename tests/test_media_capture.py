@@ -317,6 +317,39 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     assert output_path.read_bytes().index(b"moov") < output_path.read_bytes().index(b"mdat")
 
 
+def test_demo_frontend_reports_empty_audio_window_as_video_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def write_output(**kwargs) -> None:
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(frontends_module, "mux_h264", write_output)
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", write_output)
+    (tmp_path / "video").mkdir()
+    (tmp_path / "audio").mkdir()
+    wave_path = tmp_path / "audio" / "conversation.wav"
+    with wave.open(str(wave_path), "wb") as audio:
+        audio.setnchannels(2)
+        audio.setsampwidth(2)
+        audio.setframerate(48_000)
+    frontend = frontends_module._DemoCaptureFrontend(overlay_lines=3)
+
+    artifact = frontend.finalize_video(
+        session_root=tmp_path,
+        raw_path=tmp_path / "video" / "session.264",
+        wave_path=wave_path,
+        audio_start_frame=480,
+        audio_end_frame=960,
+        fps=30,
+        packets=(),
+        width=64,
+        height=32,
+    )
+
+    assert artifact.audio_embedded is False
+
+
 def test_matroska_timeline_preserves_lower_rate_and_dropped_frame_timestamps(
     tmp_path: Path,
     monkeypatch,
@@ -829,6 +862,140 @@ def test_retention_ignores_unowned_directories(
 
     assert unrelated.exists()
     assert not owned.exists()
+
+
+@pytest.mark.asyncio
+async def test_retention_protects_bundles_queued_for_rendering(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    render_started = asyncio.Event()
+    release_render = asyncio.Event()
+    rendered: list[tuple[Path, bool]] = []
+
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=100,
+    ))
+    for bundle in (first, second):
+        bundle.mkdir()
+        (bundle / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
+        (bundle / "payload").write_bytes(b"x" * 200)
+    os.utime(second, ns=(1, 1))
+    os.utime(first, ns=(2, 2))
+    bundles = {"first": first, "second": second}
+    service._recorder.end_session = (  # type: ignore[method-assign]
+        lambda participant_id, *_args: bundles[participant_id]
+    )
+
+    async def write_inline(function, *args):
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    render_lock = asyncio.Lock()
+
+    async def render(bundle: Path) -> None:
+        async with render_lock:
+            rendered.append((bundle, bundle.exists()))
+            if bundle == first:
+                render_started.set()
+                await release_render.wait()
+
+    service._render = render  # type: ignore[method-assign]
+    try:
+        first_task = asyncio.create_task(service._finish_session("first", 1))
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+
+        second_task = asyncio.create_task(service._finish_session("second", 2))
+        for _ in range(40):
+            if second in service._render_tasks:
+                break
+            await asyncio.sleep(0.025)
+        assert second in service._render_tasks
+
+        release_render.set()
+        await asyncio.gather(first_task, second_task)
+
+        assert rendered == [(first, True), (second, True)]
+    finally:
+        release_render.set()
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_participant_finalization_before_executors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    render_started = asyncio.Event()
+    release_render = asyncio.Event()
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=0,
+    ))
+    service._recorder.end_session = (  # type: ignore[method-assign]
+        lambda *_args: bundle
+    )
+    writer_shutdown = False
+
+    async def write_inline(function, *args):
+        assert not writer_shutdown
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    original_shutdown = service._writer_executor.shutdown
+
+    def note_writer_shutdown(*args, **kwargs) -> None:
+        nonlocal writer_shutdown
+        writer_shutdown = True
+        original_shutdown(*args, **kwargs)
+
+    monkeypatch.setattr(service._writer_executor, "shutdown", note_writer_shutdown)
+
+    async def render(_bundle: Path) -> None:
+        render_started.set()
+        await release_render.wait()
+
+    service._render = render  # type: ignore[method-assign]
+    departed = ParticipantEvent("alice", False, 1_000_000, "connector")
+    service._returns._departure_event(departed).set()
+    participant_callback = service._endpoint._participant_cbs[0]
+    callback_task = asyncio.create_task(participant_callback(departed))
+    stop_task: asyncio.Task | None = None
+    try:
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+
+        stop_task = asyncio.create_task(service.stop())
+        await asyncio.sleep(0.05)
+        assert not stop_task.done()
+
+        release_render.set()
+        await asyncio.wait_for(stop_task, timeout=2)
+        await callback_task
+        assert writer_shutdown
+    finally:
+        release_render.set()
+        if stop_task is not None:
+            await asyncio.gather(stop_task, return_exceptions=True)
+        await service.stop()
 
 
 @pytest.mark.asyncio
