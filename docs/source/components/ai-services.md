@@ -26,6 +26,7 @@ recorded video, and document retrieval.
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
+| `services/nemotron35-lightning-llm/` | `nemotron35_lightning_llm_server` | 8108 | NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
@@ -144,7 +145,7 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron_omni"},
+      "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {"base_url": "http://localhost:8108"}
     }
   }
@@ -217,7 +218,7 @@ image and ports) or as a local server:
 uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
+- `vlm_llm_nim`: Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner as NIM
   containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
   these endpoints; they never launch or stop the containers.
 
@@ -277,7 +278,8 @@ needs.
 ## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
+`nemotron3_nano_llm_server`, `nemotron35_lightning_llm_server`,
+`nemotron_omni_llm_server`, `embedding_server`)
 and self-hosted NIM containers (`nim_server`)
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
@@ -352,8 +354,9 @@ The target ports and container names match the defaults in the per-profile YAML 
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
-All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`) accept a
+All six vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`, `nemotron35_lightning_llm_server`,
+`nemotron_omni_llm_server`, `embedding_server`) accept a
 `vllm_backend:` key in their YAML to pick how vLLM is hosted:
 
 | `vllm_backend` | Runtime | Code fallback | Shipped standalone YAMLs | Use when |
@@ -445,9 +448,10 @@ The shipped image pin was qualified with this in-container vLLM version:
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
+  `xr-ai-vllm-nemotron35-lightning-llm-server`,
   `xr-ai-vllm-nemotron-omni-llm-server`, and
   `xr-ai-vllm-embedding-server`.
-- Persistence parity: all five vLLM-backed wrappers launch their Docker
+- Persistence parity: all six vLLM-backed wrappers launch their Docker
   processes in separate sessions, so they survive launcher shutdowns like
   their pip-mode `start_new_session=True` counterparts.
 
@@ -519,6 +523,16 @@ cleanup.
   `temperature=0.6` and `top_p=0.95` for tool calling. It identifies the model
   as ready for commercial use under the
   [NVIDIA Nemotron Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/).
+- **nemotron35-lightning-llm** serves the text-only
+  `NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` checkpoint at port 8108. The
+  shared profiles use it for both LLM roles and keep visual inference on
+  Cosmos3. The checkpoint uses native NVFP4 on Blackwell and W4A16 kernels on
+  earlier supported GPUs. vLLM extracts reasoning with `nemotron_v3` and
+  parses tool calls with `qwen3_coder`; the client preset disables thinking by
+  default. The checked-in runtime follows the model card's vLLM 0.27.1 recipe
+  and bounds context and concurrency for the shared stack. Refer to the
+  [model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4)
+  for hardware-specific throughput recipes.
 - **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute

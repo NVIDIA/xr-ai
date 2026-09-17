@@ -28,7 +28,7 @@
     },
     "llm": {
       "adapter": {
-        "preset": "nemotron_omni"
+        "preset": "nemotron35_lightning"
       },
       "endpoint": {
         "base_url": "http://localhost:8108",
@@ -36,12 +36,12 @@
       },
       "deployment": {
         "ownership": "managed",
-        "service": "omni"
+        "service": "lightning"
       }
     },
     "agent_llm": {
       "adapter": {
-        "preset": "nemotron_omni"
+        "preset": "nemotron35_lightning"
       },
       "endpoint": {
         "base_url": "http://localhost:8108",
@@ -49,7 +49,7 @@
       },
       "deployment": {
         "ownership": "managed",
-        "service": "omni"
+        "service": "lightning"
       }
     },
     "vlm": {

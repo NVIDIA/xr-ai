@@ -96,15 +96,15 @@ def _load_main():
     return module
 
 
-def test_omni_supplies_both_language_and_vision() -> None:
+def test_lightning_supplies_language_and_cosmos_supplies_vision() -> None:
     models = json.loads((_SAMPLE / "yaml/models.local.json").read_text())["models"]
 
+    assert models["llm"]["adapter"]["preset"] == "nemotron35_lightning"
     assert models["llm"]["endpoint"]["base_url"] == "http://localhost:8108"
-    assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8108"
-    assert models["vlm"]["adapter"]["capabilities"]["vision"] is True
-    assert models["vlm"]["adapter"]["reasoning_field"] == "reasoning_content"
+    assert models["vlm"]["endpoint"]["base_url"] == "http://localhost:8100"
+    assert models["vlm"]["adapter"]["preset"] == "cosmos3_nano_reasoner"
     assert all("deployment" not in model for model in models.values())
-    assert "cosmos" not in json.dumps(models).lower()
+    assert "nemotron_omni" not in json.dumps(models)
 
 
 def test_materialized_config_stays_inside_runtime_dir(tmp_path: Path) -> None:

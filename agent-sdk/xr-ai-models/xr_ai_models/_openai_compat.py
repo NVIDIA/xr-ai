@@ -5,8 +5,8 @@
 
 Per-model quirks (reasoning field name, mandatory ``chat_template_kwargs``)
 are absorbed by ``reasoning_field`` and ``default_extras`` on the
-constructor; per-call quirks (``enable_thinking``, ``thinking_budget``)
-fold into ``chat_template_kwargs`` on the wire.
+constructor. Per-call thinking mode is a chat-template option, while vLLM's
+reasoning-token limit is a sampling parameter.
 """
 from __future__ import annotations
 
@@ -262,7 +262,7 @@ def _pcm_to_wav(pcm: bytes, sample_rate: int, channels: int) -> bytes:
 class OpenAICompatLLM:
     """OpenAI-compatible ``/v1/chat/completions`` client.
 
-    Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
+    Used directly for plain LLMs (Llama-Nemotron, Nemotron 3 and 3.5,
     Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
@@ -328,9 +328,9 @@ class OpenAICompatLLM:
             tpl: dict[str, Any] = {}
             if enable_thinking:
                 tpl["enable_thinking"] = True
-            if thinking_budget is not None:
-                tpl["thinking_budget"] = thinking_budget
             per_call["chat_template_kwargs"] = tpl
+        if thinking_budget is not None:
+            per_call["thinking_token_budget"] = thinking_budget
         for k, v in merge_dicts(self._default_extras, per_call).items():
             payload[k] = v
         return payload
@@ -351,7 +351,8 @@ class OpenAICompatLLM:
 
         Per-call generation values override endpoint defaults. ``headers`` may
         supply request context but cannot override the configured authorization
-        header.
+        header. ``thinking_budget`` limits reasoning tokens within the total
+        ``max_tokens`` output limit.
         """
 
         payload = self._build_payload(
@@ -385,6 +386,8 @@ class OpenAICompatLLM:
 
         Malformed server-sent event lines and deltas without content are
         skipped. Tool-call and reasoning deltas are not yielded.
+        ``thinking_budget`` limits reasoning tokens within the total
+        ``max_tokens`` output limit.
         """
 
         payload = self._build_payload(

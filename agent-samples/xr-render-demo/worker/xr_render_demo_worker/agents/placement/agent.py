@@ -70,6 +70,7 @@ def make_placement_agent(
                     tools=list(definitions) or None,
                     max_tokens=2048,
                     temperature=0.0,
+                    enable_thinking=False,
                 )
             try:
                 loop_result = await run_tool_loop(messages, toolset, _call_model)
