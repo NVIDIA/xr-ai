@@ -256,7 +256,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     models = json.loads(config.models_config.read_text())
 
     assert config.models_config == _SAMPLE / "yaml" / "models.json"
-    assert models["models"]["llm"]["adapter"]["preset"] == "nemotron_omni"
+    assert models["models"]["llm"]["adapter"]["preset"] == "nemotron35_lightning"
     assert models["models"]["llm"]["endpoint"]["base_url"].endswith(":8108")
     assert models["models"]["vlm"]["adapter"]["preset"] == ("cosmos3_nano_reasoner")
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")

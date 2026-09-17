@@ -1,23 +1,15 @@
 {
   "models": {
     "llm": {
-      "adapter": {"preset": "nemotron_omni"},
+      "adapter": {"preset": "nemotron35_lightning"},
       "endpoint": {"base_url": "http://localhost:8108"}
     },
     "vlm": {
-      "category": "vlm",
       "adapter": {
-        "kind": "openai_compat",
-        "model_name": "llm",
-        "reasoning_field": "reasoning_content",
-        "capabilities": {"streaming": true, "vision": true},
-        "default_extras": {
-          "max_tokens": 128,
-          "temperature": 0.0,
-          "chat_template_kwargs": {"enable_thinking": false}
-        }
+        "preset": "cosmos3_nano_reasoner",
+        "default_extras": {"max_tokens": 128, "temperature": 0.0}
       },
-      "endpoint": {"base_url": "http://localhost:8108"}
+      "endpoint": {"base_url": "http://localhost:8100"}
     },
     "stt": {
       "adapter": {"preset": "parakeet_stt"},

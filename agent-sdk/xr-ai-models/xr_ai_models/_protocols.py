@@ -4,9 +4,8 @@
 """Service protocols, message types, and capability flags.
 
 Worker code depends on the ``*Service`` protocols and treats every
-concrete client as a structural match.  Reasoning-token field naming differs
-across servers (``reasoning`` for nano_v3, ``reasoning_content`` for
-nemotron_v3); ``ChatResponse.reasoning`` is the canonical post-normalization
+concrete client as a structural match. Reasoning-token field naming differs
+across servers; ``ChatResponse.reasoning`` is the canonical post-normalization
 name.
 """
 from __future__ import annotations

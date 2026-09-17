@@ -34,10 +34,10 @@ selects the deployment profile independently.
 
 The shipped profiles are:
 
-- `default`: local Parakeet STT, Pocket TTS, Nemotron Omni, Cosmos3-Nano
+- `default`: local Parakeet STT, Pocket TTS, Nemotron 3.5 Lightning, Cosmos3-Nano
   Reasoner, and Nemotron embedding services.
 - `vlm_llm_nim`: local STT, Pocket TTS, and embedding plus self-hosted
-  Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
+  Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner NIM containers.
 
 The shared profiles use Pocket TTS. Magpie remains available as a standalone
 service, but is not integrated into the persistent model stack.
@@ -80,7 +80,7 @@ The profile must retain the wrapped JSON shape:
 
 Within the shared profile, `managed` means `model-servers` owns that service.
 Roles may share a service; for example, `llm` and `agent_llm` can both name
-`omni`. A service name must have a corresponding row in `_MODEL_SERVICES` in
+`lightning`. A service name must have a corresponding row in `_MODEL_SERVICES` in
 `agent-samples/model-servers/main.py`.
 
 ## Customize a hardware-specific server

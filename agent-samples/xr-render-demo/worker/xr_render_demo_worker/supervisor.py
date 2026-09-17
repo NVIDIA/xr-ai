@@ -344,6 +344,7 @@ class SceneSupervisor:
                 tools=list(definitions) or None,
                 max_tokens=2048,
                 temperature=0.0,
+                enable_thinking=False,
             )
 
         try:
