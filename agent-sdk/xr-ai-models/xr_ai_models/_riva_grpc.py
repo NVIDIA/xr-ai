@@ -79,8 +79,7 @@ def _parse_wav(data: bytes) -> tuple[int, int, bytes]:
 
 
 async def _channel_ready(auth: Any, enabled: bool) -> bool:
-    # Hosted NVCF exposes no health surface; the spec sets health_check=false
-    # and readiness is assumed. Self-hosted Riva answers a channel-ready probe.
+    # Disabling explicit health probes skips the channel-ready request.
     if not enabled:
         return True
 

@@ -91,7 +91,7 @@ class EndpointSpec:
 
     @property
     def health_check(self) -> bool:
-        """Whether readiness requires a successful endpoint health check."""
+        """Whether an explicit ``health()`` call probes the endpoint."""
 
         return self.readiness == "health"
 
@@ -176,7 +176,7 @@ class _RoleSpec:
 
     @property
     def health_check(self) -> bool:
-        """Whether readiness requires a successful endpoint health check."""
+        """Whether an explicit ``health()`` call probes the endpoint."""
 
         return self.endpoint.health_check
 

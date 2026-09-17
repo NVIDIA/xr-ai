@@ -110,14 +110,9 @@ its hardware-specific server YAML, and copy compatible endpoint entries into
 the sample's models JSON. Omit the `deployment` object from copied entries;
 it belongs to the shared model-server profile.
 
-Declare only application processes in the sample orchestrator. Start
-`model_servers` separately and wait for its launcher to return before starting
-the application sample. Server wrappers check model readiness and verify
-existing services before reuse. Consumer workers do not poll model health
-endpoints or need placeholder `Process` entries. Simple VLM's streaming image
-warmup and XR Render's tool-shaped LLM warmup remain explicit startup gates.
-Application capability services such as RAG remain sample-owned and can retain
-their own readiness probes.
+Declare only application processes in the sample orchestrator. Application
+capability services such as RAG remain sample-owned. For startup ordering and
+readiness, refer to {ref}`consumer-model-readiness`.
 
 ## Calling these from a worker
 
@@ -226,18 +221,15 @@ uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
   containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
   these endpoints; they never launch or stop the containers.
 
-To adapt a sample, copy the relevant `llm` and `vlm` entries from
-`models.vlm_llm_nim.json` into the sample's active models JSON and remove their
-`deployment` objects. Samples with an
-`agent_llm` role duplicate the `llm` entry under that name. The adjacent
-`nim_llm_server.yaml` and `nim_vlm_server.yaml` comments repeat this mapping
-beside the container configuration.
+To configure a sample with these endpoints, refer to
+{doc}`/guides/customizing-model-servers`.
 
 The container `image:` is the model, so swapping models is a
 `nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
 per entry, not per profile: each model role independently picks a local
 server, a self-hosted NIM container, or a hosted endpoint through its own
-`adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+`adapter` and `endpoint` sections. The model-server launcher also requires
+`deployment` metadata; consumer profiles omit it. The shipped profiles are
 presets, not a closed set; a mixed setup is a copy of a shipped profile
 with the relevant entries changed, saved under any name and selected with
 `--models` (model-servers) or `models_config` (workers). When mixing, mind

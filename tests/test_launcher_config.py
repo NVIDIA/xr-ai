@@ -129,12 +129,11 @@ def test_consumer_profiles_connect_without_model_lifecycle_metadata(relative) ->
         for model in raw.values()
     )
     models = load_models_config(profile)
-    deployment = load_deployment_profile(profile)
 
     assert all(spec.deployment == DeploymentSpec() for spec in models.entries.values())
     assert all(spec.endpoint.readiness == "health" for spec in models.entries.values())
-    assert deployment.services == {}
-    assert deployment.required_credentials == ()
+    with pytest.raises(ValueError, match="must define adapter, endpoint, and deployment objects"):
+        load_deployment_profile(profile)
 
 
 def test_launcher_rejects_worker_only_yaml_profile(tmp_path) -> None:
@@ -184,7 +183,7 @@ def test_launcher_rejects_worker_only_flat_json_profile(tmp_path) -> None:
     )
 
     assert load_models_config(profile).vlm("vlm").base_url.endswith(":8100")
-    with pytest.raises(ValueError, match="must define adapter and endpoint"):
+    with pytest.raises(ValueError, match="must define adapter, endpoint"):
         load_model_deployment(worker_config)
 
 
@@ -302,42 +301,3 @@ def test_bundled_model_servers_profiles_have_launcher_sdk_parity(
 def test_load_deployment_profile_rejects_non_json(tmp_path) -> None:
     with pytest.raises(ValueError, match="must use a .json file"):
         load_deployment_profile(tmp_path / "models.local.yaml")
-
-
-@pytest.mark.parametrize("deployment, expected_services", [
-    (None, {}),
-    ({}, {}),
-    ({"ownership": "external"}, {}),
-    ({"ownership": "reused", "service": "vlm"}, {"vlm": "reuse"}),
-    ({"ownership": "managed", "service": "vlm", "credentials": ["NGC_API_KEY"]}, {"vlm": "own"}),
-])
-def test_optional_deployment_preserves_credentials_and_legacy_modes(tmp_path, deployment, expected_services):
-    model = {
-        "adapter": {"preset": "cosmos3_nano_reasoner"},
-        "endpoint": {"base_url": "https://example.com", "api_key_env": "ENDPOINT_API_KEY", "readiness": "none"},
-    }
-    if deployment is not None:
-        model["deployment"] = deployment
-    path = tmp_path / "models.json"
-    path.write_text(json.dumps({"models": {"vlm": model}}))
-    sdk = load_models_config(path).vlm("vlm")
-    launcher = load_deployment_profile(path)
-
-    assert launcher.services == expected_services
-    assert launcher.required_credentials == tuple(sorted({"ENDPOINT_API_KEY", *sdk.deployment.credentials}))
-    assert sdk.endpoint.readiness == "none"
-    assert sdk.endpoint.api_key_env == "ENDPOINT_API_KEY"
-    assert sdk.deployment.ownership == (deployment or {}).get("ownership", "external")
-
-
-@pytest.mark.parametrize("deployment", [None, [], "reused", False])
-def test_optional_deployment_still_rejects_explicit_non_objects(tmp_path, deployment):
-    path = tmp_path / "models.json"
-    path.write_text(json.dumps({"models": {"vlm": {
-        "adapter": {"preset": "cosmos3_nano_reasoner"},
-        "endpoint": {"base_url": "http://localhost:8100"},
-        "deployment": deployment,
-    }}}))
-    for loader in (load_models_config, load_deployment_profile):
-        with pytest.raises(ValueError, match="deployment"):
-            loader(path)

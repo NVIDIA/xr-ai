@@ -63,24 +63,16 @@ Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
 and `kind: preset:<name>`. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form with `adapter` and
-`endpoint` objects; `deployment` is optional in both loaders. Launcher credentials
-are explicit: endpoint credentials use `api_key_env`, while credentials needed
-by a managed service itself use `deployment.credentials`.
+stdlib-only launcher must use the wrapped nested JSON form with `adapter`,
+`endpoint`, and `deployment` objects. Only the worker-side loader accepts omitted
+`deployment` metadata. Launcher credentials are explicit: endpoint credentials
+use `api_key_env`, while credentials needed by a managed service itself use
+`deployment.credentials`.
 
 ## Request failures
 
-Model-server wrappers retain startup and reuse checks. Consumers send actual
-requests without a preliminary model-health request. OpenAI-compatible HTTP
-clients retry connection failures and temporary gateway or unavailable responses
-within a bounded attempt count; authentication, invalid requests, read/write
-failures, and failures after accepting a response propagate. Streamed text or
-audio is never replayed. The exact retry policy is documented on the generated
-{py:class}`~xr_ai_models.OpenAICompatLLM` reference.
-
-Applications retain their request-error handling after retries are exhausted.
-A ready worker is not a guarantee that every model remains available. Simple
-VLM and XR Render still use explicit inference warmups during startup.
+Applications handle errors from model requests. For worker startup behavior,
+refer to {ref}`consumer-model-readiness`.
 
 ## Built-in adapters
 
@@ -137,14 +129,10 @@ A hosted OpenAI-compatible endpoint changes only the profile:
 }
 ```
 
-Worker model clients do not probe health routes at startup. For code that calls
-`health()` explicitly, `readiness: none` makes that call succeed without a
-request; `health_path` selects a provider-specific HTTP route when probing is
-enabled. These compatibility settings remain supported. Tea making's RAG service
-still explicitly checks embedding health at startup and when reporting readiness.
-Its embedding entry needs `readiness: none` for a provider without a health route,
-or the provider's supported `health_path` with health probing enabled. Refer to
-{ref}`RAG embedding health <rag-embedding-health>`.
+For code that calls `health()` explicitly, `readiness: none` makes that call
+succeed without a request; `health_path` selects the HTTP route when probing is
+enabled. Tea making's RAG service requires this configuration for hosted embedding
+endpoints; refer to {ref}`rag-embedding-health`.
 
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
