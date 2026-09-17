@@ -42,7 +42,7 @@ whenever you want to pre-warm models:
 From the repository root, enter the model-server sample directory:
 
 ```bash
-cd agent-samples/model-servers
+cd model-server-samples/model-servers
 ```
 
 :::{important}
@@ -113,7 +113,7 @@ repository defaults first:
 
 ```bash
 cd agent-samples/simple-vlm-example
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 The command may download model weights on its first run. Refer to the
@@ -209,7 +209,7 @@ Start the shared `model-servers` stack, which includes Pocket TTS:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then start the
@@ -257,7 +257,7 @@ Start the shared model services, including Pocket TTS:
 
 ```bash
 cd agent-samples/tea-making-sample
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then launch the
@@ -325,7 +325,7 @@ own model services.
 
 ```bash
 cd agent-samples/xr-render-demo
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 This exits immediately once all configured services are ready. Weights stay
@@ -404,7 +404,7 @@ The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 To stop the model servers when done:
 
 ```bash
-uv run --project ../model-servers model_servers --stop
+uv run --project ../../model-server-samples/model-servers model_servers --stop
 ```
 
 XR Render uses the configured shared endpoints in `yaml/models.json`; it does

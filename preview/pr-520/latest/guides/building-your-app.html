@@ -584,7 +584,7 @@ dependency must retain a repository source mapping.</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">main.py</span></code> and the root <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p></td>
 <td><p>Keep the <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> entry point, DeviceIOHub process, worker process, and launcher source entries.</p></td>
-<td><p>Rename the project, command, logging namespace, worker command, and worker YAML path. Keep only the reused service declarations the application needs.</p></td>
+<td><p>Rename the project, command, logging namespace, worker command, and worker YAML path. Add only application-owned service processes.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>Keep the typed DeviceIOHub configuration shape.</p></td>
@@ -607,8 +607,8 @@ dependency must retain a repository source mapping.</p>
 <td><p>Replace the vision question-and-answer workflow, topics, tool calls, and prompt.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
-<td><p>Keep the adapter, endpoint, and deployment separation.</p></td>
-<td><p>Declare only the logical model roles and endpoints the application needs.</p></td>
+<td><p>Keep the adapter and endpoint separation.</p></td>
+<td><p>Declare only the logical model roles, client adapters, and shared endpoints the application needs. Do not add model-server deployment or readiness settings.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
 <td><p>Keep it when speech input needs wake phrases and follow-up turns.</p></td>
@@ -621,6 +621,10 @@ dependency must retain a repository source mapping.</p>
 </tbody>
 </table>
 </div>
+<p>Rewrite the copied README as application-owned documentation. Replace its title
+and the “Simple VLM example” and “This sample” descriptions, and remove links to
+the Simple VLM sample reference. In particular, make sure the name replacements
+did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link.</p>
 <p>The copied DeviceIOHub YAML contains development-only credential placeholders.
 They can remain in place: <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> from the
 environment overwrite them at startup. Never put actual keys or tokens in
@@ -654,22 +658,27 @@ ready:</p>
 </div>
 <p>Open the authenticated web-client URL printed by DeviceIOHub, grant the media
 permissions the application needs, and connect.</p>
-<p>The copied <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> entries document local services that must
-already be running; the launcher neither starts nor probes them. The copied
-<code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> session checks STT and TTS health plus the supplied VLM warmup
-probe before it announces readiness. An application that replaces the voice
-runtime must own equivalent checks for the services it needs. When a model role
-changes, update <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and the worker’s service construction, then
-update the reuse entries so <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> continues to describe the local
-shared-service assumptions. An external endpoint does not need a local reuse
-entry.</p>
+<p>The application launcher owns only DeviceIOHub, the worker, and any other
+application processes. The separate model-server launcher owns shared model
+startup and readiness. The copied worker does not poll the STT, VLM, or TTS
+health endpoints; it explicitly exercises VLM inference as an application
+warmup before announcing readiness. Keep or replace that probe according to the
+capabilities the application must warm or verify. When a model role changes,
+update <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and the worker’s service construction. Do not add
+shared model services to the application’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list.</p>
 </section>
 <section id="verify-without-hardware">
 <h2>Verify without hardware<a class="headerlink" href="#verify-without-hardware" title="Link to this heading">#</a></h2>
 <p>From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/my-app/worker<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s1">'from pathlib import Path; from my_app_worker.config import load_config; load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))'</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/my-app/worker<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY'</span>
+<span class="s">from pathlib import Path</span>
+<span class="s">from my_app_worker.config import load_config</span>
+
+<span class="s">load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))</span>
+<span class="s">PY</span>
 </pre></div>
 </div>
 <p>Exercise model wire behavior with <code class="docutils literal notranslate"><span class="pre">tests/_stub_openai.py</span></code>, which provides an
@@ -693,17 +702,20 @@ CPU-only selection from the repository root:</p>
 </section>
 <section id="avoid-upstream-repository-checks">
 <h2>Avoid upstream repository checks<a class="headerlink" href="#avoid-upstream-repository-checks" title="Link to this heading">#</a></h2>
-<p>The repository’s pre-commit hooks are optional and run only after they are
-installed. When installed, the SPDX hook can add the NVIDIA copyright header to
-staged application files, and a staged <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> triggers the dependency
+<p>Installing the repository’s pre-commit hooks enables automatic checks during
+commits. The hooks and their underlying scripts can also be run explicitly.
+When the hooks run, the SPDX hook can add the NVIDIA copyright header to staged
+application files, and a staged <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> triggers the dependency
 generator, which inventories every project in the source tree. The full
-repository documentation and test suites also treat top-level directories
-under <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> as repository samples.</p>
+repository documentation and test suites also treat top-level directories under
+<code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> as repository samples.</p>
 <p>For an application that is not a repository sample, leave the repository’s
 pre-commit hooks uninstalled and use the focused application test command
-above. To use those hooks or the full repository checks, first edit the SPDX
-hook exclusions, dependency-generator ignore rules, and sample catalogs for the
-chosen application path.</p>
+above. If you choose to use those hooks or other repository-wide checks in your
+fork, first adapt the pre-commit SPDX exclusion and standalone SPDX checker, the
+dependency generator’s discovery rules, and the sample catalogs and tests for
+the application path. The checkout’s <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> continues to apply; this
+directory is not automatically exempt from its repository-wide instructions.</p>
 </section>
 </section>
 

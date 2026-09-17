@@ -41,7 +41,7 @@ Run commands from `agent-samples/tea-making-sample/`. The tea sample reuses all
 model services, so start the shared stack, including Pocket TTS, first:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return. Then launch the
