@@ -687,7 +687,7 @@ like the local vLLM servers. Its deployment profiles pick the mix: every
 <code class="docutils literal notranslate"><span class="pre">managed</span></code> entry launches as a <code class="docutils literal notranslate"><span class="pre">nim_server</span></code> process (<code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code>, a
 generic wrapper; the per-GPU-profile <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> picks the
 image and ports) or as a local server:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
 <ul class="simple">
@@ -793,7 +793,7 @@ launcher-controlled Docker contract. This prevents a failed container created
 by one sample profile—or by older launcher behavior—from being restarted later
 with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 <p><strong>Stopping the persisted servers</strong>, from the repo root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
@@ -861,7 +861,7 @@ another tag, an internal mirror, or a custom build.</p>
 <p class="admonition-title">Important</p>
 <p>When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.08-py3
 </pre></div>
 </div>
@@ -1065,10 +1065,10 @@ and recorded-media operations return <code class="docutils literal notranslate">
 <li><p>Standalone service YAMLs live beside services for direct single-service
 launches; they are not sample configuration. Shared deployments use the
 hardware-specific YAML under
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
 resulting endpoints through their models JSON.</p></li>
 <li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
-under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
+under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
 <code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>

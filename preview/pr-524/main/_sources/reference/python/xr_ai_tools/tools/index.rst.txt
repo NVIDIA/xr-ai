@@ -41,11 +41,15 @@ Module Contents
 
 
 
-.. py:class:: Tool(name: str, description: str, request_model: type[RequestT], result_model: type[pydantic.BaseModel] | None, handler: collections.abc.Callable[[RequestT], collections.abc.Awaitable[ResultT] | ResultT], *, return_direct: bool = False, render_result: collections.abc.Callable[[ResultT], str] | None = None)
+.. py:class:: Tool(name: str, description: str, request_model: type[RequestT], result_model: type[pydantic.BaseModel] | None, handler: collections.abc.Callable[[RequestT], collections.abc.Awaitable[ResultT] | ResultT], *, return_direct: bool = False, render_result: collections.abc.Callable[[ResultT], str] | None = None, examples: collections.abc.Sequence[str] = ())
 
 
 
    A Pydantic-validated tool shared by agents, voice, and background triggers.
+
+   ``examples`` are optional model-facing usage examples owned by the tool.
+   Orchestrators may place them in a prompt when that tool is available; they
+   are not part of the OpenAI-compatible function definition.
 
 
    .. py:method:: execute(request: RequestT) -> ResultT

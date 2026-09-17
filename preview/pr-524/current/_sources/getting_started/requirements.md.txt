@@ -63,7 +63,7 @@ docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
 
 Install before `uv sync` for these targets:
 
-- **DGX Spark** (`agent-samples/model-servers/yaml/spark/`): `sudo apt install python3-dev`
+- **DGX Spark** (`model-server-samples/model-servers/yaml/spark/`): `sudo apt install python3-dev`
 
 All GPU profiles default to `vllm_backend: docker`, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to `vllm_backend: pip`, refer to the
@@ -115,7 +115,7 @@ setups:
 
 ## Running on other GPUs
 
-A profile (`agent-samples/model-servers/yaml/<profile>/`) is a convenience preset
+A profile (`model-server-samples/model-servers/yaml/<profile>/`) is a convenience preset
 that pins two knobs per model server so the stack fits a known configuration:
 
 - `cuda_visible_devices` — which physical GPU each server runs on (for example,
@@ -138,7 +138,7 @@ and adjust those knobs to your hardware:
 Then select the reviewed profile explicitly:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers \
+uv run --project model-server-samples/model-servers model_servers \
   --gpu-profile <profile-directory-name>
 ```
 

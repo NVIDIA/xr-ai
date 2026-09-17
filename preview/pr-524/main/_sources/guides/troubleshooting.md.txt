@@ -24,7 +24,7 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `agent-samples/model-servers/yaml/spark/` profile.
+This applies to the `model-server-samples/model-servers/yaml/spark/` profile.
 
 ### DGX Spark — CUDA allocation fails during a vLLM cold start
 
@@ -187,7 +187,7 @@ profile:
 [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 This applies to the
-`agent-samples/model-servers/yaml/96G_blackwell/` profile.
+`model-server-samples/model-servers/yaml/96G_blackwell/` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 
@@ -507,7 +507,7 @@ persistence*.
 
 ```bash
 cd xr-ai
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 ```
 
 For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
@@ -521,7 +521,7 @@ success if server ownership cannot be verified or any target remains running.
 
 ### First run downloads models silently
 
-**Symptom:** `uv run --project agent-samples/model-servers model_servers`
+**Symptom:** `uv run --project model-server-samples/model-servers model_servers`
 appears to hang at startup the first time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at

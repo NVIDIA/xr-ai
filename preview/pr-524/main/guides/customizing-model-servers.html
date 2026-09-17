@@ -469,11 +469,11 @@ the sample at the resulting endpoints.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Deployment profile</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/models.&lt;name&gt;.json</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/models.&lt;name&gt;.json</span></code></p></td>
 <td><p>Logical roles, client adapters, endpoints, credentials, and shared-service ownership</p></td>
 </tr>
 <tr class="row-odd"><td><p>Hardware profile</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code></p></td>
 <td><p>Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings</p></td>
 </tr>
 <tr class="row-even"><td><p>Sample models JSON</p></td>
@@ -503,12 +503,12 @@ Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.</p></li>
 <p>The shared profiles use Pocket TTS. Magpie remains available as a standalone
 service, but is not integrated into the persistent model stack.</p>
 <p>Copy the closest profile under a new name:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>agent-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>agent-samples/model-servers/yaml/models.my-stack.json
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>model-server-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>model-server-samples/model-servers/yaml/models.my-stack.json
 </pre></div>
 </div>
 <p>Run it by filename stem:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>my-stack
 </pre></div>
 </div>
@@ -535,7 +535,7 @@ The profile must retain the wrapped JSON shape:</p>
 <p>Within the shared profile, <code class="docutils literal notranslate"><span class="pre">managed</span></code> means <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> owns that service.
 Roles may share a service; for example, <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> can both name
 <code class="docutils literal notranslate"><span class="pre">omni</span></code>. A service name must have a corresponding row in <code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/main.py</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/main.py</span></code>.</p>
 </section>
 <section id="customize-a-hardware-specific-server">
 <h2>Customize a hardware-specific server<a class="headerlink" href="#customize-a-hardware-specific-server" title="Link to this heading">#</a></h2>
@@ -698,7 +698,7 @@ endpoint-only customization.</p>
 <section id="validate-and-switch-profiles">
 <h2>Validate and switch profiles<a class="headerlink" href="#validate-and-switch-profiles" title="Link to this heading">#</a></h2>
 <p>Before committing a custom profile:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>empty<span class="w"> </span>agent-samples/model-servers/yaml/models.my-stack.json
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>empty<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
 
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>tests/test_model_servers.py<span class="w"> </span><span class="se">\</span>
@@ -710,8 +710,8 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 Starting another profile stops persisted services outside the new selection
 before launching it. After changing an image, checkpoint, or launch setting,
 stop the old stack once so it cannot continue serving stale configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>my-stack
 </pre></div>
 </div>
