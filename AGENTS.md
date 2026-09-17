@@ -9,7 +9,7 @@ This file contains the repository-wide constraints for humans and agents. Read
 the nearest package or sample README for its entry point and canonical-doc
 links. User-facing docs live only under `docs/source/`.
 
-Building an application that is not a repository sample? Read
+Building an application? Read
 [`docs/source/guides/building-your-app.md`](docs/source/guides/building-your-app.md).
 
 ## Repository map

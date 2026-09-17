@@ -1,6 +1,9 @@
 ---
 name: build-your-app
-description: Build an application on the NVIDIA xr-ai stack. Use when creating, adapting, running, or verifying an application inside an xr-ai checkout; route applications being prepared as upstream repository samples to the adding-a-sample guide instead.
+description: >-
+  Build an application on the NVIDIA xr-ai stack. Use when creating, adapting,
+  running, or verifying an application, whether or not xr-ai has already been
+  cloned.
 ---
 
 <!--
@@ -10,8 +13,14 @@ description: Build an application on the NVIDIA xr-ai stack. Use when creating, 
 
 # Build your XR AI application
 
-Read `AGENTS.md`, then follow `docs/source/guides/building-your-app.md` as the
-canonical procedure. It covers SDK selection, reference-application adaptation,
-startup, and verification. If the application is being prepared for the
-repository's sample collection, follow `docs/source/guides/adding-a-sample.md`
-instead.
+Ask whether to use the latest release (the default) or `main`, then follow the
+build-your-application guide that matches that ref. Before a checkout exists,
+use the published
+[`latest`](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
+guide for the latest release or the
+[`main`](https://nvidia.github.io/xr-ai/main/guides/building-your-app.html)
+guide for `main`. Once the guide creates the checkout, confirm that
+`skills/build-your-app/SKILL.md` and
+`docs/source/guides/building-your-app.md` exist at the selected ref. If either
+is absent, ask the user before using `main` for the skill, guide, and checkout.
+Then read `AGENTS.md` and continue with the guide from the checkout.

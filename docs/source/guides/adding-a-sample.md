@@ -5,11 +5,10 @@
 
 # Adding a new sample
 
-Read this when preparing a repository sample. For an application that will not
-be contributed as a repository sample, read {doc}`building-your-app` instead.
-For a working sample reference, refer to `agent-samples/simple-vlm-example/`.
-Hard rules and the checklist live in `AGENTS.md`; this file holds the
-boilerplate templates.
+Read {doc}`building-your-app` first to build the application. Read this when
+preparing it as a repository sample. For a working sample reference, refer to
+`agent-samples/simple-vlm-example/`. Hard rules and the checklist live in
+`AGENTS.md`; this file holds the boilerplate templates.
 
 ## Naming conventions
 
