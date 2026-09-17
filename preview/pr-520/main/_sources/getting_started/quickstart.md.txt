@@ -133,8 +133,9 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-Only the DeviceIOHub and worker start. Worker readiness probes all three reused
-services and includes a short 1280x720 streaming VLM warmup.
+Only DeviceIOHub and the worker start. For the worker's startup warmup, refer
+to {doc}`/reference/simple-vlm-example`. For readiness and required deployment
+order, refer to {ref}`consumer-model-readiness`.
 The hub prints:
 
 ```
@@ -183,8 +184,7 @@ To use compatible services at different locations, edit their endpoints in
 
 ```json
 {
-  "endpoint": {"base_url": "https://your-vlm.example.com"},
-  "deployment": {"ownership": "reused", "service": "vlm"}
+  "endpoint": {"base_url": "https://your-vlm.example.com"}
 }
 ```
 
@@ -407,7 +407,7 @@ To stop the model servers when done:
 uv run --project ../model-servers model_servers --stop
 ```
 
-XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
+XR Render uses the configured shared endpoints in `yaml/models.json`; it does
 not select or own model deployment profiles.
 
 ## Hub only (standalone)

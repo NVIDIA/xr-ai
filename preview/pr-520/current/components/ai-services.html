@@ -427,7 +427,7 @@
 <p>Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and reuse-only sample configuration, refer to
+deployment profiles, hardware YAML, and consumer model configuration, refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>Multiple reusable inference and typed capability services are available as
 launchable peers of <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>. Model HTTP is encapsulated by
@@ -592,24 +592,11 @@ Application samples reuse those endpoints; they do not own model processes or
 copy server YAML into their own configuration directories. Follow
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> to select a deployment profile, tune
 its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample’s models JSON with <code class="docutils literal notranslate"><span class="pre">deployment.ownership</span></code> set to <code class="docutils literal notranslate"><span class="pre">reused</span></code>.</p>
-<p>Declare each model dependency in the sample orchestrator as reuse-only so the
-process list records the external dependency without transferring lifecycle
-ownership to the sample:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">Process</span><span class="p">(</span>
-    <span class="s2">"vlm"</span><span class="p">,</span>
-    <span class="s2">"../../services/vlm-server"</span><span class="p">,</span>
-    <span class="s2">"vlm_server"</span><span class="p">,</span>
-    <span class="n">launch_mode</span><span class="o">=</span><span class="s2">"reuse"</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>The launcher skips reuse-only entries completely: it does not start, order, or
-readiness-check them. Start <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> separately before the application
-sample. At startup, the sample worker probes endpoints whose models JSON entry
-uses <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and keeps waiting until those reused services are
-available. Application capability services such as RAG remain sample-owned and
-keep their configuration with the sample that launches them.</p>
+the sample’s models JSON. Omit the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object from copied entries;
+it belongs to the shared model-server profile.</p>
+<p>Declare only application processes in the sample orchestrator. Application
+capability services such as RAG remain sample-owned. For startup ordering and
+readiness, refer to <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
@@ -632,15 +619,13 @@ never branch on backend.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A model profile separates adapter behavior, endpoint connectivity, and
-deployment ownership:</p>
+<p>A consumer model profile specifies adapter behavior and endpoint connectivity:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
+<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -660,8 +645,8 @@ local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils lite
 API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.
 Self-hosted speech NIMs are covered below.</p>
-<p>A hosted entry uses an environment-variable reference for its credential,
-disables endpoint health probing, and declares external ownership:</p>
+<p>A hosted consumer entry uses an environment-variable reference for its
+credential and omits deployment and health polling metadata:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -673,10 +658,8 @@ disables endpoint health probing, and declares external ownership:</p>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -687,17 +670,15 @@ disables endpoint health probing, and declares external ownership:</p>
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
 subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
-<code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
-hosted service.</p></li>
+<li><p><strong>Omitted <code class="docutils literal notranslate"><span class="pre">deployment</span></code></strong> defaults to an externally operated endpoint; no
+model process is started or stopped by the profile.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
 </ul>
 <p>To adapt a sample, copy its active model profile, replace the local model entry
 with the hosted entry, and point <code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML at the new
-file. The same wrapped JSON profile is consumed by the worker and orchestrator,
-so the orchestrator omits externally owned services and requests the referenced
-credential automatically.</p>
+file. The worker reads the endpoint credential named in <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>; export
+it or configure the credential store. Consumer sample launchers do not inspect
+model profiles to choose model processes.</p>
 <section id="self-hosted-nim-containers-models-vlm-llm-nim-json">
 <h3>Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)<a class="headerlink" href="#self-hosted-nim-containers-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
 <p>Compatible models can be pulled from NGC and served as <strong>optimized NIM
@@ -715,17 +696,14 @@ image and ports) or as a local server:</p>
 containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
 these endpoints; they never launch or stop the containers.</p></li>
 </ul>
-<p>To adapt a sample, copy the relevant <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">vlm</span></code> entries from
-<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code> into the sample’s active models JSON and change only
-their deployment ownership from <code class="docutils literal notranslate"><span class="pre">managed</span></code> to <code class="docutils literal notranslate"><span class="pre">reused</span></code>. Samples with an
-<code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> role duplicate the <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry under that name. The adjacent
-<code class="docutils literal notranslate"><span class="pre">nim_llm_server.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">nim_vlm_server.yaml</span></code> comments repeat this mapping
-beside the container configuration.</p>
+<p>To configure a sample with these endpoints, refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>The container <code class="docutils literal notranslate"><span class="pre">image:</span></code> is the model, so swapping models is a
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> edit plus the matching profile entry. Selection is
 per entry, not per profile: each model role independently picks a local
 server, a self-hosted NIM container, or a hosted endpoint through its own
-<code class="docutils literal notranslate"><span class="pre">adapter</span></code>/<code class="docutils literal notranslate"><span class="pre">endpoint</span></code>/<code class="docutils literal notranslate"><span class="pre">deployment</span></code> sections. The shipped profiles are
+<code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> sections. The model-server launcher also requires
+<code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata; consumer profiles omit it. The shipped profiles are
 presets, not a closed set; a mixed setup is a copy of a shipped profile
 with the relevant entries changed, saved under any name and selected with
 <code class="docutils literal notranslate"><span class="pre">--models</span></code> (model-servers) or <code class="docutils literal notranslate"><span class="pre">models_config</span></code> (workers). When mixing, mind
@@ -741,8 +719,9 @@ Workers reach them through the optional <code class="docutils literal notranslat
 </pre></div>
 </div>
 <p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
-(default 44100). <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the default) runs a gRPC channel-ready
-probe. No shipped model-server profile or sample selects Riva speech.</p>
+(default 44100). An explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> call with <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the
+default) runs a gRPC channel-ready probe; consumer startup does not call it.
+No shipped model-server profile or sample selects Riva speech.</p>
 <p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
 <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
@@ -753,8 +732,9 @@ validation status and hardware cautions; verify startup and capacity on the
 target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
 <p>A NIM container serving something the samples don’t ship is the same
 mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
-(its health route is <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>, so keep <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> and
-let the container gate readiness), or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port.
+or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port. Consumer workers do not require a
+health route. Operators can still check the container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>
+endpoint directly.
 With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry’s
 <code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service

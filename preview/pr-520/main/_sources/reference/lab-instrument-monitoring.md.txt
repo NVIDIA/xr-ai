@@ -124,7 +124,7 @@ temporary copy named in the logs.
 | `yaml/lab_instrument_monitoring_worker.yaml` | Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history |
 | `yaml/device_map.yaml` | QR payloads and ArUco IDs mapped to instrument names |
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Reused model adapters, endpoints, and readiness checks |
+| `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
 For example, shorten both visual polling periods by setting

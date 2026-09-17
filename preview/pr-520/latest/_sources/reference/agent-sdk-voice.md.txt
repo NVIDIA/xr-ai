@@ -37,10 +37,14 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns model readiness, hub transport, VAD and STT, voice gating, typed
-text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
+`VoiceAgent` owns application readiness, hub transport, VAD and STT, voice gating,
+typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
+
+For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
+For deployment order and migration of existing applications, refer to
+{ref}`consumer-model-readiness`.
 
 Each non-empty final STT result is queued for publication on
 `VOICE_TRANSCRIPT_TOPIC` before wake-phrase filtering. Accepted speech and

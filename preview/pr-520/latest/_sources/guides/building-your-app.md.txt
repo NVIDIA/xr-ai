@@ -5,12 +5,44 @@
 
 # Build your application
 
-Read this when building an XR AI application that will not be contributed as a
-repository sample. To prepare a repository sample, follow
-{doc}`adding-a-sample` instead. The directions below assume the application is
-under `agent-samples/<your-app>/`. The XR AI SDK distributions are not published
-to a package registry; they resolve through relative `[tool.uv.sources]` entries
-in each application's `pyproject.toml`.
+Read this when building an XR AI application. The directions below assume the
+application is under `agent-samples/<your-app>/`. The XR AI SDK distributions
+are not published to a package registry; they resolve through relative
+`[tool.uv.sources]` entries in each application's `pyproject.toml`.
+
+## Start from a source checkout
+
+Use the latest stable release by default, falling back to the latest
+prerelease when no stable release exists. Use `main` when the application
+needs unreleased changes. The documentation and checkout must use the same
+ref: use the `/latest/` documentation with the selected release or `/main/`
+with `main`.
+
+Create the checkout:
+
+```bash
+git clone https://github.com/NVIDIA/xr-ai.git
+cd xr-ai
+```
+
+To use the latest stable release, or the latest prerelease when no stable
+release exists, run:
+
+```bash
+git checkout "$(git tag --list 'v*' | python3 .github/scripts/select_latest_docs_release.py)"
+```
+
+After checking out a release, confirm that this guide and
+`skills/build-your-app/SKILL.md` exist in the checkout. If either is absent,
+ask before switching the documentation, skill, and checkout to `main`.
+
+Read `AGENTS.md`, then review the
+{doc}`system requirements </getting_started/requirements>` and
+{doc}`credential sources </getting_started/credentials>` before resolving the
+application. The copied reference application uses local model services by
+default. When configuring hosted LLM or VLM endpoints, refer to the "Hosting
+models on NVIDIA NIM" section of {doc}`AI services
+</components/ai-services>`.
 
 ## Choose the layers your application needs
 
