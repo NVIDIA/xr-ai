@@ -280,7 +280,6 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
 
 def test_sample_readmes_use_sample_directory_commands() -> None:
     for sample_dir, command in _sample_projects():
-        directory = sample_dir.name
         relative_dir = sample_dir.relative_to(_ROOT).as_posix()
         readme = _visible_markdown((sample_dir / "README.md").read_text())
         run_section = _section(readme, "Run")
@@ -299,7 +298,7 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
             "https://nvidia.github.io/xr-ai/latest/reference/configuration.html"
             in configure_section
         )
-        if directory != "model-servers":
+        if sample_dir.parent.name == "agent-samples":
             assert "uv run --project ../../model-server-samples/model-servers model_servers" in bash
             assert "same terminal" in run_section
             assert "sample configuration guide" in configure_section

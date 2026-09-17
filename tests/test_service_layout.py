@@ -52,6 +52,7 @@ _MODEL_SERVICES = {
     "vlm-server": ("vlm-server", "vlm_server", 8100),
 }
 _LEGACY_PROJECTS = (
+    "agent-samples/model-servers",
     "ai-services/embedding-server",
     "ai-services/vlm-server",
     "ai-services/stt-server",
