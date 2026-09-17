@@ -24,10 +24,12 @@ Config keys (nemotron_omni_llm_server.yaml)
                                       NVFP4 on Spark).
     tensor_parallel_size:     int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:            int    vLLM --max-model-len (default: 131072).
-    gpu_memory_utilization:   float  vLLM --gpu-memory-utilization (default: 0.85).
+    gpu_memory_utilization:   float  Automatic vLLM KV-cache sizing fraction
+                                     (default: 0.85; ignored when
+                                     kv_cache_memory_bytes is set).
     kv_cache_memory_bytes:    int    Explicit vLLM KV-cache size in bytes (optional).
-                                     When set, gpu_memory_utilization remains the
-                                     startup free-memory admission threshold.
+                                     Mutually exclusive with automatic fractional
+                                     sizing.
     enforce_eager:            bool   Skip CUDA graph capture (default: false).
     video_pruning_rate:       float  --video-pruning-rate (default: 0.5).
     video_fps:                int    FPS for video input sampling (default: 2).
@@ -150,7 +152,6 @@ def run() -> None:
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
         "--max-model-len", str(max_ctx),
-        "--gpu-memory-utilization", str(gpu_mem),
         "--video-pruning-rate", str(prune_rate),
         "--allowed-local-media-path", "/",
         "--media-io-kwargs", media_io_kwargs,
@@ -158,7 +159,9 @@ def run() -> None:
         "--enable-auto-tool-choice",
         "--tool-call-parser", "qwen3_coder",
     ]
-    if kv_cache_memory_bytes is not None:
+    if kv_cache_memory_bytes is None:
+        extra_serve_args.extend(["--gpu-memory-utilization", str(gpu_mem)])
+    else:
         extra_serve_args.extend(
             ["--kv-cache-memory-bytes", str(kv_cache_memory_bytes)]
         )
