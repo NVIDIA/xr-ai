@@ -459,7 +459,7 @@ Start this once before running <code class="docutils literal notranslate"><span 
 <code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or
 whenever you want to pre-warm models:</p>
 <p>From the repository root, enter the model-server sample directory:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>model-server-samples/model-servers
 </pre></div>
 </div>
 <div class="admonition important">
@@ -517,7 +517,7 @@ fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.j
 port 8100, and Pocket TTS on port 8105. From the sample directory, start the
 repository defaults first:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>The command may download model weights on its first run. Refer to the
@@ -599,7 +599,7 @@ and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
 <p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return, then start the
@@ -638,7 +638,7 @@ and visual inference. Records are written as JSON Lines under the sample’s
 events without replacing those durable records.</p>
 <p>Start the shared model services, including Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/tea-making-sample
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return, then launch the
@@ -695,7 +695,7 @@ own model services.</p>
 <section id="step-1-start-model-servers-once">
 <h3>Step 1 — Start model servers (once)<a class="headerlink" href="#step-1-start-model-servers-once" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>This exits immediately once all configured services are ready. Weights stay
@@ -761,7 +761,7 @@ Agent: [Changes the sphere's color or explains why it could not.]
 The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for headset and native-client setup.</p>
 <p>To stop the model servers when done:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>XR Render uses the configured shared endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does

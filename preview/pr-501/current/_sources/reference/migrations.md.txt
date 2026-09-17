@@ -13,6 +13,22 @@ and command to `device_io_hub`. Rename `xr_media_hub.yaml` to
 `device_io_hub.yaml` and `XR_MEDIA_HUB_NO_WEB_CLIENT` to
 `DEVICE_IO_HUB_NO_WEB_CLIENT`. The rename has no compatibility aliases.
 
+## Shared model-server sample location
+
+The shared model-server launcher moved from `agent-samples/model-servers/` to
+`model-server-samples/model-servers/`. Update scripts and configuration paths
+that name the old directory. From the repository root, run:
+
+```bash
+uv run --project model-server-samples/model-servers model_servers
+```
+
+From an agent sample directory, use
+`uv run --project ../../model-server-samples/model-servers model_servers`.
+The `model_servers` command, model profiles, service ports, and cache locations
+are unchanged. Run `uv sync` from the new sample directory to recreate its local
+environment; an environment tied to the old directory does not need to be moved.
+
 (consumer-model-readiness)=
 ## Consumer model readiness
 

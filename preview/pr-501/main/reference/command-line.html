@@ -440,7 +440,8 @@
   <section id="command-line-reference">
 <h1>Command-line reference<a class="headerlink" href="#command-line-reference" title="Link to this heading">#</a></h1>
 <p>This reference is generated from the installed commands in each top-level
-sample’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> and the literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations in its
+sample’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> under <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> and <code class="docutils literal notranslate"><span class="pre">model-server-samples/</span></code>,
+and the literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations in its
 entry-point module. Worker and service commands are launcher-managed process
 protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <div class="xr-ai-cli-reference docutils container">
@@ -454,25 +455,6 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <p class="rubric">Options</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></dt><dd><p>bind the unauthenticated event viewer to all IPv4 interfaces instead of loopback</p>
-</dd>
-</dl>
-</section>
-<section id="model-servers">
-<h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
-<p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
-<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/</span></code>:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
-</pre></div>
-</div>
-<p class="rubric">Options</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop every persisted model-server stack and exit.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">NAME_OR_PATH</span></code></dt><dd><p>Deployment profile to start: a shipped name (default, vlm_llm_nim) or a path to a profile JSON.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Use a named YAML GPU profile instead of automatic detection. Intended for explicitly reviewed custom hardware profiles.</p>
 </dd>
 </dl>
 </section>
@@ -506,6 +488,25 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </pre></div>
 </div>
 <p>This command has no sample-specific options.</p>
+</section>
+<section id="model-servers">
+<h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
+<p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop every persisted model-server stack and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">NAME_OR_PATH</span></code></dt><dd><p>Deployment profile to start: a shipped name (default, vlm_llm_nim) or a path to a profile JSON.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Use a named YAML GPU profile instead of automatic detection. Intended for explicitly reviewed custom hardware profiles.</p>
+</dd>
+</dl>
 </section>
 </div>
 </section>

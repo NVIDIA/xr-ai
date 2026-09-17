@@ -214,7 +214,7 @@ generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
 image and ports) or as a local server:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
 - `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
@@ -330,7 +330,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -384,7 +384,7 @@ When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 docker pull nvcr.io/nvidia/vllm:26.08-py3
 ```
 
@@ -576,9 +576,9 @@ cleanup.
 - Standalone service YAMLs live beside services for direct single-service
   launches; they are not sample configuration. Shared deployments use the
   hardware-specific YAML under
-  `agent-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
+  `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `agent-samples/model-servers/yaml/<gpu-profile>/`; its
+  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
   `../../../../models/nim` from that location.
