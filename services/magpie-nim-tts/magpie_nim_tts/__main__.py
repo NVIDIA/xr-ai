@@ -36,7 +36,12 @@ async def _reusable_listener(config: dict) -> int | None:
             observed_identity = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise RuntimeError(f"adapter on port {port} is unhealthy; stop it before launching") from exc
-    if observed_identity != identity(config):
+    expected = identity(config)
+    # The extraction renamed the service identity without changing its TTS
+    # contract. Accept the old name only for an otherwise identical TTS config.
+    legacy = expected | {"service": "nim-model-adapter"}
+    legacy_matches = expected["configuration"]["kind"] == "tts" and observed_identity == legacy
+    if observed_identity != expected and not legacy_matches:
         raise RuntimeError(f"port {port} serves a different adapter configuration; stop it before launching")
     if pid_on_port_checked(port) != (pid, True, True):
         raise RuntimeError(f"listener on port {port} changed during inspection")

@@ -4,6 +4,7 @@
 """Exercise real adapter processes, port ownership, reuse, and --stop without GPUs."""
 from __future__ import annotations
 
+import os
 import shutil
 import signal
 import socket
@@ -20,6 +21,23 @@ import pytest
 import yaml
 from xr_ai_vllm import stop_persistent_servers
 from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
+
+# The pre-split health identity, independent of the new identity() helper.
+# Use the real HTTP/gRPC service with this old wire contract in a subprocess.
+_LEGACY_LAUNCH = """
+import magpie_nim_tts.common as common
+
+def identity(config):
+    settings = {key: value for key, value in config.items() if key not in ("host", "port")}
+    settings.setdefault("kind", "embedding")
+    if "base_url" in settings:
+        settings["base_url"] = settings["base_url"].rstrip("/")
+    return {"status": "ok", "service": "nim-model-adapter", "configuration": settings}
+
+common.identity = identity
+from magpie_nim_tts.__main__ import run
+run()
+"""
 
 
 @pytest.fixture
@@ -54,15 +72,24 @@ def servers(tmp_path, monkeypatch, grpc_backend):
               "health_url": f"http://127.0.0.1:{upstream.server_port}"}
     processes = []
 
-    def launch(overrides=None, *, ready=True):
+    def launch(overrides=None, *, ready=True, legacy=False):
         number = len(processes)
         path = tmp_path / f"config-{number}.yaml"
-        path.write_text(yaml.safe_dump(config | (overrides or {})))
+        settings = config | (overrides or {})
+        if legacy:
+            settings.setdefault("kind", "tts")
+        path.write_text(yaml.safe_dump(settings))
         ready_file = tmp_path / f"ready-{number}"
         log = (tmp_path / f"process-{number}.log").open("w+")
+        command = [sys.executable, "-c", _LEGACY_LAUNCH] if legacy else [
+            sys.executable, "-m", "magpie_nim_tts",
+        ]
+        # Set markers at exec time so the legacy fixture retains its health
+        # implementation instead of re-execing the current module.
+        env = os.environ | {"XR_AI_VLLM_MANAGED": "1", "XR_AI_VLLM_PORT": str(settings["port"])} if legacy else None
         process = subprocess.Popen(
-            [sys.executable, "-m", "magpie_nim_tts", "--config", str(path),
-             "--ready-file", str(ready_file)], stdout=log, stderr=log, start_new_session=True,
+            [*command, "--config", str(path), "--ready-file", str(ready_file)],
+            stdout=log, stderr=log, start_new_session=True, env=env,
         )
         # Reap independently while --stop waits for /proc/<pid> to disappear.
         reaper = threading.Thread(target=process.wait, daemon=True)
@@ -111,9 +138,16 @@ def grpc_backend():
             server.stop(0).wait()
 
 
-def test_two_launches_reuse_one_listener_and_real_stop_allows_restart(servers):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_two_launches_reuse_one_listener_and_real_stop_allows_restart(servers, legacy):
     config, _, launch = servers
-    first, _ = launch()
+    first, _ = launch(legacy=legacy)
+    if legacy:
+        with httpx.Client(trust_env=False) as client:
+            observed = client.get(f"http://127.0.0.1:{config['port']}/health").json()
+        assert observed["service"] == "nim-model-adapter"
+        assert observed["configuration"]["kind"] == "tts"
+        assert "kind" not in config  # New config omits the old explicit kind.
     port = config["port"]
     assert pid_on_port_checked(port) == (first.pid, True, True)
     assert has_xr_ai_ownership_marker(first.pid, port)
@@ -135,11 +169,12 @@ def test_two_launches_reuse_one_listener_and_real_stop_allows_restart(servers):
     assert restarted.poll() in (0, -signal.SIGTERM)
 
 
-@pytest.mark.parametrize("change", ["voice", "post_synthesis_pause_ms", "unhealthy"])
-def test_existing_adapter_must_be_healthy_and_match_configuration(servers, change):
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("change", ["voice", "post_synthesis_pause_ms", "base_url", "unhealthy"])
+def test_existing_adapter_must_be_healthy_and_match_configuration(servers, change, legacy):
     config, state, launch = servers
     config["post_synthesis_pause_ms"] = 300
-    first, _ = launch()
+    first, _ = launch(legacy=legacy)
     overrides = {}
     if change == "unhealthy":
         state["healthy"] = False
@@ -166,3 +201,14 @@ def test_unhealthy_backend_does_not_leave_a_listener_after_failed_start(servers)
     _, output = launch(ready=False)
     assert "unhealthy" in output
     assert pid_on_port_checked(config["port"]) == (None, True, False)
+
+
+def test_legacy_identity_is_only_accepted_for_tts(servers):
+    config, _, launch = servers
+    # Even identical configuration cannot authorize a non-TTS legacy identity.
+    config["kind"] = "stt"
+    first, _ = launch(legacy=True)
+    _, output = launch(ready=False)
+    assert "different adapter configuration" in output
+    assert pid_on_port_checked(config["port"]) == (first.pid, True, True)
+    assert first.poll() is None

@@ -28,7 +28,10 @@ and post-synthesis pause in `magpie_nim_tts.yaml`. The default HTTP port is the
 configured Pocket client port, 8105; stop any other listener before using it.
 The backend must already be healthy before the adapter announces readiness.
 A repeated launch reuses a healthy, ownership-marked adapter with the same
-configuration. Configuration changes require stopping and restarting it.
+configuration. A running pre-split TTS adapter reporting the
+`nim-model-adapter` identity is also reusable when its complete configuration
+matches; ownership and health checks still apply. Other legacy adapter kinds
+are not accepted. Configuration changes require stopping and restarting it.
 
 ## HTTP contract
 
