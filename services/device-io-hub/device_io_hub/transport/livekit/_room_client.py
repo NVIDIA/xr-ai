@@ -23,7 +23,7 @@ from typing import NamedTuple
 import numpy as np
 from livekit import rtc
 from loguru import logger
-from xr_ai_hub._capture import _CAPTURE_REJECTION_MIME_TYPE
+from xr_ai_hub._image_capture import _CAPTURE_REJECTION_MIME_TYPE
 from xr_ai_hub._types import ImageCaptureData
 
 from device_io_hub.ipc import (
@@ -34,6 +34,7 @@ from device_io_hub.ipc import (
     ReturnAudioFlush,
 )
 
+from ._byte_stream import ByteStreamReadLimits, read_byte_stream
 from ._token import make_client_token
 from .config import (
     _DEFAULT_RETURN_AUDIO_MAX_BUFFER_S,
@@ -49,6 +50,11 @@ def _now_us() -> int:
 _RETURN_AUDIO_DROP_LOG_INTERVAL_S = 5.0
 _IMAGE_CAPTURE_TOPIC = "camera.capture.response"
 _IMAGE_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
+_IMAGE_CAPTURE_READ_LIMITS = ByteStreamReadLimits(
+    max_bytes=_IMAGE_CAPTURE_MAX_BYTES,
+    idle_timeout_s=15.0,
+    total_timeout_s=60.0,
+)
 _IMAGE_CAPTURE_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _IMAGE_CAPTURE_RESPONSE_MIME_TYPES = _IMAGE_CAPTURE_MIME_TYPES | {
     _CAPTURE_REJECTION_MIME_TYPE
@@ -321,25 +327,11 @@ class RoomClient:
                     info.mime_type,
                 )
                 return
-            if info.size is not None and info.size > _IMAGE_CAPTURE_MAX_BYTES:
-                logger.warning(
-                    "Client image stream {} declares {} bytes (limit {}) — dropped",
-                    request_id,
-                    info.size,
-                    _IMAGE_CAPTURE_MAX_BYTES,
-                )
+            try:
+                image = await read_byte_stream(reader, _IMAGE_CAPTURE_READ_LIMITS)
+            except (TimeoutError, ValueError) as exc:
+                logger.warning("Client image stream {} was rejected: {}", request_id, exc)
                 return
-
-            image = bytearray()
-            async for chunk in reader:
-                image.extend(chunk)
-                if len(image) > _IMAGE_CAPTURE_MAX_BYTES:
-                    logger.warning(
-                        "Client image stream {} exceeded {} bytes — dropped",
-                        request_id,
-                        _IMAGE_CAPTURE_MAX_BYTES,
-                    )
-                    return
             if not image:
                 logger.warning("Client image stream {} was empty — dropped", request_id)
                 return
@@ -349,7 +341,7 @@ class RoomClient:
                     request_id=request_id,
                     pts_us=_now_us(),
                     mime_type=info.mime_type,
-                    data=bytes(image),
+                    data=image,
                 )
             )
         finally:

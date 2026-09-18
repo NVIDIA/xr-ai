@@ -3,9 +3,9 @@
 
 package com.nvidia.xrai.streamkitsample.streamkit.backends
 
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
-import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
@@ -135,14 +135,4 @@ interface StreamingBackend {
      * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
      */
     suspend fun send(data: ByteArray, reliable: Boolean = true)
-
-    /** Send an encoded image through the backend's chunked stream transport. */
-    suspend fun sendImage(
-        data: ByteArray,
-        requestId: String,
-        mimeType: String,
-        name: String,
-    ) {
-        throw UnsupportedOperationException("This backend does not support image streams.")
-    }
 }

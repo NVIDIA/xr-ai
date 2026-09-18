@@ -397,35 +397,6 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try await room.localParticipant.publish(data: data, options: options)
     }
 
-    public func sendImage(
-        _ data: Data,
-        requestID: String,
-        mimeType: String,
-        name: String
-    ) async throws {
-        guard let room, room.connectionState == .connected else {
-            throw StreamError.notConnected
-        }
-        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
-        let writer = try await room.localParticipant.streamBytes(
-            options: StreamByteOptions(
-                topic: "camera.capture.response",
-                attributes: ["request_id": requestID],
-                destinationIdentities: destinations,
-                mimeType: mimeType,
-                name: name,
-                totalSize: data.count
-            )
-        )
-        do {
-            try await writer.write(data)
-            try await writer.close()
-        } catch {
-            if await writer.isOpen { try? await writer.close(reason: error.localizedDescription) }
-            throw error
-        }
-    }
-
     // MARK: - Private helpers
 
     /// Roll the recording engine back to its idle state: drop prepared mode and
@@ -757,6 +728,43 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         if let plain = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines), !plain.isEmpty { return plain }
         throw StreamError.tokenFetchFailed(url)
+    }
+}
+
+extension LiveKitBackend {
+    internal func sendByteStream(
+        _ data: Data,
+        topic: String,
+        attributes: [String: String],
+        mimeType: String?,
+        name: String?
+    ) async throws -> String {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let connection = ByteStreamConnection(
+            room: room,
+            generation: connectionGeneration
+        )
+        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        return try await LiveKitByteStreamWriter.sendBytes(
+            data,
+            options: ByteStreamWireOptions(
+                topic: topic,
+                attributes: attributes,
+                destinationIdentities: destinations,
+                mimeType: mimeType,
+                name: name,
+                totalSize: data.count
+            ),
+            connection: connection,
+            isConnectionActive: { [weak self] candidate in
+                guard let self else { return false }
+                return self.room === candidate.room
+                    && candidate.room.connectionState == .connected
+                    && self.connectionGeneration == candidate.generation
+            }
+        )
     }
 }
 

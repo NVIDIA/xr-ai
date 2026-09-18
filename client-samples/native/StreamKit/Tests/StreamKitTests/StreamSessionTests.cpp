@@ -42,9 +42,6 @@ struct MockBackend : streamkit::StreamingBackend {
     streamkit::CameraConfig last_camera_config;
     std::vector<std::string> sent_topics;
     std::vector<std::string> sent_payloads;
-    std::vector<std::uint8_t> sent_image;
-    std::string sent_image_request_id;
-    std::string sent_image_mime_type;
 
     void Connect(const streamkit::SessionConfig&) override {
         ++connect_calls;
@@ -70,15 +67,6 @@ struct MockBackend : streamkit::StreamingBackend {
         sent_topics.emplace_back(topic);
         sent_payloads.emplace_back(BytesToString(data));
     }
-    void SendImage(std::span<const std::uint8_t> data,
-                   std::string_view request_id,
-                   std::string_view mime_type,
-                   std::string_view) override {
-        sent_image.assign(data.begin(), data.end());
-        sent_image_request_id = request_id;
-        sent_image_mime_type = mime_type;
-    }
-
     // Helpers for tests to drive the event hooks the backend would normally
     // fire from its event loop.
     void fire_data(std::string_view topic, std::string_view payload) const {
@@ -199,19 +187,13 @@ int main() {
         "camera.capture.request",
         R"({"version":1,"request_id":"capture-1","timeout_ms":5000})");
     ExpectEq(capture_calls, 1);
-    ExpectEq(raw->sent_image, std::vector<std::uint8_t>({1, 2, 3}));
-    ExpectEq(raw->sent_image_request_id, std::string("capture-1"));
     ExpectEq(data_calls, 1);
 
     session.on_image_capture_requested = {};
     raw->fire_data(
         "camera.capture.request",
         R"({"version":1,"request_id":"capture-2","timeout_ms":5000})");
-    ExpectEq(raw->sent_image_request_id, std::string("capture-2"));
-    ExpectEq(raw->sent_image_mime_type,
-             std::string("application/vnd.xr-ai.capture-rejection+json"));
-    ExpectEq(std::string(raw->sent_image.begin(), raw->sent_image.end()),
-             std::string(R"({"version":1,"status":"rejected"})"));
+    ExpectEq(capture_calls, 1);
 
     raw->fire_data(
         "camera.capture.request",

@@ -32,6 +32,8 @@
  * await session.connect(SessionConfig.default);
  */
 
+import { INTERNAL_SEND_BYTE_STREAM } from './Backends/LiveKit/ByteStreamTransport.js';
+
 import { ConnectionState } from './ConnectionState.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,7 +286,7 @@ export class StreamSession {
     const requestId = request?.request_id;
     if (request?.version !== 1 || typeof requestId !== 'string' || !requestId) return;
     const handler = this.onImageCaptureRequested;
-    if (!handler || typeof this.#backend.sendImage !== 'function') {
+    if (!handler || typeof this.#backend[INTERNAL_SEND_BYTE_STREAM] !== 'function') {
       await this.#rejectCaptureRequest(requestId);
       return;
     }
@@ -302,7 +304,7 @@ export class StreamSession {
       if (!image || !['image/jpeg', 'image/png', 'image/webp'].includes(image.mimeType)) {
         throw new TypeError('image capture must return encoded JPEG, PNG, or WebP data');
       }
-      await this.#backend.sendImage(image.data, {
+      await this.#sendCaptureResponse(image.data, {
         requestId,
         mimeType: image.mimeType,
         name: image.name,
@@ -320,10 +322,10 @@ export class StreamSession {
   }
 
   async #rejectCaptureRequest(requestId) {
-    if (typeof this.#backend.sendImage !== 'function') return;
+    if (typeof this.#backend[INTERNAL_SEND_BYTE_STREAM] !== 'function') return;
     const response = new TextEncoder().encode('{"version":1,"status":"rejected"}');
     try {
-      await this.#backend.sendImage(response, {
+      await this.#sendCaptureResponse(response, {
         requestId,
         mimeType: 'application/vnd.xr-ai.capture-rejection+json',
         name: 'capture-rejection.json',
@@ -331,6 +333,19 @@ export class StreamSession {
     } catch (error) {
       console.warn('StreamSession image capture rejection failed', error);
     }
+  }
+
+  async #sendCaptureResponse(data, { requestId, mimeType, name = 'capture' }) {
+    const sendByteStream = this.#backend[INTERNAL_SEND_BYTE_STREAM];
+    if (typeof sendByteStream !== 'function') {
+      throw new TypeError('This backend does not support byte streams');
+    }
+    return sendByteStream.call(this.#backend, data, {
+      topic: 'camera.capture.response',
+      attributes: { request_id: requestId },
+      mimeType,
+      name,
+    });
   }
 
   #handleCaptureCancel(data) {
