@@ -511,6 +511,40 @@ def test_presentation_timeline_rate_limits_each_camera_track_independently() -> 
     ]
 
 
+def test_presentation_timeline_schedules_camera_update_after_overlay_frame() -> None:
+    timeline = _OverlayTimeline(
+        [{
+            "event_id": 1,
+            "kind": "voice_caption",
+            "source": "user",
+            "text": "just before the camera update",
+            "pts_us": 4_990_000,
+        }],
+        duration_us=12_000_000,
+    )
+    first_pixels = np.zeros((3, 2), dtype=np.uint8)
+    second_pixels = np.ones((3, 2), dtype=np.uint8)
+
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0, "track_id": "camera"}, first_pixels),
+            ({"pts_us": 5_000_000, "track_id": "camera"}, second_pixels),
+        ]),
+        timeline.change_points(start_us=0, end_us=17_000_000),
+        start_us=0,
+        end_us=17_000_000,
+        min_interval_us=33_333,
+    ))
+
+    assert [row["pts_us"] for row, _pixels in frames[:3]] == [
+        0,
+        4_990_000,
+        5_023_333,
+    ]
+    assert np.shares_memory(frames[1][1], first_pixels)
+    assert np.shares_memory(frames[2][1], second_pixels)
+
+
 def test_demo_frontend_reports_empty_audio_window_as_video_only(
     tmp_path: Path,
     monkeypatch,
@@ -755,7 +789,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         for frame in encoded_inputs
     )
     assert finalized_video_inputs == ["session.timeline.mkv.pending"]
-    assert finalized_video_pts == [1_000_000, 1_040_000, 1_100_000]
+    assert finalized_video_pts == [1_000_000, 1_040_000, 1_073_333]
     assert not (session / "video" / "rendering.264").exists()
     assert not (session / "video" / "session.timeline.mkv.pending").exists()
 

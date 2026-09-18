@@ -132,6 +132,7 @@ def _presentation_frames(
     next_point = next(points, None)
     previous: tuple[dict[str, Any], np.ndarray] | None = None
     last_output_us: dict[str, int] = {}
+    pending_camera: dict[str, tuple[int, dict[str, Any], np.ndarray]] = {}
 
     def track_id(row: dict[str, Any]) -> str:
         return str(row.get("track_id", "session"))
@@ -141,6 +142,43 @@ def _presentation_frames(
         while next_point is not None and next_point <= through_us:
             next_point = next(points, None)
 
+    def drain_synthetic(
+        limit_us: int,
+        *,
+        inclusive: bool,
+    ) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
+        nonlocal previous
+        while previous is not None:
+            previous_track = track_id(previous[0])
+            semantic_us = next_point
+            if semantic_us is not None and previous_track in last_output_us:
+                semantic_us = max(
+                    semantic_us,
+                    last_output_us[previous_track] + min_interval_us,
+                )
+            candidates = [
+                (due_us, 0, track)
+                for track, (due_us, _row, _pixels) in pending_camera.items()
+            ]
+            if semantic_us is not None:
+                candidates.append((semantic_us, 1, previous_track))
+            if not candidates:
+                return
+            due_us, kind, due_track = min(candidates)
+            if due_us > limit_us or (due_us == limit_us and not inclusive):
+                return
+            if kind == 0:
+                _pending_us, row, pixels = pending_camera.pop(due_track)
+                advance_points(due_us)
+                output = ({**row, "pts_us": due_us}, pixels)
+            else:
+                advance_points(due_us)
+                output = ({**previous[0], "pts_us": due_us}, previous[1])
+                pending_camera.pop(due_track, None)
+            previous = output
+            last_output_us[due_track] = due_us
+            yield output
+
     for row, pixels in decoded:
         pts_us = int(row["pts_us"])
         if pts_us < start_us:
@@ -148,43 +186,22 @@ def _presentation_frames(
             continue
         if pts_us > end_us:
             break
-        while next_point is not None and next_point <= pts_us:
-            candidate = next_point
-            if previous is None:
-                break
-            previous_track = track_id(previous[0])
-            previous_output = last_output_us.get(previous_track)
-            if previous_output is not None:
-                candidate = max(candidate, previous_output + min_interval_us)
-            if candidate >= pts_us:
-                break
-            advance_points(candidate)
-            held_row = {**previous[0], "pts_us": candidate}
-            previous = (held_row, previous[1])
-            last_output_us[previous_track] = candidate
-            yield previous
+        yield from drain_synthetic(pts_us, inclusive=False)
         previous = (row, pixels)
         row_track = track_id(row)
         previous_output = last_output_us.get(row_track)
         if previous_output is None or pts_us - previous_output >= min_interval_us:
             advance_points(pts_us)
+            pending_camera.pop(row_track, None)
             last_output_us[row_track] = pts_us
             yield previous
-    while next_point is not None:
-        if previous is None:
-            break
-        candidate = next_point
-        previous_track = track_id(previous[0])
-        previous_output = last_output_us.get(previous_track)
-        if previous_output is not None:
-            candidate = max(candidate, previous_output + min_interval_us)
-        if candidate > end_us:
-            break
-        advance_points(candidate)
-        held_row = {**previous[0], "pts_us": candidate}
-        previous = (held_row, previous[1])
-        last_output_us[previous_track] = candidate
-        yield previous
+        else:
+            pending_camera[row_track] = (
+                previous_output + min_interval_us,
+                row,
+                pixels,
+            )
+    yield from drain_synthetic(end_us, inclusive=True)
 
 
 class CaptureRenderer:
