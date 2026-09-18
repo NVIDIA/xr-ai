@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Customizing model servers" href="customizing-model-servers.html" />
-    <link rel="prev" title="Adding CloudXR to a sample" href="adding-cloudxr.html" />
+    <link rel="prev" title="Build your application" href="building-your-app.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -325,6 +325,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Guides</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building-your-app.html">Build your application</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
@@ -478,12 +479,14 @@ generated catalog enrolls files under a top-level sample’s <code class="docuti
 files beside a direct capability subproject, then renders them verbatim.
 Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.</p>
-<p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
+<p>Application-owned projects under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> are outside the repository sample and
+contribution tooling described below. After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change elsewhere,
+run
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
 normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
-affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
-SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
+affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files outside
+<code class="docutils literal notranslate"><span class="pre">apps/</span></code> require an SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
 <p>The root <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> records the repository’s dependency qualification cutoff.
 Repository CI passes it explicitly to uv, so fresh resolutions ignore
 package-index artifacts uploaded after that timestamp while normal
@@ -510,12 +513,12 @@ locks under <code class="docutils literal notranslate"><span class="pre">depende
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="adding-cloudxr.html"
+       href="building-your-app.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Adding CloudXR to a sample</p>
+        <p class="prev-next-title">Build your application</p>
       </div>
     </a>
     <a class="right-next"
