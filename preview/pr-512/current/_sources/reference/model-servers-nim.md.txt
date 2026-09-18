@@ -20,9 +20,10 @@ The launcher waits for readiness, then exits with the model servers running.
 
 All client endpoints preserve the original `model-servers` HTTP contracts,
 including `/health`, the `llm`, `vlm`, and `embed` aliases, multipart WAV
-transcription, and Pocket-compatible speech responses. The adapters live in
-this sample and use the existing typed `xr_ai_models` clients for NIM inference.
-Consuming workers do not need the Riva extra.
+transcription, and Pocket-compatible speech responses. TTS uses the shared
+`services/magpie-nim-tts` HTTP wrapper; the remaining adapters live in this
+sample. All use the typed `xr_ai_models` clients for inference. Consuming
+workers do not need the Riva extra.
 
 The embedding adapter translates XR AI's `query: ` and `passage: ` prefixes
 to NIM's input types, preserving input order and avoiding duplicated prefixes.
@@ -31,15 +32,12 @@ The chat adapters translate model aliases and normalize Nemotron reasoning.
 Streaming chat returns visible text, matching the shared SDK; use non-streaming
 chat for function calls and reasoning.
 
-Magpie returns mono 16-bit audio at 44,100 Hz. Its HTTP endpoint supports WAV
-synthesis and the existing Pocket client's PCM streaming protocol, including
-sample-rate headers. Streaming requests forward Magpie's PCM chunks as they
-arrive over gRPC, so playback can start before a sentence finishes synthesis.
-The voice pipeline still submits complete sentences rather than token-by-token
-text. WAV requests remain buffered. A client disconnect cancels the upstream
-RPC before the adapter admits another synthesis request. Failures before the
-first audio return an HTTP error; failures after streaming starts terminate the
-response instead of appending an error message to the PCM audio.
+The Magpie HTTP service forwards PCM chunks as synthesis proceeds and appends
+the configured 300 ms pause after each successful nonempty request. This sample
+owns the per-profile voice and pause settings in `tts_adapter.yaml`; sentence
+submission in consuming workers is unchanged. Refer to
+{doc}`magpie-nim-tts` for the supported HTTP contract, streaming, and cancellation
+behavior.
 
 Native NIM endpoints are separate from the client ports:
 

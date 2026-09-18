@@ -329,6 +329,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -359,6 +360,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -464,7 +466,13 @@ contain configuration, protocol, and operational details.</p>
 +---------------+   media and data   +----------------+   IPC events   +----------------+
 | Clients       | &lt;----------------&gt; | DeviceIOHub    | &lt;------------&gt; | agent workers  |
 | (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
-+---------------+                    +----------------+                +-------+--------+
++---------------+                    +-------+--------+                +-------+--------+
+                                                |
+                                     normalized | media and return data
+                                                v
+                                       +-----------------+
+                                       | optional capture |
+                                       +-----------------+
                                                                             |
                                                typed model and tool calls   |
                                                 +---------------------------+--------+
@@ -479,7 +487,8 @@ contain configuration, protocol, and operational details.</p>
 <p>The architecture has four cooperating planes:</p>
 <ul class="simple">
 <li><p><strong>Media plane:</strong> DeviceIOHub receives client audio, video, and data through
-a transport connector, then fans participant-tagged events out to workers.</p></li>
+a transport connector, then fans participant-tagged events out to workers
+and optional passive processors such as session capture.</p></li>
 <li><p><strong>Application plane:</strong> agent workers own application behavior, participant
 state, model and tool orchestration, concurrency, and cancellation.</p></li>
 <li><p><strong>Service plane:</strong> typed model clients and tools isolate workers from model
@@ -513,23 +522,27 @@ services or externally hosted APIs.</p>
 <td><p>Media fan-out, participant identity, return routing, and shared-media access</p></td>
 <td><p>Agent state, model calls, or tools</p></td>
 </tr>
-<tr class="row-odd"><td><p>Agent SDK</p></td>
+<tr class="row-odd"><td><p>Session capture</p></td>
+<td><p>Timestamped raw media/events and pluggable demo or workflow projections</p></td>
+<td><p>Transport sessions, agent policy, model inference, or live-path flow control</p></td>
+</tr>
+<tr class="row-even"><td><p>Agent SDK</p></td>
 <td><p>Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives</p></td>
 <td><p>Application lifecycle and decision policy</p></td>
 </tr>
-<tr class="row-even"><td><p>Agent worker</p></td>
+<tr class="row-odd"><td><p>Agent worker</p></td>
 <td><p>Application state, tasks, prompts, model and tool loops, concurrency, and cleanup</p></td>
 <td><p>Transport internals or model-server lifecycle</p></td>
 </tr>
-<tr class="row-odd"><td><p>AI model services</p></td>
+<tr class="row-even"><td><p>AI model services</p></td>
 <td><p>Inference and model-specific serving behavior</p></td>
 <td><p>Participant routing or application policy</p></td>
 </tr>
-<tr class="row-even"><td><p>Tools and capability services</p></td>
+<tr class="row-odd"><td><p>Tools and capability services</p></td>
 <td><p>Bounded application capabilities</p></td>
 <td><p>General agent orchestration</p></td>
 </tr>
-<tr class="row-odd"><td><p>Sample orchestrator</p></td>
+<tr class="row-even"><td><p>Sample orchestrator</p></td>
 <td><p>Process declarations, startup ordering, readiness, and shutdown</p></td>
 <td><p>Runtime business logic</p></td>
 </tr>
@@ -556,6 +569,12 @@ Multiple agents or passive processors can subscribe to the same input.</p></li>
 <li><p>Return audio and data name the originating participant. The hub validates
 the target and the connector delivers the response only to that participant.</p></li>
 </ol>
+<p>An optional capture process can observe both sides after hub normalization. It
+uses the same on-demand video path as other passive processors and never joins
+the transport session, so encoder load remains outside the hub’s
+latency-sensitive path. Its shared session writer can follow participant
+lifetime or accept private start/stop commands from an agent adapter; demo and
+raw workflow projections reuse the same timestamped media and metadata core.</p>
 <p>The resulting portable contract is:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>participant -&gt; hub -&gt; subscribed worker -&gt; hub -&gt; same participant
 </pre></div>
@@ -625,6 +644,14 @@ input out to several consumers, but it never uses the return path to route
 one participant’s data to another.</p></li>
 <li><p><strong>Transport details stop at the hub.</strong> Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code>; transport
 SDKs and server packages do not enter agent APIs.</p></li>
+<li><p><strong>Capture is transport-independent and policy-separated.</strong> Session capture
+consumes normalized hub IPC and routed return traffic in a separate process.
+Participant-lifetime or agent-controlled boundaries select what the shared
+writer retains; demo rendering and raw workflow packets are projections over
+that writer. Agent wrappers own the capture namespace and fixed metadata;
+model-facing start and stop actions do not accept filesystem paths. Bounded
+capture queues may drop recording frames but must not
+apply backpressure to the hub, clients, or agents.</p></li>
 <li><p><strong>Raw media stays on the media path.</strong> Video pixels remain in shared memory
 until explicitly requested, and raw media is not embedded in runtime events
 or tool results.</p></li>

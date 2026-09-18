@@ -305,6 +305,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -323,6 +324,7 @@
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
@@ -336,6 +338,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -461,24 +464,22 @@ The launcher waits for readiness, then exits with the model servers running.</p>
 </div>
 <p>All client endpoints preserve the original <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> HTTP contracts,
 including <code class="docutils literal notranslate"><span class="pre">/health</span></code>, the <code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, and <code class="docutils literal notranslate"><span class="pre">embed</span></code> aliases, multipart WAV
-transcription, and Pocket-compatible speech responses. The adapters live in
-this sample and use the existing typed <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> clients for NIM inference.
-Consuming workers do not need the Riva extra.</p>
+transcription, and Pocket-compatible speech responses. TTS uses the shared
+<code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts</span></code> HTTP wrapper; the remaining adapters live in this
+sample. All use the typed <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> clients for inference. Consuming
+workers do not need the Riva extra.</p>
 <p>The embedding adapter translates XR AI’s <code class="docutils literal notranslate"><span class="pre">query:</span> </code> and <code class="docutils literal notranslate"><span class="pre">passage:</span> </code> prefixes
 to NIM’s input types, preserving input order and avoiding duplicated prefixes.
 Unprefixed strings default to passages; callers can also set <code class="docutils literal notranslate"><span class="pre">input_type</span></code>.
 The chat adapters translate model aliases and normalize Nemotron reasoning.
 Streaming chat returns visible text, matching the shared SDK; use non-streaming
 chat for function calls and reasoning.</p>
-<p>Magpie returns mono 16-bit audio at 44,100 Hz. Its HTTP endpoint supports WAV
-synthesis and the existing Pocket client’s PCM streaming protocol, including
-sample-rate headers. Streaming requests forward Magpie’s PCM chunks as they
-arrive over gRPC, so playback can start before a sentence finishes synthesis.
-The voice pipeline still submits complete sentences rather than token-by-token
-text. WAV requests remain buffered. A client disconnect cancels the upstream
-RPC before the adapter admits another synthesis request. Failures before the
-first audio return an HTTP error; failures after streaming starts terminate the
-response instead of appending an error message to the PCM audio.</p>
+<p>The Magpie HTTP service forwards PCM chunks as synthesis proceeds and appends
+the configured 300 ms pause after each successful nonempty request. This sample
+owns the per-profile voice and pause settings in <code class="docutils literal notranslate"><span class="pre">tts_adapter.yaml</span></code>; sentence
+submission in consuming workers is unchanged. Refer to
+<a class="reference internal" href="magpie-nim-tts.html"><span class="doc">Magpie NIM HTTP speech service</span></a> for the supported HTTP contract, streaming, and cancellation
+behavior.</p>
 <p>Native NIM endpoints are separate from the client ports:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
