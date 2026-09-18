@@ -105,7 +105,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?: VIRTUAL_CAMERA_ID
     )
 
-    var cameraMode by mutableStateOf(
+    internal var cameraMode by mutableStateOf(
         runCatching {
             CameraMode.valueOf(settings.getString("camera.mode", CameraMode.OFF.name)!!)
         }.getOrDefault(CameraMode.OFF)
@@ -327,7 +327,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Camera ─────────────────────────────────────────────────────────────────
 
-    fun setCameraMode(mode: CameraMode) {
+    internal fun setCameraMode(mode: CameraMode) {
         if (cameraMode == mode) return
         cameraMode = mode
         settings.edit().putString("camera.mode", mode.name).apply()
