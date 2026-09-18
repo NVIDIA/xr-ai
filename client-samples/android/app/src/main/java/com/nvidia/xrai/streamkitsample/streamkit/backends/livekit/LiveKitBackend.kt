@@ -22,9 +22,6 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
-import io.livekit.android.room.datastream.StreamBytesOptions
-import io.livekit.android.room.datastream.outgoing.ByteStreamSender
-import io.livekit.android.room.datastream.outgoing.writeFile
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
@@ -37,7 +34,6 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoCaptureParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -47,7 +43,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
 import java.net.URL
@@ -327,14 +322,26 @@ internal class LiveKitBackend(
         data: ByteArray,
         options: FileSendOptions,
     ): FileTransferInfo {
+        if (!isConnected || room == null) throw StreamError.NotConnected
         val effective = makeFileOptions(options, data.size.toLong(), null)
-        return sendFileStream(effective) { sender -> sender.write(data).getOrThrow() }
+        val streamId = try {
+            byteStreamWriter.sendBytes(data, effective.wire)
+        } catch (_: ByteStreamConnectionChanged) {
+            throw StreamError.FileTransferIncomplete
+        }
+        return effective.toTransferInfo(streamId)
     }
 
     override suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo {
+        if (!isConnected || room == null) throw StreamError.NotConnected
         if (!file.isFile) throw StreamError.InvalidFileMetadata("file is not readable")
         val effective = makeFileOptions(options, file.length(), file.name)
-        return sendFileStream(effective) { sender -> sender.writeFile(file).getOrThrow() }
+        val streamId = try {
+            byteStreamWriter.sendFile(file, effective.wire)
+        } catch (_: ByteStreamConnectionChanged) {
+            throw StreamError.FileTransferIncomplete
+        }
+        return effective.toTransferInfo(streamId)
     }
 
     private data class EffectiveFileOptions(
@@ -342,8 +349,16 @@ internal class LiveKitBackend(
         val name: String,
         val mimeType: String,
         val size: Long,
-        val liveKit: StreamBytesOptions,
-    )
+        val wire: ByteStreamWireOptions,
+    ) {
+        fun toTransferInfo(streamId: String) = FileTransferInfo(
+            id = streamId,
+            topic = topic,
+            name = name,
+            mimeType = mimeType,
+            size = size,
+        )
+    }
 
     private fun makeFileOptions(
         options: FileSendOptions,
@@ -391,7 +406,7 @@ internal class LiveKitBackend(
             name = name,
             mimeType = mimeType,
             size = size,
-            liveKit = StreamBytesOptions(
+            wire = ByteStreamWireOptions(
                 topic = FILE_STREAM_TOPIC,
                 attributes = attributes,
                 destinationIdentities = destinations,
@@ -400,41 +415,6 @@ internal class LiveKitBackend(
                 totalSize = size,
             ),
         )
-    }
-
-    private suspend fun sendFileStream(
-        effective: EffectiveFileOptions,
-        write: suspend (ByteStreamSender) -> Unit,
-    ): FileTransferInfo {
-        val activeRoom = room
-        if (!isConnected || activeRoom == null) throw StreamError.NotConnected
-        val generation = connectionGeneration
-        val sender = activeRoom.localParticipant.streamBytes(effective.liveKit)
-        try {
-            write(sender)
-            sender.close()
-            if (sender.isOpen || !isConnected || room !== activeRoom || generation != connectionGeneration) {
-                throw StreamError.FileTransferIncomplete
-            }
-        } catch (error: Throwable) {
-            closeFileSenderAfterFailure(sender)
-            throw error
-        }
-        return FileTransferInfo(
-            id = sender.info.id,
-            topic = effective.topic,
-            name = effective.name,
-            mimeType = effective.mimeType,
-            size = effective.size,
-        )
-    }
-
-    private suspend fun closeFileSenderAfterFailure(sender: ByteStreamSender) {
-        withContext(NonCancellable) {
-            withTimeoutOrNull(2_000) {
-                runCatching { sender.close("StreamKit send failed") }
-            }
-        }
     }
 
     private fun validateFileField(

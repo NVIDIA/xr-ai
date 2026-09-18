@@ -25,7 +25,10 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
-import { LiveKitByteStreamWriter } from './ByteStreamTransport.js';
+import {
+  ByteStreamConnectionChanged,
+  LiveKitByteStreamWriter,
+} from './ByteStreamTransport.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -570,9 +573,17 @@ export class LiveKitBackend {
       'application/octet-stream',
       this.#config.hubIdentity,
     );
-    const info = await room.localParticipant.sendBytes(bytes, transfer.liveKitOptions);
+    let id;
+    try {
+      id = await this.#byteStreamWriter.sendBytes(bytes, transfer.liveKitOptions);
+    } catch (error) {
+      if (error instanceof ByteStreamConnectionChanged) {
+        throw StreamError.fileTransferIncomplete();
+      }
+      throw error;
+    }
     return {
-      id: info.id,
+      id,
       topic: transfer.topic,
       name: transfer.name,
       mimeType: transfer.mimeType,
@@ -591,25 +602,17 @@ export class LiveKitBackend {
       file.type,
       this.#config.hubIdentity,
     );
-    const writer = await room.localParticipant.streamBytes(transfer.liveKitOptions);
-    const reader = file.stream().getReader();
-    let closed = false;
+    let id;
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writer.write(value);
+      id = await this.#byteStreamWriter.sendFile(file, transfer.liveKitOptions);
+    } catch (error) {
+      if (error instanceof ByteStreamConnectionChanged) {
+        throw StreamError.fileTransferIncomplete();
       }
-      await writer.close();
-      closed = true;
-    } finally {
-      reader.releaseLock();
-      if (!closed) {
-        try { await writer.close(); } catch { /* Preserve the original read or write error. */ }
-      }
+      throw error;
     }
     return {
-      id: writer.info.id,
+      id,
       topic: transfer.topic,
       name: transfer.name,
       mimeType: transfer.mimeType,
