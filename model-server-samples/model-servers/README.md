@@ -46,6 +46,10 @@ the checked-in fields and comments.
 
 ## Run
 
+Before the first launch, including on DGX Spark, refer to the
+[Docker host setup](https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#docker-host-setup)
+for Docker access and NVIDIA runtime prerequisites.
+
 Run all commands from `model-server-samples/model-servers/`:
 
 ```bash
