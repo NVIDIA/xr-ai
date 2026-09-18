@@ -369,7 +369,7 @@ class CaptureService:
         try:
             await asyncio.shield(future)
         except asyncio.CancelledError:
-            await future
+            _ = await future
             raise
 
     async def _drain_callbacks(self) -> None:

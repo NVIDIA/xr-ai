@@ -1149,11 +1149,11 @@ async def test_duplicate_stop_has_one_finalization_owner(
         first = asyncio.create_task(service._finish_session("alice", 1_100_000))
         await asyncio.sleep(0)
         second = asyncio.create_task(service._finish_session("alice", 1_100_000))
-        await second
+        _ = await second
         assert end_calls == []
 
         worker_release.set()
-        await first
+        _ = await first
         assert end_calls == ["alice"]
     finally:
         worker_release.set()
@@ -1255,7 +1255,7 @@ async def test_cancelled_stop_still_finishes_cleanup(
 
     release_close.set()
     with pytest.raises(asyncio.CancelledError):
-        await stop_task
+        _ = await stop_task
     assert service._stop_task is not None and service._stop_task.done()
     with pytest.raises(RuntimeError, match="cannot schedule new futures"):
         service._writer_executor.submit(lambda: None)
