@@ -35,7 +35,6 @@ Exceptions
 
 .. autoapisummary::
 
-   xr_ai_hub.ImageCaptureUnavailable
    xr_ai_hub.FrameUnavailable
 
 
@@ -44,7 +43,6 @@ Classes
 
 .. autoapisummary::
 
-   xr_ai_hub.ClientImageCaptureSource
    xr_ai_hub.LiveFrameSource
    xr_ai_hub.ProcessorEndpoint
    xr_ai_hub.Subscribe
@@ -58,9 +56,6 @@ Classes
    xr_ai_hub.FrameData
    xr_ai_hub.FrameRequest
    xr_ai_hub.FrameSignal
-   xr_ai_hub.ImageCaptureCancel
-   xr_ai_hub.ImageCaptureData
-   xr_ai_hub.ImageCaptureRequest
    xr_ai_hub.MsgType
    xr_ai_hub.ParticipantEvent
    xr_ai_hub.PixelFormat
@@ -82,32 +77,6 @@ Functions
 
 Package Contents
 ----------------
-
-.. py:class:: ClientImageCaptureSource(endpoint: xr_ai_hub.ProcessorEndpoint, *, timeout_s: float = 10.0)
-
-   Request encoded still images from participant clients through the hub.
-
-
-   .. py:method:: capture(participant_id: str) -> xr_ai_hub.ImageCaptureData
-      :async:
-
-
-      Ask a connected participant for one still image.
-
-
-
-   .. py:method:: close() -> None
-
-      Detach the capture callback and fail outstanding requests.
-
-
-
-.. py:exception:: ImageCaptureUnavailable
-
-
-
-   Raised when a client image capture does not complete successfully.
-
 
 .. py:function:: decode(raw: bytes) -> tuple[int, Any]
 
@@ -350,12 +319,6 @@ Package Contents
 
 
 
-   .. py:method:: on_image_capture(cb: ImageCaptureCallback) -> CallbackUnsubscribe
-
-      Register for completed participant image-capture requests.
-
-
-
    .. py:method:: on_participant(cb: ParticipantCallback) -> None
 
       Register an async callback for participant join and leave events.
@@ -367,22 +330,6 @@ Package Contents
 
 
       Send an application data message to its target participant.
-
-
-
-   .. py:method:: request_image_capture(request: xr_ai_hub.ImageCaptureRequest) -> None
-      :async:
-
-
-      Ask the hub to invoke one participant's image-capture capability.
-
-
-
-   .. py:method:: cancel_image_capture(cancel: xr_ai_hub.ImageCaptureCancel) -> None
-      :async:
-
-
-      Cancel a previously requested participant image capture.
 
 
 
@@ -993,91 +940,6 @@ Package Contents
 
 
       Identity of the participant's video track.
-
-
-
-.. py:class:: ImageCaptureCancel
-
-   Cancel one pending participant image capture.
-
-
-   .. py:attribute:: participant_id
-      :type:  str
-
-      Participant whose client should stop the capture.
-
-
-
-   .. py:attribute:: request_id
-      :type:  str
-
-      Capture request to cancel.
-
-
-
-.. py:class:: ImageCaptureData
-
-   One complete encoded image returned for a capture request.
-
-
-   .. py:attribute:: participant_id
-      :type:  str
-
-      Participant that produced the image.
-
-
-
-   .. py:attribute:: request_id
-      :type:  str
-
-      Capture request completed by this image.
-
-
-
-   .. py:attribute:: pts_us
-      :type:  int
-
-      Server receive time in Unix microseconds.
-
-
-
-   .. py:attribute:: mime_type
-      :type:  str
-
-      Declared image media type.
-
-
-
-   .. py:attribute:: data
-      :type:  bytes
-
-      Complete encoded image bytes.
-
-
-
-.. py:class:: ImageCaptureRequest
-
-   Ask one participant's client to capture and return an image.
-
-
-   .. py:attribute:: participant_id
-      :type:  str
-
-      Participant whose camera capability should be invoked.
-
-
-
-   .. py:attribute:: request_id
-      :type:  str
-
-      Opaque identifier correlating the request with its byte stream.
-
-
-
-   .. py:attribute:: timeout_ms
-      :type:  int
-
-      Client-visible deadline in milliseconds.
 
 
 

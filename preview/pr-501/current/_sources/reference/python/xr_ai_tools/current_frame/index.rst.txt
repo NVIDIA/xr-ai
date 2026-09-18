@@ -88,7 +88,9 @@ Module Contents
 
    A fresh frame already observed by the hub is preferred. When none is
    available, the tool transparently asks the participant client to capture
-   and upload one encoded still image.
+   and upload one encoded still image. Installing a StreamKit capture handler
+   opts the client in; calls from foreground tools or background pollers may
+   briefly activate that client's camera when video is off.
 
 
    .. py:method:: release(participant_id: str) -> None

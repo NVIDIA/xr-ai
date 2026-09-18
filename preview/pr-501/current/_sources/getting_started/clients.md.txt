@@ -36,7 +36,9 @@ DeviceIOHub sends a targeted `camera.capture.request`. The handler captures and
 encodes one JPEG, PNG, or WebP image; StreamKit returns it to the hub with
 LiveKit's chunked byte-stream transport. Requests include an opaque correlation
 ID and deadline. The web, Android, and Apple SDKs cancel pending asynchronous
-capture work on disconnect or when a superseding turn expires the request.
+capture work on disconnect or when a superseding turn expires the request. A
+client without an installed handler, or whose handler fails, returns an
+immediate rejection so the requesting tool does not wait for its full timeout.
 
 The web, Android, and Apple sample apps install handlers that briefly open the
 selected camera when necessary and stop it after the still is encoded. The
@@ -49,8 +51,10 @@ This capability is independent of visual inference. An agent calls the existing
 `CurrentFrameTool` and can pass its returned `ImageReference` to a VLM, an
 image-processing tool, a workflow, or another participant-scoped agent. The
 tool resolves a fresh hub frame when video is streaming and requests a client
-capture only when one is not available. Agents do not branch on transport or
-camera state.
+capture only when one is not available. This applies to every tool invocation,
+including periodic monitoring: installing the client capture handler opts that
+client in to brief camera activation when a caller needs a still while video is
+off. Agents do not branch on transport or camera state.
 
 The same resolution rule can extend to a future short-video selector: resolve a
 recorded hub window first, then ask a capable client to record and upload a
@@ -270,7 +274,8 @@ hub certificate on port 8080 remains required for the LiveKit channel.
 
 ## Native C++
 
-The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.
+The C++20 sample ships a working backend for LiveKit client-sdk-cpp v1.10.2 or
+newer. The SDK root must use its official `include/` and `lib/` layout.
 
 ```bash
 cd client-samples/native

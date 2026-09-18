@@ -459,10 +459,7 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ImageCaptureUnavailable" title="xr_ai_hub.ImageCaptureUnavailable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImageCaptureUnavailable</span></code></a></p></td>
-<td><p>Raised when a client image capture does not complete successfully.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameUnavailable" title="xr_ai_hub.FrameUnavailable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameUnavailable</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameUnavailable" title="xr_ai_hub.FrameUnavailable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameUnavailable</span></code></a></p></td>
 <td><p>Raised when a fresh camera frame cannot be obtained before the timeout.</p></td>
 </tr>
 </tbody>
@@ -473,56 +470,44 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ClientImageCaptureSource" title="xr_ai_hub.ClientImageCaptureSource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClientImageCaptureSource</span></code></a></p></td>
-<td><p>Request encoded still images from participant clients through the hub.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.LiveFrameSource" title="xr_ai_hub.LiveFrameSource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LiveFrameSource</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.LiveFrameSource" title="xr_ai_hub.LiveFrameSource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LiveFrameSource</span></code></a></p></td>
 <td><p>Track frame signals and fetch fresh pixels through <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint" title="xr_ai_hub.ProcessorEndpoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint" title="xr_ai_hub.ProcessorEndpoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code></a></p></td>
 <td><p>Downstream IPC endpoint for data processors.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.Subscribe" title="xr_ai_hub.Subscribe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Subscribe</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.Subscribe" title="xr_ai_hub.Subscribe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Subscribe</span></code></a></p></td>
 <td><p>Per-participant message-category filter.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ShmRingBuffer" title="xr_ai_hub.ShmRingBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShmRingBuffer</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ShmRingBuffer" title="xr_ai_hub.ShmRingBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShmRingBuffer</span></code></a></p></td>
 <td><p>Shared-memory ring buffer for raw video frames.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.SlotView" title="xr_ai_hub.SlotView"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SlotView</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.SlotView" title="xr_ai_hub.SlotView"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SlotView</span></code></a></p></td>
 <td><p>Zero-copy view into one ring-buffer slot's pixel data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.AgentPresence" title="xr_ai_hub.AgentPresence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentPresence</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.AgentPresence" title="xr_ai_hub.AgentPresence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentPresence</span></code></a></p></td>
 <td><p>An agent endpoint has attached to (or detached from) the hub.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.AudioChunk" title="xr_ai_hub.AudioChunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AudioChunk</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.AudioChunk" title="xr_ai_hub.AudioChunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AudioChunk</span></code></a></p></td>
 <td><p>Raw PCM audio chunk from the connector.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ConnectorRegistration" title="xr_ai_hub.ConnectorRegistration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConnectorRegistration</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ConnectorRegistration" title="xr_ai_hub.ConnectorRegistration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConnectorRegistration</span></code></a></p></td>
 <td><p>Sent by a connector on startup so the hub can open its ring buffer.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ControlMessage" title="xr_ai_hub.ControlMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControlMessage</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ControlMessage" title="xr_ai_hub.ControlMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControlMessage</span></code></a></p></td>
 <td><p>Extensible key/value control message (hub-internal, no track concept).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataMessage</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataMessage</span></code></a></p></td>
 <td><p>Arbitrary binary/text payload from a LiveKit data channel.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
 <td><p>Pixel data for the latest frame, published by the hub on <cite>video_data.&lt;pid&gt;.&lt;track&gt;</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
 <td><p>Sent by a processor to request a copy of the current latest frame.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
 <td><p>Signals that a decoded frame has been written into the shared-memory ring buffer.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ImageCaptureCancel" title="xr_ai_hub.ImageCaptureCancel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImageCaptureCancel</span></code></a></p></td>
-<td><p>Cancel one pending participant image capture.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ImageCaptureData" title="xr_ai_hub.ImageCaptureData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImageCaptureData</span></code></a></p></td>
-<td><p>One complete encoded image returned for a capture request.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ImageCaptureRequest" title="xr_ai_hub.ImageCaptureRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImageCaptureRequest</span></code></a></p></td>
-<td><p>Ask one participant's client to capture and return an image.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.MsgType" title="xr_ai_hub.MsgType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MsgType</span></code></a></p></td>
 <td><p>Wire-level message identifiers used by the hub IPC protocol.</p></td>
@@ -568,38 +553,6 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 </section>
 <section id="package-contents">
 <h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading">#</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_hub.ClientImageCaptureSource">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ClientImageCaptureSource</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="n"><span class="pre">endpoint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint" title="xr_ai_hub.ProcessorEndpoint"><span class="pre">xr_ai_hub.ProcessorEndpoint</span></a></span></em>,</dd>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_hub.ClientImageCaptureSource" title="Link to this definition">#</a></dt>
-<dd><p>Request encoded still images from participant clients through the hub.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ClientImageCaptureSource.capture">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_hub.ImageCaptureData" title="xr_ai_hub.ImageCaptureData"><span class="pre">xr_ai_hub.ImageCaptureData</span></a></span></span><a class="headerlink" href="#xr_ai_hub.ClientImageCaptureSource.capture" title="Link to this definition">#</a></dt>
-<dd><p>Ask a connected participant for one still image.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ClientImageCaptureSource.close">
-<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ClientImageCaptureSource.close" title="Link to this definition">#</a></dt>
-<dd><p>Detach the capture callback and fail outstanding requests.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py exception">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureUnavailable">
-<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ImageCaptureUnavailable</span></span><a class="headerlink" href="#xr_ai_hub.ImageCaptureUnavailable" title="Link to this definition">#</a></dt>
-<dd><p>Raised when a client image capture does not complete successfully.</p>
-</dd></dl>
-
 <dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_hub.decode">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_hub.decode" title="Link to this definition">#</a></dt>
@@ -871,12 +824,6 @@ an older build that does not answer probes.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.on_image_capture">
-<span class="sig-name descname"><span class="pre">on_image_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ImageCaptureCallback</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">CallbackUnsubscribe</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.on_image_capture" title="Link to this definition">#</a></dt>
-<dd><p>Register for completed participant image-capture requests.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.on_participant">
 <span class="sig-name descname"><span class="pre">on_participant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ParticipantCallback</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.on_participant" title="Link to this definition">#</a></dt>
 <dd><p>Register an async callback for participant join and leave events.</p>
@@ -886,18 +833,6 @@ an older build that does not answer probes.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.send_return_data">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">send_return_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><span class="pre">xr_ai_hub.DataMessage</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.send_return_data" title="Link to this definition">#</a></dt>
 <dd><p>Send an application data message to its target participant.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.request_image_capture">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">request_image_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.ImageCaptureRequest" title="xr_ai_hub.ImageCaptureRequest"><span class="pre">xr_ai_hub.ImageCaptureRequest</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.request_image_capture" title="Link to this definition">#</a></dt>
-<dd><p>Ask the hub to invoke one participant’s image-capture capability.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.cancel_image_capture">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cancel_image_capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cancel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.ImageCaptureCancel" title="xr_ai_hub.ImageCaptureCancel"><span class="pre">xr_ai_hub.ImageCaptureCancel</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.cancel_image_capture" title="Link to this definition">#</a></dt>
-<dd><p>Cancel a previously requested participant image capture.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1469,84 +1404,6 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureCancel">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ImageCaptureCancel</span></span><a class="headerlink" href="#xr_ai_hub.ImageCaptureCancel" title="Link to this definition">#</a></dt>
-<dd><p>Cancel one pending participant image capture.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureCancel.participant_id">
-<span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureCancel.participant_id" title="Link to this definition">#</a></dt>
-<dd><p>Participant whose client should stop the capture.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureCancel.request_id">
-<span class="sig-name descname"><span class="pre">request_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureCancel.request_id" title="Link to this definition">#</a></dt>
-<dd><p>Capture request to cancel.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ImageCaptureData</span></span><a class="headerlink" href="#xr_ai_hub.ImageCaptureData" title="Link to this definition">#</a></dt>
-<dd><p>One complete encoded image returned for a capture request.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData.participant_id">
-<span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureData.participant_id" title="Link to this definition">#</a></dt>
-<dd><p>Participant that produced the image.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData.request_id">
-<span class="sig-name descname"><span class="pre">request_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureData.request_id" title="Link to this definition">#</a></dt>
-<dd><p>Capture request completed by this image.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData.pts_us">
-<span class="sig-name descname"><span class="pre">pts_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureData.pts_us" title="Link to this definition">#</a></dt>
-<dd><p>Server receive time in Unix microseconds.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData.mime_type">
-<span class="sig-name descname"><span class="pre">mime_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureData.mime_type" title="Link to this definition">#</a></dt>
-<dd><p>Declared image media type.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureData.data">
-<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bytes</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureData.data" title="Link to this definition">#</a></dt>
-<dd><p>Complete encoded image bytes.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureRequest">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">ImageCaptureRequest</span></span><a class="headerlink" href="#xr_ai_hub.ImageCaptureRequest" title="Link to this definition">#</a></dt>
-<dd><p>Ask one participant’s client to capture and return an image.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureRequest.participant_id">
-<span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureRequest.participant_id" title="Link to this definition">#</a></dt>
-<dd><p>Participant whose camera capability should be invoked.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureRequest.request_id">
-<span class="sig-name descname"><span class="pre">request_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureRequest.request_id" title="Link to this definition">#</a></dt>
-<dd><p>Opaque identifier correlating the request with its byte stream.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_hub.ImageCaptureRequest.timeout_ms">
-<span class="sig-name descname"><span class="pre">timeout_ms</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_hub.ImageCaptureRequest.timeout_ms" title="Link to this definition">#</a></dt>
-<dd><p>Client-visible deadline in milliseconds.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.MsgType">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">MsgType</span></span><a class="headerlink" href="#xr_ai_hub.MsgType" title="Link to this definition">#</a></dt>
 <dd><p>Wire-level message identifiers used by the hub IPC protocol.</p>
@@ -1813,12 +1670,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ClientImageCaptureSource"><code class="docutils literal notranslate"><span class="pre">ClientImageCaptureSource</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ClientImageCaptureSource.capture"><code class="docutils literal notranslate"><span class="pre">capture()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ClientImageCaptureSource.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureUnavailable"><code class="docutils literal notranslate"><span class="pre">ImageCaptureUnavailable</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.decode"><code class="docutils literal notranslate"><span class="pre">decode()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.encode"><code class="docutils literal notranslate"><span class="pre">encode()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.register_decoder"><code class="docutils literal notranslate"><span class="pre">register_decoder()</span></code></a></li>
@@ -1842,11 +1693,8 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_frame_data"><code class="docutils literal notranslate"><span class="pre">on_frame_data()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_audio"><code class="docutils literal notranslate"><span class="pre">on_audio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_data"><code class="docutils literal notranslate"><span class="pre">on_data()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_image_capture"><code class="docutils literal notranslate"><span class="pre">on_image_capture()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_participant"><code class="docutils literal notranslate"><span class="pre">on_participant()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_data"><code class="docutils literal notranslate"><span class="pre">send_return_data()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.request_image_capture"><code class="docutils literal notranslate"><span class="pre">request_image_capture()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.cancel_image_capture"><code class="docutils literal notranslate"><span class="pre">cancel_image_capture()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_audio"><code class="docutils literal notranslate"><span class="pre">send_return_audio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.flush_return_audio"><code class="docutils literal notranslate"><span class="pre">flush_return_audio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.request_roster"><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></a></li>
@@ -1939,25 +1787,6 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameSignal.data_sz"><code class="docutils literal notranslate"><span class="pre">data_sz</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameSignal.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameSignal.track_id"><code class="docutils literal notranslate"><span class="pre">track_id</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureCancel"><code class="docutils literal notranslate"><span class="pre">ImageCaptureCancel</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureCancel.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureCancel.request_id"><code class="docutils literal notranslate"><span class="pre">request_id</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData"><code class="docutils literal notranslate"><span class="pre">ImageCaptureData</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData.request_id"><code class="docutils literal notranslate"><span class="pre">request_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData.pts_us"><code class="docutils literal notranslate"><span class="pre">pts_us</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData.mime_type"><code class="docutils literal notranslate"><span class="pre">mime_type</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureData.data"><code class="docutils literal notranslate"><span class="pre">data</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureRequest"><code class="docutils literal notranslate"><span class="pre">ImageCaptureRequest</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureRequest.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureRequest.request_id"><code class="docutils literal notranslate"><span class="pre">request_id</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ImageCaptureRequest.timeout_ms"><code class="docutils literal notranslate"><span class="pre">timeout_ms</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType"><code class="docutils literal notranslate"><span class="pre">MsgType</span></code></a><ul class="nav section-nav flex-column">

@@ -518,7 +518,9 @@
 <dd><p>Return a participant’s current image without running visual inference.</p>
 <p>A fresh frame already observed by the hub is preferred. When none is
 available, the tool transparently asks the participant client to capture
-and upload one encoded still image.</p>
+and upload one encoded still image. Installing a StreamKit capture handler
+opts the client in; calls from foreground tools or background pollers may
+briefly activate that client’s camera when video is off.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_tools.current_frame.CurrentFrameTool.release">
 <span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_tools.current_frame.CurrentFrameTool.release" title="Link to this definition">#</a></dt>
