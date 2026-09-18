@@ -327,6 +327,25 @@ drift:
 - Commands:
   - `llama_nemotron_llm_server` → `llama_nemotron_llm_server.__main__:run`
 
+#### `magpie-nim-tts` — [`services/magpie-nim-tts/`](services/magpie-nim-tts/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `fastapi>=0.115`
+  - `uvicorn>=0.30`
+  - `pyyaml>=6.0`
+  - `httpx>=0.27`
+- Optional dependency groups:
+  - `test`:
+    - `pytest>=8.0`
+- Commands:
+  - `magpie_nim_tts` → `magpie_nim_tts.__main__:run`
+
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
 - Python: `>=3.11,<3.13`

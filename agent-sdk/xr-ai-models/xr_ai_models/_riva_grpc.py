@@ -19,6 +19,7 @@ import asyncio
 import io
 import os
 import wave
+from collections.abc import AsyncIterator
 from typing import Any
 
 from loguru import logger
@@ -163,8 +164,7 @@ class RivaSTT:
 
 
 class RivaTTS:
-    """Riva TTS client: streaming synthesis over gRPC, concatenated to one
-    WAV (or raw PCM) result."""
+    """Riva TTS client with incremental PCM and buffered WAV or PCM synthesis."""
 
     def __init__(
         self,
@@ -227,6 +227,66 @@ class RivaTTS:
         if response_format == "pcm":
             return pcm
         return _pcm_to_wav(pcm, self._sample_rate, 1)
+
+    async def stream_pcm(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[bytes]:
+        """Yield raw mono 16-bit PCM bytes for a complete text input.
+
+        Chunks use the configured sample rate and contain only whole samples.
+        The timeout bounds the stream's lifetime, checked on each read. Closing
+        or cancelling the iterator cancels the RPC and joins its pending read
+        before returning, so callers can safely release a synthesis lock.
+        """
+        responses = self._tts.synthesize_online(
+            text,
+            voice_name=self._voice,
+            language_code=self._language,
+            encoding=self._rc.AudioEncoding.LINEAR_PCM,
+            sample_rate_hz=self._sample_rate,
+        )
+        deadline = asyncio.get_running_loop().time() + (timeout or self._timeout)
+        read_task = None
+        pending = b""
+        try:
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError("Riva speech stream timed out")
+                # gRPC iteration blocks. Read only when the consumer asks for
+                # another chunk, keeping buffering bounded by one response.
+                read_task = asyncio.create_task(asyncio.to_thread(next, responses, None))
+                response = await asyncio.wait_for(asyncio.shield(read_task), remaining)
+                if response is None:
+                    break
+                pending += response.audio
+                complete = len(pending) - len(pending) % 2
+                if complete:
+                    yield pending[:complete]
+                    pending = pending[complete:]
+            if pending:
+                raise ValueError("Riva returned an incomplete PCM sample")
+        finally:
+            # Cancelling a to_thread task alone leaves its gRPC read running.
+            # Cancel the actual RPC first, then wait for that read to unwind.
+            responses.cancel()
+            if read_task is not None:
+                joined = asyncio.gather(read_task, return_exceptions=True)
+                cancelled = None
+                # A disconnect can cancel us again during timeout cleanup.
+                # Shield every join attempt so the blocking read keeps its
+                # task, and propagate cancellation only after it has finished.
+                while not joined.done():
+                    try:
+                        await asyncio.shield(joined)
+                    except asyncio.CancelledError as exc:
+                        cancelled = exc
+                joined.result()
+                if cancelled is not None:
+                    raise cancelled
 
     async def health(self) -> bool:
         """Whether the Riva gRPC channel is ready (assumed when probing is off)."""
