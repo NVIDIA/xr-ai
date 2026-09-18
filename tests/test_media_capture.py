@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -37,6 +38,7 @@ from device_io_hub.capture._service import (
     _invalid_audio_reason,
 )
 from device_io_hub.capture.config import CaptureConfig, load_capture_config
+from device_io_hub.capture.renderer import _OverlayTimeline, _presentation_frames
 from xr_ai_hub import (
     AudioChunk,
     DataMessage,
@@ -308,6 +310,7 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     assert command[command.index("-profile:a") + 1] == "aac_low"
     assert command[command.index("-ar:a") + 1] == "48000"
     assert command[command.index("-ac:a") + 1] == "2"
+    assert "-avoid_negative_ts" not in command
     assert command[command.index("-movflags") + 1] == "+faststart"
     audio_filter = command[command.index("-filter_complex") + 1]
     assert "atrim=start_sample=480:end_sample=2400" in audio_filter
@@ -316,6 +319,196 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     assert "channel_layouts=stereo" in audio_filter
     assert "asetpts=N/SR/TB" in audio_filter
     assert output_path.read_bytes().index(b"moov") < output_path.read_bytes().index(b"mdat")
+
+
+def test_mp4_finalizer_starts_real_audio_and_video_at_zero(tmp_path: Path) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if ffmpeg is None or ffprobe is None:
+        pytest.skip("FFmpeg and FFprobe are required for the real MP4 timing test")
+
+    timeline_path = tmp_path / "timeline.mkv"
+    generate = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=64x32:r=30:d=0.2",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(timeline_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if generate.returncode != 0:
+        pytest.skip(f"FFmpeg has no usable libx264 encoder: {generate.stderr.strip()}")
+
+    wave_path = tmp_path / "conversation.wav"
+    samples = np.full((9_600, 2), 8_000, dtype="<i2")
+    with wave.open(str(wave_path), "wb") as stream:
+        stream.setnchannels(2)
+        stream.setsampwidth(2)
+        stream.setframerate(48_000)
+        stream.writeframes(samples.tobytes())
+    output_path = tmp_path / "session.mp4"
+
+    mp4_module.mux_h264_aac(
+        ffmpeg_path=ffmpeg,
+        output_path=output_path,
+        video_path=timeline_path,
+        wave_path=wave_path,
+        audio_start_frame=0,
+        audio_end_frame=len(samples),
+        fps=30,
+    )
+
+    probe = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,start_time",
+            "-of",
+            "json",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    stream_starts = {
+        stream["codec_type"]: float(stream["start_time"])
+        for stream in json.loads(probe.stdout)["streams"]
+    }
+    assert stream_starts == pytest.approx({"video": 0.0, "audio": 0.0}, abs=1e-6)
+
+    decoded = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(output_path),
+            "-map",
+            "0:a:0",
+            "-frames:a",
+            "512",
+            "-f",
+            "s16le",
+            "pipe:1",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    first_audio = np.frombuffer(decoded.stdout, dtype="<i2")
+    assert first_audio.size >= 512 * 2
+    assert np.mean(np.abs(first_audio[: 512 * 2])) > 1_000
+
+
+def test_presentation_timeline_holds_frames_for_sparse_caption_changes() -> None:
+    events = [
+        {
+            "event_id": 1,
+            "kind": "voice_caption",
+            "source": "user",
+            "text": "between frames",
+            "pts_us": 5_000_000,
+        },
+        {
+            "event_id": 2,
+            "kind": "voice_caption",
+            "source": "agent",
+            "text": "after last frame",
+            "pts_us": 25_000_000,
+        },
+    ]
+    timeline = _OverlayTimeline(events, duration_us=12_000_000)
+    first_pixels = np.zeros((3, 2), dtype=np.uint8)
+    second_pixels = np.ones((3, 2), dtype=np.uint8)
+    decoded = iter([
+        ({"pts_us": 0, "track_id": "camera"}, first_pixels),
+        ({"pts_us": 20_000_000, "track_id": "camera"}, second_pixels),
+    ])
+
+    frames = list(
+        _presentation_frames(
+            decoded,
+            timeline.change_points(start_us=0, end_us=30_000_000),
+            start_us=0,
+            end_us=30_000_000,
+            min_interval_us=1,
+        )
+    )
+
+    assert [row["pts_us"] for row, _pixels in frames] == [
+        0,
+        5_000_000,
+        17_000_001,
+        20_000_000,
+        25_000_000,
+        30_000_000,
+    ]
+    assert [timeline.at(row["pts_us"])[0] for row, _pixels in frames] == [
+        "",
+        "USER: between frames",
+        "",
+        "",
+        "AGENT: after last frame",
+        "AGENT: after last frame",
+    ]
+    assert all(np.shares_memory(pixels, first_pixels) for _row, pixels in frames[1:3])
+    assert all(np.shares_memory(pixels, second_pixels) for _row, pixels in frames[4:])
+
+
+def test_presentation_timeline_coalesces_dense_changes_to_frame_rate() -> None:
+    pixels = np.zeros((3, 2), dtype=np.uint8)
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0}, pixels),
+            ({"pts_us": 100}, pixels),
+        ]),
+        (1, 2, 3, 100),
+        start_us=0,
+        end_us=100,
+        min_interval_us=10,
+    ))
+
+    assert [row["pts_us"] for row, _pixels in frames] == [0, 10, 100]
+
+
+def test_presentation_timeline_rate_limits_each_camera_track_independently() -> None:
+    pixels = np.zeros((3, 2), dtype=np.uint8)
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0, "track_id": "a"}, pixels),
+            ({"pts_us": 0, "track_id": "b"}, pixels),
+            ({"pts_us": 40_000, "track_id": "a"}, pixels),
+            ({"pts_us": 40_000, "track_id": "b"}, pixels),
+        ]),
+        (),
+        start_us=0,
+        end_us=40_000,
+        min_interval_us=33_333,
+    ))
+
+    assert [(row["track_id"], row["pts_us"]) for row, _pixels in frames] == [
+        ("a", 0),
+        ("b", 0),
+        ("a", 40_000),
+        ("b", 40_000),
+    ]
 
 
 def test_demo_frontend_reports_empty_audio_window_as_video_only(
@@ -562,7 +755,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
         for frame in encoded_inputs
     )
     assert finalized_video_inputs == ["session.timeline.mkv.pending"]
-    assert finalized_video_pts == [1_000_000, 1_050_000]
+    assert finalized_video_pts == [1_000_000, 1_040_000, 1_100_000]
     assert not (session / "video" / "rendering.264").exists()
     assert not (session / "video" / "session.timeline.mkv.pending").exists()
 
@@ -866,16 +1059,15 @@ def test_retention_ignores_unowned_directories(
 
 
 @pytest.mark.asyncio
-async def test_retention_protects_bundles_queued_for_rendering(
+async def test_retention_keeps_waiting_session_active_until_render_finishes(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
-    first = tmp_path / "first"
-    second = tmp_path / "second"
     render_started = asyncio.Event()
-    release_render = asyncio.Event()
+    release_render = threading.Event()
     rendered: list[tuple[Path, bool]] = []
+    loop = asyncio.get_running_loop()
 
     monkeypatch.setattr(
         service_module,
@@ -885,43 +1077,33 @@ async def test_retention_protects_bundles_queued_for_rendering(
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         profile="demo",
-        max_total_bytes=100,
+        max_total_bytes=1,
     ))
-    for bundle in (first, second):
-        bundle.mkdir()
-        (bundle / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
-        (bundle / "payload").write_bytes(b"x" * 200)
-    os.utime(second, ns=(1, 1))
-    os.utime(first, ns=(2, 2))
-    bundles = {"first": first, "second": second}
-    service._recorder.end_session = (  # type: ignore[method-assign]
-        lambda participant_id, *_args: bundles[participant_id]
-    )
+    service._recorder.begin_session("first", 1_000_000)
+    service._recorder.begin_session("second", 2_000_000)
+    first = service._recorder._sessions["first"].root
+    second = service._recorder._sessions["second"].root
 
-    async def write_inline(function, *args):
-        return function(*args)
+    def render(bundle: Path) -> None:
+        rendered.append((bundle, bundle.exists()))
+        if bundle == first:
+            loop.call_soon_threadsafe(render_started.set)
+            assert release_render.wait(timeout=5)
 
-    service._write = write_inline  # type: ignore[method-assign]
-    render_lock = asyncio.Lock()
-
-    async def render(bundle: Path) -> None:
-        async with render_lock:
-            rendered.append((bundle, bundle.exists()))
-            if bundle == first:
-                render_started.set()
-                await release_render.wait()
-
-    service._render = render  # type: ignore[method-assign]
+    service._render_bundle = render  # type: ignore[method-assign]
     try:
-        first_task = asyncio.create_task(service._finish_session("first", 1))
+        first_task = asyncio.create_task(
+            service._finish_session("first", 1_100_000),
+        )
         await asyncio.wait_for(render_started.wait(), timeout=1)
 
-        second_task = asyncio.create_task(service._finish_session("second", 2))
-        for _ in range(40):
-            if second in service._render_tasks:
-                break
-            await asyncio.sleep(0.025)
-        assert second in service._render_tasks
+        second_task = asyncio.create_task(
+            service._finish_session("second", 2_100_000),
+        )
+        await asyncio.sleep(0.05)
+        assert not second_task.done()
+        assert service._recorder.has_session("second")
+        assert second.exists()
 
         release_render.set()
         await asyncio.gather(first_task, second_task)
@@ -929,6 +1111,52 @@ async def test_retention_protects_bundles_queued_for_rendering(
         assert rendered == [(first, True), (second, True)]
     finally:
         release_render.set()
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_stop_has_one_finalization_owner(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    worker_release = asyncio.Event()
+
+    class BlockingWorker:
+        async def close(self) -> None:
+            await worker_release.wait()
+
+    service._recorder.begin_session("alice", 1_000_000)
+    service._frame_workers[("alice", "camera")] = BlockingWorker()  # type: ignore[assignment]
+    end_calls: list[str] = []
+    original_end = service._recorder.end_session
+
+    def end_once(participant_id, *args):
+        end_calls.append(participant_id)
+        return original_end(participant_id, *args)
+
+    service._recorder.end_session = end_once  # type: ignore[method-assign]
+
+    async def write_inline(function, *args):
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    try:
+        first = asyncio.create_task(service._finish_session("alice", 1_100_000))
+        await asyncio.sleep(0)
+        second = asyncio.create_task(service._finish_session("alice", 1_100_000))
+        await second
+        assert end_calls == []
+
+        worker_release.set()
+        await first
+        assert end_calls == ["alice"]
+    finally:
+        worker_release.set()
         await service.stop()
 
 
@@ -997,6 +1225,40 @@ async def test_shutdown_drains_participant_finalization_before_executors(
         if stop_task is not None:
             await asyncio.gather(stop_task, return_exceptions=True)
         await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_still_finishes_cleanup(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    close_started = asyncio.Event()
+    release_close = asyncio.Event()
+
+    async def controlled_write(function, *args):
+        if function.__name__ == "close":
+            close_started.set()
+            await release_close.wait()
+        return function(*args)
+
+    service._write = controlled_write  # type: ignore[method-assign]
+    stop_task = asyncio.create_task(service.stop())
+    await asyncio.wait_for(close_started.wait(), timeout=1)
+    stop_task.cancel()
+    await asyncio.sleep(0)
+    assert not stop_task.done()
+
+    release_close.set()
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task
+    assert service._stop_task is not None and service._stop_task.done()
+    with pytest.raises(RuntimeError, match="cannot schedule new futures"):
+        service._writer_executor.submit(lambda: None)
 
 
 @pytest.mark.asyncio

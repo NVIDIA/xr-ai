@@ -29,11 +29,12 @@ except (ImportError, RuntimeError, OSError) as exc:
 
 from xr_ai_hub import AudioChunk, DataMessage, FrameData, FrameSignal, PixelFormat, SlotView  # noqa: E402
 
-from video_memory_service.service import VideoMemoryService  # noqa: E402
-from video_memory_service.store import ChunkStore  # noqa: E402
+from device_io_hub.capture import CaptureRenderer  # noqa: E402
 from device_io_hub.capture._recorder import SessionRecorder  # noqa: E402
 from device_io_hub.capture.config import CaptureConfig  # noqa: E402
 from device_io_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
+from video_memory_service.service import VideoMemoryService  # noqa: E402
+from video_memory_service.store import ChunkStore  # noqa: E402
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
@@ -236,8 +237,8 @@ async def test_resolution_change_surfaces_error():
             assert (1280, 720) in resolutions
 
 
-async def test_media_capture_composites_caption_with_real_nvenc():
-    """Capture must join NVENC resolution chunks into one playable session."""
+async def test_media_capture_renders_caption_with_real_nvenc():
+    """Raw capture and the explicit renderer produce their separate artifacts."""
     if shutil.which("ffmpeg") is None:
         pytest.skip("FFmpeg is required for capture MP4 finalization")
     width, height = 640, 480
@@ -292,12 +293,22 @@ async def test_media_capture_composites_caption_with_real_nvenc():
         manifest = json.loads((session / "manifest.json").read_text())
         segment = manifest["video_tracks"]["camera"][0]
         assert len(manifest["video_tracks"]["camera"]) == 1
-        assert len(list((session / "video").glob("*.mp4"))) == 1
-        assert segment["width"] > width
-        assert segment["height"] > height
+        assert not list((session / "video").glob("*.mp4"))
+        assert segment["width"] == width
+        assert segment["height"] == height
         assert len(segment["encoded_dimensions"]) == 2
-        assert segment["audio_embedded"] is True
-        demuxer = PyNvVideoCodec.CreateDemuxer(str(session / segment["path"]))
+        assert segment["audio_embedded"] is False
+
+        output = CaptureRenderer(gpu_id=0).render(session)
+        manifest = json.loads((session / "manifest.json").read_text())
+        rendering = manifest["renderings"]["captioned_mp4"]
+        assert output == session / rendering["path"]
+        assert rendering["width"] > width
+        assert rendering["height"] > height
+        assert rendering["audio_embedded"] is True
+        assert len(list((session / "video").glob("*.mp4"))) == 1
+
+        demuxer = PyNvVideoCodec.CreateDemuxer(str(output))
         assert demuxer.GetVideoStreamId() >= 0
         assert demuxer.GetAudioStreamId() >= 0
         packet_types = set()

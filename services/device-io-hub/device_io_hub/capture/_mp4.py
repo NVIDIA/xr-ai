@@ -98,8 +98,6 @@ def mux_h264_aac(
         str(_MP4_AUDIO_SAMPLE_RATE),
         "-ac:a",
         str(_MP4_AUDIO_CHANNELS),
-        "-avoid_negative_ts",
-        "make_zero",
         "-video_track_timescale",
         "90000",
         "-movflags",

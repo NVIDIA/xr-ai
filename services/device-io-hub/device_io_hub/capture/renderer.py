@@ -8,7 +8,7 @@ from __future__ import annotations
 import ctypes
 import json
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +102,90 @@ class _OverlayTimeline:
         caption = self._caption if pts_us <= self._caption_expires_us else ""
         return caption, tuple(self._data_feed)
 
+    def change_points(self, *, start_us: int, end_us: int) -> tuple[int, ...]:
+        points = {end_us}
+        for event in self._events:
+            event_pts = event.get("pts_us")
+            if not isinstance(event_pts, int):
+                continue
+            if event.get("kind") == "voice_caption":
+                points.add(event_pts)
+                points.add(event_pts + self._duration_us + 1)
+            elif event.get("kind") == "data" and isinstance(event.get("text"), str):
+                points.add(event_pts)
+        return tuple(sorted(point for point in points if start_us <= point <= end_us))
+
+
+def _presentation_frames(
+    decoded: Iterator[tuple[dict[str, Any], np.ndarray]],
+    change_points: Iterable[int],
+    *,
+    start_us: int,
+    end_us: int,
+    min_interval_us: int,
+) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
+    """Merge camera and presentation changes into one rate-limited timeline."""
+
+    points = iter(sorted({
+        point for point in change_points if start_us <= point <= end_us
+    }))
+    next_point = next(points, None)
+    previous: tuple[dict[str, Any], np.ndarray] | None = None
+    last_output_us: dict[str, int] = {}
+
+    def track_id(row: dict[str, Any]) -> str:
+        return str(row.get("track_id", "session"))
+
+    def advance_points(through_us: int) -> None:
+        nonlocal next_point
+        while next_point is not None and next_point <= through_us:
+            next_point = next(points, None)
+
+    for row, pixels in decoded:
+        pts_us = int(row["pts_us"])
+        if pts_us < start_us:
+            previous = (row, pixels)
+            continue
+        if pts_us > end_us:
+            break
+        while next_point is not None and next_point <= pts_us:
+            candidate = next_point
+            if previous is None:
+                break
+            previous_track = track_id(previous[0])
+            previous_output = last_output_us.get(previous_track)
+            if previous_output is not None:
+                candidate = max(candidate, previous_output + min_interval_us)
+            if candidate >= pts_us:
+                break
+            advance_points(candidate)
+            held_row = {**previous[0], "pts_us": candidate}
+            previous = (held_row, previous[1])
+            last_output_us[previous_track] = candidate
+            yield previous
+        previous = (row, pixels)
+        row_track = track_id(row)
+        previous_output = last_output_us.get(row_track)
+        if previous_output is None or pts_us - previous_output >= min_interval_us:
+            advance_points(pts_us)
+            last_output_us[row_track] = pts_us
+            yield previous
+    while next_point is not None:
+        if previous is None:
+            break
+        candidate = next_point
+        previous_track = track_id(previous[0])
+        previous_output = last_output_us.get(previous_track)
+        if previous_output is not None:
+            candidate = max(candidate, previous_output + min_interval_us)
+        if candidate > end_us:
+            break
+        advance_points(candidate)
+        held_row = {**previous[0], "pts_us": candidate}
+        previous = (held_row, previous[1])
+        last_output_us[previous_track] = candidate
+        yield previous
+
 
 class CaptureRenderer:
     """Create a captioned H.264/AAC MP4 from a completed capture bundle."""
@@ -184,16 +268,27 @@ class CaptureRenderer:
             _read_json_lines(events_path),
             duration_us=round(self._config.overlay_seconds * 1_000_000),
         )
+        presentation_points = timeline.change_points(
+            start_us=int(segment["start_us"]),
+            end_us=int(manifest["end_us"]),
+        )
+        min_interval_us = round(1_000_000 / fps)
         writers: dict[str, _H264TrackWriter] = {}
         video_root = root / "video"
         existing_temporary_segments = set(video_root.glob("render_*.264"))
         try:
             for sequence, (row, pixels) in enumerate(
-                self._decode_packets(
-                    raw_path,
-                    packet_rows,
-                    max_width=max_width,
-                    max_height=max_height,
+                _presentation_frames(
+                    self._decode_packets(
+                        raw_path,
+                        packet_rows,
+                        max_width=max_width,
+                        max_height=max_height,
+                    ),
+                    presentation_points,
+                    start_us=int(segment["start_us"]),
+                    end_us=int(manifest["end_us"]),
+                    min_interval_us=min_interval_us,
                 ),
                 start=1,
             ):
