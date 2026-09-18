@@ -71,10 +71,11 @@ permission denied for `/var/run/docker.sock`, add your user to the Docker group:
 sudo usermod -aG docker "$USER"
 ```
 
-Log out completely and log back in, or disconnect and reconnect your SSH
-session, then retry `docker ps` without `sudo`. Opening another terminal in the
-same desktop session does not refresh its group membership. The `docker` group
-grants root-level privileges; refer to
+Log out completely and log back in, disconnect and reconnect your SSH session,
+or reboot the host, then retry `docker ps` without `sudo`. If group membership
+still has not refreshed after logging back in, reboot the host. Opening another
+terminal in the same desktop session does not refresh its group membership.
+The `docker` group grants root-level privileges; refer to
 [Docker's Linux post-installation instructions](https://docs.docker.com/engine/install/linux-postinstall/)
 for group creation if needed and access details.
 
