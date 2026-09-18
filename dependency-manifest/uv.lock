@@ -871,7 +871,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=42.0" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "livekit", specifier = ">=1.0" },
+    { name = "livekit", specifier = ">=1.1.15" },
     { name = "livekit-api", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pynvvideocodec", specifier = ">=2.2" },

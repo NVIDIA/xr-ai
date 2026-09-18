@@ -7,6 +7,7 @@
 
 add_library(streamkit STATIC
     src/StreamSession.cpp
+    src/Backends/LiveKit/ByteStreamTransport.cpp
     src/Backends/LiveKit/LiveKitBackend.cpp
 )
 
@@ -23,18 +24,18 @@ target_compile_features(streamkit PUBLIC cxx_std_20)
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # LiveKitBackend talks to `livekit::Room` and friends from the upstream LiveKit
-# C++ SDK (https://github.com/livekit/rust-sdks → `cpp/`). The SDK ships as a
-# tree containing `inc/livekit/*.h` headers and `lib/liblivekit{,_ffi}.so` plus
-# a vendored protobuf runtime. The supported/tested released API is v0.4.1.
+# C++ SDK (https://github.com/livekit/client-sdk-cpp). The SDK ships as a
+# tree containing `include/livekit/*.h` headers and `lib/liblivekit{,_ffi}.so`
+# plus a vendored protobuf runtime. Byte streams require v1.10.2 or newer.
 #
 # Two ways to supply it:
 #
 #   1. Set `-DLIVEKIT_SDK_ROOT=/path/to/sdk` on the cmake command line.
-#      The path must contain `inc/livekit/room.h` and the corresponding lib
+#      The path must contain `include/livekit/room.h` and the corresponding lib
 #      under either `lib/` or `lib/<ABI>/`.
 #
 #   2. Drop the SDK at `client-samples/native/third_party/livekit-cpp-sdk/`
-#      with the same `inc/` + `lib/` layout, and the build picks it up
+#      with the same `include/` + `lib/` layout, and the build picks it up
 #      without any extra flags.
 #
 # When neither path resolves, `STREAMKIT_HAVE_LIVEKIT` stays OFF and the
@@ -42,23 +43,23 @@ target_compile_features(streamkit PUBLIC cxx_std_20)
 # real WebRTC session). This keeps CI green on machines without the SDK and
 # matches the prior placeholder behaviour.
 
-set(LIVEKIT_SDK_ROOT "" CACHE PATH "Path to a LiveKit C++ SDK install (containing inc/ and lib/)")
+set(LIVEKIT_SDK_ROOT "" CACHE PATH "Path to a LiveKit C++ SDK install (containing include/ and lib/)")
 set(LIVEKIT_LIB_DIR  "" CACHE PATH "Override path to the LiveKit C++ SDK lib dir (defaults to LIVEKIT_SDK_ROOT/lib)")
 
 set(_streamkit_default_sdk
     "${CMAKE_CURRENT_LIST_DIR}/../third_party/livekit-cpp-sdk")
-if(NOT LIVEKIT_SDK_ROOT AND EXISTS "${_streamkit_default_sdk}/inc/livekit/room.h")
+if(NOT LIVEKIT_SDK_ROOT AND EXISTS "${_streamkit_default_sdk}/include/livekit/room.h")
     set(LIVEKIT_SDK_ROOT "${_streamkit_default_sdk}")
 endif()
 
 set(STREAMKIT_HAVE_LIVEKIT OFF)
 
 if(LIVEKIT_SDK_ROOT)
-    if(NOT EXISTS "${LIVEKIT_SDK_ROOT}/inc/livekit/room.h")
+    if(NOT EXISTS "${LIVEKIT_SDK_ROOT}/include/livekit/room.h")
         message(FATAL_ERROR
             "[streamkit] LIVEKIT_SDK_ROOT='${LIVEKIT_SDK_ROOT}' does not "
-            "contain inc/livekit/room.h. Point it at a LiveKit C++ SDK "
-            "tree with inc/ and lib/ subdirectories.")
+            "contain include/livekit/room.h. Point it at a LiveKit C++ SDK "
+            "tree with include/ and lib/ subdirectories.")
     endif()
 
     if(NOT LIVEKIT_LIB_DIR)
@@ -83,7 +84,7 @@ if(LIVEKIT_SDK_ROOT)
         PATHS "${LIVEKIT_LIB_DIR}" "${LIVEKIT_LIB_DIR}/${ANDROID_ABI}"
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
 
-    target_include_directories(streamkit PRIVATE "${LIVEKIT_SDK_ROOT}/inc")
+    target_include_directories(streamkit PRIVATE "${LIVEKIT_SDK_ROOT}/include")
     if(LIVEKIT_LIB_MAIN)
         target_link_libraries(streamkit PUBLIC "${LIVEKIT_LIB_MAIN}")
     else()

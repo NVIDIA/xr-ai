@@ -14,6 +14,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")"
 
 VERSION="$(tr -d '[:space:]' < .sdk-version)"
+LIVEKIT_VERSION="$(node -p "require('./package.json').dependencies['livekit-client']")"
 SDK_FILE="nvidia-cloudxr-${VERSION}.tgz"
 SDK_CACHE="${SDK_FILE}"
 LOCAL_TARBALL="sdk.tgz"
@@ -21,6 +22,7 @@ VENDOR_DIR="../web-xr/vendor"
 OUT_CLOUDXR="${VENDOR_DIR}/cloudxr-sdk.esm.mjs"
 OUT_LIVEKIT="${VENDOR_DIR}/livekit-client.esm.mjs"
 VERSION_MARKER="${VENDOR_DIR}/.cloudxr-sdk-version"
+LIVEKIT_VERSION_MARKER="${VENDOR_DIR}/.livekit-client-version"
 
 mkdir -p "${VENDOR_DIR}"
 
@@ -107,6 +109,8 @@ echo "Copied $(basename "${OUT_LIVEKIT}")  ($(stat -c%s "${OUT_LIVEKIT}") bytes)
 
 printf '%s\n' "${VERSION}" > "${VERSION_MARKER}.partial"
 mv "${VERSION_MARKER}.partial" "${VERSION_MARKER}"
+printf '%s\n' "${LIVEKIT_VERSION}" > "${LIVEKIT_VERSION_MARKER}.partial"
+mv "${LIVEKIT_VERSION_MARKER}.partial" "${LIVEKIT_VERSION_MARKER}"
 
 echo
 echo "Done. Vendor bundles ready under ${VENDOR_DIR}/."

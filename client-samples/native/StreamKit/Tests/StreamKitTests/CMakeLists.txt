@@ -12,9 +12,7 @@ function(_streamkit_add_test name source)
     target_link_libraries(${name} PRIVATE streamkit)
     target_include_directories(${name} PRIVATE
         "${_streamkit_test_root}"
-        # AgentStatusParser.h lives next to LiveKitBackend.cpp in StreamKit/src.
-        # Tests need that path so the parser is reachable as
-        # "Backends/LiveKit/AgentStatusParser.h".
+        # Internal transport and parser headers live under StreamKit/src.
         "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
     )
     add_test(NAME ${name} COMMAND ${name})
@@ -26,3 +24,4 @@ _streamkit_add_test(streamkit_frame_sink_tests       FrameSinkTests.cpp)
 _streamkit_add_test(streamkit_audio_sink_tests       AudioSinkTests.cpp)
 _streamkit_add_test(streamkit_session_tests          StreamSessionTests.cpp)
 _streamkit_add_test(streamkit_livekit_backend_tests  LiveKitBackendTests.cpp)
+_streamkit_add_test(streamkit_byte_stream_tests      ByteStreamTransportTests.cpp)
