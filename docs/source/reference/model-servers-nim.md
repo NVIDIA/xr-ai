@@ -1,0 +1,288 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Shared model servers with NVIDIA NIM
+
+This independent sample starts the same model families as `model-servers`,
+with Magpie replacing Pocket TTS. It reuses `services/nim-server` for NIM
+container lifecycle and `services/stt-server` for the Spark STT fallback.
+The launcher waits for readiness, then exits with the model servers running.
+
+| Role | Model | Endpoint |
+|---|---|---|
+| STT | Parakeet TDT 0.6B v3 | HTTP `localhost:8103` |
+| TTS | Magpie TTS Multilingual | HTTP `localhost:8105` |
+| LLM and agent LLM | Nemotron 3 Nano Omni 30B A3B Reasoning | HTTP `localhost:8108` |
+| VLM | Cosmos3 Nano Reasoner | HTTP `localhost:8100` |
+| Embedding | Llama Nemotron Embed 1B v2 | HTTP `localhost:8109` |
+
+All client endpoints preserve the original `model-servers` HTTP contracts,
+including `/health`, the `llm`, `vlm`, and `embed` aliases, multipart WAV
+transcription, and Pocket-compatible speech responses. TTS uses the shared
+`services/magpie-nim-tts` HTTP wrapper; the remaining adapters live in this
+sample. All use the typed `xr_ai_models` clients for inference. Consuming
+workers do not need the Riva extra.
+
+The embedding adapter translates XR AI's `query: ` and `passage: ` prefixes
+to NIM's input types, preserving input order and avoiding duplicated prefixes.
+Unprefixed strings default to passages; callers can also set `input_type`.
+The chat adapters translate model aliases and normalize Nemotron reasoning.
+Streaming chat returns visible text, matching the shared SDK; use non-streaming
+chat for function calls and reasoning.
+
+The Magpie HTTP service forwards PCM chunks as synthesis proceeds and appends
+the configured 300 ms pause after each successful nonempty request. This sample
+owns the per-profile voice and pause settings in `tts_adapter.yaml`; sentence
+submission in consuming workers is unchanged. Refer to
+{doc}`magpie-nim-tts` for the supported HTTP contract, streaming, and cancellation
+behavior.
+
+Native NIM endpoints are separate from the client ports:
+
+| Backend | Native ports |
+|---|---|
+| Parakeet, except Spark | HTTP readiness `9010`; Riva gRPC `50051` |
+| Magpie | HTTP readiness `9011`; Riva gRPC `50052` |
+| Nemotron Omni | HTTP `8118` |
+| Cosmos | HTTP `8110` |
+| Embeddings | HTTP `8119` |
+
+Spark retains the original HTTP STT service directly on port `8103`.
+
+## Run
+
+Run all commands from `model-server-samples/model-servers-nim/`:
+
+```bash
+uv sync
+uv run model_servers_nim --gpu-profile 96G_blackwell --dry-run
+uv run model_servers_nim
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
+```
+
+After the launcher exits, start the consuming sample from the same terminal.
+
+Docker with NVIDIA Container Toolkit and `NGC_API_KEY` are required. Spark also
+uses `HF_TOKEN` for its local STT fallback. Credentials can be exported in the
+environment or loaded from the repository's existing credential store.
+Refer to the [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html).
+First startup downloads container images and models and can take tens of
+minutes. The caches persist under the repository's `models/` directory.
+
+Parakeet NIM and Magpie additionally compile TensorRT engines. The sample's
+Riva launcher exports the compiled repositories once and reuses them after
+containers are stopped and removed. Downloads remain in each container's
+`nim_cache` subdirectory; compiled exports live beneath
+`<nim_cache>/<container_name>/riva-repositories/<cache-key>/`. Cache paths can
+be symlinked to another disk without changing the checked-in configuration.
+
+The cache key includes the resolved container image ID, configured environment
+settings, GPU model and compute capability, driver version, CPU architecture,
+and an explicit build-format version. Change that version only when build or
+export semantics make existing engines incompatible. Changing compatibility
+inputs builds a separate export. Bootstrap source edits update the container
+fingerprint without invalidating compatible engines. Adapter settings, including
+the post-synthesis silence duration, do not affect the engine cache key.
+
+An exclusive lock prevents concurrent builds of the same export; only complete,
+validated archives are published. Every reuse verifies archive checksums and
+the complete tar structure, including gzip integrity for compressed exports.
+Compatible exports from the earlier source-hash cache are validated and reused
+in place without rebuilding or copying them. Invalid or interrupted exports
+are rebuilt when no valid compatible export is available.
+
+Compilation and serving use the same managed container, so cancellation and
+`--stop` also work during engine generation. The bootstrap uses NVIDIA's
+`NIM_EXPORT_PATH` workflow, then starts the server with
+`NIM_DISABLE_MODEL_DOWNLOAD=true` and a fresh workspace. Refer to
+[NVIDIA's model caching guide](https://docs.nvidia.com/nim/speech/latest/deployment/docker/model-caching.html).
+The launcher manages these settings automatically; no additional user command
+or client configuration change is required. Spark's native STT fallback does
+not use this Riva cache.
+
+The first launch after enabling repository caching still builds an export;
+existing download caches alone do not contain one. Later launches still verify
+and extract the archives, load engines onto the GPU, and initialize Riva.
+Stopping servers preserves downloads and exports. To reclaim compiled-cache
+space, stop the stack and remove the corresponding `riva-repositories/`
+directory; the next launch rebuilds it.
+
+The default GPU detection is shared with `model-servers`. Explicit selections:
+
+```bash
+uv run model_servers_nim --gpu-profile 96G_blackwell
+uv run model_servers_nim --gpu-profile dual_48G_ada
+uv run model_servers_nim --gpu-profile spark
+```
+
+These are alternative stacks and share model ports and GPU capacity with
+`model-servers`. Stop the active stack before switching. For example, when
+switching from the original sample:
+
+```bash
+uv run --project ../model-servers model_servers --stop
+uv run model_servers_nim
+```
+
+To stop this stack before editing its configuration or switching back:
+
+```bash
+uv run model_servers_nim --stop
+```
+
+Cleanup uses the ports declared in this sample's YAML, including all compatibility
+adapters and the Spark fallback. Run it before changing ports. It does not
+remove downloaded images or model caches. Do not use it while another stack
+owns those same ports.
+
+Repeated launches reuse a healthy adapter only after verifying its managed
+process markers and matching configuration, including backend URL and model. An unrelated,
+unhealthy, or differently configured listener causes startup to fail without
+stopping that listener. Stop this stack before changing the adapter configuration.
+The stop command terminates the marked adapter listener; wrappers from repeated
+launches then exit when that listener closes.
+
+## Use with an agent sample
+
+Start an existing agent sample with its checked-in `yaml/models.json` unchanged.
+For example, after this stack reports ready:
+
+```bash
+uv run --project ../../agent-samples/simple-vlm-example simple_vlm_example
+```
+
+The default ports, model aliases, and protocols match `model-servers`. There is
+no client configuration export or additional worker dependency to install.
+The `pocket_tts` preset now reaches Magpie through the compatible HTTP endpoint.
+This compatibility applies to the original default local profiles; custom
+remote hosts, alternate models, or custom ports still need matching settings.
+
+An optional export remains available for custom deployments:
+
+```bash
+uv run model_servers_nim --export-models yaml/models.reused.json
+```
+
+The export requires no credentials or running models. Add `--gpu-profile NAME`
+to select a different hardware profile. Exported entries use `ownership: reused`
+and omit server credentials. Only consumers with custom endpoint requirements
+need entries copied from this export.
+
+When upgrading an already running version, stop it before updating the checkout,
+then start the updated stack. Native chat ports and adapter processes change;
+restarting a consuming worker alone does not replace the running servers.
+
+## Configure
+
+`yaml/<gpu-profile>/models.json` selects the deployment and client adapters.
+The adjacent server YAML files own image versions and digests, model profiles,
+ports, GPU placement, and runtime limits. Refer to the generated
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
+and the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html). `--models PATH` selects a custom deployment JSON
+using the selected hardware directory. For example, reduce Omni concurrency in
+`nim_llm_server.yaml` by changing its `NIM_PASSTHROUGH_ARGS` entry:
+
+```yaml
+    --max-num-seqs 2
+```
+
+| Hardware | GPU placement | Initial allocation plan |
+|---|---|---|
+| 96 GB Blackwell | All models on GPU 0 | Omni 35%, Cosmos 24%, plus speech and embedding engines |
+| Two 48 GB Ada GPUs | Speech and Cosmos on GPU 0; Omni and embeddings on GPU 1 | Cosmos 36% on GPU 0; Omni 80% on GPU 1 |
+| DGX Spark | All models on GPU 0 | Omni 25% with a fixed 2 GiB cache; Cosmos 22%; shared system memory |
+
+These fractions budget **weights, runtime, and cache together**, relative to
+total GPU memory. Magpie uses the pinned 1.10.0 `batch_size=8` engine
+(approximately 13 GiB), and Parakeet NIM uses approximately 14 GB. The actual
+Magpie manifest has no batch-size-one profile, despite older documentation
+for this tag listing one. Embeddings use one FP8 engine on Blackwell and Ada
+(approximately 3–4 GiB). The dual-Ada plan leaves roughly 4 GB on GPU 0 and
+5 GB on GPU 1 beyond these estimates. It does not reserve capacity for a large
+renderer or unrelated GPU workloads.
+
+Omni is pinned to its generic TP=1 NVFP4 profile on Blackwell and Spark and
+its FP8 profile on Ada. Cosmos selects Nano, with an 8,192-token context and
+four image inputs. Ada explicitly selects the FP8 vLLM checkpoint profile
+shipped under L40S, which shares SM 8.9 with RTX 6000 Ada; this profile contains
+weights rather than a GPU-specific TensorRT engine. The generic BF16 fallback
+would exceed the shared-GPU budget.
+Omni has a 32,768-token context and at most four sequences. Graph capture is
+disabled for these shared-GPU profiles to reduce startup and runtime memory.
+
+Parakeet v3 NIM 1.3.0 has no ARM64 image, so Spark uses the original NeMo STT
+service and configuration. The other selected images have ARM64 manifests.
+Spark uses the generic BF16 Cosmos profile and generic FP16 ONNX embedding
+profile; that embedding profile has a **4,096-token** input limit. ARM64 image
+availability is distinct from validation on GB10: the complete Spark stack
+still needs hardware qualification, including cold-cache startup. Cosmos NIM
+uses fractional cache sizing and does not inherit the original sample's Spark
+prefetch and fixed-cache safeguards.
+
+A 96 GB RTX PRO 6000 Blackwell run passed cached-model startup, sequential
+inference through the unchanged original and simple-VLM client configurations,
+repeated-launch reuse, and full shutdown. This includes real speech, image
+streaming, function calls, and embeddings. Cold-cache startup, sustained
+concurrent load, and full restart qualification remain outstanding; dual Ada
+and Spark still need complete stack validation on their target machines.
+The defaults are allocation estimates, not a claim of full hardware qualification. Refer to the
+[model-server customization guide](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html)
+for the shared lifecycle and profiling workflow.
+
+Container and profile references:
+
+- [Cosmos3 Reasoner 1.7.0](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/cosmos3-reasoner/1.7.0)
+- [Omni NIM support matrix](https://docs.nvidia.com/nim/vision-language-models/2.0.4-variant/support-matrix.html)
+- [Magpie engine memory](https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html)
+- [Parakeet v3 selection and Spark restrictions](https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/asr.html)
+- [Embedding 1.13.0 engines and memory](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/support-matrix.html)
+
+## Validate
+
+The CPU checks load every profile with the real SDK, construct Docker commands,
+check startup, export, and stop behavior, and exercise prefix-aware embedding calls.
+Compatibility tests load the unchanged simple-VLM and original model-server JSON
+files and exercise readiness, speech, image requests, visible-text streaming,
+function calls, reasoning, and embeddings through real SDK HTTP serialization.
+Linux lifecycle tests launch actual adapters on temporary ports with a local
+health stub, without Docker or GPUs. They verify ownership, repeated launch,
+shutdown, restart, and rejection of unhealthy or conflicting listeners:
+
+```bash
+uv run --extra test python -m pytest tests -q
+```
+
+Repository-cache tests also exercise real subprocesses, interrupted builds,
+concurrent launches, checksum failures, and configuration changes. An optional
+Docker test verifies container removal, cache reuse, and stopping during a
+build. It uses small stand-in engines and a test HTTP server on temporary ports,
+so it does not qualify GPU inference. With a speech container already running,
+select its locally installed image and run the isolated Docker test:
+
+```bash
+XR_AI_TEST_RIVA_IMAGE=$(docker inspect --format '{{.Image}}' xr-ai-model-servers-nim-tts) \
+  uv run --extra test python -m pytest tests/test_riva_repository.py -m gpu -q
+```
+
+The compiled-repository workflow still needs full inference validation after
+both the initial export and a container-removing restart on each GPU profile.
+After startup, check every endpoint through the same SDK that agents use:
+
+```bash
+uv run --extra test python smoke_test.py
+uv run --extra test python smoke_test.py --models ../../agent-samples/simple-vlm-example/yaml/models.json
+```
+
+The default smoke test loads the original `model-servers` configuration unchanged.
+It exercises a Magpie-to-Parakeet speech round trip, PCM speech responses, both
+LLM roles, image inference and streaming, and query and passage embeddings.
+A smaller consumer profile tests only its configured roles. Repeat after a cold start and a
+warm restart on each target machine; monitor GPU memory under concurrent agent
+traffic as well as during startup.
