@@ -7,7 +7,7 @@
  * StreamKit — LiveKitBackend
  *
  * Implements StreamingBackend using the LiveKit C++ SDK
- * (https://github.com/livekit/rust-sdks → `cpp/`). The SDK headers are kept
+ * (https://github.com/livekit/client-sdk-cpp). The SDK headers are kept
  * out of this header so that consumers only need StreamKit's own includes.
  * All LiveKit types are forward-declared and stored as opaque smart pointers;
  * the destructor lives in the .cpp where the full types are visible.
