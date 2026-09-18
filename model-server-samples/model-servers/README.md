@@ -14,6 +14,9 @@ the `All processes ready` banner and exits, while the services remain running
 with their weights warm. You can start an agent sample from the same terminal
 after the command returns.
 
+Use `--models lightning` to select Nemotron 3.5 Lightning for the `llm` and
+`agent_llm` roles while retaining Cosmos3 Nano Reasoner for visual inference.
+
 ## Configure
 
 Model configuration has two layers:

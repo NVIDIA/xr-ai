@@ -39,6 +39,17 @@ assert _NANO_SPEC and _NANO_SPEC.loader
 _nano = importlib.util.module_from_spec(_NANO_SPEC)
 _NANO_SPEC.loader.exec_module(_nano)
 
+_LIGHTNING_PATH = (
+    _REPO_ROOT
+    / "services/nemotron35-lightning-llm/nemotron35_lightning_llm_server/__main__.py"
+)
+_LIGHTNING_SPEC = importlib.util.spec_from_file_location(
+    "nemotron35_lightning_main", _LIGHTNING_PATH
+)
+assert _LIGHTNING_SPEC and _LIGHTNING_SPEC.loader
+_lightning = importlib.util.module_from_spec(_LIGHTNING_SPEC)
+_LIGHTNING_SPEC.loader.exec_module(_lightning)
+
 _EMBEDDING_PATH = (
     _REPO_ROOT / "services/embedding-server/embedding_server/__main__.py"
 )
@@ -64,6 +75,20 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     assert tts.command == "pocket_tts_server"
     assert Path(tts.config).name == "pocket_tts_server.yaml"
     assert tts.launch_mode == "persist"
+    assert credentials == ()
+
+
+def test_lightning_profile_uses_lightning_and_cosmos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
+
+    processes, credentials = _model_servers._build_processes("lightning")
+
+    assert [process.name for process in processes] == [
+        "stt", "tts", "lightning", "vlm", "embedding",
+    ]
+    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
     assert credentials == ()
 
 
@@ -121,6 +146,7 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
         ("stt", 8103),
         ("tts", 8105),
         ("agent-llm", 8107),
+        ("lightning", 8108),
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
@@ -313,6 +339,25 @@ def test_repository_yaml_paths_exclude_apps_and_virtual_environments(
     assert _repository_yaml_paths(tmp_path) == sorted((included, nested_apps))
 
 
+@pytest.mark.parametrize(
+    "profile_path",
+    sorted(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
+            "*/nemotron35_lightning_llm_server.yaml"
+        )
+    ),
+)
+def test_lightning_profiles_use_qualified_vllm(profile_path: Path) -> None:
+    config = yaml.safe_load(profile_path.read_text())
+
+    assert config["model"] == (
+        "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
+    )
+    assert config["vllm_backend"] == "docker"
+    assert config["vllm_image"] == _nano.DEFAULT_IMAGE
+    assert config["kv_cache_dtype"] == "fp8"
+
+
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
@@ -331,6 +376,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         ("stt", 8103),
         ("tts", 8105),
         ("agent-llm", 8107),
+        ("lightning", 8108),
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
@@ -713,6 +759,43 @@ def test_omni_rejects_invalid_explicit_kv_cache(
 
     with pytest.raises(SystemExit, match="1"):
         _omni.run()
+
+
+def test_lightning_forwards_reasoning_tools_and_hardware_tuning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(_lightning, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _lightning,
+        "load_config",
+        lambda: (
+            {
+                "vllm_backend": "docker",
+                "quantization": "modelopt_fp4",
+                "moe_backend": "humming",
+                "linear_backend": "humming",
+            },
+            Path("."),
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        _lightning, "resolve_model_cache", lambda *_a, **_k: Path("models")
+    )
+    monkeypatch.setattr(_lightning, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _lightning, "serve", lambda **kwargs: captured.update(kwargs)
+    )
+
+    _lightning.run()
+
+    args = captured["extra_serve_args"]
+    assert args[args.index("--reasoning-parser") + 1] == "nemotron_v3"
+    assert args[args.index("--tool-call-parser") + 1] == "qwen3_coder"
+    assert args[args.index("--quantization") + 1] == "modelopt_fp4"
+    assert args[args.index("--moe-backend") + 1] == "humming"
+    assert captured["extra_env"] == {"VLLM_HUMMING_MOE_GEMM_TYPE": "indexed"}
 
 
 def test_embedding_default_cache_tracks_service_depth(
