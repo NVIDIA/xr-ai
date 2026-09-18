@@ -399,6 +399,8 @@ class SessionRecorder:
                 session.video[frame.track_id] = writer
         raw_frame = writer.write(frame, "", ())
         if raw_frame is None:
+            with session.lock:
+                session.dropped_video_frames += 1
             return
         raw_width, raw_height, raw_segment_path = raw_frame
         with session.lock:

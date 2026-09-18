@@ -238,7 +238,59 @@ async def test_frame_worker_samples_before_requesting_pixels() -> None:
         await worker.close()
 
     assert [signal.pts_us for signal in endpoint.requested] == [1_000_000, 1_040_000]
-    assert recorder.dropped == [1_000_000, 1_040_000]
+    assert recorder.dropped == [1_000_000, 1_010_000, 1_040_000]
+
+
+@pytest.mark.asyncio
+async def test_frame_worker_accepts_nominal_rate_with_timestamp_jitter() -> None:
+    class Endpoint:
+        def __init__(self) -> None:
+            self.requested: list[FrameSignal] = []
+            self.changed = asyncio.Event()
+
+        async def request_frame(self, signal: FrameSignal):
+            self.requested.append(signal)
+            if len(self.requested) == 4:
+                self.changed.set()
+            return None
+
+    class Recorder:
+        def note_video_drop(self, _participant_id: str, _pts_us: int) -> None:
+            pass
+
+    endpoint = Endpoint()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = _FrameWorker(
+            endpoint=endpoint,  # type: ignore[arg-type]
+            recorder=Recorder(),  # type: ignore[arg-type]
+            executor=executor,
+            participant_id="alice",
+            track_id="camera",
+            queue_size=4,
+            sample_fps=30,
+            on_failure=lambda _task: None,
+        )
+        for seq, pts_us in enumerate((1_000_000, 1_033_133, 1_066_866, 1_099_799)):
+            worker.submit(FrameSignal(
+                slot=0,
+                seq=seq,
+                pts_us=pts_us,
+                width=64,
+                height=32,
+                fmt=PixelFormat.I420,
+                data_sz=3_072,
+                participant_id="alice",
+                track_id="camera",
+            ))
+        await asyncio.wait_for(endpoint.changed.wait(), 1.0)
+        await worker.close()
+
+    assert [signal.pts_us for signal in endpoint.requested] == [
+        1_000_000,
+        1_033_133,
+        1_066_866,
+        1_099_799,
+    ]
 
 
 def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> None:
@@ -304,7 +356,8 @@ def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
     assert "-r" not in command
     assert command[command.index("-i") + 1] == str(h264_path)
     assert command[command.index("-c:v") + 1] == "copy"
-    assert command[command.index("-fps_mode:v") + 1] == "passthrough"
+    assert command[command.index("-vsync") + 1] == "passthrough"
+    assert "-fps_mode:v" not in command
     assert command[command.index("-copytb") + 1] == "1"
     assert command[command.index("-c:a") + 1] == "aac"
     assert command[command.index("-profile:a") + 1] == "aac_low"
@@ -925,6 +978,41 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     assert audio["sample_format"] == "float32_le"
 
 
+def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session("alice", 1_000_000)
+    for pts_us in (1_000_000, 1_033_133, 1_066_866, 1_099_799):
+        recorder.record_video(_frame(pts_us=pts_us))
+    bundle = recorder.end_session("alice", 1_100_000)
+
+    assert bundle is not None
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    assert manifest["counts"]["video_frames"] == 4
+    assert manifest["dropped_video_frames"] == 0
+
+
 @pytest.mark.asyncio
 async def test_explicit_session_control_records_only_between_reserved_commands(
     tmp_path: Path,
@@ -979,6 +1067,7 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
         await service._on_agent_data(
             DataMessage("alice", CAPTURE_STOP_TOPIC, 1_050_000, b""),
         )
+        await service._drain_callbacks()
         await service._on_agent_data(
             DataMessage("alice", CAPTURE_STT_TOPIC, 1_060_000, b"after"),
         )
@@ -989,6 +1078,7 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
         await service._on_agent_data(
             DataMessage("alice", CAPTURE_STOP_TOPIC, 2_010_000, b""),
         )
+        await service._drain_callbacks()
 
         target = tmp_path / "sop-capture" / "assembly-line"
         sessions = sorted(path.parent for path in target.glob("*/manifest.json"))
@@ -1006,6 +1096,41 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
         assert "after" not in (session / "transcript.jsonl").read_text()
         assert not (tmp_path / "other-target").exists()
     finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_explicit_stop_does_not_block_return_traffic(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    finalize_started = asyncio.Event()
+    release_finalize = asyncio.Event()
+
+    async def blocking_finalize(*_args, **_kwargs) -> None:
+        finalize_started.set()
+        await release_finalize.wait()
+
+    service._finish_session_owned = blocking_finalize  # type: ignore[method-assign]
+    try:
+        await asyncio.wait_for(
+            service._on_agent_data(
+                DataMessage("alice", CAPTURE_STOP_TOPIC, 1_050_000, b""),
+            ),
+            timeout=0.1,
+        )
+        await asyncio.wait_for(finalize_started.wait(), timeout=0.1)
+        assert service._callback_tasks
+    finally:
+        release_finalize.set()
+        await service._drain_callbacks()
         await service.stop()
 
 
@@ -1258,6 +1383,61 @@ async def test_shutdown_drains_participant_finalization_before_executors(
         release_render.set()
         if stop_task is not None:
             await asyncio.gather(stop_task, return_exceptions=True)
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_commits_all_raw_bundles_before_waiting_for_render(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=0,
+    ))
+    service._recorder.begin_session("first", 1_000_000)
+    service._recorder.begin_session("second", 2_000_000)
+    first = service._recorder._sessions["first"].root
+    second = service._recorder._sessions["second"].root
+    render_started = asyncio.Event()
+    release_render = asyncio.Event()
+    rendered: list[Path] = []
+
+    async def render(bundle: Path) -> None:
+        rendered.append(bundle)
+        render_started.set()
+        await release_render.wait()
+
+    service._render = render  # type: ignore[method-assign]
+    first_task = asyncio.create_task(service._finish_session("first", 1_100_000))
+    stop_task: asyncio.Task | None = None
+    try:
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+        stop_task = asyncio.create_task(service.stop())
+        for _ in range(100):
+            if (second / "manifest.json").is_file():
+                break
+            await asyncio.sleep(0.01)
+
+        assert (second / "manifest.json").is_file()
+        assert rendered == [first]
+        assert not stop_task.done()
+
+        release_render.set()
+        await asyncio.wait_for(stop_task, timeout=2)
+        await first_task
+    finally:
+        release_render.set()
+        if stop_task is not None:
+            await asyncio.gather(stop_task, return_exceptions=True)
+        await asyncio.gather(first_task, return_exceptions=True)
         await service.stop()
 
 

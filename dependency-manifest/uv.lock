@@ -6282,7 +6282,7 @@ repository = [
     { name = "xr-ai-logging" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tests" },
-    { name = "xr-ai-tools", extra = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-tools", extra = ["frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
     { name = "xr-ai-vllm" },
     { name = "xr-ai-voice" },
@@ -6330,7 +6330,7 @@ requires-dist = [
     { name = "xr-ai-logging", marker = "extra == 'repository'", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-models", extras = ["riva"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tests", marker = "extra == 'repository'", editable = "../tests" },
-    { name = "xr-ai-tools", extras = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-tools" },
+    { name = "xr-ai-tools", extras = ["frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-vad", marker = "extra == 'repository'", editable = "../utils/xr-ai-vad" },
     { name = "xr-ai-vllm", marker = "extra == 'repository'", editable = "../utils/xr-ai-vllm" },
     { name = "xr-ai-voice", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-voice" },
@@ -6468,9 +6468,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-capture = [
-    { name = "xr-ai-hub-client" },
-]
 frames = [
     { name = "numpy" },
     { name = "pillow" },
@@ -6509,14 +6506,13 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'marker-tracking'", specifier = ">=10.0" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "pyzmq", marker = "extra == 'services'", specifier = ">=27.0" },
-    { name = "xr-ai-hub-client", marker = "extra == 'capture'", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-hub-client", marker = "extra == 'frames'", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-hub-client", marker = "extra == 'marker-tracking'", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-models", marker = "extra == 'relay'", editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-models", marker = "extra == 'vision'", editable = "../agent-sdk/xr-ai-models" },
     { name = "zxing-cpp", marker = "extra == 'marker-tracking'", specifier = ">=2.3,<4" },
 ]
-provides-extras = ["relay", "frames", "capture", "image-editing", "vision", "marker-tracking", "services"]
+provides-extras = ["relay", "frames", "image-editing", "vision", "marker-tracking", "services"]
 
 [[package]]
 name = "xr-ai-vad"

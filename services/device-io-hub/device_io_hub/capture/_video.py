@@ -21,6 +21,22 @@ from .config import CaptureConfig
 _MAX_SAFE_NAME = 96
 
 
+def _sample_deadline(
+    next_pts_us: int | None,
+    pts_us: int,
+    interval_us: int,
+) -> tuple[int, bool]:
+    """Return the stable next deadline and whether this frame is due."""
+
+    if next_pts_us is None:
+        return pts_us + interval_us, True
+    tolerance_us = max(0, (interval_us - 1) // 2)
+    if pts_us + tolerance_us <= next_pts_us:
+        return next_pts_us, False
+    intervals = max(1, (pts_us - next_pts_us) // interval_us + 1)
+    return next_pts_us + intervals * interval_us, True
+
+
 def _safe_name(value: str) -> str:
     cleaned = "".join(char if char.isalnum() or char in "-_." else "_" for char in value)
     if cleaned == value and 0 < len(cleaned) <= _MAX_SAFE_NAME:
@@ -70,7 +86,8 @@ class _H264TrackWriter:
         self._stream = None
         self._width = 0
         self._height = 0
-        self._last_pts_us = 0
+        self._sample_interval_us = round(1_000_000 / config.sample_fps)
+        self._next_sample_pts_us: int | None = None
         self._segment_index = 0
         self._active: dict | None = None
         self._packets: list[VideoPacket] = []
@@ -83,9 +100,14 @@ class _H264TrackWriter:
         caption: str,
         data_feed: tuple[str, ...],
     ) -> tuple[int, int, str] | None:
-        min_interval_us = round(1_000_000 / self._config.sample_fps)
-        if self._last_pts_us and frame.pts_us - self._last_pts_us < min_interval_us:
+        next_pts_us, due = _sample_deadline(
+            self._next_sample_pts_us,
+            frame.pts_us,
+            self._sample_interval_us,
+        )
+        if not due:
             return None
+        self._next_sample_pts_us = next_pts_us
         rendered = self._frontend.render_frame(
             frame,
             caption=caption,
@@ -100,7 +122,6 @@ class _H264TrackWriter:
         self._submitted_pts.append(frame.pts_us)
         for packet in _encoded_packets(self._encoder.Encode(rendered.pixels, picture_params)):
             self._write_packet(packet)
-        self._last_pts_us = frame.pts_us
         self._active["end_us"] = frame.pts_us
         self._active["num_frames"] += 1
         return width, height, str(self._active["path"])

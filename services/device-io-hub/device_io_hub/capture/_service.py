@@ -32,6 +32,7 @@ from xr_ai_hub._capture import (
 
 from ._recorder import SessionRecorder
 from ._return_subscriber import ReturnTrafficSubscriber
+from ._video import _sample_deadline
 from .config import CaptureConfig
 from .renderer import CaptureRenderer
 
@@ -104,8 +105,8 @@ class _FrameWorker:
         self._recorder = recorder
         self._executor = executor
         self._queue: asyncio.Queue[FrameSignal | None] = asyncio.Queue(maxsize=queue_size)
-        self._min_interval_us = round(1_000_000 / sample_fps)
-        self._last_request_pts_us: int | None = None
+        self._sample_interval_us = round(1_000_000 / sample_fps)
+        self._next_sample_pts_us: int | None = None
         self._on_failure = on_failure
         self._task = asyncio.create_task(
             self._run(),
@@ -126,12 +127,15 @@ class _FrameWorker:
             signal = await self._queue.get()
             if signal is None:
                 return
-            if (
-                self._last_request_pts_us is not None
-                and signal.pts_us - self._last_request_pts_us < self._min_interval_us
-            ):
+            next_pts_us, due = _sample_deadline(
+                self._next_sample_pts_us,
+                signal.pts_us,
+                self._sample_interval_us,
+            )
+            if not due:
+                self._recorder.note_video_drop(signal.participant_id, signal.pts_us)
                 continue
-            self._last_request_pts_us = signal.pts_us
+            self._next_sample_pts_us = next_pts_us
             frame = await self._endpoint.request_frame(signal)
             if frame is None:
                 self._recorder.note_video_drop(signal.participant_id, signal.pts_us)
@@ -145,9 +149,11 @@ class _FrameWorker:
             return
         while not self._queue.empty():
             try:
-                self._queue.get_nowait()
+                signal = self._queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+            if signal is not None:
+                self._recorder.note_video_drop(signal.participant_id, signal.pts_us)
         self._queue.put_nowait(None)
         await self._task
 
@@ -227,6 +233,18 @@ class CaptureService:
 
         return tracked
 
+    def _spawn_callback(self, awaitable: Awaitable[None], *, name: str) -> None:
+        task = asyncio.create_task(awaitable, name=name)
+        self._callback_tasks.add(task)
+        task.add_done_callback(self._background_callback_done)
+
+    def _background_callback_done(self, task: asyncio.Task) -> None:
+        self._callback_tasks.discard(task)
+        if self._stopped or task.cancelled() or self._failure is None or self._failure.done():
+            return
+        if error := task.exception():
+            self._failure.set_exception(error)
+
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
         self._failure = loop.create_future()
@@ -263,6 +281,8 @@ class CaptureService:
         )
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
+        if self._stopped:
+            return
         if event.joined:
             self._departed_participants.discard(event.participant_id)
             if self._config.session_mode == "participant":
@@ -285,6 +305,8 @@ class CaptureService:
                 "finalizing an incomplete bundle",
                 event.participant_id,
             )
+        if self._stopped:
+            return
         self._departed_participants.add(event.participant_id)
         await self._finish_session(
             event.participant_id,
@@ -302,6 +324,19 @@ class CaptureService:
         if participant_id in self._closing_participants:
             return
         self._closing_participants.add(participant_id)
+        await self._finish_session_owned(
+            participant_id,
+            pts_us,
+            incomplete_reason=incomplete_reason,
+        )
+
+    async def _finish_session_owned(
+        self,
+        participant_id: str,
+        pts_us: int,
+        *,
+        incomplete_reason: str | None = None,
+    ) -> None:
         try:
             workers = [
                 (key, worker)
@@ -318,9 +353,10 @@ class CaptureService:
                     pts_us,
                     incomplete_reason,
                 )
-                if bundle is not None:
+                if bundle is not None and not self._stopped:
                     await self._render(bundle)
-                await self._write(self._recorder._prune_artifacts)
+                if not self._stopped:
+                    await self._write(self._recorder._prune_artifacts)
         finally:
             self._closing_participants.discard(participant_id)
 
@@ -344,11 +380,17 @@ class CaptureService:
             metadata,
         )
 
-    async def _stop_recording(self, participant_id: str, pts_us: int) -> None:
+    def _stop_recording(self, participant_id: str, pts_us: int) -> None:
         if self._config.session_mode != "explicit":
             logger.warning("media capture ignored explicit stop in participant session mode")
             return
-        await self._finish_session(participant_id, pts_us)
+        if participant_id in self._closing_participants:
+            return
+        self._closing_participants.add(participant_id)
+        self._spawn_callback(
+            self._finish_session_owned(participant_id, pts_us),
+            name=f"capture-finalize-{participant_id}",
+        )
 
     def _render_bundle(self, bundle: Path) -> None:
         if self._renderer is None:
@@ -383,7 +425,8 @@ class CaptureService:
 
     async def _on_frame(self, signal: FrameSignal) -> None:
         if (
-            signal.participant_id in self._departed_participants
+            self._stopped
+            or signal.participant_id in self._departed_participants
             or signal.participant_id in self._closing_participants
             or not self._recorder.has_session(signal.participant_id)
         ):
@@ -412,7 +455,8 @@ class CaptureService:
 
     async def _record_audio(self, direction: str, chunk: AudioChunk) -> None:
         if (
-            chunk.participant_id in self._departed_participants
+            self._stopped
+            or chunk.participant_id in self._departed_participants
             or chunk.participant_id in self._closing_participants
             or not self._recorder.has_session(chunk.participant_id)
         ):
@@ -430,7 +474,8 @@ class CaptureService:
 
     async def _on_device_data(self, message: DataMessage) -> None:
         if (
-            message.participant_id in self._departed_participants
+            self._stopped
+            or message.participant_id in self._departed_participants
             or message.participant_id in self._closing_participants
             or not self._recorder.has_session(message.participant_id)
         ):
@@ -439,7 +484,8 @@ class CaptureService:
 
     async def _on_agent_data(self, message: DataMessage) -> None:
         if (
-            message.participant_id in self._departed_participants
+            self._stopped
+            or message.participant_id in self._departed_participants
             or message.participant_id in self._closing_participants
         ):
             return
@@ -456,7 +502,7 @@ class CaptureService:
                 logger.warning("media capture ignored invalid start command: {}", exc)
             return
         if message.topic == CAPTURE_STOP_TOPIC:
-            await self._stop_recording(message.participant_id, message.pts_us)
+            self._stop_recording(message.participant_id, message.pts_us)
             return
         if not self._recorder.has_session(message.participant_id):
             return
@@ -478,7 +524,8 @@ class CaptureService:
 
     async def _on_agent_flush(self, flush) -> None:
         if (
-            flush.participant_id in self._departed_participants
+            self._stopped
+            or flush.participant_id in self._departed_participants
             or flush.participant_id in self._closing_participants
             or not self._recorder.has_session(flush.participant_id)
         ):
@@ -519,17 +566,19 @@ class CaptureService:
             return_exceptions=True,
         )
         await asyncio.sleep(0)
-        await self._drain_callbacks()
+        workers = list(self._frame_workers.values())
+        self._frame_workers.clear()
         await asyncio.gather(
-            *(worker.close() for worker in self._frame_workers.values()),
+            *(worker.close() for worker in workers),
             return_exceptions=True,
         )
-        self._frame_workers.clear()
+        # Raw bundles are the durable capture product. Commit every active
+        # session before waiting for any already-running derived rendering.
+        _ = await self._write(self._recorder.close)
+        await self._drain_callbacks()
         async with self._finalize_lock:
-            completed = await self._write(self._recorder.close)
-            for bundle in completed:
-                await self._render(bundle)
-            await self._write(self._recorder._prune_artifacts)
+            pass
+        await self._write(self._recorder._prune_artifacts)
         self._writer_executor.shutdown(wait=True, cancel_futures=False)
         if self._renderer_executor is not None:
             self._renderer_executor.shutdown(wait=True, cancel_futures=False)

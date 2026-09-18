@@ -12,6 +12,7 @@ from pathlib import Path
 _MP4_AUDIO_SAMPLE_RATE = 48_000
 _MP4_AUDIO_CHANNELS = 2
 
+
 def find_ffmpeg() -> str:
     """Return the FFmpeg executable required to finalize capture MP4s."""
 
@@ -84,7 +85,7 @@ def mux_h264_aac(
         "copy",
         "-tag:v",
         "avc1",
-        "-fps_mode:v",
+        "-vsync",
         "passthrough",
         "-copytb",
         "1",
