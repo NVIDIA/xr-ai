@@ -455,6 +455,36 @@ and command to <code class="docutils literal notranslate"><span class="pre">devi
 <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">XR_MEDIA_HUB_NO_WEB_CLIENT</span></code> to
 <code class="docutils literal notranslate"><span class="pre">DEVICE_IO_HUB_NO_WEB_CLIENT</span></code>. The rename has no compatibility aliases.</p>
 </section>
+<section id="shared-model-server-sample-location">
+<h2>Shared model-server sample location<a class="headerlink" href="#shared-model-server-sample-location" title="Link to this heading">#</a></h2>
+<p>The shared model-server launcher moved from <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/</span></code> to
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/</span></code>. Update scripts and configuration paths
+that name the old directory. From the repository root, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
+</pre></div>
+</div>
+<p>From an agent sample directory, use
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">../../model-server-samples/model-servers</span> <span class="pre">model_servers</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command, model profiles, service ports, and cache locations
+are unchanged. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> from the new sample directory to recreate its local
+environment; an environment tied to the old directory does not need to be moved.</p>
+</section>
+<section id="consumer-model-readiness">
+<span id="id1"></span><h2>Consumer model readiness<a class="headerlink" href="#consumer-model-readiness" title="Link to this heading">#</a></h2>
+<p>Workers can report ready without STT, TTS, LLM, or VLM availability. Consumer
+workers no longer poll model health at startup. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> waits only for
+explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>; it no longer adds STT and TTS probes. Start the
+shared model-server stack and wait for its launcher to return first. Server
+wrappers retain model startup and reuse checks.</p>
+<p><a class="reference internal" href="simple-vlm-example.html"><span class="doc">Simple VLM</span></a> retains its streaming image
+warmup, and <a class="reference internal" href="xr-render-demo.html"><span class="doc">XR Render</span></a> retains its LLM warmup,
+including for hosted LLMs. Tea making retains its RAG capability probe and
+<a class="reference internal" href="../guides/customizing-model-servers.html#rag-embedding-health"><span class="std std-ref">embedding health checks</span></a>.</p>
+<p>Endpoint <code class="docutils literal notranslate"><span class="pre">readiness</span></code> and <code class="docutils literal notranslate"><span class="pre">health_path</span></code> settings still control explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code>
+calls, but do not enable automatic worker polling. Out-of-tree applications
+that require the former behavior can explicitly pass
+<code class="docutils literal notranslate"><span class="pre">probes={&quot;stt&quot;:</span> <span class="pre">stt.health,</span> <span class="pre">&quot;tts&quot;:</span> <span class="pre">tts.health}</span></code> to <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>.</p>
+</section>
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -490,6 +520,13 @@ alias. Replace the <code class="docutils literal notranslate"><span class="pre">
 <code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code> path with <code class="docutils literal notranslate"><span class="pre">pocket_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code>. Pocket TTS voice names differ from Piper voice names;
 the checked-in profiles use the CC0 <code class="docutils literal notranslate"><span class="pre">bill_boerst</span></code> voice.</p>
+<p>Pocket TTS now selects a GPU automatically by default, and the checked-in
+model-server profiles require CUDA on GPU 0. Set <code class="docutils literal notranslate"><span class="pre">device:</span> <span class="pre">cpu</span></code> for CPU-only
+execution or <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> to change GPU placement. CUDA warmup runs
+within <code class="docutils literal notranslate"><span class="pre">startup_timeout_s</span></code>, so increase that timeout when cold initialization
+exceeds 600 seconds. The service now resolves the PyPI Torch build instead of
+the CPU-only index; Linux environments therefore include the CUDA library
+footprint even when execution falls back to CPU.</p>
 </section>
 <section id="removed-sdk-compatibility-surfaces">
 <h2>Removed SDK compatibility surfaces<a class="headerlink" href="#removed-sdk-compatibility-surfaces" title="Link to this heading">#</a></h2>
@@ -634,6 +671,8 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#consumer-model-readiness">Consumer model readiness</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-speech-service">Local speech service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#removed-sdk-compatibility-surfaces">Removed SDK compatibility surfaces</a></li>
