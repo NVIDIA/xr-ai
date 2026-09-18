@@ -314,7 +314,6 @@ class SessionRecorder:
             text = message.data.decode("utf-8")
             payload = {"text": text}
         except UnicodeDecodeError:
-            text = ""
             payload = {"data_base64": base64.b64encode(message.data).decode("ascii")}
         self._event(
             session,
