@@ -40,12 +40,20 @@ capture work on disconnect or when a superseding turn expires the request. A
 client without an installed handler, or whose handler fails, returns an
 immediate rejection so the requesting tool does not wait for its full timeout.
 
-The web, Android, and Apple sample apps install handlers that briefly open the
-selected camera when necessary and stop it after the still is encoded. The
-native StreamKit API exposes the same callback for the host application's camera
-pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or newer.
-Capture streams are targeted to the configured hub identity and are limited to
-8 MiB at the connector. They are not broadcast to peer participants.
+The web, Android, and Apple sample apps expose one persisted **Camera Mode**
+selector. **Off** installs no image handler and publishes no video,
+**On-demand images** installs the handler without publishing video, and **Live
+video** publishes the selected camera without installing the image handler.
+The first-launch default is **Off**. The selection is not reset by disconnect,
+reconnect, or app relaunch, so reconnecting restores the selected behavior
+without silently changing the user's authorization choice. In on-demand mode,
+the handler briefly opens the selected camera when necessary and stops it after
+the still is encoded.
+
+The native StreamKit API exposes the same callback for the host application's
+camera pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or
+newer. Capture streams are targeted to the configured hub identity and are
+limited to 8 MiB at the connector. They are not broadcast to peer participants.
 
 This capability is independent of visual inference. An agent calls the existing
 `CurrentFrameTool` and can pass its returned `ImageReference` to a VLM, an
@@ -55,6 +63,18 @@ capture only when one is not available. This applies to every tool invocation,
 including periodic monitoring: installing the client capture handler opts that
 client in to brief camera activation when a caller needs a still while video is
 off. Agents do not branch on transport or camera state.
+
+External camera sources, including glasses SDKs, use the same mutually
+exclusive modes at the application boundary. In **Live video**, pass each SDK
+frame to `injectVideoFrame`; that API publishes a video track by design. In
+**On-demand images**, keep or request the latest SDK frame in the source adapter
+and encode it only from `onImageCaptureRequested`—do not pass it to
+`injectVideoFrame`, because that would publish video. In **Off**, stop or discard
+the SDK feed and leave the handler unset. This routing is client-side and does
+not require a new StreamKit API. The Android virtual-camera source demonstrates
+both paths: live mode injects its generated frames, while on-demand mode encodes
+one generated frame without publication. Apple integrations apply the same
+routing to the `CMSampleBuffer` supplied by the camera SDK.
 
 The same resolution rule can extend to a future short-video selector: resolve a
 recorded hub window first, then ask a capable client to record and upload a
