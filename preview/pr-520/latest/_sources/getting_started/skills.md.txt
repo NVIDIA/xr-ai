@@ -23,6 +23,13 @@ For application work, `build-your-app` is also a complete entry point. It uses
 the published build guide before the checkout exists and continues with the
 same guide from the selected repository ref after cloning.
 
+To start directly with an application, describe its goal in this prompt and
+paste it to your coding agent:
+
+```{literalinclude} /_snippets/app-build-prompt.txt
+:language: text
+```
+
 Prefer to do it by hand? Follow {doc}`/getting_started/quickstart`.
 
 ## Available skills

@@ -421,13 +421,13 @@
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/5cc92ece531ed28f8134215ad5dc0bc9a2e2c0a6/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/83d25bec615fbb79591dbf2bae263f2aeeceeb29/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/5cc92ece531ed28f8134215ad5dc0bc9a2e2c0a6/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/83d25bec615fbb79591dbf2bae263f2aeeceeb29/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/5cc92ece531ed28f8134215ad5dc0bc9a2e2c0a6/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/83d25bec615fbb79591dbf2bae263f2aeeceeb29/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -442,7 +442,7 @@ strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/5cc92ece531ed28f8134215ad5dc0bc9a2e2c0a6/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/83d25bec615fbb79591dbf2bae263f2aeeceeb29/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
 <p>The user-facing command catalog is generated from top-level sample
@@ -454,12 +454,14 @@ generated catalog enrolls files under a top-level sample’s <code class="docuti
 files beside a direct capability subproject, then renders them verbatim.
 Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.</p>
-<p>After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change, run
+<p>Application-owned projects under <code class="docutils literal notranslate"><span class="pre">apps/</span></code> are outside the repository sample and
+contribution tooling described below. After a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change elsewhere,
+run
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_map.py</span></code>. The pre-commit hook
 normally regenerates the Python inventory in <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
-affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
-SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
+affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files outside
+<code class="docutils literal notranslate"><span class="pre">apps/</span></code> require an SPDX header; refer to <a class="reference internal" href="spdx-headers.html"><span class="doc">SPDX headers</span></a>.</p>
 <p>The root <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> records the repository’s dependency qualification cutoff.
 Repository CI passes it explicitly to uv, so fresh resolutions ignore
 package-index artifacts uploaded after that timestamp while normal

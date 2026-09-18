@@ -425,9 +425,10 @@
 <section id="build-your-application">
 <h1>Build your application<a class="headerlink" href="#build-your-application" title="Link to this heading">#</a></h1>
 <p>Read this when building an XR AI application. The directions below assume the
-application is under <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;your-app&gt;/</span></code>. The XR AI SDK distributions
-are not published to a package registry; they resolve through relative
-<code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entries in each application’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>
+application is under <code class="docutils literal notranslate"><span class="pre">apps/&lt;your-app&gt;/</span></code>. This directory is for applications
+that are not part of the repository’s sample catalog. The XR AI SDK
+distributions are not published to a package registry; they resolve through
+relative <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entries in each application’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>
 <section id="start-from-a-source-checkout">
 <h2>Start from a source checkout<a class="headerlink" href="#start-from-a-source-checkout" title="Link to this heading">#</a></h2>
 <p>Use the latest stable release by default, falling back to the latest
@@ -442,10 +443,16 @@ with <code class="docutils literal notranslate"><span class="pre">main</span></c
 </div>
 <p>To use the latest stable release, or the latest prerelease when no stable
 release exists, run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>checkout<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>tag<span class="w"> </span>--list<span class="w"> </span><span class="s1">'v*'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>.github/scripts/select_latest_docs_release.py<span class="k">)</span><span class="s2">"</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">release_tag</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>tag<span class="w"> </span>--list<span class="w"> </span><span class="s1">'v*'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>.github/scripts/select_latest_docs_release.py<span class="k">)</span><span class="s2">"</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$release_tag</span><span class="s2">"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span>git<span class="w"> </span>checkout<span class="w"> </span><span class="s2">"</span><span class="nv">$release_tag</span><span class="s2">"</span>
+<span class="k">else</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"No release tag found; continuing on main."</span><span class="w"> </span>&gt;<span class="p">&amp;</span><span class="m">2</span>
+<span class="k">fi</span>
 </pre></div>
 </div>
-<p>After checking out a release, confirm that this guide and
+<p>After checking out a release, confirm that
+<code class="docutils literal notranslate"><span class="pre">docs/source/guides/building-your-app.md</span></code> and
 <code class="docutils literal notranslate"><span class="pre">skills/build-your-app/SKILL.md</span></code> exist in the checkout. If either is absent,
 ask before switching the documentation, skill, and checkout to <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p>
 <p>Read <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, then review the
@@ -534,10 +541,11 @@ ownership boundaries and composition guidance.</p>
 <p><code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code> is the smallest complete voice-and-vision
 application. Copy its tracked files from the repository root and rename its
 Python package and worker configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>agent-samples/my-app
-git<span class="w"> </span>archive<span class="w"> </span>HEAD<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x<span class="w"> </span>--strip-components<span class="o">=</span><span class="m">2</span><span class="w"> </span>-C<span class="w"> </span>agent-samples/my-app
-mv<span class="w"> </span>agent-samples/my-app/worker/simple_vlm_example_worker<span class="w"> </span>agent-samples/my-app/worker/my_app_worker
-mv<span class="w"> </span>agent-samples/my-app/yaml/simple_vlm_example_worker.yaml<span class="w"> </span>agent-samples/my-app/yaml/my_app_worker.yaml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>apps/my-app
+git<span class="w"> </span>archive<span class="w"> </span>HEAD<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>tar<span class="w"> </span>-x<span class="w"> </span>--strip-components<span class="o">=</span><span class="m">2</span><span class="w"> </span>-C<span class="w"> </span>apps/my-app
+mv<span class="w"> </span>apps/my-app/worker/simple_vlm_example_worker<span class="w"> </span>apps/my-app/worker/my_app_worker
+mv<span class="w"> </span>apps/my-app/yaml/simple_vlm_example_worker.yaml<span class="w"> </span>apps/my-app/yaml/my_app_worker.yaml
 </pre></div>
 </div>
 <p>Replace the sample names consistently:</p>
@@ -569,10 +577,21 @@ mv<span class="w"> </span>agent-samples/my-app/yaml/simple_vlm_example_worker.ya
 </tbody>
 </table>
 </div>
-<p>The copied projects already contain working relative sources for the assumed
-<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;your-app&gt;/</span></code> location. Keep each <code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entry paired
-with its distribution in <code class="docutils literal notranslate"><span class="pre">[project].dependencies</span></code>. Every unpublished XR AI
-dependency must retain a repository source mapping.</p>
+<p>Substitute the application’s real kebab-case name for <code class="docutils literal notranslate"><span class="pre">my-app</span></code>, then derive its
+snake-case package and CamelCase class names mechanically. Apply the
+replacements in the listed order across the entire copied tree, including
+comments and docstrings. Update any remaining <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>
+working-directory references to <code class="docutils literal notranslate"><span class="pre">apps/</span></code>, and change prose that still describes
+the application as a repository sample. The following check should produce no
+output:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>grep<span class="w"> </span>-rniE<span class="w"> </span><span class="s1">'simple[-_ ]?vlm'</span><span class="w"> </span>apps/my-app
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">apps/</span></code> and <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> directories are at the same depth, so the
+copied projects’ relative sources continue to work. Keep each
+<code class="docutils literal notranslate"><span class="pre">[tool.uv.sources]</span></code> entry paired with its distribution in
+<code class="docutils literal notranslate"><span class="pre">[project].dependencies</span></code>. Every unpublished XR AI dependency must retain a
+repository source mapping.</p>
 <p>Use this map to separate reusable scaffolding from the VLM example:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -624,7 +643,8 @@ dependency must retain a repository source mapping.</p>
 <p>Rewrite the copied README as application-owned documentation. Replace its title
 and the “Simple VLM example” and “This sample” descriptions, and remove links to
 the Simple VLM sample reference. In particular, make sure the name replacements
-did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link.</p>
+did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link. Change its working
+directory to <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code> and use the model-server command shown below.</p>
 <p>The copied DeviceIOHub YAML contains development-only credential placeholders.
 They can remain in place: <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> from the
 environment overwrite them at startup. Never put actual keys or tokens in
@@ -636,7 +656,7 @@ live-frame selection from <code class="docutils literal notranslate"><span class
 </section>
 <section id="resolve-and-run-the-application">
 <h2>Resolve and run the application<a class="headerlink" href="#resolve-and-run-the-application" title="Link to this heading">#</a></h2>
-<p>From <code class="docutils literal notranslate"><span class="pre">agent-samples/my-app/</span></code>, resolve both projects before starting the stack:</p>
+<p>From <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code>, resolve both projects before starting the stack:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync
 uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 </pre></div>
@@ -649,7 +669,8 @@ command below.</p>
 <p>The copied application reuses STT, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>Then start the application from the same directory:</p>
@@ -672,12 +693,12 @@ shared model services to the application’s <code class="docutils literal notra
 <p>From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/my-app/worker<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/my-app/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY'</span>
 <span class="s">from pathlib import Path</span>
 <span class="s">from my_app_worker.config import load_config</span>
 
-<span class="s">load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))</span>
+<span class="s">load_config(Path("apps/my-app/yaml/my_app_worker.yaml"))</span>
 <span class="s">PY</span>
 </pre></div>
 </div>
@@ -686,36 +707,45 @@ and resolves packaged files such as the system prompt:</p>
 tests exercise <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> clients without importing the application worker.
 Use <code class="docutils literal notranslate"><span class="pre">tests/test_simple_vlm_example_wire.py</span></code> as the small STT, VLM, and TTS
 wire-format pattern; use <code class="docutils literal notranslate"><span class="pre">tests/test_xr_render_demo_wire.py</span></code> for LLM tool-call
-flows. For worker-level tests, follow the <code class="docutils literal notranslate"><span class="pre">sys.path.insert()</span></code> setup in
-<code class="docutils literal notranslate"><span class="pre">tests/test_simple_vlm_example_worker.py</span></code> so the application worker package can
-be imported without adding it to <code class="docutils literal notranslate"><span class="pre">tests/pyproject.toml</span></code>.</p>
+flows.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">hub</span></code>, <code class="docutils literal notranslate"><span class="pre">make_connector</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_processor</span></code> fixtures in
-<code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> run DeviceIOHub IPC over local ZMQ sockets. They cover
-participant routing and worker-facing endpoint behavior without LiveKit, a
-camera, a microphone, Docker, or a GPU. Put application tests in
-<code class="docutils literal notranslate"><span class="pre">tests/test_my_app_*.py</span></code>, point model clients at <code class="docutils literal notranslate"><span class="pre">StubOpenAI</span></code>, and run the
-CPU-only selection from the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v<span class="w"> </span>-k<span class="w"> </span>my_app<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+<code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> run DeviceIOHub IPC over local ZMQ sockets. They demonstrate
+participant routing and worker-facing endpoint coverage without LiveKit, a
+camera, a microphone, Docker, or a GPU. Pytest does not load that file for
+tests under <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code> because it is not an ancestor of the application
+test directory. Keep application-owned fixtures in
+<code class="docutils literal notranslate"><span class="pre">apps/my-app/tests/conftest.py</span></code>; copy and adapt only the repository fixtures the
+application needs.</p>
+<p>Add the application’s pytest settings to <code class="docutils literal notranslate"><span class="pre">apps/my-app/pyproject.toml</span></code>:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[tool.pytest.ini_options]</span>
+<span class="n">asyncio_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"auto"</span>
+<span class="n">pythonpath</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"worker"</span><span class="p">]</span>
+<span class="n">markers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">"gpu: requires local GPU, Docker, or NVENC"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"integration: starts a real service process"</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>Point model clients at a <code class="docutils literal notranslate"><span class="pre">StubOpenAI</span></code>-style transport, then run the application
+test directory explicitly with the repository test environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>pytest<span class="w"> </span>-v<span class="w"> </span>apps/my-app/tests<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
 </pre></div>
 </div>
 <p>Refer to <a class="reference internal" href="testing.html"><span class="doc">Testing</span></a> for the complete test commands and marker rules.</p>
 </section>
-<section id="avoid-upstream-repository-checks">
-<h2>Avoid upstream repository checks<a class="headerlink" href="#avoid-upstream-repository-checks" title="Link to this heading">#</a></h2>
-<p>Installing the repository’s pre-commit hooks enables automatic checks during
-commits. The hooks and their underlying scripts can also be run explicitly.
-When the hooks run, the SPDX hook can add the NVIDIA copyright header to staged
-application files, and a staged <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> triggers the dependency
-generator, which inventories every project in the source tree. The full
-repository documentation and test suites also treat top-level directories under
-<code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> as repository samples.</p>
-<p>For an application that is not a repository sample, leave the repository’s
-pre-commit hooks uninstalled and use the focused application test command
-above. If you choose to use those hooks or other repository-wide checks in your
-fork, first adapt the pre-commit SPDX exclusion and standalone SPDX checker, the
-dependency generator’s discovery rules, and the sample catalogs and tests for
-the application path. The checkout’s <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> continues to apply; this
-directory is not automatically exempt from its repository-wide instructions.</p>
+<section id="understand-the-application-boundary">
+<h2>Understand the application boundary<a class="headerlink" href="#understand-the-application-boundary" title="Link to this heading">#</a></h2>
+<p>Repository file checks exclude the top-level <code class="docutils literal notranslate"><span class="pre">apps/</span></code> directory. Application
+projects do not enter <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> or the dependency manifest, and the
+repository’s Ruff and SPDX checks do not inspect application-owned files. The
+sample documentation, configuration catalogs, and test discovery remain scoped
+to <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> and <code class="docutils literal notranslate"><span class="pre">tests/</span></code>. Git ignores <code class="docutils literal notranslate"><span class="pre">apps/*</span></code> by default so private
+application work is not staged accidentally. Remove that ignore rule when the
+application owner wants to track the application in the fork.</p>
+<p>The rest of the checkout remains repository-owned. Commit-wide hooks such as
+DCO sign-off still run when installed, and changes outside <code class="docutils literal notranslate"><span class="pre">apps/</span></code> continue to
+follow <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> and the repository’s contribution checks.</p>
 </section>
 </section>
 
@@ -773,7 +803,7 @@ directory is not automatically exempt from its repository-wide instructions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#copy-the-reference-application">Copy the reference application</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolve-and-run-the-application">Resolve and run the application</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-without-hardware">Verify without hardware</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#avoid-upstream-repository-checks">Avoid upstream repository checks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#understand-the-application-boundary">Understand the application boundary</a></li>
 </ul>
   </nav></div>
 

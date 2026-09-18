@@ -235,7 +235,7 @@ Package Contents
    .. py:attribute:: response_id
       :type:  str | None
 
-      Stable stream identifier; reuse after recent closure is ignored and warned.
+      Identifier shared by incremental chunks; recent reuse is ignored with one warning.
 
 
 

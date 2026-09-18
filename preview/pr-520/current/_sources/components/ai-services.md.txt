@@ -396,10 +396,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.
 
 ### docker mode — prerequisites
 
-- **Docker Engine** with the user in the `docker` group (`docker version`
-  must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
-  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- **Docker Engine** accessible from the launch session (`docker ps` must
+  succeed without `sudo`). Refer to {ref}`docker-host-setup` for group setup.
+- **NVIDIA Container Toolkit** installed, with its `nvidia` runtime registered
+  in Docker. Refer to {ref}`docker-host-setup` for the runtime check,
+  configuration steps, and GPU smoke test.
 - **NGC pull access**, when the configured `vllm_image` is restricted or
   requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
