@@ -281,16 +281,16 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.2</option>
+    <option value="0" >v0.2.0-beta.2</option>
     <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="2" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["simple-vlm-example.html", "../../v0.1.0-beta/index.html", "../../main/reference/simple-vlm-example.html"];
+    var urls = ["../../v0.2.0-beta.2/reference/simple-vlm-example.html", "../../v0.1.0-beta/index.html", "simple-vlm-example.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -454,11 +454,11 @@ latest camera frame and streams the answer to both Pocket TTS and the
 sample’s design and operational details.</p>
 <section id="composition">
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
-<p>The orchestrator starts only DeviceIOHub and the worker. The fixed
-<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile marks Parakeet STT, Cosmos3 Nano, and Pocket TTS as
-reused services. Start those endpoints together with the shared model-server
-stack.</p>
-<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns service readiness, hub transport, voice gating, TTS, signals,
+<p>The orchestrator starts only DeviceIOHub and the worker. The
+<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile configures client adapters and shared endpoints for
+Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+the shared model-server stack.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code> selects the participant’s current image with
 <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>, passes its opaque reference to
@@ -505,7 +505,9 @@ streaming image query.</p>
 <p>Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
-Endpoint health alone is not sufficient for that warmup.</p>
+The warmup retries failed inference requests until one succeeds. It does not
+call a health endpoint first. STT and TTS do not gate worker startup; start the
+shared model-server stack before the sample so speech requests can succeed.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
@@ -528,7 +530,7 @@ layout works without command-line configuration arguments.</p>
 <td><p>Wake phrases, listening chime, and follow-up window</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
-<td><p>Model adapters, endpoints, readiness, and reuse declarations</p></td>
+<td><p>Model adapters and shared endpoints</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>

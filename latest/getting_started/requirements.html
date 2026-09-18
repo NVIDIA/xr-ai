@@ -281,16 +281,16 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.2</option>
+    <option value="0" >v0.2.0-beta.2</option>
     <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="2" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["requirements.html", "../../v0.1.0-beta/getting_started/requirements.html", "../../main/getting_started/requirements.html"];
+    var urls = ["../../v0.2.0-beta.2/getting_started/requirements.html", "../../v0.1.0-beta/getting_started/requirements.html", "requirements.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -520,7 +520,7 @@ NVDEC.</p>
 </tr>
 <tr class="row-odd"><td><p>NVIDIA Container Toolkit</p></td>
 <td><p>latest</p></td>
-<td><p>required: configures the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime that gives Docker access to the GPU</p></td>
+<td><p>required, with the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime registered in Docker; refer to <a class="reference internal" href="#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a></p></td>
 </tr>
 <tr class="row-even"><td><p>Node.js</p></td>
 <td><p>20.19.0+ with npm</p></td>
@@ -534,22 +534,77 @@ virtual-environment setup needed. If you do not have it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </pre></div>
 </div>
-<p>The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI and runtime-configuration steps from there:</p>
-<blockquote>
-<div><p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
-</div></blockquote>
-<p>Quick smoke-test once installed:</p>
+<section id="docker-access-and-nvidia-runtime">
+<span id="docker-host-setup"></span><span id="docker-access-and-nvidia-runtime-including-dgx-spark"></span><h3>Docker access and NVIDIA runtime<a class="headerlink" href="#docker-access-and-nvidia-runtime" title="Link to this heading">#</a></h3>
+<p>Complete these checks on the model-server host before launching a stack. They
+also apply to DGX Spark: having Docker and the NVIDIA Container Toolkit installed
+does not guarantee that your login can access Docker or that its <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime
+is registered.</p>
+<section id="docker-access">
+<h4>Docker access<a class="headerlink" href="#docker-access" title="Link to this heading">#</a></h4>
+<p>Run this command without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>, in the same login session that will launch
+<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>ps
+</pre></div>
+</div>
+<p>The command must succeed; an empty container list is valid. If it reports
+permission denied for <code class="docutils literal notranslate"><span class="pre">/var/run/docker.sock</span></code>, add your user to the Docker group:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>usermod<span class="w"> </span>-aG<span class="w"> </span>docker<span class="w"> </span><span class="s2">"</span><span class="nv">$USER</span><span class="s2">"</span>
+</pre></div>
+</div>
+<p>Log out completely and log back in, or disconnect and reconnect your SSH
+session, then retry <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>. If the session still has not
+picked up the new group membership, reboot the host. Opening another terminal
+in the same desktop session does not refresh its group membership.</p>
+<p>For an immediate alternative after adding your user to the group, run
+<code class="docutils literal notranslate"><span class="pre">newgrp</span> <span class="pre">docker</span></code> to start a shell with the updated group. Run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> and
+launch <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> from that shell; existing terminals and applications
+keep their previous group membership.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">docker</span></code> group grants root-level privileges; refer to
+<a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">Docker’s Linux post-installation instructions</a>
+for group creation if needed and access details.</p>
+</section>
+<section id="nvidia-runtime">
+<h4>NVIDIA runtime<a class="headerlink" href="#nvidia-runtime" title="Link to this heading">#</a></h4>
+<p>Check Docker’s registered runtimes without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>info<span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{json .Runtimes}}'</span>
+</pre></div>
+</div>
+<p>The command must succeed. If it lists <code class="docutils literal notranslate"><span class="pre">nvidia</span></code>, continue to the GPU smoke test
+below without reconfiguring or restarting Docker. If <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> is absent, check
+that the toolkit is installed:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nvidia-ctk<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>If the toolkit command is missing, follow the Ubuntu installation steps in the
+<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit installation guide</a>.
+Installing the toolkit and registering its runtime in Docker are separate steps.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> is absent, register it and restart Docker. Schedule this restart
+when other container workloads can be interrupted:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>nvidia-ctk<span class="w"> </span>runtime<span class="w"> </span>configure<span class="w"> </span>--runtime<span class="o">=</span>docker
+sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>docker
+docker<span class="w"> </span>info<span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{json .Runtimes}}'</span>
+</pre></div>
+</div>
+<p>The final command must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> and list an <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime.
+The model-server wrappers explicitly request that runtime; installing the
+toolkit alone is insufficient.</p>
+<p>Verify GPU access from a container, also without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--runtime<span class="o">=</span>nvidia<span class="w"> </span>-e<span class="w"> </span><span class="nv">NVIDIA_VISIBLE_DEVICES</span><span class="o">=</span>all<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>nvidia/cuda:13.0.3-base-ubuntu24.04<span class="w"> </span>nvidia-smi
 </pre></div>
 </div>
+<p>The output must list the host GPU. After these checks pass, follow the
+<a class="reference internal" href="quickstart.html"><span class="doc">model-server quickstart</span></a>. For cleanup errors or an unknown
+runtime, refer to <a class="reference internal" href="../guides/troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
+</section>
+</section>
 </section>
 <section id="gpu-profile-prerequisites">
 <h2>GPU-profile prerequisites<a class="headerlink" href="#gpu-profile-prerequisites" title="Link to this heading">#</a></h2>
 <p>Install before <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> for these targets:</p>
 <ul class="simple">
-<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
+<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
 </ul>
 <p>All GPU profiles default to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code>, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code>, refer to the
@@ -585,9 +640,9 @@ only</strong>: signaling works via <code class="docutils literal notranslate"><s
 Open the web client at the WSL distribution’s <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address instead (note
 it can change across reboots). Microphone capture needs a secure context.
 Prefer the hub’s default HTTPS web server (<code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080</span></code>): an HTTPS
-origin is a secure context once you trust the hub’s self-signed certificate
+origin is a secure context once you trust the hub’s development root CA
 (download it from <code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080/cert</span></code>, or copy
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> out of the WSL filesystem via
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/root-ca.crt</span></code> out of the WSL filesystem via
 <code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows certificate store) or click through
 the browser warning. On a plain-HTTP path (the legacy token server, or
 <code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>), the report’s verified workaround is
@@ -601,7 +656,7 @@ service occupies port 8000. Refer to the <code class="docutils literal notransla
 </section>
 <section id="running-on-other-gpus">
 <h2>Running on other GPUs<a class="headerlink" href="#running-on-other-gpus" title="Link to this heading">#</a></h2>
-<p>A profile (<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
+<p>A profile (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
 that pins two knobs per model server so the stack fits a known configuration:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> — which physical GPU each server runs on (for example,
@@ -622,7 +677,7 @@ them if you have spare VRAM.</p></li>
 the LLM and VLM servers to reduce the KV-cache footprint.</p></li>
 </ol>
 <p>Then select the reviewed profile explicitly:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-directory-name&gt;
 </pre></div>
 </div>
@@ -699,7 +754,14 @@ dropped if it is closed.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware">Hardware</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software">Software</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software">Software</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-access-and-nvidia-runtime">Docker access and NVIDIA runtime</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-access">Docker access</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#nvidia-runtime">NVIDIA runtime</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-profile-prerequisites">GPU-profile prerequisites</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#windows-wsl2">Windows (WSL2)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-on-other-gpus">Running on other GPUs</a></li>

@@ -281,16 +281,16 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.2</option>
+    <option value="0" >v0.2.0-beta.2</option>
     <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="2" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["tea-making-sample.html", "../../v0.1.0-beta/index.html", "../../main/reference/tea-making-sample.html"];
+    var urls = ["../../v0.2.0-beta.2/reference/tea-making-sample.html", "../../v0.1.0-beta/index.html", "tea-making-sample.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -479,7 +479,7 @@ ownership, and event composition are reusable.</p>
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
 <p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The tea sample reuses all
 model services, so start the shared stack, including Pocket TTS, first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return. Then launch the
@@ -736,7 +736,7 @@ temporary worker configuration with absolute paths. Edit the files under
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
-<td><p>Reused model adapters, endpoints, and readiness checks</p></td>
+<td><p>Model adapters, shared endpoints, and explicit RAG embedding health settings</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>LiveKit room and ports, web and token servers, and network behavior</p></td>
