@@ -7,6 +7,7 @@ xr-render-demo orchestrator. Runs the process stack for this sample.
 Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► DeviceIOHub ──IPC──► worker (this sample's agent)
+                                      └─IPC──► capture (with --capture)
   Web client ── WebRTC ──► cloudxr-runtime
                         worker ──native tool──► scene ──► LOVR (OpenXR)
 
@@ -41,6 +42,9 @@ mutates the XR scene (move, recolor, add, remove, etc.).
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """
+from __future__ import annotations
+
+import argparse
 import os
 import platform
 import re
@@ -48,6 +52,7 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
 
 from loguru import logger
@@ -70,8 +75,35 @@ _NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
-def _build_processes() -> list[Process]:
-    return [
+_CAPTURE_PROCESS = Process(
+    "capture",
+    "../../services/device-io-hub",
+    "device_io_capture",
+    config="yaml/media_capture.yaml",
+)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Conversational agent for a live CloudXR scene.",
+    )
+    parser.add_argument(
+        "--capture",
+        action="store_true",
+        help=(
+            "record participant video, bidirectional audio, and data-channel "
+            "traffic"
+        ),
+    )
+    return parser
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    return _parser().parse_args(sys.argv[1:] if argv is None else argv)
+
+
+def _build_processes(*, capture: bool = False) -> list[Process]:
+    processes = [
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
                 config="yaml/device_io_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
@@ -86,6 +118,12 @@ def _build_processes() -> list[Process]:
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
     ]
+    if capture:
+        hub_index = next(
+            index for index, process in enumerate(processes) if process.name == "hub"
+        )
+        processes.insert(hub_index + 1, _CAPTURE_PROCESS)
+    return processes
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
@@ -254,7 +292,8 @@ def _ensure_web_vendor() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def run() -> None:
+def run(argv: Sequence[str] | None = None) -> None:
+    args = _parse_args(argv)
     setup_logging("orchestrator", namespace="xr-render-demo")
     if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
         os.environ[_NO_WEB_CLIENT_ENV] = "1"
@@ -262,7 +301,7 @@ def run() -> None:
     else:
         _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(), _BASE)
+    run_stack(_build_processes(capture=args.capture), _BASE)
 
 
 if __name__ == "__main__":

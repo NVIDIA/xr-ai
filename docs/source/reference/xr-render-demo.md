@@ -22,6 +22,7 @@ shared model services.
 | Role | Ownership | Directory | Command | Port |
 |---|---|---|---|---|
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
+| capture | sample, opt-in | `services/device-io-hub/` | `device_io_capture` | — |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
 | stt | reused | `services/stt-server/` | `stt_server` | 8103 |
 | tts | reused | `services/pocket-tts/` | `pocket_tts_server` | 8105 |
@@ -115,6 +116,7 @@ restart `xr_render_demo` to apply a change.
 | `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
+| `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
@@ -135,6 +137,55 @@ model stack.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
+
+## Opt-in session capture
+
+Capture is disabled by default. Run `uv run xr_render_demo --capture` to start
+`device_io_capture` immediately after DeviceIOHub. Capture subscribes to
+normalized media-hub IPC rather than LiveKit, so the recording contract stays
+the same if the device transport changes. It requests video pixels through the
+hub's on-demand frame path and observes already-routed return audio and data on
+the hub publisher. It never joins the LiveKit room.
+
+Each participant connection creates a timestamped directory under
+`~/.local/share/xr-ai/captures/xr-render-demo/` containing:
+
+- A canonical raw H.264 stream plus one derived fast-start `.mp4` under
+  `video/`, with NVENC H.264 video and AAC-LC
+  audio at 48 kHz stereo. Final STT and spoken TTS text use the large lower caption;
+  all UTF-8 data-channel messages scroll in a smaller right-side panel. Both
+  panels are outside the sensor image. The joined source `.264` stream is
+  retained beside the `.mp4`.
+- `audio/conversation.wav`, with device input on the left and agent output on
+  the right, aligned by hub timestamps. Exact float32 chunks remain in
+  `device.f32le` and `agent.f32le`, indexed by `chunks.jsonl`.
+- `video/frames.jsonl`, indexing every accepted frame by absolute and relative
+  timestamp, source sequence, track, pixel format, and dimensions.
+- `transcript.jsonl`, containing final user STT and spoken agent TTS text on
+  the same clock, plus `observations.jsonl` for derived frame-linked metadata.
+- `events.jsonl`, retaining inbound and outbound data with direction, topic,
+  absolute and relative timestamps, and either UTF-8 text or base64 for binary
+  payloads.
+- `manifest.json`, recording the capture profile, session policy, shared clock,
+  file roles, counts, source track metadata, audio layout, and capture drops.
+
+NVENC work runs behind a bounded queue in the capture process. When capture is
+slower than the live stream, it replaces old pending frame requests and records
+the drop count rather than adding latency to DeviceIOHub or the agent. The
+process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
+Finalization additionally requires `ffmpeg` on `PATH`; it copies the H.264
+stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
+normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
+ahead of media data for fast-start playback. Omit `--capture` when recording is
+prohibited, and treat the output as sensitive device data.
+
+The media-capture service itself also supports a `raw` projection and explicit
+agent-controlled session boundaries. Those modes reuse the same audio,
+transcript, observation, timing, manifest, retention, and encoder
+infrastructure. In explicit mode, a background wrapper fixes the relative
+capture namespace and metadata before exposing parameterless start and stop
+actions; every start creates a timestamped child bundle. The XR render demo
+intentionally selects `demo` plus participant-lifetime recording.
 
 ## The LLM server
 

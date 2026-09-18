@@ -1,0 +1,1811 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import threading
+import types
+import wave
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import numpy as np
+import pytest
+from device_io_hub.capture import CaptureRenderer
+from device_io_hub.capture import _frontends as frontends_module
+from device_io_hub.capture import _matroska as matroska_module
+from device_io_hub.capture import _mp4 as mp4_module
+from device_io_hub.capture import _service as service_module
+from device_io_hub.capture._compositor import compose_caption
+from device_io_hub.capture._recorder import (
+    _CAPTURE_MARKER_CONTENT,
+    _CAPTURE_MARKER_NAME,
+    SessionRecorder,
+    _safe_name,
+    _StereoWaveWriter,
+)
+from device_io_hub.capture._return_subscriber import ReturnTrafficSubscriber
+from device_io_hub.capture._service import (
+    CaptureService,
+    _FrameWorker,
+    _invalid_audio_reason,
+)
+from device_io_hub.capture.config import CaptureConfig, load_capture_config
+from device_io_hub.capture.renderer import _OverlayTimeline, _presentation_frames
+from xr_ai_hub import (
+    AudioChunk,
+    DataMessage,
+    FrameData,
+    FrameSignal,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+)
+from xr_ai_hub._capture import (
+    CAPTURE_OBSERVATION_TOPIC,
+    CAPTURE_START_TOPIC,
+    CAPTURE_STOP_TOPIC,
+    CAPTURE_STT_TOPIC,
+    CAPTURE_TTS_TOPIC,
+)
+
+
+def _minimal_fast_start_mp4() -> bytes:
+    def box(kind: bytes) -> bytes:
+        return (8).to_bytes(4, "big") + kind
+
+    return box(b"ftyp") + box(b"moov") + box(b"mdat")
+
+
+@pytest.fixture(autouse=True)
+def _stub_capture_mp4_finalizer(monkeypatch) -> None:
+    monkeypatch.setattr(frontends_module, "find_ffmpeg", lambda: "/test/ffmpeg")
+
+    def finalize(**kwargs) -> None:
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", finalize)
+
+
+def _frame(
+    *,
+    pts_us: int = 1_000_000,
+    width: int = 64,
+    height: int = 32,
+    track_id: str = "camera",
+) -> FrameData:
+    y = np.full(width * height, 96, dtype=np.uint8)
+    u = np.full(width * height // 4, 128, dtype=np.uint8)
+    v = np.full(width * height // 4, 128, dtype=np.uint8)
+    return FrameData(
+        seq=1,
+        pts_us=pts_us,
+        width=width,
+        height=height,
+        fmt=PixelFormat.I420,
+        data=np.concatenate((y, u, v)).tobytes(),
+        participant_id="alice",
+        track_id=track_id,
+    )
+
+
+def _audio(direction: str, *, pts_us: int = 1_000_000) -> AudioChunk:
+    values = np.full(480, 0.25 if direction == "device" else -0.5, dtype=np.float32)
+    return AudioChunk(
+        pts_us=pts_us,
+        sample_rate=48_000,
+        channels=1,
+        samples=values.size,
+        data=values.tobytes(),
+        participant_id="alice",
+        track_id="mic" if direction == "device" else "tts",
+    )
+
+
+def test_compositor_preserves_sensor_pixels_and_appends_caption_panel() -> None:
+    frame = _frame(width=640, height=320)
+
+    output, width, height = compose_caption(
+        frame,
+        "Agent: hello",
+        data_feed=("DEVICE sensor.state: open", "AGENT scene.update: complete"),
+        max_lines=2,
+    )
+
+    assert width > frame.width
+    assert height > frame.height
+    assert width % 2 == 0
+    assert height % 2 == 0
+    luma = output[:height]
+    chroma = output[height:]
+    assert np.all(luma[:frame.height, :frame.width] == 96)
+    assert np.any(luma[frame.height:, :frame.width] == 235)
+    assert np.any(luma[:, frame.width:] == 235)
+    assert np.all(chroma[:frame.height // 2, :frame.width] == 128)
+
+
+def test_stereo_wave_aligns_device_left_and_agent_right(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.wav"
+    writer = _StereoWaveWriter(path, start_us=1_000_000, sample_rate=48_000)
+    writer.add("device", _audio("device"))
+    writer.add("agent", _audio("agent"))
+    writer.close()
+
+    with wave.open(str(path), "rb") as stream:
+        assert stream.getnchannels() == 2
+        assert stream.getframerate() == 48_000
+        samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").reshape(-1, 2)
+    assert np.all(samples[:, 0] > 0)
+    assert np.all(samples[:, 1] < 0)
+
+
+def test_stereo_wave_ignores_arrival_jitter_and_bursts(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.wav"
+    writer = _StereoWaveWriter(path, start_us=1_000_000, sample_rate=48_000)
+    device = _audio("device")
+    agent = _audio("agent")
+    writer.add("device", device)
+    writer.add("device", _audio("device", pts_us=1_510_900))
+    writer.add("agent", agent)
+    writer.add("agent", _audio("agent", pts_us=1_000_100))
+    writer.close()
+
+    with wave.open(str(path), "rb") as stream:
+        samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").reshape(-1, 2)
+
+    assert samples.shape == (960, 2)
+    assert np.all(samples[:, 0] > 0)
+    assert np.all(samples[:, 1] < 0)
+
+
+def test_stereo_wave_retains_real_conversation_gap(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.wav"
+    writer = _StereoWaveWriter(path, start_us=1_000_000, sample_rate=48_000)
+    writer.add("agent", _audio("agent"))
+    writer.add("agent", _audio("agent", pts_us=1_510_000))
+    writer.close()
+
+    with wave.open(str(path), "rb") as stream:
+        samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").reshape(-1, 2)
+
+    assert np.all(samples[:480, 1] < 0)
+    assert np.all(samples[480:24_480, 1] == 0)
+    assert np.all(samples[24_480:, 1] < 0)
+
+
+def test_capture_rejects_malformed_audio_before_recording() -> None:
+    valid = _audio("device")
+    invalid = _audio("device")
+    invalid.data = invalid.data[:-4]
+
+    assert _invalid_audio_reason(valid) is None
+    assert _invalid_audio_reason(invalid) == "expected 1920 PCM bytes, got 1916"
+
+
+@pytest.mark.asyncio
+async def test_frame_worker_samples_before_requesting_pixels() -> None:
+    class Endpoint:
+        def __init__(self) -> None:
+            self.requested: list[FrameSignal] = []
+            self.changed = asyncio.Event()
+
+        async def request_frame(self, signal: FrameSignal):
+            self.requested.append(signal)
+            if len(self.requested) == 2:
+                self.changed.set()
+            return None
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.dropped: list[int] = []
+
+        def note_video_drop(self, _participant_id: str, pts_us: int) -> None:
+            self.dropped.append(pts_us)
+
+    endpoint = Endpoint()
+    recorder = Recorder()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = _FrameWorker(
+            endpoint=endpoint,  # type: ignore[arg-type]
+            recorder=recorder,  # type: ignore[arg-type]
+            executor=executor,
+            participant_id="alice",
+            track_id="camera",
+            queue_size=4,
+            sample_fps=30,
+            on_failure=lambda _task: None,
+        )
+        for seq, pts_us in enumerate((1_000_000, 1_010_000, 1_040_000)):
+            worker.submit(FrameSignal(
+                slot=0,
+                seq=seq,
+                pts_us=pts_us,
+                width=64,
+                height=32,
+                fmt=PixelFormat.I420,
+                data_sz=3_072,
+                participant_id="alice",
+                track_id="camera",
+            ))
+        await asyncio.wait_for(endpoint.changed.wait(), 1.0)
+        await worker.close()
+
+    assert [signal.pts_us for signal in endpoint.requested] == [1_000_000, 1_040_000]
+    assert recorder.dropped == [1_000_000, 1_010_000, 1_040_000]
+
+
+@pytest.mark.asyncio
+async def test_frame_worker_accepts_nominal_rate_with_timestamp_jitter() -> None:
+    class Endpoint:
+        def __init__(self) -> None:
+            self.requested: list[FrameSignal] = []
+            self.changed = asyncio.Event()
+
+        async def request_frame(self, signal: FrameSignal):
+            self.requested.append(signal)
+            if len(self.requested) == 4:
+                self.changed.set()
+            return None
+
+    class Recorder:
+        def note_video_drop(self, _participant_id: str, _pts_us: int) -> None:
+            pass
+
+    endpoint = Endpoint()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = _FrameWorker(
+            endpoint=endpoint,  # type: ignore[arg-type]
+            recorder=Recorder(),  # type: ignore[arg-type]
+            executor=executor,
+            participant_id="alice",
+            track_id="camera",
+            queue_size=4,
+            sample_fps=30,
+            on_failure=lambda _task: None,
+        )
+        for seq, pts_us in enumerate((1_000_000, 1_033_133, 1_066_866, 1_099_799)):
+            worker.submit(FrameSignal(
+                slot=0,
+                seq=seq,
+                pts_us=pts_us,
+                width=64,
+                height=32,
+                fmt=PixelFormat.I420,
+                data_sz=3_072,
+                participant_id="alice",
+                track_id="camera",
+            ))
+        await asyncio.wait_for(endpoint.changed.wait(), 1.0)
+        await worker.close()
+
+    assert [signal.pts_us for signal in endpoint.requested] == [
+        1_000_000,
+        1_033_133,
+        1_066_866,
+        1_099_799,
+    ]
+
+
+def test_capture_config_resolves_output_and_caption_duration(tmp_path: Path) -> None:
+    path = tmp_path / "capture.yaml"
+    path.write_text(
+        "out_dir: artifacts\noverlay_seconds: 8\n",
+        encoding="utf-8",
+    )
+
+    config = load_capture_config(path)
+
+    assert config.out_dir == str((tmp_path / "artifacts").resolve())
+    assert config.profile == "raw"
+    assert config.overlay_seconds == 8
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("profile", "archive", "profile must be"),
+        ("session_mode", "automatic", "session_mode must be"),
+    ],
+)
+def test_capture_config_rejects_unknown_modular_modes(field, value, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        CaptureConfig(**{field: value})
+
+
+def test_mp4_finalizer_encodes_aac_stereo_and_normalizes_timestamps(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    h264_path = tmp_path / "session.264"
+    wave_path = tmp_path / "conversation.wav"
+    output_path = tmp_path / "session.mp4.pending"
+    h264_path.write_bytes(b"annex-b")
+    with wave.open(str(wave_path), "wb") as stream:
+        stream.setnchannels(2)
+        stream.setsampwidth(2)
+        stream.setframerate(48_000)
+        stream.writeframes(b"\0" * 4_800)
+
+    commands: list[list[str]] = []
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        Path(command[-1]).write_bytes(_minimal_fast_start_mp4())
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(mp4_module.subprocess, "run", run)
+
+    mp4_module.mux_h264_aac(
+        ffmpeg_path="/usr/bin/ffmpeg",
+        output_path=output_path,
+        video_path=h264_path,
+        wave_path=wave_path,
+        audio_start_frame=480,
+        audio_end_frame=2_400,
+        fps=30,
+    )
+
+    command = commands[0]
+    assert "-r" not in command
+    assert command[command.index("-i") + 1] == str(h264_path)
+    assert command[command.index("-c:v") + 1] == "copy"
+    assert command[command.index("-vsync") + 1] == "passthrough"
+    assert "-fps_mode:v" not in command
+    assert command[command.index("-copytb") + 1] == "1"
+    assert command[command.index("-c:a") + 1] == "aac"
+    assert command[command.index("-profile:a") + 1] == "aac_low"
+    assert command[command.index("-ar:a") + 1] == "48000"
+    assert command[command.index("-ac:a") + 1] == "2"
+    assert "-avoid_negative_ts" not in command
+    assert command[command.index("-movflags") + 1] == "+faststart"
+    audio_filter = command[command.index("-filter_complex") + 1]
+    assert "atrim=start_sample=480:end_sample=2400" in audio_filter
+    assert "atrim=start_sample=480:end_sample=2400,asetpts=PTS-STARTPTS" in audio_filter
+    assert audio_filter.index("asetpts=PTS-STARTPTS") < audio_filter.index("aresample=")
+    assert "channel_layouts=stereo" in audio_filter
+    assert "asetpts=N/SR/TB" in audio_filter
+    assert output_path.read_bytes().index(b"moov") < output_path.read_bytes().index(b"mdat")
+
+
+def test_mp4_finalizer_starts_real_audio_and_video_at_zero(tmp_path: Path) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if ffmpeg is None or ffprobe is None:
+        pytest.skip("FFmpeg and FFprobe are required for the real MP4 timing test")
+
+    timeline_path = tmp_path / "timeline.mkv"
+    generate = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=64x32:r=30:d=0.2",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(timeline_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if generate.returncode != 0:
+        pytest.skip(f"FFmpeg has no usable libx264 encoder: {generate.stderr.strip()}")
+
+    wave_path = tmp_path / "conversation.wav"
+    samples = np.full((9_600, 2), 8_000, dtype="<i2")
+    with wave.open(str(wave_path), "wb") as stream:
+        stream.setnchannels(2)
+        stream.setsampwidth(2)
+        stream.setframerate(48_000)
+        stream.writeframes(samples.tobytes())
+    output_path = tmp_path / "session.mp4"
+
+    mp4_module.mux_h264_aac(
+        ffmpeg_path=ffmpeg,
+        output_path=output_path,
+        video_path=timeline_path,
+        wave_path=wave_path,
+        audio_start_frame=0,
+        audio_end_frame=len(samples),
+        fps=30,
+    )
+
+    probe = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,start_time",
+            "-of",
+            "json",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    stream_starts = {
+        stream["codec_type"]: float(stream["start_time"])
+        for stream in json.loads(probe.stdout)["streams"]
+    }
+    assert stream_starts == pytest.approx({"video": 0.0, "audio": 0.0}, abs=1e-6)
+
+    decoded = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(output_path),
+            "-map",
+            "0:a:0",
+            "-frames:a",
+            "512",
+            "-f",
+            "s16le",
+            "pipe:1",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    first_audio = np.frombuffer(decoded.stdout, dtype="<i2")
+    assert first_audio.size >= 512 * 2
+    assert np.mean(np.abs(first_audio[: 512 * 2])) > 1_000
+
+
+def test_presentation_timeline_holds_frames_for_sparse_caption_changes() -> None:
+    events = [
+        {
+            "event_id": 1,
+            "kind": "voice_caption",
+            "source": "user",
+            "text": "between frames",
+            "pts_us": 5_000_000,
+        },
+        {
+            "event_id": 2,
+            "kind": "voice_caption",
+            "source": "agent",
+            "text": "after last frame",
+            "pts_us": 25_000_000,
+        },
+    ]
+    timeline = _OverlayTimeline(events, duration_us=12_000_000)
+    first_pixels = np.zeros((3, 2), dtype=np.uint8)
+    second_pixels = np.ones((3, 2), dtype=np.uint8)
+    decoded = iter([
+        ({"pts_us": 0, "track_id": "camera"}, first_pixels),
+        ({"pts_us": 20_000_000, "track_id": "camera"}, second_pixels),
+    ])
+
+    frames = list(
+        _presentation_frames(
+            decoded,
+            timeline.change_points(start_us=0, end_us=30_000_000),
+            start_us=0,
+            end_us=30_000_000,
+            min_interval_us=1,
+        )
+    )
+
+    assert [row["pts_us"] for row, _pixels in frames] == [
+        0,
+        5_000_000,
+        17_000_001,
+        20_000_000,
+        25_000_000,
+        30_000_000,
+    ]
+    assert [timeline.at(row["pts_us"])[0] for row, _pixels in frames] == [
+        "",
+        "USER: between frames",
+        "",
+        "",
+        "AGENT: after last frame",
+        "AGENT: after last frame",
+    ]
+    assert all(np.shares_memory(pixels, first_pixels) for _row, pixels in frames[1:3])
+    assert all(np.shares_memory(pixels, second_pixels) for _row, pixels in frames[4:])
+
+
+def test_presentation_timeline_coalesces_dense_changes_to_frame_rate() -> None:
+    pixels = np.zeros((3, 2), dtype=np.uint8)
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0}, pixels),
+            ({"pts_us": 100}, pixels),
+        ]),
+        (1, 2, 3, 100),
+        start_us=0,
+        end_us=100,
+        min_interval_us=10,
+    ))
+
+    assert [row["pts_us"] for row, _pixels in frames] == [0, 10, 100]
+
+
+def test_presentation_timeline_rate_limits_each_camera_track_independently() -> None:
+    pixels = np.zeros((3, 2), dtype=np.uint8)
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0, "track_id": "a"}, pixels),
+            ({"pts_us": 0, "track_id": "b"}, pixels),
+            ({"pts_us": 40_000, "track_id": "a"}, pixels),
+            ({"pts_us": 40_000, "track_id": "b"}, pixels),
+        ]),
+        (),
+        start_us=0,
+        end_us=40_000,
+        min_interval_us=33_333,
+    ))
+
+    assert [(row["track_id"], row["pts_us"]) for row, _pixels in frames] == [
+        ("a", 0),
+        ("b", 0),
+        ("a", 40_000),
+        ("b", 40_000),
+    ]
+
+
+def test_presentation_timeline_schedules_camera_update_after_overlay_frame() -> None:
+    timeline = _OverlayTimeline(
+        [{
+            "event_id": 1,
+            "kind": "voice_caption",
+            "source": "user",
+            "text": "just before the camera update",
+            "pts_us": 4_990_000,
+        }],
+        duration_us=12_000_000,
+    )
+    first_pixels = np.zeros((3, 2), dtype=np.uint8)
+    second_pixels = np.ones((3, 2), dtype=np.uint8)
+
+    frames = list(_presentation_frames(
+        iter([
+            ({"pts_us": 0, "track_id": "camera"}, first_pixels),
+            ({"pts_us": 5_000_000, "track_id": "camera"}, second_pixels),
+        ]),
+        timeline.change_points(start_us=0, end_us=17_000_000),
+        start_us=0,
+        end_us=17_000_000,
+        min_interval_us=33_333,
+    ))
+
+    assert [row["pts_us"] for row, _pixels in frames[:3]] == [
+        0,
+        4_990_000,
+        5_023_333,
+    ]
+    assert np.shares_memory(frames[1][1], first_pixels)
+    assert np.shares_memory(frames[2][1], second_pixels)
+
+
+def test_demo_frontend_reports_empty_audio_window_as_video_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def write_output(**kwargs) -> None:
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(frontends_module, "mux_h264", write_output)
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", write_output)
+    (tmp_path / "video").mkdir()
+    (tmp_path / "audio").mkdir()
+    wave_path = tmp_path / "audio" / "conversation.wav"
+    with wave.open(str(wave_path), "wb") as audio:
+        audio.setnchannels(2)
+        audio.setsampwidth(2)
+        audio.setframerate(48_000)
+    frontend = frontends_module._DemoCaptureFrontend(overlay_lines=3)
+
+    artifact = frontend.finalize_video(
+        session_root=tmp_path,
+        raw_path=tmp_path / "video" / "session.264",
+        wave_path=wave_path,
+        audio_start_frame=480,
+        audio_end_frame=960,
+        fps=30,
+        packets=(),
+        width=64,
+        height=32,
+    )
+
+    assert artifact.audio_embedded is False
+
+
+def test_matroska_timeline_preserves_lower_rate_and_dropped_frame_timestamps(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    packet_payload = (
+        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac"
+        b"\x00\x00\x00\x01\x68\xee\x3c\x80"
+        b"\x00\x00\x00\x01\x65frame"
+    )
+    h264_path = tmp_path / "session.264"
+    h264_path.write_bytes(packet_payload * 3)
+    packets = [
+        matroska_module.VideoPacket(
+            offset=index * len(packet_payload),
+            size=len(packet_payload),
+            pts_us=pts_us,
+            key_frame=True,
+        )
+        for index, pts_us in enumerate((1_000_000, 1_066_667, 3_000_000))
+    ]
+    relative_timecodes: list[int] = []
+    original_simple_block = matroska_module._simple_block
+
+    def record_simple_block(track, relative_ms, flags, payload):
+        relative_timecodes.append(relative_ms)
+        return original_simple_block(track, relative_ms, flags, payload)
+
+    monkeypatch.setattr(matroska_module, "_simple_block", record_simple_block)
+    output_path = tmp_path / "timeline.mkv"
+
+    matroska_module.mux_h264(
+        output_path=output_path,
+        h264_path=h264_path,
+        packets=packets,
+        width=64,
+        height=32,
+        fps=30,
+    )
+
+    assert relative_timecodes == [0, 67, 2_000]
+    assert output_path.read_bytes().startswith(b"\x1a\x45\xdf\xa3")
+
+
+def test_capture_requires_ffmpeg_on_path(monkeypatch) -> None:
+    monkeypatch.setattr(mp4_module.shutil, "which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="FFmpeg is required"):
+        mp4_module.find_ffmpeg()
+
+
+def test_capture_requires_native_ffmpeg_aac_encoder(monkeypatch) -> None:
+    monkeypatch.setattr(mp4_module.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(
+        mp4_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, " V..... h264", ""),
+    )
+
+    with pytest.raises(RuntimeError, match="native AAC encoder"):
+        mp4_module.find_ffmpeg()
+
+
+def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    encoded_inputs: list[np.ndarray] = []
+    finalized_video_inputs: list[str] = []
+    finalized_video_pts: list[int] = []
+
+    class FakeEncoder:
+        def Encode(self, frame, _params):
+            encoded_inputs.append(frame.copy())
+            return [
+                {
+                    "data": (
+                        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac\x00\x00\x00\x01\x68\xee\x3c\x80\x00\x00\x00\x01\x65frame"
+                    ),
+                    "timestamp": 1_000_000,
+                    "picture_type": 3,
+                }
+            ]
+
+        def EndEncode(self):
+            return []
+
+    class FakeDecoder:
+        def Decode(self, packet):
+            if not packet.bsl:
+                return []
+            return [np.vstack((
+                np.full((32, 64), 96, dtype=np.uint8),
+                np.full((16, 64), 128, dtype=np.uint8),
+            ))]
+
+    fake_module = types.SimpleNamespace(
+        CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+        CreateDecoder=lambda **_kwargs: FakeDecoder(),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        PacketData=type("PacketData", (), {}),
+        VideoPacketFlag=types.SimpleNamespace(ENDOFSTREAM=1),
+        cudaVideoCodec=types.SimpleNamespace(H264=4),
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
+
+    original_mux_h264 = frontends_module.mux_h264
+
+    def mux_timeline(**kwargs) -> None:
+        finalized_video_pts.extend(packet.pts_us for packet in kwargs["packets"])
+        original_mux_h264(**kwargs)
+
+    def finalize(**kwargs) -> None:
+        finalized_video_inputs.append(kwargs["video_path"].name)
+        kwargs["output_path"].write_bytes(_minimal_fast_start_mp4())
+
+    monkeypatch.setattr(frontends_module, "mux_h264", mux_timeline)
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", finalize)
+    config = CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    )
+    recorder = SessionRecorder(config)
+    recorder.begin_session("alice", 1_000_000)
+    recorder.record_data(
+        "agent",
+        DataMessage("alice", "agent.response", 1_000_000, b"Hello from the agent"),
+    )
+    recorder.record_data(
+        "device",
+        DataMessage("alice", "sensor.state", 1_000_000, b"Door open"),
+    )
+    recorder.record_data(
+        "agent",
+        DataMessage("alice", "agent.large", 1_000_000, b"x" * 4_096),
+    )
+    recorder.record_voice_caption(
+        "user",
+        DataMessage("alice", CAPTURE_STT_TOPIC, 1_000_000, b"What is this?"),
+    )
+    recorder.record_audio("device", _audio("device"))
+    recorder.record_audio("agent", _audio("agent"))
+    recorder.record_video(_frame())
+    recorder.record_voice_caption(
+        "agent",
+        DataMessage("alice", CAPTURE_TTS_TOPIC, 1_040_000, b"This is a door."),
+    )
+    recorder.record_video(_frame(pts_us=1_050_000))
+    packets = recorder._sessions["alice"].video["camera"]._packets
+    assert [packet.pts_us for packet in packets] == [1_000_000, 1_050_000]
+    recorder.end_session("alice", 1_100_000)
+
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    assert stat.S_IMODE(session.stat().st_mode) & 0o077 == 0
+    assert not list(session.rglob("*.pending"))
+    manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == 3
+    assert manifest["profile"] == "raw"
+    assert manifest["capture_profile"] == "raw"
+    assert manifest["session_mode"] == "participant"
+    assert manifest["participant_id"] == "alice"
+    assert manifest["audio"]["channels"] == {"left": "device", "right": "agent"}
+    assert manifest["video_tracks"]["camera"][0]["num_frames"] == 2
+    segment = manifest["video_tracks"]["camera"][0]
+    assert segment["path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    packet_rows = [
+        json.loads(line)
+        for line in (session / segment["packet_index"]).read_text().splitlines()
+    ]
+    assert [row["pts_us"] for row in packet_rows] == [1_000_000, 1_050_000]
+    assert {row["track_id"] for row in packet_rows} == {"camera"}
+    assert (session / segment["raw_path"]).read_bytes().startswith(b"\x00\x00\x00\x01")
+    assert (session / "audio" / "device.f32le").read_bytes() == _audio("device").data
+    assert (session / "audio" / "agent.f32le").read_bytes() == _audio("agent").data
+    frame_rows = [
+        json.loads(line)
+        for line in (session / manifest["video_frame_index"]).read_text().splitlines()
+    ]
+    assert [row["relative_us"] for row in frame_rows] == [0, 50_000]
+    transcript_rows = [
+        json.loads(line)
+        for line in (session / manifest["transcript"]).read_text().splitlines()
+    ]
+    assert [row["source"] for row in transcript_rows] == ["user", "agent"]
+    events = [json.loads(line) for line in (session / "events.jsonl").read_text().splitlines()]
+    assert [event["event_id"] for event in events] == list(range(1, len(events) + 1))
+    assert any(event.get("text") == "Hello from the agent" for event in events)
+    assert any(
+        event.get("kind") == "voice_caption"
+        and event.get("source") == "agent"
+        and event.get("text") == "This is a door."
+        for event in events
+    )
+    assert len(encoded_inputs) == 2
+    assert encoded_inputs[0].shape == (48, 64)
+    assert manifest["renderings"] == {}
+
+    output = CaptureRenderer().render(session)
+    manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
+    rendering = manifest["renderings"]["captioned_mp4"]
+    assert output == session / rendering["path"]
+    assert rendering["source"] == "video/session.264"
+    muxed = output.read_bytes()
+    assert muxed[4:8] == b"ftyp"
+    assert muxed.index(b"moov") < muxed.index(b"mdat")
+    assert any(
+        frame.shape[0] > 48 and np.any(frame[_frame().height:] == 235)
+        for frame in encoded_inputs
+    )
+    assert finalized_video_inputs == ["session.timeline.mkv.pending"]
+    assert finalized_video_pts == [1_000_000, 1_040_000, 1_073_333]
+    assert not (session / "video" / "rendering.264").exists()
+    assert not (session / "video" / "session.timeline.mkv.pending").exists()
+
+
+def test_raw_capture_does_not_attempt_mp4_finalization(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+
+    def fail(**_kwargs) -> None:
+        raise RuntimeError("finalization failed")
+
+    monkeypatch.setattr(frontends_module, "mux_h264_aac", fail)
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session("alice", 1_000_000)
+    recorder.record_video(_frame())
+    recorder.end_session("alice", 1_100_000)
+
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    manifest = json.loads((session / "manifest.json").read_text())
+    segment = manifest["video_tracks"]["camera"][0]
+    assert segment["path"] == segment["raw_path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    assert (session / segment["path"]).is_file()
+    assert not list((session / "video").glob("*.mp4"))
+
+
+def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    encoded_inputs: list[np.ndarray] = []
+
+    class FakeEncoder:
+        def Encode(self, frame, _params):
+            encoded_inputs.append(frame.copy())
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+    monkeypatch.setattr(
+        frontends_module,
+        "find_ffmpeg",
+        lambda: pytest.fail("raw capture must not require FFmpeg"),
+    )
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session(
+        "alice",
+        1_000_000,
+        "agent",
+        "assembly-line/run-a",
+        {"purpose": "SOP evidence", "tags": ["assembly"]},
+    )
+    recorder.record_voice_caption(
+        "user",
+        DataMessage("alice", CAPTURE_STT_TOPIC, 1_010_000, b"Attach the wheel"),
+    )
+    recorder.record_observation(
+        DataMessage("alice", CAPTURE_OBSERVATION_TOPIC, 1_020_000, b""),
+        {
+            "kind": "frame_caption",
+            "frame_pts_us": 1_000_000,
+            "text": "Wheel aligned with axle",
+        },
+    )
+    recorder.record_video(_frame())
+    recorder.record_audio("device", _audio("device"))
+    recorder.end_session("alice", 1_100_000)
+
+    assert encoded_inputs[0].shape == (48, 64)
+    assert np.all(encoded_inputs[0][:32] == 96)
+    session = next(path.parent for path in tmp_path.rglob("manifest.json"))
+    manifest = json.loads((session / "manifest.json").read_text())
+    segment = manifest["video_tracks"]["camera"][0]
+    assert manifest["version"] == 3
+    assert manifest["capture_profile"] == "raw"
+    assert manifest["profile"] == "raw"
+    assert manifest["session_mode"] == "explicit"
+    assert manifest["trigger"] == "agent"
+    assert manifest["target"] == "assembly-line/run-a"
+    assert manifest["metadata"] == {"purpose": "SOP evidence", "tags": ["assembly"]}
+    assert manifest["complete"] is True
+    assert manifest["incomplete_reason"] is None
+    assert manifest["clock"]["session_start_us"] == 1_000_000
+    assert segment["path"] == "video/session.264"
+    assert segment["audio_embedded"] is False
+    frame = json.loads((session / manifest["video_frame_index"]).read_text())
+    assert frame["pts_us"] == 1_000_000
+    assert frame["relative_us"] == 0
+    assert frame["source_width"] == frame["raw_width"] == 64
+    assert "projection_width" not in frame
+    transcript = json.loads((session / manifest["transcript"]).read_text())
+    assert transcript["relative_us"] == 10_000
+    assert transcript["text"] == "Attach the wheel"
+    observation = json.loads((session / manifest["observations"]).read_text())
+    assert observation["frame_relative_us"] == 0
+    audio = json.loads((session / manifest["audio"]["raw_index"]).read_text())
+    assert audio["duration_us"] == 10_000
+    assert audio["sample_format"] == "float32_le"
+
+
+def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session("alice", 1_000_000)
+    for pts_us in (1_000_000, 1_033_133, 1_066_866, 1_099_799):
+        recorder.record_video(_frame(pts_us=pts_us))
+    bundle = recorder.end_session("alice", 1_100_000)
+
+    assert bundle is not None
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    assert manifest["counts"]["video_frames"] == 4
+    assert manifest["dropped_video_frames"] == 0
+
+
+@pytest.mark.asyncio
+async def test_explicit_session_control_records_only_between_reserved_commands(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    try:
+        await service._on_participant(ParticipantEvent("alice", True, 1_000_000))
+        await service._on_agent_data(
+            DataMessage("alice", "agent.response", 1_010_000, b"before"),
+        )
+        assert not list(tmp_path.iterdir())
+
+        start_command = json.dumps({
+            "target": "sop-capture/assembly-line",
+            "metadata": {"purpose": "agent controlled"},
+        }).encode()
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_020_000,
+            start_command,
+        ))
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_025_000,
+            json.dumps({
+                "target": "other-target",
+                "metadata": {"purpose": "must not replace active metadata"},
+            }).encode(),
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STT_TOPIC, 1_030_000, b"during"),
+        )
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_OBSERVATION_TOPIC,
+            1_040_000,
+            json.dumps({
+                "kind": "frame_caption",
+                "frame_pts_us": 1_035_000,
+                "text": "A timed observation",
+            }).encode(),
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STOP_TOPIC, 1_050_000, b""),
+        )
+        await service._drain_callbacks()
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STT_TOPIC, 1_060_000, b"after"),
+        )
+
+        await service._on_agent_data(DataMessage(
+            "alice", CAPTURE_START_TOPIC, 2_000_000, start_command,
+        ))
+        await service._on_agent_data(
+            DataMessage("alice", CAPTURE_STOP_TOPIC, 2_010_000, b""),
+        )
+        await service._drain_callbacks()
+
+        target = tmp_path / "sop-capture" / "assembly-line"
+        sessions = sorted(path.parent for path in target.glob("*/manifest.json"))
+        assert len(sessions) == 2
+        session = sessions[0]
+        manifest = json.loads((session / "manifest.json").read_text())
+        assert manifest["start_us"] == 1_020_000
+        assert manifest["end_us"] == 1_050_000
+        assert manifest["target"] == "sop-capture/assembly-line"
+        assert manifest["metadata"] == {"purpose": "agent controlled"}
+        assert manifest["counts"]["transcripts"] == 1
+        assert manifest["counts"]["observations"] == 1
+        assert "during" in (session / "transcript.jsonl").read_text()
+        assert "before" not in (session / "events.jsonl").read_text()
+        assert "after" not in (session / "transcript.jsonl").read_text()
+        assert not (tmp_path / "other-target").exists()
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_explicit_stop_does_not_block_return_traffic(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    finalize_started = asyncio.Event()
+    release_finalize = asyncio.Event()
+
+    async def blocking_finalize(*_args, **_kwargs) -> None:
+        finalize_started.set()
+        await release_finalize.wait()
+
+    service._finish_session_owned = blocking_finalize  # type: ignore[method-assign]
+    try:
+        await asyncio.wait_for(
+            service._on_agent_data(
+                DataMessage("alice", CAPTURE_STOP_TOPIC, 1_050_000, b""),
+            ),
+            timeout=0.1,
+        )
+        await asyncio.wait_for(finalize_started.wait(), timeout=0.1)
+        assert service._callback_tasks
+    finally:
+        release_finalize.set()
+        await service._drain_callbacks()
+        await service.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["../escape", "/absolute", "bad target"])
+async def test_explicit_session_control_rejects_unsafe_wrapper_targets(
+    tmp_path: Path,
+    monkeypatch,
+    target: str,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="raw",
+        session_mode="explicit",
+        max_total_bytes=0,
+    ))
+    try:
+        await service._on_agent_data(DataMessage(
+            "alice",
+            CAPTURE_START_TOPIC,
+            1_000_000,
+            json.dumps({"target": target, "metadata": {}}).encode(),
+        ))
+        assert not service._recorder.has_session("alice")
+        assert not list(tmp_path.iterdir())
+    finally:
+        await service.stop()
+
+
+def test_safe_names_do_not_alias_distinct_track_ids() -> None:
+    assert _safe_name("cam/1") != _safe_name("cam_1")
+
+
+def test_retention_counts_incomplete_capture_directories(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    target = tmp_path / "workflow"
+    target.mkdir()
+    incomplete = target / "1_incomplete"
+    incomplete.mkdir()
+    (incomplete / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
+    (incomplete / "events.jsonl").write_bytes(b"x" * 100)
+    complete = tmp_path / "2_complete"
+    complete.mkdir()
+    (complete / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
+    (complete / "manifest.json").write_text("{}")
+    (complete / "payload").write_bytes(b"y" * 100)
+    os.utime(incomplete, ns=(1, 1))
+    os.utime(complete, ns=(2, 2))
+
+    SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=len(_CAPTURE_MARKER_CONTENT.encode()) + 102,
+    ))
+
+    assert not incomplete.exists()
+    assert complete.exists()
+
+
+def test_retention_ignores_unowned_directories(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    unrelated = tmp_path / "unrelated-project"
+    unrelated.mkdir()
+    (unrelated / "events.jsonl").write_bytes(b"x" * 100)
+    owned = tmp_path / "capture-session"
+    owned.mkdir()
+    (owned / _CAPTURE_MARKER_NAME).write_text(_CAPTURE_MARKER_CONTENT)
+    (owned / "events.jsonl").write_bytes(b"y" * 100)
+    os.utime(owned, ns=(1, 1))
+    os.utime(unrelated, ns=(2, 2))
+
+    SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=1,
+    ))
+
+    assert unrelated.exists()
+    assert not owned.exists()
+
+
+@pytest.mark.asyncio
+async def test_retention_keeps_waiting_session_active_until_render_finishes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    render_started = asyncio.Event()
+    release_render = threading.Event()
+    rendered: list[tuple[Path, bool]] = []
+    loop = asyncio.get_running_loop()
+
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=1,
+    ))
+    service._recorder.begin_session("first", 1_000_000)
+    service._recorder.begin_session("second", 2_000_000)
+    first = service._recorder._sessions["first"].root
+    second = service._recorder._sessions["second"].root
+
+    def render(bundle: Path) -> None:
+        rendered.append((bundle, bundle.exists()))
+        if bundle == first:
+            loop.call_soon_threadsafe(render_started.set)
+            assert release_render.wait(timeout=5)
+
+    service._render_bundle = render  # type: ignore[method-assign]
+    try:
+        first_task = asyncio.create_task(
+            service._finish_session("first", 1_100_000),
+        )
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+
+        second_task = asyncio.create_task(
+            service._finish_session("second", 2_100_000),
+        )
+        await asyncio.sleep(0.05)
+        assert not second_task.done()
+        assert service._recorder.has_session("second")
+        assert second.exists()
+
+        release_render.set()
+        await asyncio.gather(first_task, second_task)
+
+        assert rendered == [(first, True), (second, True)]
+    finally:
+        release_render.set()
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_stop_has_one_finalization_owner(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    worker_release = asyncio.Event()
+
+    class BlockingWorker:
+        async def close(self) -> None:
+            await worker_release.wait()
+
+    service._recorder.begin_session("alice", 1_000_000)
+    service._frame_workers[("alice", "camera")] = BlockingWorker()  # type: ignore[assignment]
+    end_calls: list[str] = []
+    original_end = service._recorder.end_session
+
+    def end_once(participant_id, *args):
+        end_calls.append(participant_id)
+        return original_end(participant_id, *args)
+
+    service._recorder.end_session = end_once  # type: ignore[method-assign]
+
+    async def write_inline(function, *args):
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    try:
+        first = asyncio.create_task(service._finish_session("alice", 1_100_000))
+        await asyncio.sleep(0)
+        second = asyncio.create_task(service._finish_session("alice", 1_100_000))
+        _ = await second
+        assert end_calls == []
+
+        worker_release.set()
+        _ = await first
+        assert end_calls == ["alice"]
+    finally:
+        worker_release.set()
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_participant_finalization_before_executors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    render_started = asyncio.Event()
+    release_render = asyncio.Event()
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=0,
+    ))
+    service._recorder.end_session = (  # type: ignore[method-assign]
+        lambda *_args: bundle
+    )
+    writer_shutdown = False
+
+    async def write_inline(function, *args):
+        assert not writer_shutdown
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    original_shutdown = service._writer_executor.shutdown
+
+    def note_writer_shutdown(*args, **kwargs) -> None:
+        nonlocal writer_shutdown
+        writer_shutdown = True
+        original_shutdown(*args, **kwargs)
+
+    monkeypatch.setattr(service._writer_executor, "shutdown", note_writer_shutdown)
+
+    async def render(_bundle: Path) -> None:
+        render_started.set()
+        await release_render.wait()
+
+    service._render = render  # type: ignore[method-assign]
+    departed = ParticipantEvent("alice", False, 1_000_000, "connector")
+    service._returns._departure_event(departed).set()
+    participant_callback = service._endpoint._participant_cbs[0]
+    callback_task = asyncio.create_task(participant_callback(departed))
+    stop_task: asyncio.Task | None = None
+    try:
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+
+        stop_task = asyncio.create_task(service.stop())
+        await asyncio.sleep(0.05)
+        assert not stop_task.done()
+
+        release_render.set()
+        await asyncio.wait_for(stop_task, timeout=2)
+        await callback_task
+        assert writer_shutdown
+    finally:
+        release_render.set()
+        if stop_task is not None:
+            await asyncio.gather(stop_task, return_exceptions=True)
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_commits_all_raw_bundles_before_waiting_for_render(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setattr(
+        service_module,
+        "CaptureRenderer",
+        lambda **_kwargs: types.SimpleNamespace(),
+    )
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        profile="demo",
+        max_total_bytes=0,
+    ))
+    service._recorder.begin_session("first", 1_000_000)
+    service._recorder.begin_session("second", 2_000_000)
+    first = service._recorder._sessions["first"].root
+    second = service._recorder._sessions["second"].root
+    render_started = asyncio.Event()
+    release_render = asyncio.Event()
+    rendered: list[Path] = []
+
+    async def render(bundle: Path) -> None:
+        rendered.append(bundle)
+        render_started.set()
+        await release_render.wait()
+
+    service._render = render  # type: ignore[method-assign]
+    first_task = asyncio.create_task(service._finish_session("first", 1_100_000))
+    stop_task: asyncio.Task | None = None
+    try:
+        await asyncio.wait_for(render_started.wait(), timeout=1)
+        stop_task = asyncio.create_task(service.stop())
+        for _ in range(100):
+            if (second / "manifest.json").is_file():
+                break
+            await asyncio.sleep(0.01)
+
+        assert (second / "manifest.json").is_file()
+        assert rendered == [first]
+        assert not stop_task.done()
+
+        release_render.set()
+        await asyncio.wait_for(stop_task, timeout=2)
+        await first_task
+    finally:
+        release_render.set()
+        if stop_task is not None:
+            await asyncio.gather(stop_task, return_exceptions=True)
+        await asyncio.gather(first_task, return_exceptions=True)
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_still_finishes_cleanup(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    close_started = asyncio.Event()
+    release_close = asyncio.Event()
+
+    async def controlled_write(function, *args):
+        if function.__name__ == "close":
+            close_started.set()
+            await release_close.wait()
+        return function(*args)
+
+    service._write = controlled_write  # type: ignore[method-assign]
+    stop_task = asyncio.create_task(service.stop())
+    await asyncio.wait_for(close_started.wait(), timeout=1)
+    stop_task.cancel()
+    await asyncio.sleep(0)
+    assert not stop_task.done()
+
+    release_close.set()
+    with pytest.raises(asyncio.CancelledError):
+        _ = await stop_task
+    assert service._stop_task is not None and service._stop_task.done()
+    with pytest.raises(RuntimeError, match="cannot schedule new futures"):
+        service._writer_executor.submit(lambda: None)
+
+
+@pytest.mark.asyncio
+async def test_stopped_return_subscriber_releases_late_departure_waiter() -> None:
+    subscriber = ReturnTrafficSubscriber("inproc://capture-stopped-subscriber")
+    subscriber.stop()
+    try:
+        await asyncio.wait_for(
+            subscriber.wait_for_departure(
+                ParticipantEvent("alice", False, 1_000_000, "connector"),
+            ),
+            timeout=0.1,
+        )
+        assert not subscriber._departures
+    finally:
+        subscriber.close()
+
+
+@pytest.mark.asyncio
+async def test_departure_waits_for_published_return_traffic(
+    hub,
+    hub_addrs,
+    make_connector,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    pull, publish = hub_addrs
+    service = CaptureService(CaptureConfig(
+        hub_push_addr=pull,
+        hub_sub_addr=publish,
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+    await service.start()
+    connector = make_connector(connector_id="capture-order")
+    connector_task: asyncio.Task | None = None
+    write_started = threading.Event()
+    release_write = threading.Event()
+    original_record_audio = service._recorder.record_audio
+
+    def delayed_record_audio(direction: str, chunk: AudioChunk) -> None:
+        if direction == "agent" and not write_started.is_set():
+            write_started.set()
+            if not release_write.wait(timeout=1):
+                raise TimeoutError("test did not release the capture writer")
+        original_record_audio(direction, chunk)
+
+    service._recorder.record_audio = delayed_record_audio  # type: ignore[method-assign]
+    try:
+        await connector.register()
+        connector_task = asyncio.create_task(connector.run())
+        await asyncio.sleep(0.05)
+        await connector.notify_participant_joined("alice", pts_us=1_000_000)
+        for _ in range(40):
+            if "alice" in service._recorder._sessions:
+                break
+            await asyncio.sleep(0.025)
+        assert "alice" in service._recorder._sessions
+
+        first = _audio("agent", pts_us=1_010_000)
+        second = _audio("agent", pts_us=1_020_000)
+        await hub.send_return_audio(first)
+        for _ in range(40):
+            if write_started.is_set():
+                break
+            await asyncio.sleep(0.025)
+        assert write_started.is_set()
+        await hub.send_return_audio(second)
+        await hub.broadcast(
+            b"participant",
+            MsgType.PARTICIPANT_EVENT,
+            ParticipantEvent("alice", False, 1_030_000, "capture-order"),
+        )
+
+        await asyncio.sleep(0.05)
+        assert not list(tmp_path.glob("*/manifest.json"))
+        release_write.set()
+        manifests: list[Path] = []
+        for _ in range(80):
+            manifests = list(tmp_path.glob("*/manifest.json"))
+            if manifests:
+                break
+            await asyncio.sleep(0.025)
+        assert manifests
+        assert (manifests[0].parent / "audio" / "agent.f32le").read_bytes() == (
+            first.data + second.data
+        )
+    finally:
+        release_write.set()
+        connector.stop()
+        if connector_task is not None:
+            connector_task.cancel()
+            await asyncio.gather(connector_task, return_exceptions=True)
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_missing_return_departure_finalizes_incomplete_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setattr(service_module, "_RETURN_TRAFFIC_DRAIN_TIMEOUT_S", 0.01)
+    service = CaptureService(CaptureConfig(
+        out_dir=str(tmp_path),
+        max_total_bytes=0,
+    ))
+
+    async def write_inline(function, *args):
+        return function(*args)
+
+    service._write = write_inline  # type: ignore[method-assign]
+    try:
+        await service._on_participant(ParticipantEvent("alice", True, 1_000_000))
+
+        await asyncio.wait_for(
+            service._on_participant(
+                ParticipantEvent("alice", False, 1_100_000, "lost-return-marker"),
+            ),
+            timeout=1,
+        )
+
+        session = next(path.parent for path in tmp_path.glob("*/manifest.json"))
+        manifest = json.loads((session / "manifest.json").read_text())
+        assert manifest["complete"] is False
+        assert manifest["incomplete_reason"] == "return_traffic_drain_timeout"
+        assert not service._recorder.has_session("alice")
+        assert not service._returns._departures
+    finally:
+        await service.stop()
+
+
+def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeEncoder:
+        def Encode(self, _frame, _params):
+            return [{
+                "data": (
+                    b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac"
+                    b"\x00\x00\x00\x01\x68\xee\x3c\x80"
+                    b"\x00\x00\x00\x01\x65frame"
+                ),
+                "picture_type": 3,
+            }]
+
+        def EndEncode(self):
+            return []
+
+    fake_module = types.SimpleNamespace(
+        CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", fake_module)
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path),
+        sample_fps=30,
+        max_total_bytes=0,
+    ))
+    recorder.begin_session("alice", 1_000_000)
+    recorder.record_video(_frame(pts_us=1_000_000, width=64, height=32))
+    recorder.record_video(_frame(pts_us=1_050_000, width=128, height=64))
+    recorder.record_video(_frame(
+        pts_us=1_100_000,
+        width=128,
+        height=64,
+        track_id="replacement-camera",
+    ))
+    recorder.end_session("alice", 1_150_000)
+
+    session = next(path for path in tmp_path.iterdir() if path.is_dir())
+    manifest = json.loads((session / "manifest.json").read_text())
+    videos = [
+        video
+        for track in manifest["video_tracks"].values()
+        for video in track
+    ]
+    assert len(videos) == 1
+    assert videos[0]["num_frames"] == 3
+    assert videos[0]["source_track_ids"] == ["camera", "replacement-camera"]
+    assert videos[0]["encoded_dimensions"] == [
+        {"width": 64, "height": 32},
+        {"width": 128, "height": 64},
+    ]
+    assert videos[0]["source_dimensions"] == [
+        {"width": 64, "height": 32},
+        {"width": 128, "height": 64},
+    ]
+    assert not list((session / "video").glob("*.mp4"))
+    assert [path.name for path in (session / "video").glob("*.264")] == [
+        "session.264"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_capture_service_observes_both_sides_of_media_hub(
+    hub,
+    hub_addrs,
+    make_connector,
+    make_processor,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    encoded_inputs: list[np.ndarray] = []
+
+    class FakeEncoder:
+        def Encode(self, frame, _params):
+            encoded_inputs.append(frame.copy())
+            return [
+                {
+                    "data": (
+                        b"\x00\x00\x00\x01\x67\x64\x00\x1f\xac\x00\x00\x00\x01\x68\xee\x3c\x80\x00\x00\x00\x01\x65frame"
+                    ),
+                    "timestamp": 1_000_000,
+                    "picture_type": 3,
+                }
+            ]
+
+        def EndEncode(self):
+            return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "PyNvVideoCodec",
+        types.SimpleNamespace(
+            CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
+            NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+        ),
+    )
+    pull, publish = hub_addrs
+    service = CaptureService(CaptureConfig(
+        hub_push_addr=pull,
+        hub_sub_addr=publish,
+        out_dir=str(tmp_path),
+        frame_queue_size=1,
+        encoder_workers=1,
+        max_total_bytes=0,
+    ))
+    await service.start()
+    connector = make_connector(connector_id="capture-test")
+    processor = make_processor()
+    returned_data: list[DataMessage] = []
+
+    async def record_return(message: DataMessage) -> None:
+        returned_data.append(message)
+
+    connector.on_return_data(record_return)
+    connector_task: asyncio.Task | None = None
+    try:
+        await connector.register()
+        connector_task = asyncio.create_task(connector.run())
+        await asyncio.sleep(0.05)
+        await connector.notify_participant_joined("alice", pts_us=1_000_000)
+        for _ in range(40):
+            if "alice" in service._endpoint.subscribed_participants:
+                break
+            await asyncio.sleep(0.025)
+        assert "alice" in service._endpoint.subscribed_participants
+        await asyncio.sleep(0.05)
+
+        await connector.push_audio(_audio("device"))
+        await connector.push_data(DataMessage("alice", "sensor.state", 1_000_000, b"open"))
+        await connector.push_frame(
+            data=_frame().data,
+            width=_frame().width,
+            height=_frame().height,
+            fmt=_frame().fmt,
+            pts_us=_frame().pts_us,
+            participant_id="alice",
+            track_id="camera",
+        )
+        await processor.send_return_audio(_audio("agent"))
+        await processor.send_return_data(
+            DataMessage("alice", "agent.response", 1_000_000, b"Captured response"),
+        )
+        await processor.send_return_data(
+            DataMessage("alice", CAPTURE_STT_TOPIC, 1_000_000, b"User transcript"),
+        )
+        await processor.send_return_data(
+            DataMessage("alice", CAPTURE_TTS_TOPIC, 1_010_000, b"Spoken response"),
+        )
+        await processor.send_return_data(DataMessage(
+            "alice",
+            CAPTURE_OBSERVATION_TOPIC,
+            1_020_000,
+            json.dumps({
+                "kind": "frame_caption",
+                "frame_pts_us": 1_000_000,
+                "text": "Door is open",
+            }).encode(),
+        ))
+
+        for _ in range(80):
+            sessions = [path for path in tmp_path.iterdir() if path.is_dir()]
+            if sessions and encoded_inputs and b"Spoken response" in (
+                sessions[0] / "events.jsonl"
+            ).read_bytes():
+                break
+            await asyncio.sleep(0.025)
+        assert encoded_inputs
+        for _ in range(20):
+            if returned_data:
+                break
+            await asyncio.sleep(0.025)
+
+        await connector.notify_participant_left("alice", pts_us=1_100_000)
+        for _ in range(80):
+            sessions = [path for path in tmp_path.iterdir() if path.is_dir()]
+            if sessions and (sessions[0] / "manifest.json").is_file():
+                break
+            await asyncio.sleep(0.025)
+        session = next(path for path in tmp_path.iterdir() if path.is_dir())
+        manifest = json.loads((session / "manifest.json").read_text())
+        assert manifest["video_tracks"]["camera"]
+        assert (session / "audio" / "device.f32le").stat().st_size > 0
+        assert (session / "audio" / "agent.f32le").stat().st_size > 0
+        events = (session / "events.jsonl").read_text()
+        assert '"direction":"device"' in events
+        assert '"direction":"agent"' in events
+        assert '"kind":"voice_caption"' in events
+        assert '"kind":"observation"' in events
+        assert "Door is open" in (session / "observations.jsonl").read_text()
+        assert "User transcript" in (session / "transcript.jsonl").read_text()
+        returned_topics = [message.topic for message in returned_data]
+        assert "agent.response" in returned_topics
+        assert CAPTURE_OBSERVATION_TOPIC not in returned_topics
+        assert CAPTURE_STT_TOPIC not in returned_topics
+        assert CAPTURE_TTS_TOPIC not in returned_topics
+    finally:
+        connector.stop()
+        if connector_task is not None:
+            connector_task.cancel()
+            await asyncio.gather(connector_task, return_exceptions=True)
+        await service.stop()

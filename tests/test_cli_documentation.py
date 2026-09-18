@@ -36,11 +36,15 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--gpu-profile",),
     ]
     assert commands["model_servers"].project_dir == Path("model-server-samples/model-servers")
-    assert commands["simple_vlm_example"].arguments == ()
+    assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
+        ("--capture",),
+    ]
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
     ]
-    assert commands["xr_render_demo"].arguments == ()
+    assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
+        ("--capture",),
+    ]
 
 
 def test_catalog_builds_sample_directory_invocation() -> None:

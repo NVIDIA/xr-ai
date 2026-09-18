@@ -145,6 +145,8 @@ drift:
   - `nemo-relay>=0.7.2,<0.8`
   - `pydantic>=2.10`
 - Optional dependency groups:
+  - `capture`:
+    - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `frames`:
     - `numpy>=1.24`
     - `Pillow>=10.0`
@@ -289,6 +291,8 @@ drift:
   - `PyNvVideoCodec>=2.2`
 - Optional dependency groups: none
 - Commands:
+  - `device_io_capture` → `device_io_hub.capture.__main__:run`
+  - `device_io_capture_render` → `device_io_hub.capture._render_cli:run`
   - `device_io_hub` → `device_io_hub.__main__:run`
 
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)

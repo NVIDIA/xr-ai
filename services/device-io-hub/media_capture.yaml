@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Media-hub capture reference configuration. Run from services/device-io-hub:
+#   uv run device_io_capture --config media_capture.yaml
+
+hub_sub_addr: ipc:///tmp/xr_hub_pub
+hub_push_addr: ipc:///tmp/xr_hub_in
+
+# Each participant connection creates one timestamped capture bundle here.
+out_dir: ~/.local/share/xr-ai/captures
+
+# Raw capture is the infrastructure default. `demo` keeps the same canonical
+# bundle, then invokes the separate renderer to add transcript/data panels and
+# a fast-start H.264/AAC MP4 when the session completes.
+profile: raw
+
+# `participant` records one session from join to leave. `explicit` records only
+# between reserved agent start/stop control messages.
+session_mode: participant
+
+# Video pixels are requested after the media hub has normalized the transport.
+# NVENC runs in bounded worker threads; if capture falls behind, old capture
+# requests are dropped without delaying the hub, client, or agent.
+sample_fps: 30.0
+bitrate: 6000000
+gpu_id: 0
+frame_queue_size: 2
+encoder_workers: 2
+
+# A rendered fast-start .mp4 encodes this mix as AAC-LC at 48 kHz stereo:
+# device input on the left, agent output on the right. The same mix remains in
+# conversation.wav, and exact float32 chunks and timing remain in the raw audio
+# artifacts. FFmpeg with its native AAC encoder must be available on PATH.
+audio_sample_rate: 48000
+
+# These renderer defaults control the large transcript caption and the smaller
+# scrolling data panel. Capture retains the complete source timelines whether
+# or not a rendering is requested.
+overlay_seconds: 12.0
+overlay_lines: 4
+
+# Oldest completed capture bundles are removed when the total exceeds 10 GiB.
+# Active sessions are never removed. Set to 0 for unlimited retention.
+max_total_bytes: 10737418240

@@ -5,9 +5,9 @@
 
 # XR AI native tools
 
-Native finite and streaming tools for model loops, live and recorded vision,
-tracking, spatial operations, memory, and typed capability services. Every tool
-execution passes through NeMo Relay.
+Native finite and streaming tools for model loops, agent-controlled recording,
+live and recorded vision, tracking, spatial operations, memory, and typed
+capability services. Every tool execution passes through NeMo Relay.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="native-tools-and-model-tool-calls"></a>
