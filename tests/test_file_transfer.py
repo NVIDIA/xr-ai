@@ -169,6 +169,47 @@ def test_file_ipc_rejects_unbounded_hwm() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queued_file_is_dropped_after_unsubscribe() -> None:
+    processor = ProcessorEndpoint(
+        "inproc://queued-file-pub",
+        "inproc://queued-file-in",
+        file_sub_addr="inproc://queued-file-lane",
+    )
+    message = FileMessage(
+        participant_id="alice",
+        topic="image.response",
+        pts_us=123,
+        transfer_id="stream-queued",
+        name="capture.png",
+        mime_type="image/png",
+        attributes={},
+        data=b"png",
+        participant_session_id="session-1",
+    )
+    delivered: list[FileMessage] = []
+
+    async def on_file(message: FileMessage) -> None:
+        delivered.append(message)
+
+    processor.on_file(on_file)
+    processor._participants.add("alice")
+    processor._participant_sessions["alice"] = "session-1"
+    processor.subscribe("alice", filter=Subscribe.FILE)
+    processor._file_queue.put_nowait(message)
+    processor.unsubscribe("alice")
+    processor._running = True
+    worker = asyncio.create_task(processor._run_file_callbacks())
+    try:
+        await asyncio.wait_for(processor._file_queue.join(), 1)
+        assert delivered == []
+    finally:
+        processor._running = False
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+        processor.close()
+
+
+@pytest.mark.asyncio
 async def test_connector_rejects_file_larger_than_ipc_limit() -> None:
     connector = ConnectorEndpoint(
         "inproc://oversize-file-in",

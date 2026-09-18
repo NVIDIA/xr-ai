@@ -26,7 +26,6 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <fstream>
 #include <future>
 #include <iterator>
 #include <mutex>
@@ -40,7 +39,6 @@
 #if STREAMKIT_HAVE_LIVEKIT
 #include "livekit/audio_frame.h"
 #include "livekit/audio_source.h"
-#include "livekit/data_stream.h"
 #include "livekit/livekit.h"
 #include "livekit/local_audio_track.h"
 #include "livekit/local_participant.h"
@@ -69,8 +67,6 @@ constexpr std::size_t kFileMaxAttributeKeyBytes = 128;
 constexpr std::size_t kFileMaxAttributeValueBytes = 1024;
 constexpr std::size_t kFileMaxAttributes = 32;
 constexpr std::size_t kFileMaxAttributesBytes = 8 * 1024;
-constexpr std::size_t kFileWriteChunkBytes = 64 * 1024;
-
 struct EffectiveFileOptions {
     std::string topic;
     std::string name;
@@ -133,16 +129,6 @@ EffectiveFileOptions MakeFileOptions(const FileSendOptions& options,
         .size = size,
     };
 }
-
-#if STREAMKIT_HAVE_LIVEKIT
-std::vector<std::uint8_t> ToBytes(std::span<const std::byte> data) {
-    std::vector<std::uint8_t> bytes(data.size());
-    if (!data.empty()) {
-        std::memcpy(bytes.data(), data.data(), data.size());
-    }
-    return bytes;
-}
-#endif
 
 LiveKitBackend*& MetricsCallbackBackend() {
     static thread_local LiveKitBackend* backend = nullptr;
@@ -657,8 +643,6 @@ FileTransferInfo LiveKitBackend::SendBytes(
     std::span<const std::byte> data,
     const FileSendOptions& options) {
     const auto effective = MakeFileOptions(options, data.size());
-
-#if STREAMKIT_HAVE_LIVEKIT
     std::shared_ptr<livekit::Room> active_room;
     std::uint64_t generation;
     {
@@ -673,64 +657,35 @@ FileTransferInfo LiveKitBackend::SendBytes(
         config_.hub_identity.has_value() && !config_.hub_identity->empty()
             ? std::vector<std::string>{*config_.hub_identity}
             : std::vector<std::string>{};
-    livekit::ByteStreamWriter writer(
-        *active_room->localParticipant(),
-        effective.name,
-        std::string(kFileStreamTopic),
-        effective.attributes,
-        "",
-        effective.size,
-        effective.mime_type,
-        destinations);
-    const auto require_active_connection = [&]() {
-        std::scoped_lock lock(teardown_mutex_);
-        if (!is_connected_.load() || room_ != active_room ||
-            connect_generation_.load() != generation) {
-            throw StreamError("The file stream is no longer on the active connection");
-        }
+    const detail::ByteStreamWireOptions wire{
+        .topic = std::string(kFileStreamTopic),
+        .attributes = effective.attributes,
+        .destination_identities = destinations,
+        .mime_type = effective.mime_type,
+        .name = effective.name,
+        .total_size = effective.size,
     };
+    const detail::ByteStreamConnection connection{
+        .room = active_room,
+        .is_active = [this, active_room, generation]() {
+            std::scoped_lock lock(teardown_mutex_);
+            return is_connected_.load() && room_ == active_room &&
+                   connect_generation_.load() == generation;
+        },
+    };
+    std::string stream_id;
     try {
-        for (std::size_t offset = 0; offset < data.size();
-             offset += kFileWriteChunkBytes) {
-            require_active_connection();
-            writer.write(ToBytes(data.subspan(
-                offset,
-                std::min(kFileWriteChunkBytes, data.size() - offset))));
-        }
-        require_active_connection();
-        writer.close();
-        if (!writer.isClosed()) {
-            throw StreamError("The file stream did not close on the active connection");
-        }
-        require_active_connection();
-    } catch (...) {
-        if (!writer.isClosed()) {
-            try {
-                writer.close("StreamKit send failed");
-            } catch (...) {
-            }
-        }
-        throw;
+        stream_id = detail::LiveKitByteStreamWriter::SendBytes(data, wire, connection);
+    } catch (const detail::ByteStreamConnectionChanged&) {
+        throw StreamError("The file stream did not close on the active connection");
     }
     return {
-        .id = writer.info().stream_id,
+        .id = std::move(stream_id),
         .topic = effective.topic,
         .name = effective.name,
         .mime_type = effective.mime_type,
         .size = effective.size,
     };
-#else
-    if (!is_connected_.load()) {
-        throw NotConnectedError{};
-    }
-    return {
-        .id = std::format("stub-{}", std::chrono::steady_clock::now().time_since_epoch().count()),
-        .topic = effective.topic,
-        .name = effective.name,
-        .mime_type = effective.mime_type,
-        .size = effective.size,
-    };
-#endif
 }
 
 FileTransferInfo LiveKitBackend::SendFile(
@@ -738,8 +693,6 @@ FileTransferInfo LiveKitBackend::SendFile(
     const FileSendOptions& options) {
     const auto size = std::filesystem::file_size(path);
     const auto effective = MakeFileOptions(options, size, path.filename().string());
-
-#if STREAMKIT_HAVE_LIVEKIT
     std::shared_ptr<livekit::Room> active_room;
     std::uint64_t generation;
     {
@@ -754,76 +707,35 @@ FileTransferInfo LiveKitBackend::SendFile(
         config_.hub_identity.has_value() && !config_.hub_identity->empty()
             ? std::vector<std::string>{*config_.hub_identity}
             : std::vector<std::string>{};
-    livekit::ByteStreamWriter writer(
-        *active_room->localParticipant(),
-        effective.name,
-        std::string(kFileStreamTopic),
-        effective.attributes,
-        "",
-        effective.size,
-        effective.mime_type,
-        destinations);
-    const auto require_active_connection = [&]() {
-        std::scoped_lock lock(teardown_mutex_);
-        if (!is_connected_.load() || room_ != active_room ||
-            connect_generation_.load() != generation) {
-            throw StreamError("The file stream is no longer on the active connection");
-        }
+    const detail::ByteStreamWireOptions wire{
+        .topic = std::string(kFileStreamTopic),
+        .attributes = effective.attributes,
+        .destination_identities = destinations,
+        .mime_type = effective.mime_type,
+        .name = effective.name,
+        .total_size = effective.size,
     };
+    const detail::ByteStreamConnection connection{
+        .room = active_room,
+        .is_active = [this, active_room, generation]() {
+            std::scoped_lock lock(teardown_mutex_);
+            return is_connected_.load() && room_ == active_room &&
+                   connect_generation_.load() == generation;
+        },
+    };
+    std::string stream_id;
     try {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
-            throw StreamError("Could not open file: " + path.string());
-        }
-        std::vector<std::uint8_t> chunk(64 * 1024);
-        while (file) {
-            file.read(reinterpret_cast<char*>(chunk.data()),
-                      static_cast<std::streamsize>(chunk.size()));
-            const auto count = file.gcount();
-            if (count > 0) {
-                require_active_connection();
-                const std::vector<std::uint8_t> payload(
-                    chunk.begin(), chunk.begin() + count);
-                writer.write(payload);
-            }
-        }
-        if (!file.eof()) {
-            throw StreamError("Could not read file: " + path.string());
-        }
-        require_active_connection();
-        writer.close();
-        if (!writer.isClosed()) {
-            throw StreamError("The file stream did not close on the active connection");
-        }
-        require_active_connection();
-    } catch (...) {
-        if (!writer.isClosed()) {
-            try {
-                writer.close("StreamKit send failed");
-            } catch (...) {
-            }
-        }
-        throw;
+        stream_id = detail::LiveKitByteStreamWriter::SendFile(path, wire, connection);
+    } catch (const detail::ByteStreamConnectionChanged&) {
+        throw StreamError("The file stream did not close on the active connection");
     }
     return {
-        .id = writer.info().stream_id,
+        .id = std::move(stream_id),
         .topic = effective.topic,
         .name = effective.name,
         .mime_type = effective.mime_type,
         .size = effective.size,
     };
-#else
-    if (!is_connected_.load()) {
-        throw NotConnectedError{};
-    }
-    return {
-        .id = std::format("stub-{}", std::chrono::steady_clock::now().time_since_epoch().count()),
-        .topic = effective.topic,
-        .name = effective.name,
-        .mime_type = effective.mime_type,
-        .size = effective.size,
-    };
-#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

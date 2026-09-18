@@ -756,9 +756,9 @@ class ProcessorEndpoint:
                 if type_id != MsgType.FILE_MESSAGE:
                     log.debug("Unhandled message type %d on file endpoint", type_id)
                     continue
-                if not self._file_session_is_active(msg):
+                if not self._file_delivery_is_active(msg):
                     log.debug(
-                        "Dropping stale file %s for participant %s",
+                        "Dropping inactive file %s for participant %s",
                         msg.transfer_id,
                         msg.participant_id,
                     )
@@ -786,14 +786,21 @@ class ProcessorEndpoint:
             )
         )
 
+    def _file_delivery_is_active(self, msg: FileMessage) -> bool:
+        """Whether this endpoint still wants this participant's file traffic."""
+        return (
+            self._file_session_is_active(msg)
+            and bool(self._subscribed.get(msg.participant_id, Subscribe(0)) & Subscribe.FILE)
+        )
+
     async def _run_file_callbacks(self) -> None:
         """Run file callbacks serially while the file receiver handles probes."""
         while self._running:
             msg = await self._file_queue.get()
             try:
-                if not self._file_session_is_active(msg):
+                if not self._file_delivery_is_active(msg):
                     log.debug(
-                        "Dropping stale queued file %s for participant %s",
+                        "Dropping inactive queued file %s for participant %s",
                         msg.transfer_id,
                         msg.participant_id,
                     )

@@ -14,23 +14,6 @@ import CoreMedia
 import Foundation
 import LiveKit
 
-private actor FileCloseRace {
-    private var completed = false
-    private var waiter: CheckedContinuation<Void, Never>?
-
-    func wait() async {
-        if completed { return }
-        await withCheckedContinuation { waiter = $0 }
-    }
-
-    func finish() {
-        guard !completed else { return }
-        completed = true
-        waiter?.resume()
-        waiter = nil
-    }
-}
-
 // MARK: - LiveKitBackend
 
 /// ``StreamingBackend`` implementation that uses LiveKit WebRTC for transport.
@@ -424,7 +407,19 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     public func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo {
         let effective = try makeFileOptions(options, size: data.count, defaultName: nil)
-        return try await sendFileStream(data: data, fileURL: nil, effective: effective)
+        let connection = try activeByteStreamConnection()
+        let streamID: String
+        do {
+            streamID = try await LiveKitByteStreamWriter.sendBytes(
+                data,
+                options: effective.wire,
+                connection: connection,
+                isConnectionActive: isByteStreamConnectionActive
+            )
+        } catch ByteStreamTransportError.connectionChanged {
+            throw StreamError.fileTransferIncomplete
+        }
+        return effective.transferInfo(id: streamID)
     }
 
     public func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
@@ -437,7 +432,19 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             size: size,
             defaultName: values.name ?? fileURL.lastPathComponent
         )
-        return try await sendFileStream(data: nil, fileURL: fileURL, effective: effective)
+        let connection = try activeByteStreamConnection()
+        let streamID: String
+        do {
+            streamID = try await LiveKitByteStreamWriter.sendFile(
+                fileURL,
+                options: effective.wire,
+                connection: connection,
+                isConnectionActive: isByteStreamConnectionActive
+            )
+        } catch ByteStreamTransportError.connectionChanged {
+            throw StreamError.fileTransferIncomplete
+        }
+        return effective.transferInfo(id: streamID)
     }
 
     // MARK: - Private helpers
@@ -457,7 +464,17 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         let name: String
         let mimeType: String
         let size: Int
-        let liveKit: StreamByteOptions
+        let wire: ByteStreamWireOptions
+
+        func transferInfo(id: String) -> FileTransferInfo {
+            FileTransferInfo(
+                id: id,
+                topic: topic,
+                name: name,
+                mimeType: mimeType,
+                size: size
+            )
+        }
     }
 
     private func makeFileOptions(
@@ -515,7 +532,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             name: name,
             mimeType: mimeType,
             size: size,
-            liveKit: StreamByteOptions(
+            wire: ByteStreamWireOptions(
                 topic: Self.fileStreamTopic,
                 attributes: attributes,
                 destinationIdentities: destinations,
@@ -526,61 +543,17 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         )
     }
 
-    private func sendFileStream(
-        data: Data?,
-        fileURL: URL?,
-        effective: EffectiveFileOptions
-    ) async throws -> FileTransferInfo {
+    private func activeByteStreamConnection() throws -> ByteStreamConnection {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
-        let generation = connectionGeneration
-        let writer = try await room.localParticipant.streamBytes(options: effective.liveKit)
-        do {
-            if let data {
-                try await writer.write(data)
-            } else if let fileURL {
-                let handle = try FileHandle(forReadingFrom: fileURL)
-                defer { try? handle.close() }
-                while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
-                    try Task.checkCancellation()
-                    try await writer.write(chunk)
-                }
-            }
-            try Task.checkCancellation()
-            try await writer.close()
-            guard await writer.isOpen == false,
-                  generation == connectionGeneration,
-                  self.room === room,
-                  room.connectionState == .connected else {
-                throw StreamError.fileTransferIncomplete
-            }
-        } catch {
-            await closeFileWriterAfterFailure(writer)
-            throw error
-        }
-        return FileTransferInfo(
-            id: writer.info.id,
-            topic: effective.topic,
-            name: effective.name,
-            mimeType: effective.mimeType,
-            size: effective.size
-        )
+        return ByteStreamConnection(room: room, generation: connectionGeneration)
     }
 
-    private func closeFileWriterAfterFailure(_ writer: ByteStreamWriter) async {
-        let race = FileCloseRace()
-        let closeTask = Task {
-            _ = try? await writer.close(reason: "StreamKit send failed")
-            await race.finish()
-        }
-        let timeoutTask = Task {
-            _ = try? await Task.sleep(nanoseconds: 2_000_000_000)
-            await race.finish()
-        }
-        await race.wait()
-        closeTask.cancel()
-        timeoutTask.cancel()
+    private func isByteStreamConnectionActive(_ connection: ByteStreamConnection) -> Bool {
+        room === connection.room &&
+            connectionGeneration == connection.generation &&
+            connection.room.connectionState == .connected
     }
 
     private static func validateFileField(

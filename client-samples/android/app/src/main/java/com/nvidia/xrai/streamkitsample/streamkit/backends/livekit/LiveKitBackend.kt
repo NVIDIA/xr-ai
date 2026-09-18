@@ -374,8 +374,8 @@ internal class LiveKitBackend(
         data: ByteArray,
         options: FileSendOptions,
     ): FileTransferInfo {
-        val effective = makeFileOptions(options, data.size.toLong(), null)
         if (!isConnected || room == null) throw StreamError.NotConnected
+        val effective = makeFileOptions(options, data.size.toLong(), null)
         val streamId = try {
             byteStreamWriter.sendBytes(data, effective.wire)
         } catch (_: ByteStreamConnectionChanged) {
@@ -385,14 +385,9 @@ internal class LiveKitBackend(
     }
 
     override suspend fun sendFile(file: File, options: FileSendOptions): FileTransferInfo {
-        var effective = makeFileOptions(options, 0, file.name)
         if (!isConnected || room == null) throw StreamError.NotConnected
         if (!file.isFile) throw StreamError.InvalidFileMetadata("file is not readable")
-        val size = file.length()
-        effective = effective.copy(
-            size = size,
-            wire = effective.wire.copy(totalSize = size),
-        )
+        val effective = makeFileOptions(options, file.length(), file.name)
         val streamId = try {
             byteStreamWriter.sendFile(file, effective.wire)
         } catch (_: ByteStreamConnectionChanged) {

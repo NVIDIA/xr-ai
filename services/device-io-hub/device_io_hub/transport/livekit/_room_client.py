@@ -234,6 +234,13 @@ class _ReturnAudioPipe:
             pass
 
 
+class _ReturnAudioEntry(NamedTuple):
+    session_id: str
+    source: rtc.AudioSource
+    publication: rtc.LocalTrackPublication
+    pipe: _ReturnAudioPipe
+
+
 _FILE_STREAM_TOPIC = "_streamkit.file"
 _FILE_APPLICATION_TOPIC_ATTRIBUTE = "_streamkit.topic"
 _FILE_RESERVED_PREFIX = "_streamkit."
@@ -311,9 +318,7 @@ class RoomClient:
         # restrict each track so only the target participant can hear it.
         # The pipe paces audio into LiveKit at audio rate, so flush_return_audio
         # can drop in-flight TTS instantly even after a burst of chunks.
-        self._return_audio: dict[
-            str, tuple[rtc.AudioSource, rtc.LocalTrackPublication, _ReturnAudioPipe]
-        ] = {}
+        self._return_audio: dict[str, _ReturnAudioEntry] = {}
 
         self._room.register_byte_stream_handler(_FILE_STREAM_TOPIC, self._on_file_stream)
 
@@ -503,7 +508,7 @@ class RoomClient:
         self._pending_tasks.clear()
         # Close pacing pipes before dropping the entries so drainer tasks exit cleanly.
         await asyncio.gather(
-            *(pipe.close() for _src, _pub, pipe in self._return_audio.values()),
+            *(entry.pipe.close() for entry in self._return_audio.values()),
             return_exceptions=True,
         )
         self._return_audio.clear()
@@ -608,28 +613,16 @@ class RoomClient:
         participant_session_id: str,
         header: dict[str, object],
     ) -> None:
-        data = bytearray()
         try:
-            async with asyncio.timeout(self._cfg.incoming_file_total_timeout_s):
-                while True:
-                    try:
-                        chunk = await asyncio.wait_for(
-                            anext(reader),
-                            timeout=self._cfg.incoming_file_idle_timeout_s,
-                        )
-                    except StopAsyncIteration:
-                        break
-                    data.extend(chunk)
-                    if len(data) > self._cfg.incoming_file_max_bytes:
-                        raise ValueError(
-                            f"observed size exceeds {self._cfg.incoming_file_max_bytes} bytes"
-                        )
-
-            declared_size = int(header["size"])
-            if declared_size and len(data) != declared_size:
-                raise ValueError(
-                    f"observed size {len(data)} does not match declared size {declared_size}"
-                )
+            payload = await read_byte_stream(
+                reader,
+                ByteStreamReadLimits(
+                    max_bytes=self._cfg.incoming_file_max_bytes,
+                    idle_timeout_s=self._cfg.incoming_file_idle_timeout_s,
+                    total_timeout_s=self._cfg.incoming_file_total_timeout_s,
+                    require_declared_size=True,
+                ),
+            )
 
             final_attributes = _validate_file_attributes(reader.info.attributes)
             unexpected_reserved = [
@@ -649,7 +642,6 @@ class RoomClient:
                 for key, value in final_attributes.items()
                 if not key.startswith(_FILE_RESERVED_PREFIX)
             }
-            payload = await asyncio.to_thread(bytes, data)
             accepted = await self._ep.push_file(FileMessage(
                 participant_id=participant_id,
                 topic=str(header["topic"]),
@@ -667,7 +659,7 @@ class RoomClient:
                     participant_id,
                     header["transfer_id"],
                     header["name"],
-                    len(data),
+                    len(payload),
                 )
         except asyncio.CancelledError:
             raise
@@ -684,8 +676,6 @@ class RoomClient:
                 participant_id,
                 exc,
             )
-        finally:
-            reader.close()
 
     def _file_task_done(self, task: asyncio.Task) -> None:
         entry = self._file_tasks.pop(task, None)
@@ -715,12 +705,28 @@ class RoomClient:
         behind a burst of chunks.
         """
         pid   = chunk.participant_id
+        session_id = self._participant_sessions.get(pid)
+        if session_id is None:
+            logger.debug("Return audio for disconnected participant {!r} dropped", pid)
+            return
         entry = self._return_audio.get(pid)
+        if entry is not None and entry.session_id != session_id:
+            self._return_audio.pop(pid, None)
+            self._refresh_return_track_permissions()
+            await self._close_return_audio_entry(pid, entry)
+            entry = None
         if entry is None:
-            entry = await self._publish_return_track(pid, chunk.sample_rate, chunk.channels)
+            source, publication, pipe = await self._publish_return_track(
+                pid,
+                chunk.sample_rate,
+                chunk.channels,
+            )
+            entry = _ReturnAudioEntry(session_id, source, publication, pipe)
+            if self._participant_sessions.get(pid) != session_id:
+                await self._close_return_audio_entry(pid, entry)
+                return
             self._return_audio[pid] = entry
             self._refresh_return_track_permissions()
-        _src, _pub, pipe = entry
 
         pcm_f32 = np.frombuffer(chunk.data, dtype=np.float32)
         pcm_i16 = (np.clip(pcm_f32, -1.0, 1.0) * 32767).astype(np.int16)
@@ -730,7 +736,7 @@ class RoomClient:
             sample_rate=chunk.sample_rate,
             num_channels=chunk.channels,
         )
-        pipe.push(frame)
+        entry.pipe.push(frame)
 
     async def flush_return_audio(self, flush: ReturnAudioFlush) -> None:
         """Drop every audio frame currently buffered for *flush.participant_id*.
@@ -741,8 +747,7 @@ class RoomClient:
         entry = self._return_audio.get(flush.participant_id)
         if entry is None:
             return
-        _src, _pub, pipe = entry
-        pipe.flush()
+        entry.pipe.flush()
 
     async def _publish_return_track(
         self, pid: str, sample_rate: int, channels: int,
@@ -767,9 +772,9 @@ class RoomClient:
             rtc.ParticipantTrackPermission(
                 participant_identity=pid,
                 allow_all=False,
-                allowed_track_sids=[pub.sid],
+                allowed_track_sids=[entry.publication.sid],
             )
-            for pid, (_src, pub, _pipe) in self._return_audio.items()
+            for pid, entry in self._return_audio.items()
         ]
         self._room.local_participant.set_track_subscription_permissions(
             allow_all_participants=False,
@@ -796,6 +801,15 @@ class RoomClient:
         participant_session_id: str,
     ) -> None:
         logger.info("Participant left: {!r}", participant.identity)
+        return_audio = self._return_audio.get(participant.identity)
+        if (
+            return_audio is not None
+            and return_audio.session_id == participant_session_id
+        ):
+            self._return_audio.pop(participant.identity, None)
+            self._refresh_return_track_permissions()
+        else:
+            return_audio = None
         participant_tasks = [
             task
             for task, (owner, session_id, _reader) in self._file_tasks.items()
@@ -809,15 +823,19 @@ class RoomClient:
             _now_us(),
             participant_session_id,
         )
-        entry = self._return_audio.pop(participant.identity, None)
-        if entry is not None:
-            _src, pub, pipe = entry
-            await pipe.close()
-            try:
-                await self._room.local_participant.unpublish_track(pub.sid)
-            except Exception:
-                logger.exception("unpublish_track failed for {!r}", participant.identity)
-            self._refresh_return_track_permissions()
+        if return_audio is not None:
+            await self._close_return_audio_entry(participant.identity, return_audio)
+
+    async def _close_return_audio_entry(
+        self,
+        participant_id: str,
+        entry: _ReturnAudioEntry,
+    ) -> None:
+        await entry.pipe.close()
+        try:
+            await self._room.local_participant.unpublish_track(entry.publication.sid)
+        except Exception:
+            logger.exception("unpublish_track failed for {!r}", participant_id)
 
     # ── media streams ─────────────────────────────────────────────────────────
 
