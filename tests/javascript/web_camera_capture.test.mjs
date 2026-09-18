@@ -16,6 +16,9 @@ const { StreamSession } = await import(
 const { ConnectionState } = await import(
   '../../client-samples/web/StreamKit/ConnectionState.js'
 );
+const { createBaseModel, disconnect: disconnectApp, setCameraMode } = await import(
+  '../../client-samples/web/App/core.js'
+);
 
 function makeMediaTrack(settings = {}) {
   return {
@@ -384,4 +387,60 @@ test('returns a rejection response when image capture is unavailable', async () 
     JSON.parse(new TextDecoder().decode(responses[0].data)),
     { version: 1, status: 'rejected' },
   );
+});
+
+test('camera modes are exclusive and survive disconnect', async () => {
+  const saved = new Map();
+  globalThis.window = {
+    location: { hostname: 'localhost', port: '8080', protocol: 'https:' },
+    localStorage: {
+      getItem: key => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+    },
+  };
+  const handler = async () => ({ data: new Uint8Array([1]), mimeType: 'image/jpeg' });
+  const session = {
+    onImageCaptureRequested: null,
+    async disconnect() {},
+  };
+  const model = {
+    cameraMode: 'off',
+    connectionState: ConnectionState.CONNECTED,
+    imageCaptureHandler: handler,
+    isCameraActive: false,
+    session,
+    captureSequence: 0,
+    capturedImageURL: null,
+  };
+  let starts = 0;
+  let stops = 0;
+  const actions = {
+    render() {},
+    async startCamera() {
+      starts += 1;
+      model.isCameraActive = true;
+    },
+    async stopCamera() {
+      stops += 1;
+      model.isCameraActive = false;
+    },
+  };
+
+  await setCameraMode(model, 'on-demand', actions);
+  assert.equal(session.onImageCaptureRequested, handler);
+  assert.equal(starts, 0);
+
+  await setCameraMode(model, 'live', actions);
+  assert.equal(session.onImageCaptureRequested, null);
+  assert.equal(starts, 1);
+
+  await setCameraMode(model, 'off', actions);
+  assert.equal(stops, 1);
+  assert.equal(saved.get('streamkit.cameraMode'), 'off');
+
+  await setCameraMode(model, 'on-demand', actions);
+  await disconnectApp(model, () => {});
+  assert.equal(model.cameraMode, 'on-demand');
+  assert.equal(saved.get('streamkit.cameraMode'), 'on-demand');
+  assert.equal(createBaseModel().cameraMode, 'on-demand');
 });

@@ -35,7 +35,10 @@ struct StreamKitSampleApp: App {
         ImmersiveSpace(id: AppModel.immersiveSpaceID) {
             ImmersiveView()
                 .environment(model)
-                .onAppear { model.immersiveSpaceIsOpen = true }
+                .onAppear {
+                    model.immersiveSpaceIsOpen = true
+                    Task { await model.applyCameraMode(model.cameraMode) }
+                }
                 .onDisappear {
                     model.immersiveSpaceIsOpen = false
                     // CloudXR renders into this RealityView, so stop a live session on disappear rather than leak it.

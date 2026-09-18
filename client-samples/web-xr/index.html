@@ -539,11 +539,14 @@
           <select id="camera-select" class="field-select"></select>
         </div>
 
-        <!-- Camera toggle -->
-        <div class="btn-row">
-          <button id="camera-btn" class="btn btn-secondary btn-full" disabled>
-            Start Camera
-          </button>
+        <!-- Camera authorization mode -->
+        <div class="field-row">
+          <label class="field-label" for="camera-mode-select">Camera Mode</label>
+          <select id="camera-mode-select" class="field-select">
+            <option value="off">Off</option>
+            <option value="on-demand">On-demand images</option>
+            <option value="live">Live video</option>
+          </select>
         </div>
 
         <!-- Camera status -->

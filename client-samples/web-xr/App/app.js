@@ -24,6 +24,7 @@ import {
   stopAudio         as _stopAudio,
   startCamera       as _startCamera,
   stopCamera        as _stopCamera,
+  setCameraMode     as _setCameraMode,
   sendCustom        as _sendCustom,
   wireBaseEvents,
 } from '/App/core.js';
@@ -80,6 +81,9 @@ function stopCamera()       { return _stopCamera(model, render, showError); }
 function startCamera()      { return _startCamera(model, { render, showError, enumerateCameras }); }
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
+function setCameraMode(mode) {
+  return _setCameraMode(model, mode, { render, startCamera, stopCamera });
+}
 function disconnect()       { return _disconnect(model, render); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 
@@ -88,6 +92,7 @@ function connect() {
     render,
     showError,
     enumerateCameras,
+    startCamera,
     stopCamera,
     onDataReceived: _onDataReceived,
   });
@@ -268,7 +273,10 @@ function wireEvents() {
     if (link?.href) verifyCert(link.href);
   });
 
-  wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendCustom });
+  wireBaseEvents(model, {
+    connect, disconnect, startAudio, stopAudio,
+    startCamera, stopCamera, setCameraMode, sendCustom,
+  });
 
   // ── XR Stream ──────────────────────────────────────────────────────────────
   const xrHostInput = $('xr-host-input');

@@ -48,6 +48,24 @@ export function isQuestBrowser() {
   return /OculusBrowser/.test(navigator.userAgent || '');
 }
 
+const CAMERA_MODE_KEY = 'streamkit.cameraMode';
+const CAMERA_MODES = new Set(['off', 'on-demand', 'live']);
+
+function loadCameraMode() {
+  try {
+    const saved = window.localStorage?.getItem(CAMERA_MODE_KEY);
+    return CAMERA_MODES.has(saved) ? saved : 'off';
+  } catch {
+    return 'off';
+  }
+}
+
+function saveCameraMode(mode) {
+  try {
+    window.localStorage?.setItem(CAMERA_MODE_KEY, mode);
+  } catch { /* Storage can be unavailable in private or embedded contexts. */ }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,6 +150,10 @@ export function createBaseModel() {
     connectionState:  ConnectionState.DISCONNECTED,
     isAudioActive:    false,
     isCameraActive:   false,
+    /** @type {'off'|'on-demand'|'live'} */
+    cameraMode:        loadCameraMode(),
+    /** @type {((request: {signal: AbortSignal}) => Promise<object>)|null} */
+    imageCaptureHandler: null,
     /** @type {Array<{deviceId: string, label: string}>} */
     cameras:           [],
     /** @type {string|null} */
@@ -256,19 +278,23 @@ export function renderBase(model) {
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────────
-  const cameraBtn    = $('camera-btn');
+  const cameraModeSelect = $('camera-mode-select');
   const cameraStatus = $('camera-status');
 
-  cameraBtn.disabled = !isConnected;
+  cameraModeSelect.value = model.cameraMode;
   if (model.isCameraActive) {
-    cameraBtn.textContent    = 'Stop Camera';
-    cameraBtn.className      = 'btn btn-destructive';
     cameraStatus.textContent = 'Streaming';
     cameraStatus.className   = 'status-text status-active';
+  } else if (model.cameraMode === 'on-demand') {
+    cameraStatus.textContent = isConnected ? 'On demand' : 'Not connected';
+    cameraStatus.className   = isConnected
+      ? 'status-text status-active'
+      : 'status-text status-idle';
+  } else if (model.cameraMode === 'live') {
+    cameraStatus.textContent = isConnected ? 'Starting…' : 'Not connected';
+    cameraStatus.className   = 'status-text status-idle';
   } else {
-    cameraBtn.textContent    = 'Start Camera';
-    cameraBtn.className      = 'btn btn-secondary';
-    cameraStatus.textContent = isConnected ? 'Idle' : 'Not connected';
+    cameraStatus.textContent = 'Off';
     cameraStatus.className   = 'status-text status-idle';
   }
 
@@ -380,6 +406,7 @@ export function resolvedTokenURL(model) {
  *   render: () => void,
  *   showError: (msg: string) => void,
  *   enumerateCameras: () => Promise<void>,
+ *   startCamera: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
@@ -389,7 +416,7 @@ export function resolvedTokenURL(model) {
  */
 export async function connect(model, {
   render, showError, enumerateCameras: _ec,
-  stopCamera: _sc,
+  startCamera: _startCamera, stopCamera: _stopCamera,
   onStateChange, onDataReceived,
 }) {
   if (model.connectionState !== ConnectionState.DISCONNECTED) return;
@@ -423,8 +450,9 @@ export async function connect(model, {
       // Enumerate cameras on connect so the selector is populated before the
       // user starts the camera for the first time.
       _ec?.();
+      if (model.cameraMode === 'live') _startCamera?.();
     } else if (state === ConnectionState.DISCONNECTED) {
-      if (wasCameraActive) _sc?.();
+      if (wasCameraActive) _stopCamera?.();
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;
@@ -432,7 +460,7 @@ export async function connect(model, {
     } else if (state === ConnectionState.RECONNECTING) {
       // Stop the camera when the connection drops so the server and client
       // both start from a known-off state after reconnect.
-      if (model.isCameraActive) _sc?.();
+      if (model.isCameraActive) _stopCamera?.();
     }
     onStateChange?.(state);
     render();
@@ -448,7 +476,10 @@ export async function connect(model, {
     renderNetworkMetrics(model);
   };
 
-  newSession.onImageCaptureRequested = async ({ signal }) => {
+  model.imageCaptureHandler = async ({ signal }) => {
+    if (model.cameraMode !== 'on-demand') {
+      throw new Error('On-demand image capture is not enabled.');
+    }
     const sequence = ++model.captureSequence;
     model.captureState = model.isCameraActive ? 'capturing' : 'starting';
     render();
@@ -488,6 +519,9 @@ export async function connect(model, {
       throw error;
     }
   };
+  newSession.onImageCaptureRequested = model.cameraMode === 'on-demand'
+    ? model.imageCaptureHandler
+    : null;
 
   newSession.onDataReceived = (topic, data) => {
     // Let the caller intercept topics first (returns true to suppress list append).
@@ -643,6 +677,7 @@ export async function disconnect(model, render) {
   model.isAudioActive    = false;
   model.isCameraActive   = false;
   model.networkMetrics   = null;
+  model.imageCaptureHandler = null;
   render();
 }
 
@@ -695,6 +730,12 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
     : CameraConfig.default;
   try {
     await model.session?.startCamera(cameraConfig);
+    if (model.cameraMode !== 'live' || model.connectionState !== ConnectionState.CONNECTED) {
+      await model.session?.stopCamera();
+      model.isCameraActive = false;
+      render();
+      return;
+    }
     model.isCameraActive = true;
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
@@ -710,6 +751,34 @@ export async function stopCamera(model, render, showError) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
   model.isCameraActive = false;
+  render();
+}
+
+/**
+ * Applies and persists the user's camera authorization choice.
+ *
+ * @param {object} model
+ * @param {'off'|'on-demand'|'live'} mode
+ * @param {{ render: () => void, startCamera: () => Promise<void>, stopCamera: () => Promise<void> }} opts
+ */
+export async function setCameraMode(model, mode, { render, startCamera, stopCamera }) {
+  if (!CAMERA_MODES.has(mode)) return;
+  model.cameraMode = mode;
+  saveCameraMode(mode);
+  if (model.session) {
+    model.session.onImageCaptureRequested = mode === 'on-demand'
+      ? model.imageCaptureHandler
+      : null;
+  }
+
+  if (mode === 'live' && model.connectionState === ConnectionState.CONNECTED) {
+    await startCamera();
+    if (model.cameraMode !== 'live' && model.isCameraActive) {
+      await stopCamera();
+    }
+  } else if (model.isCameraActive) {
+    await stopCamera();
+  }
   render();
 }
 
@@ -736,13 +805,12 @@ export async function sendCustom(model, text, showError) {
  *   disconnect:  () => void,
  *   startAudio:  () => void,
  *   stopAudio:   () => void,
- *   startCamera: () => void,
- *   stopCamera:  () => void,
+ *   setCameraMode: (mode: 'off'|'on-demand'|'live') => void,
  *   sendCustom:  (text: string) => void,
  * }} actions
  */
 export function wireBaseEvents(model, actions) {
-  const { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendCustom } = actions;
+  const { connect, disconnect, startAudio, stopAudio, setCameraMode, sendCustom } = actions;
 
   $('host-input').addEventListener('input', (e) => { model.host = e.target.value; });
   $('port-input').addEventListener('input', (e) => { model.port = Number(e.target.value) || 8080; });
@@ -766,6 +834,10 @@ export function wireBaseEvents(model, actions) {
   audioModeSelect.value = model.audioMode;
   audioModeSelect.addEventListener('change', (e) => { model.audioMode = e.target.value; });
 
+  const cameraModeSelect = $('camera-mode-select');
+  cameraModeSelect.value = model.cameraMode;
+  cameraModeSelect.addEventListener('change', (e) => { setCameraMode(e.target.value); });
+
   $('connect-btn').addEventListener('click', () => {
     if (model.connectionState === ConnectionState.DISCONNECTED) connect(); else disconnect();
   });
@@ -776,10 +848,6 @@ export function wireBaseEvents(model, actions) {
 
   $('camera-select').addEventListener('change', (e) => {
     model.selectedCameraId = e.target.value || null;
-  });
-
-  $('camera-btn').addEventListener('click', () => {
-    if (model.isCameraActive) stopCamera(); else startCamera();
   });
 
   const msgInput = $('message-input');
