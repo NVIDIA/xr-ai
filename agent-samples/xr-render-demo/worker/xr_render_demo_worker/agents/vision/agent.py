@@ -18,6 +18,7 @@ from ..._tolerant import reraise_unavailable, tolerant_toolset
 from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
+from .._adaptive import adaptive_result, reasoning_messages, refusal_toolset
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 # _SHARED_RULES ends mid-sentence: each description completes it differently.
@@ -109,6 +110,7 @@ def make_vision_agent(
                 _PastQuestion, ImageQueryResult, look_past,
             ))
         toolset = tolerant_toolset(tools)
+        toolset = refusal_toolset(toolset)
         scene_block = ""
         if context is not None:
             scene_block = f"{await context.describe(current_participant_id.get())}\n\n"
@@ -123,17 +125,30 @@ def make_vision_agent(
         ]
         async def _call_model(transcript, definitions):
             return await llm.chat(
-                transcript,
+                reasoning_messages(transcript, enabled=request.reasoning_mode == "deliberate"),
                 tools=list(definitions) or None,
                 max_tokens=2048,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=request.reasoning_mode == "deliberate",
             )
         try:
-            loop_result = await run_tool_loop(messages, toolset, _call_model)
+            loop_result = await run_tool_loop(
+                messages,
+                toolset,
+                _call_model,
+                max_iterations=6,
+            )
         except ToolLoopError:
             return SubagentResult(result="I couldn't complete that. Please try again.")
-        return SubagentResult(result=loop_result.content or "Done.")
+        return await adaptive_result(
+            llm,
+            instruction=request.instruction,
+            responsibility=(
+                f"{description} When directly delegated a question about an XR object, answer "
+                "from the supplied complete SCENE OBJECTS context without a perception call."
+            ),
+            result=loop_result,
+        )
 
     description = DESCRIPTION if video is not None else _LIVE_ONLY_DESCRIPTION
     return Tool(name="vision_agent", description=description,

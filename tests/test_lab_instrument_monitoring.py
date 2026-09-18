@@ -1803,8 +1803,9 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
     assert published[0][1] == VoiceOutput(
         text="Device1 is reading 12 volts.",
-        interrupt=True,
         timestamp_us=7,
+        kind="result",
+        turn_id="query-1",
     )
 
 
@@ -1895,7 +1896,11 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
     assert response == "I heard you."
     assert used == []
     assert spoken is False
-    assert llm.tool_names == {tool.name for tool in FOREGROUND_TOOL_DEFS}
+    assert llm.tool_names == {
+        *(tool.name for tool in FOREGROUND_TOOL_DEFS),
+        "turn__prepare_work",
+        "turn__report_progress",
+    }
 
 
 @pytest.mark.asyncio

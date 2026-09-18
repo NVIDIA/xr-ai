@@ -83,6 +83,7 @@ class SubagentCase:
     camera_error: str = ""
     physical_answer: str = ""
     physical_expect_source: str = ""
+    handled: bool = True
 
 
 # Expected args: a (lo, hi) tuple is an inclusive range, anything else is exact.
@@ -498,7 +499,7 @@ CASES = (
         instruction="Make cone-0 pink.",
         scene=(_CONE,),
         forbid_tools=("add_primitive", "update_primitive", "remove_primitive"),
-        answer_contains="recolor",
+        handled=False,
     ),
     # Mixed instructions pairing a recolor with owned work ("make it pink
     # and twice as big") are deliberately untested: the supervisor's
@@ -674,7 +675,7 @@ CASES = (
         instruction="Create a violet ring in front of the user.",
         scene=(_CONE,),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="creation",
+        handled=False,
     ),
     SubagentCase(
         name="placement_rejects_removal",
@@ -682,7 +683,7 @@ CASES = (
         instruction="Delete cone-0.",
         scene=(_CONE,),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="remov",
+        handled=False,
     ),
     SubagentCase(
         name="appearance_copies_scene_object_color",
@@ -726,7 +727,7 @@ CASES = (
         instruction="Move cone-0 behind ring-1.",
         scene=(_CONE, _RING),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="placement",
+        handled=False,
     ),
     SubagentCase(
         name="describe_surroundings_uses_live_view",
@@ -770,7 +771,7 @@ CASES = (
         instruction="Turn ring-1 orange.",
         scene=(_RING,),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="color",
+        handled=False,
     ),
     SubagentCase(
         name="holdout_physical_color_source_paraphrase",
@@ -793,7 +794,7 @@ CASES = (
         instruction="Move ring-1 behind cone-0.",
         scene=(_CONE, _RING),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="move",
+        handled=False,
     ),
     SubagentCase(
         name="holdout_erase_object_synonym",
@@ -828,7 +829,7 @@ CASES = (
         instruction="Paint capsule-2 teal.",
         scene=(_CAPSULE,),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="recolor",
+        handled=False,
     ),
     SubagentCase(
         name="holdout_live_surroundings_paraphrase",
@@ -853,6 +854,20 @@ CASES = (
         memory="The user requested a turquoise ring before a gray capsule.",
         required_tools=("recall_conversation",),
         answer_contains="turquoise ring",
+    ),
+    SubagentCase(
+        name="vision_rejects_scene_mutation",
+        agent="vision",
+        instruction="Move cone-0 behind ring-1.",
+        scene=(_CONE, _RING),
+        forbid_tools=("look_at_current_frame", "look_at_past_frame"),
+        handled=False,
+    ),
+    SubagentCase(
+        name="memory_rejects_live_view",
+        agent="memory",
+        instruction="Check whether a doorway is open in front of the user now.",
+        handled=False,
     ),
 )
 
@@ -888,15 +903,19 @@ def _args_match(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
     return True
 
 
-def check(calls: list[tuple[str, dict[str, Any]]], case: SubagentCase, reply: str) -> tuple[bool, str]:
+def check(
+    calls: list[tuple[str, dict[str, Any]]], case: SubagentCase, reply: SubagentResult
+) -> tuple[bool, str]:
     """Match expected mutations order-independently; reject any extra mutation."""
+    if reply.handled is not case.handled:
+        return False, f"handled={reply.handled}, expected {case.handled}"
     names = {name for name, _args in calls}
     missing = set(case.required_tools) - names
     if missing:
         return False, f"missing tools: {sorted(missing)}"
     if hit := set(case.forbid_tools) & names:
         return False, f"forbidden tools called: {sorted(hit)}"
-    if case.answer_contains and case.answer_contains.lower() not in reply.lower():
+    if case.answer_contains and case.answer_contains.lower() not in reply.result.lower():
         return False, f"reply does not mention {case.answer_contains!r}"
     mutations = [(name, args) for name, args in calls if name in _MUTATING]
     expected_adds = sum(1 for item in case.expect if item["tool"] == "add_primitive")
@@ -957,13 +976,15 @@ async def run_case(case: SubagentCase) -> bool:
         current_reference_time_us.set(harness.EVAL_REFERENCE_US)
         errored = False
         try:
-            reply = await agent.execute(SubagentTask(instruction=case.instruction))
+            reply = await agent.execute(
+                SubagentTask(instruction=case.instruction, reasoning_mode="fast")
+            )
         except Exception as exc:
             reply = SubagentResult(result=f"<workflow error: {exc}>")
             errored = True
     finally:
         await llm.close()
-    ok, why = check(scene.calls, case, reply.result)
+    ok, why = check(scene.calls, case, reply)
     if errored:
         ok, why = False, f"workflow error | {why}"
     status = "PASS" if ok else f"FAIL {why}"

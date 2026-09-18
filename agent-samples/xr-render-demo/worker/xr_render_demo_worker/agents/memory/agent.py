@@ -19,6 +19,7 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from ..._tolerant import tolerant_toolset
 from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
+from .._adaptive import adaptive_result, reasoning_messages, refusal_toolset
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
@@ -65,6 +66,7 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("memory agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
         toolset = tolerant_toolset([recall_tool])
+        toolset = refusal_toolset(toolset)
         prompt = _prompt_text
         messages = [
             ChatMessage(role="system", content=prompt),
@@ -76,17 +78,28 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
         ]
         async def _call_model(transcript, definitions):
             return await llm.chat(
-                transcript,
+                reasoning_messages(transcript, enabled=request.reasoning_mode == "deliberate"),
                 tools=list(definitions) or None,
                 max_tokens=2048,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=request.reasoning_mode == "deliberate",
             )
         try:
-            loop_result = await run_tool_loop(messages, toolset, _call_model)
+            loop_result = await run_tool_loop(
+                messages,
+                toolset,
+                _call_model,
+                max_iterations=6,
+            )
         except ToolLoopError:
             return SubagentResult(result="I couldn't complete that. Please try again.")
-        return SubagentResult(result=loop_result.content or "Done.")
+        return await adaptive_result(
+            llm,
+            instruction=request.instruction,
+            responsibility=DESCRIPTION,
+            result=loop_result,
+            always_classify=True,
+        )
 
     return Tool(name="memory_agent", description=DESCRIPTION,
                 request_model=SubagentTask, result_model=SubagentResult, handler=handle)

@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mappin
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import nemo_relay
 from loguru import logger
@@ -96,6 +96,12 @@ class VoiceOutput(BaseModel):
 
     timestamp_us: int | None = Field(default=None, ge=0)
     """Optional originating input timestamp propagated to TTS."""
+
+    kind: Literal["response", "acknowledgement", "progress", "result", "alert"] = "response"
+    """Semantic role used by optional multi-producer aggregation."""
+
+    turn_id: str | None = Field(default=None, min_length=1)
+    """Logical user turn shared by its acknowledgement, progress, and result."""
 
     @model_validator(mode="after")
     def validate_boundary(self) -> VoiceOutput:

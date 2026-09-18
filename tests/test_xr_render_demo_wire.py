@@ -91,7 +91,7 @@ def test_prompt_files_exist_and_are_nonempty() -> None:
 def test_models_round_trip() -> None:
     request = SceneRequest(transcript="hi", participant_id="p", timestamp_us=1)
     assert SceneRequest.model_validate(request.model_dump()) == request
-    task = SubagentTask(instruction="do")
+    task = SubagentTask(instruction="do", reasoning_mode="fast")
     assert SubagentTask.model_validate(task.model_dump()) == task
     assert SceneReply(response="ok").response == "ok"
     assert SubagentResult(result="ok").result == "ok"

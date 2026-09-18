@@ -1270,6 +1270,8 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
         "transcript__start",
         "transcript__stop",
         "transcript__status",
+        "turn__prepare_work",
+        "turn__report_progress",
     }
     assert current_view is not None and current_view.return_direct is False
 

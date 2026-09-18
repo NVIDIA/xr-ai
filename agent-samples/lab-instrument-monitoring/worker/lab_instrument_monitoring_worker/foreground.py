@@ -30,6 +30,7 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceTurnController,
 )
 
 from .events import (
@@ -297,14 +298,30 @@ class ForegroundAgent(Agent):
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = self._participant(ctx)
+        turn_id = getattr(
+            ctx.metadata,
+            "correlation_id",
+            ctx.metadata.message_id,
+        )
+
+        async def publish_voice(output: VoiceOutput) -> None:
+            await ctx.publish(VOICE_CONTRIBUTION_TOPIC, output)
+
+        controller = VoiceTurnController(
+            turn_id=turn_id,
+            timestamp_us=query.timestamp_us,
+            publish=publish_voice,
+            acknowledgement=True,
+        )
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             try:
-                response, tools, spoken = await self._answer(
-                    query.text,
-                    participant_id,
-                    ctx,
-                    timestamp_us=query.timestamp_us,
-                )
+                with controller.activate():
+                    response, tools, spoken = await self._answer(
+                        query.text,
+                        participant_id,
+                        ctx,
+                        timestamp_us=query.timestamp_us,
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -318,8 +335,9 @@ class ForegroundAgent(Agent):
                         VOICE_CONTRIBUTION_TOPIC,
                         VoiceOutput(
                             text=response,
-                            interrupt=True,
                             timestamp_us=query.timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
                 except RuntimeClosedError:
@@ -358,6 +376,13 @@ class ForegroundAgent(Agent):
             timestamp_us=timestamp_us,
             current_view_delivery=current_view_delivery,
         )
+        controller = VoiceTurnController.current() or VoiceTurnController(
+            turn_id="lab-foreground-eval",
+            timestamp_us=timestamp_us,
+            publish=None,
+            acknowledgement=True,
+        )
+        tools = controller.extend(tools)
         messages = [
             ChatMessage(role="system", content=self._prompt),
             ChatMessage(role="user", content=query),
@@ -372,11 +397,11 @@ class ForegroundAgent(Agent):
             nonlocal round_index
             round_index += 1
             response = await self._llm.chat(
-                transcript,
+                controller.messages(transcript),
                 tools=definitions,
                 max_tokens=512,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=controller.reasoning_enabled,
             )
             logger.info(
                 "foreground route pid={!r} round={} tools={}",
@@ -387,12 +412,13 @@ class ForegroundAgent(Agent):
             return response
 
         try:
-            result = await run_tool_loop(
-                messages,
-                tools,
-                call_model,
-                max_iterations=_MAX_TOOL_ROUNDS,
-            )
+            with controller.activate():
+                result = await run_tool_loop(
+                    messages,
+                    tools,
+                    call_model,
+                    max_iterations=_MAX_TOOL_ROUNDS + 1,
+                )
         except ToolLoopIterationLimitError as exc:
             return (
                 "I couldn't finish that request within the tool limit.",
@@ -571,6 +597,8 @@ class ForegroundAgent(Agent):
         delivery: _CurrentViewDelivery | None = None,
     ) -> ImageQueryResult:
         response_id = ctx.metadata.message_id
+        controller = VoiceTurnController.current()
+        turn_id = controller.turn_id if controller is not None else None
         first = True
         opened = False
         cancelled = False
@@ -590,6 +618,8 @@ class ForegroundAgent(Agent):
                         final=False,
                         interrupt=True,
                         timestamp_us=timestamp_us,
+                        kind="result",
+                        turn_id=turn_id,
                     ),
                 )
                 if delivery is not None and unavailable.strip():
@@ -610,6 +640,8 @@ class ForegroundAgent(Agent):
                             final=False,
                             interrupt=first,
                             timestamp_us=timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
                     if delivery is not None and chunk.text.strip():
@@ -633,6 +665,8 @@ class ForegroundAgent(Agent):
                         final=False,
                         interrupt=True,
                         timestamp_us=timestamp_us,
+                        kind="result",
+                        turn_id=turn_id,
                     ),
                 )
                 if delivery is not None:
@@ -651,6 +685,8 @@ class ForegroundAgent(Agent):
                         VoiceOutput(
                             response_id=response_id,
                             timestamp_us=timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
 

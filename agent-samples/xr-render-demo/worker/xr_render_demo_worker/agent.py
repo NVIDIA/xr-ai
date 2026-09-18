@@ -12,11 +12,12 @@ import nemo_relay
 from loguru import logger
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceTurnController,
 )
 
 from .models import SceneRequest
@@ -89,16 +90,31 @@ class RenderAgent(Agent):
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
-        response_id = ctx.metadata.message_id
+        turn_id = getattr(
+            ctx.metadata,
+            "correlation_id",
+            ctx.metadata.message_id,
+        )
+
+        async def publish_voice(output: VoiceOutput) -> None:
+            await ctx.publish(VOICE_CONTRIBUTION_TOPIC, output)
+
+        controller = VoiceTurnController(
+            turn_id=turn_id,
+            timestamp_us=query.timestamp_us,
+            publish=publish_voice,
+            acknowledgement=True,
+        )
         try:
-            reply = await self._supervisor.handle(
-                SceneRequest(
-                    transcript=query.text,
-                    participant_id=participant_id,
-                    timestamp_us=query.timestamp_us,
-                    trace_id=response_id or "",
+            with controller.activate():
+                reply = await self._supervisor.handle(
+                    SceneRequest(
+                        transcript=query.text,
+                        participant_id=participant_id,
+                        timestamp_us=query.timestamp_us,
+                        trace_id=turn_id,
+                    )
                 )
-            )
             text = reply.response
         except asyncio.CancelledError:
             raise
@@ -107,11 +123,12 @@ class RenderAgent(Agent):
             text = "Something went wrong. Please try again."
         try:
             await ctx.publish(
-                VOICE_OUTPUT_TOPIC,
+                VOICE_CONTRIBUTION_TOPIC,
                 VoiceOutput(
                     text=text,
-                    response_id=response_id,
                     timestamp_us=query.timestamp_us,
+                    kind="result",
+                    turn_id=turn_id,
                 ),
             )
         except asyncio.CancelledError:

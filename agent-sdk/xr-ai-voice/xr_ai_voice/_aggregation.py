@@ -50,6 +50,7 @@ class _ParticipantState:
     pending: deque[_Contribution] = field(default_factory=deque)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     discarded_streams: dict[tuple[str, str], float] = field(default_factory=dict)
+    completed_turns: dict[str, float] = field(default_factory=dict)
     in_flight_count: int = 0
     task: asyncio.Task[None] | None = None
 
@@ -168,6 +169,11 @@ class VoiceAggregationAgent(Agent):
         """Cancel and await all participant aggregation tasks."""
 
         self._stopping = True
+        await self.release_all()
+
+    async def release_all(self) -> None:
+        """Cancel and release every participant without stopping future input."""
+
         tasks = tuple(
             (participant_id, state, state.task)
             for participant_id, state in self._states.items()
@@ -242,6 +248,36 @@ class VoiceAggregationAgent(Agent):
         state: _ParticipantState,
         contribution: _Contribution,
     ) -> None:
+        self._prune_completed_turns(state, asyncio.get_running_loop().time())
+        turn_id = contribution.output.turn_id
+        kind = contribution.output.kind
+        if turn_id is not None and kind in {"acknowledgement", "progress"}:
+            if turn_id in state.completed_turns:
+                logger.debug(
+                    "dropped stale voice {} pid={!r} turn={!r}",
+                    kind,
+                    contribution.participant_id,
+                    turn_id,
+                )
+                return
+            for index in range(len(state.pending) - 1, -1, -1):
+                pending = state.pending[index]
+                if (
+                    pending.output.turn_id == turn_id
+                    and pending.output.kind == kind
+                ):
+                    del state.pending[index]
+        elif turn_id is not None and kind == "result" and contribution.output.final:
+            state.completed_turns[turn_id] = (
+                asyncio.get_running_loop().time() + self._stream_idle_timeout_s
+            )
+            for index in range(len(state.pending) - 1, -1, -1):
+                pending = state.pending[index]
+                if (
+                    pending.output.turn_id == turn_id
+                    and pending.output.kind in {"acknowledgement", "progress"}
+                ):
+                    del state.pending[index]
         if len(state.pending) >= self._queue_capacity:
             victim_index = next(
                 (index for index, pending in enumerate(state.pending) if not pending.output.interrupt),
@@ -257,6 +293,15 @@ class VoiceAggregationAgent(Agent):
             self._drop_contribution(state, victim, incoming=False)
         state.pending.append(contribution)
         state.changed.set()
+
+    @staticmethod
+    def _prune_completed_turns(
+        state: _ParticipantState,
+        now: float,
+    ) -> None:
+        for turn_id, expires_at in tuple(state.completed_turns.items()):
+            if expires_at <= now:
+                state.completed_turns.pop(turn_id, None)
 
     def _drop_contribution(
         self,
@@ -524,6 +569,8 @@ class VoiceAggregationAgent(Agent):
                     final=contribution.output.final,
                     interrupt=interrupt,
                     timestamp_us=contribution.output.timestamp_us,
+                    kind=contribution.output.kind,
+                    turn_id=contribution.output.turn_id,
                 ),
             )
         except RuntimeClosedError:
@@ -540,6 +587,8 @@ class VoiceAggregationAgent(Agent):
                 VoiceOutput(
                     response_id=response_id,
                     timestamp_us=contribution.output.timestamp_us,
+                    kind=contribution.output.kind,
+                    turn_id=contribution.output.turn_id,
                 ),
             )
         except RuntimeClosedError:
@@ -615,6 +664,19 @@ class VoiceAggregationAgent(Agent):
                 final=True,
                 interrupt=interrupts,
                 timestamp_us=timestamp_us,
+                kind=(
+                    "result"
+                    if any(item.output.kind == "result" for item in batch)
+                    else batch[-1].output.kind
+                ),
+                turn_id=(
+                    batch[0].output.turn_id
+                    if all(
+                        item.output.turn_id == batch[0].output.turn_id
+                        for item in batch
+                    )
+                    else None
+                ),
             ),
             ctx=batch[0].ctx,
             participant_id=batch[0].participant_id,

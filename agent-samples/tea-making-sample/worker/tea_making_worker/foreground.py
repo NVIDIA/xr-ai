@@ -32,6 +32,7 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceTurnController,
 )
 
 from .background_context import BackgroundContextAgent
@@ -210,14 +211,30 @@ class ForegroundAgent(Agent):
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = self._participant(ctx)
+        turn_id = getattr(
+            ctx.metadata,
+            "correlation_id",
+            ctx.metadata.message_id,
+        )
+
+        async def publish_voice(output: VoiceOutput) -> None:
+            await ctx.publish(VOICE_CONTRIBUTION_TOPIC, output)
+
+        controller = VoiceTurnController(
+            turn_id=turn_id,
+            timestamp_us=query.timestamp_us,
+            publish=publish_voice,
+            acknowledgement=True,
+        )
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             try:
-                response, tools, spoken = await self._answer(
-                    query.text,
-                    participant_id,
-                    ctx,
-                    timestamp_us=query.timestamp_us,
-                )
+                with controller.activate():
+                    response, tools, spoken = await self._answer(
+                        query.text,
+                        participant_id,
+                        ctx,
+                        timestamp_us=query.timestamp_us,
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -233,8 +250,9 @@ class ForegroundAgent(Agent):
                         VOICE_CONTRIBUTION_TOPIC,
                         VoiceOutput(
                             text=response,
-                            interrupt=True,
                             timestamp_us=query.timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
             except RuntimeClosedError:
@@ -270,6 +288,13 @@ class ForegroundAgent(Agent):
             ctx=ctx,
             timestamp_us=timestamp_us,
         )
+        controller = VoiceTurnController.current() or VoiceTurnController(
+            turn_id="tea-foreground-eval",
+            timestamp_us=timestamp_us,
+            publish=None,
+            acknowledgement=True,
+        )
+        tools = controller.extend(turn.tools)
 
         round_index = 0
 
@@ -280,11 +305,11 @@ class ForegroundAgent(Agent):
             nonlocal round_index
             round_index += 1
             response = await self._llm.chat(
-                messages,
+                controller.messages(messages),
                 tools=definitions,
                 max_tokens=512,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=controller.reasoning_enabled,
             )
             logger.info(
                 "tea foreground route pid={!r} route={} agent={} round={} tools={}",
@@ -297,15 +322,16 @@ class ForegroundAgent(Agent):
             return response
 
         try:
-            result = await run_tool_loop(
-                (
-                    ChatMessage(role="system", content=turn.agent.system_prompt),
-                    ChatMessage(role="user", content=turn.user_message),
-                ),
-                turn.tools,
-                call_model,
-                max_iterations=_MAX_TOOL_ROUNDS,
-            )
+            with controller.activate():
+                result = await run_tool_loop(
+                    (
+                        ChatMessage(role="system", content=turn.agent.system_prompt),
+                        ChatMessage(role="user", content=turn.user_message),
+                    ),
+                    tools,
+                    call_model,
+                    max_iterations=_MAX_TOOL_ROUNDS + 1,
+                )
         except ToolLoopIterationLimitError as exc:
             return (
                 "I couldn't finish that request within the tool limit.",
@@ -450,6 +476,8 @@ class ForegroundAgent(Agent):
         timestamp_us: int | None,
     ) -> ImageQueryResult:
         response_id = ctx.metadata.message_id
+        controller = VoiceTurnController.current()
+        turn_id = controller.turn_id if controller is not None else None
         first = True
         opened = False
         cancelled = False
@@ -472,6 +500,8 @@ class ForegroundAgent(Agent):
                             final=False,
                             interrupt=True,
                             timestamp_us=timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
                     opened = True
@@ -492,6 +522,8 @@ class ForegroundAgent(Agent):
                                 final=False,
                                 interrupt=first,
                                 timestamp_us=timestamp_us,
+                                kind="result",
+                                turn_id=turn_id,
                             ),
                         )
                         first = False
@@ -513,6 +545,8 @@ class ForegroundAgent(Agent):
                             final=False,
                             interrupt=True,
                             timestamp_us=timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
                     opened = True
@@ -530,6 +564,8 @@ class ForegroundAgent(Agent):
                     final=False,
                     interrupt=first,
                     timestamp_us=timestamp_us,
+                    kind="result",
+                    turn_id=turn_id,
                 ),
             )
             opened = True
@@ -545,6 +581,8 @@ class ForegroundAgent(Agent):
                         VoiceOutput(
                             response_id=response_id,
                             timestamp_us=timestamp_us,
+                            kind="result",
+                            turn_id=turn_id,
                         ),
                     )
 

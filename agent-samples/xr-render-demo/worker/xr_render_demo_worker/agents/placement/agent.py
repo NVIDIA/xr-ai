@@ -18,16 +18,25 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_placement_tools
+from .._adaptive import adaptive_result, reasoning_messages
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+_RESPONSIBILITY = (
+    "Owns requested spatial changes to existing XR objects: move, nudge, swap, contain, stack, "
+    "or restore. A move or restore remains this agent's responsibility when its named target "
+    "cannot be found; report the failed lookup without creating anything. Does not own creation, "
+    "deletion, duplication, recoloring, reshaping, or resizing. Changing color is not a spatial "
+    "change, regardless of verbs such as turn, make, paint, or match."
+)
 DESCRIPTION = (
     "Use only when every target being repositioned already exists in SCENE OBJECTS; a verb such "
-    "as put or place does not by itself make a placement task. Owns spatial changes to existing "
-    "XR objects only: move, nudge, swap, contain, stack, or "
-    "restore a target already listed in SCENE OBJECTS. Examples: 'move ring-alpha left', 'put the "
-    "existing ring inside capsule-beta', and 'swap the cone and box'. If the object being placed is "
-    "absent from SCENE OBJECTS, it is a new-object task for object_agent. Never use for creation, "
-    "deletion, duplication, recoloring, reshaping, or resizing."
+    "as put or place does not by itself make a placement task. "
+    f"{_RESPONSIBILITY} Examples: 'move ring-alpha left', 'put the "
+    "existing ring inside capsule-beta', and 'swap the cone and box'. A request to put or place a "
+    "new target is a creation task for object_agent. An explicitly requested move or restore of a "
+    "named target is still a placement attempt if lookup fails: report that it is missing and do "
+    "not reinterpret it as creation. Never use for creation, deletion, duplication, recoloring, "
+    "reshaping, or resizing."
 )
 
 
@@ -66,17 +75,27 @@ def make_placement_agent(
             ]
             async def _call_model(transcript, definitions):
                 return await llm.chat(
-                    transcript,
+                    reasoning_messages(transcript, enabled=request.reasoning_mode == "deliberate"),
                     tools=list(definitions) or None,
                     max_tokens=2048,
                     temperature=0.0,
-                    enable_thinking=False,
+                    enable_thinking=request.reasoning_mode == "deliberate",
                 )
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=_RESPONSIBILITY,
+                result=loop_result,
+            )
 
     return Tool(
         name="placement_agent",
@@ -86,7 +105,11 @@ def make_placement_agent(
         handler=handle,
         examples=(
             "For 'Move X, make Y orange, and create Z', receive the focused instruction "
-            "'Move X'.",
+            "'Move X' with reasoning_mode='fast'.",
+            "For a novel arrangement that must reconcile multiple interacting relative "
+            "constraints before its first movement call, use reasoning_mode='deliberate'.",
+            "For example, arranging several existing shapes into a collision-free pattern while "
+            "preserving a separate spatial order uses reasoning_mode='deliberate'.",
         ),
     )
 

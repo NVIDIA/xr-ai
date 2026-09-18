@@ -22,6 +22,7 @@ from xr_ai_voice import (
     VadConfig,
     VoiceAgent,
     VoiceAggregationAgent,
+    VoiceInterrupted,
     VoiceParticipantLeft,
 )
 from xr_ai_voicegate import load_voice_gate_config
@@ -63,6 +64,18 @@ class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
     ) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is not None:
+            await self.release(participant_id)
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupted(
+        self,
+        _event: VoiceInterrupted,
+        ctx: RuntimeContext,
+    ) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            await self.release_all()
+        else:
             await self.release(participant_id)
 
 
