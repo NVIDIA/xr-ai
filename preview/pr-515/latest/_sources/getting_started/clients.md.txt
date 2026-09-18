@@ -258,7 +258,7 @@ hub certificate on port 8080 remains required for the LiveKit channel.
 
 ## Native C++
 
-The C++20 sample ships a working backend for the LiveKit C++ SDK v0.4.1.
+The C++20 sample requires LiveKit C++ SDK v1.10.2 or newer.
 
 ```bash
 cd client-samples/native
