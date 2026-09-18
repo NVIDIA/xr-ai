@@ -1,0 +1,6 @@
+Build an xr-ai application that <describe what it should do>. Ask me whether
+to use the latest stable release (or the latest prerelease if no stable release
+exists) or main, then fetch skills/build-your-app/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist at
+that ref, get my approval before using main for the skill, guide, and checkout.
+Install the skill (or just follow it), then build and verify the application.

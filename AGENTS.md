@@ -9,6 +9,9 @@ This file contains the repository-wide constraints for humans and agents. Read
 the nearest package or sample README for its entry point and canonical-doc
 links. User-facing docs live only under `docs/source/`.
 
+Building an application? Read
+[`docs/source/guides/building-your-app.md`](docs/source/guides/building-your-app.md).
+
 ## Repository map
 
 ```text
@@ -16,6 +19,7 @@ client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
 model-server-samples/  Shared model-server launch samples
+apps/            Application workspaces outside repository sample tooling
 services/        Hub, model servers, and typed capability services
 utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities
 tests/           Cross-package and integration tests
@@ -79,6 +83,10 @@ agent-samples/<kebab-name>/
       __main__.py
 ```
 
+Applications that are not repository samples use the same internal layout
+under `apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog,
+and test discovery exclude that top-level directory.
+
 - Orchestrators depend on `xr-ai-launcher`, declare `PROCESSES`, and call
   `run_stack`.
 - Stack items start in declaration order; members of a `Parallel` item start
@@ -93,7 +101,8 @@ agent-samples/<kebab-name>/
 - New worker code is a named package with relative internal imports and an
   explicit `__main__.py`.
 
-Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
+When preparing a repository sample, refer to
+[Adding a sample](docs/source/guides/adding-a-sample.md) and the
 [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) reference.
 
 ## Change contract
@@ -108,7 +117,7 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 - Sample configuration values and field guidance live in checked-in YAML/JSON
   and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
   beside a direct capability subproject are generated into the config reference.
-- After any `pyproject.toml` change, run
+- After changing a `pyproject.toml` outside `apps/`, run
   `uv run --script .github/scripts/generate_dependency_map.py`; the pre-commit hook
   normally regenerates the Python inventory automatically and CI rejects drift.
   Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
@@ -134,8 +143,9 @@ Refer to [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 - When a sample's behavior is driven by an LLM prompt, changing a rule in its
   `system.txt` requires a corresponding eval case. Do not reuse worked-example
   specifics in the eval fixture.
-- New source files need the repository SPDX header. File-type rules and
-  exceptions are in [SPDX headers](docs/source/guides/spdx-headers.md).
+- New source files outside `apps/` need the repository SPDX header. File-type
+  rules and exceptions are in
+  [SPDX headers](docs/source/guides/spdx-headers.md).
 - Preserve unrelated work in a dirty tree. Never use destructive Git commands
   to discard user changes.
 

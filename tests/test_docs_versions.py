@@ -165,6 +165,31 @@ def test_agent_prompt_is_owned_by_docs_snippet() -> None:
         assert "```{literalinclude} /_snippets/agent-setup-prompt.txt" in page.read_text()
 
 
+def test_application_prompt_is_owned_by_docs_snippet() -> None:
+    snippet_path = _ROOT / "docs" / "source" / "_snippets" / "app-build-prompt.txt"
+    snippet = snippet_path.read_text()
+    skills_page = (_ROOT / "docs" / "source" / "getting_started" / "skills.md")
+
+    assert "skills/build-your-app/SKILL.md" in snippet
+    assert "<describe what it should do>" in snippet
+    assert "```{literalinclude} /_snippets/app-build-prompt.txt" in (
+        skills_page.read_text()
+    )
+
+
+def test_build_your_app_skill_routes_to_versioned_guides() -> None:
+    skill = (_ROOT / "skills" / "build-your-app" / "SKILL.md").read_text()
+
+    assert (
+        "https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html"
+        in skill
+    )
+    assert (
+        "https://nvidia.github.io/xr-ai/main/guides/building-your-app.html"
+        in skill
+    )
+
+
 def test_latest_docs_alias_contains_complete_rendered_version() -> None:
     workflow = (_ROOT / ".github" / "workflows" / "docs.yaml").read_text()
     readme = (_ROOT / "README.md").read_text()
@@ -179,6 +204,7 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
         "getting_started/skills.html",
         "getting_started/quickstart.html",
         "getting_started/requirements.html",
+        "guides/building-your-app.html",
         "overview/architecture.html",
     ):
         assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme

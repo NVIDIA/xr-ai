@@ -87,7 +87,7 @@ class VoiceOutput(BaseModel):
     """Complete response text or one incremental fragment."""
 
     response_id: str | None = Field(default=None, min_length=1)
-    """Stable identifier shared by chunks of an incremental response."""
+    """Identifier shared by incremental chunks; recent reuse is ignored with one warning."""
 
     final: bool = True
     """Whether this message completes the response."""
@@ -257,7 +257,7 @@ class VoiceAgent(Agent):
         self._output_lock = asyncio.Lock()
         self._streams: dict[tuple[str, str, str], _ResponseStream] = {}
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
-        self._closed_streams: dict[tuple[str, str, str], None] = {}
+        self._closed_streams: dict[tuple[str, str, str], bool] = {}
         self._lifecycle_tasks: set[asyncio.Task[None]] = set()
         self._participant_lifecycle_tails: dict[str, asyncio.Task[None]] = {}
         self._transcript_queue: asyncio.Queue[
@@ -357,6 +357,15 @@ class VoiceAgent(Agent):
         stream: _ResponseStream
         async with self._output_lock:
             if key in self._closed_streams:
+                if not self._closed_streams[key]:
+                    logger.warning(
+                        "ignored voice output for closed response pid={!r} source={!r} "
+                        "response_id={!r}; use a new response_id",
+                        participant_id,
+                        metadata.source,
+                        output.response_id,
+                    )
+                    self._closed_streams[key] = True
                 return
             existing = self._streams.get(key)
             if existing is None:
@@ -381,6 +390,7 @@ class VoiceAgent(Agent):
                             interrupt=output.interrupt,
                             pts_us=timestamp_us,
                         )
+                    self._remember_closed_stream(key)
                     return
                 if len(self._streams) >= _OPEN_STREAM_CAPACITY:
                     oldest_key = next(iter(self._streams))
@@ -644,7 +654,7 @@ class VoiceAgent(Agent):
 
     def _remember_closed_stream(self, key: tuple[str, str, str]) -> None:
         self._closed_streams.pop(key, None)
-        self._closed_streams[key] = None
+        self._closed_streams[key] = False
         if len(self._closed_streams) > _CLOSED_STREAM_CAPACITY:
             oldest = next(iter(self._closed_streams))
             self._closed_streams.pop(oldest, None)

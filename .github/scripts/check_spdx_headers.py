@@ -18,8 +18,8 @@ Usage
     python3 .github/scripts/check_spdx_headers.py [paths...]            # check
     python3 .github/scripts/check_spdx_headers.py --fix [paths...]      # insert missing headers
 
-With no paths, walks the repo. Designed for ``pre-commit`` with
-``pass_filenames: true``.
+With no paths, walks the repository-owned source tree. Designed for
+``pre-commit`` with ``pass_filenames: true``.
 
 In ``--fix`` mode, missing headers are inserted in the right comment
 style for the file's language, after any required first-line directive
@@ -112,7 +112,7 @@ _SKIP_EXTS = {
 _SKIP_PATH_SUFFIXES = (
     "gradle/wrapper/gradle-wrapper.properties",
 )
-_SKIP_ROOT_DIRS = {"third_party_licenses"}
+_SKIP_ROOT_DIRS = {"apps", "third_party_licenses"}
 
 # ── Walk pruning ────────────────────────────────────────────────────────────
 # Explicit set rather than "any dotted directory" — we want to scan `.github/`
@@ -305,6 +305,8 @@ def discover(root: Path) -> list[Path]:
     def _walk(d: Path) -> None:
         for entry in sorted(d.iterdir()):
             if entry.is_dir():
+                if d == root and entry.name in _SKIP_ROOT_DIRS:
+                    continue
                 if entry.name in _PRUNE_DIRS:
                     continue
                 # Skip virtualenvs regardless of directory name — the

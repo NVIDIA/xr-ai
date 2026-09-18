@@ -3,11 +3,11 @@
 
 name: lock-check
 
-# Runs `uv lock` on every pyproject.toml in the repo to prove that each
-# project's declared dependencies resolve across the full `requires-python`
-# range stated in that pyproject. uv resolves universally across the range,
-# so a single `uv lock` per project covers every supported interpreter
-# without needing a Python-version matrix here.
+# Runs `uv lock` on every repository-owned pyproject.toml outside `apps/` to
+# prove that each project's declared dependencies resolve across the full
+# `requires-python` range stated in that pyproject. uv resolves universally
+# across the range, so a single `uv lock` per project covers every supported
+# interpreter without needing a Python-version matrix here.
 #
 # The root uv.toml limits package-index candidates to the last repository-wide
 # qualification point. This is the repo-wide check on Python-version +
@@ -95,6 +95,7 @@ jobs:
                           -not -path '*/.venv/*' \
                           -not -path '*/node_modules/*' \
                           -not -path '*/.git/*' \
+                          -not -path './apps/*' \
                           -not -path './dependency-manifest/*' \
                           -print0)
           if [ "${#failed[@]}" -gt 0 ]; then

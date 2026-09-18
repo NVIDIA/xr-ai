@@ -278,15 +278,39 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
         assert "spark_uma" not in config
 
 
+def _repository_yaml_paths(root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for path in root.rglob("*.yaml"):
+        relative_parts = path.relative_to(root).parts
+        if relative_parts[:1] == ("apps",) or ".venv" in relative_parts:
+            continue
+        paths.append(path)
+    return sorted(paths)
+
+
 def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
     configured_images: dict[Path, str] = {}
-    for path in _REPO_ROOT.rglob("*.yaml"):
+    for path in _repository_yaml_paths(_REPO_ROOT):
         config = yaml.safe_load(path.read_text())
         if isinstance(config, dict) and "vllm_image" in config:
             configured_images[path] = config["vllm_image"]
 
     assert configured_images
     assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
+
+
+def test_repository_yaml_paths_exclude_apps_and_virtual_environments(
+    tmp_path: Path,
+) -> None:
+    included = tmp_path / "services" / "server.yaml"
+    nested_apps = tmp_path / "services" / "apps" / "helper.yaml"
+    app = tmp_path / "apps" / "private-app" / "config.yaml"
+    virtualenv = tmp_path / "services" / "worker" / ".venv" / "config.yaml"
+    for path in (included, nested_apps, app, virtualenv):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("enabled: true\n")
+
+    assert _repository_yaml_paths(tmp_path) == sorted((included, nested_apps))
 
 
 def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
