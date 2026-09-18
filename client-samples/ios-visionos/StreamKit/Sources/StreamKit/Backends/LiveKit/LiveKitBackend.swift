@@ -42,6 +42,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var sessionConfig: SessionConfig = .default
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
+    private var connectionGeneration: UInt64 = 0
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -371,6 +372,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     private func tearDown() async {
+        connectionGeneration &+= 1
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -698,8 +700,11 @@ extension LiveKitBackend: RoomDelegate {
     public func room(
         _ room: Room,
         didUpdateConnectionState connectionState: LiveKit.ConnectionState,
-        from _: LiveKit.ConnectionState
+        from oldState: LiveKit.ConnectionState
     ) {
+        if self.room === room, oldState == .connected, connectionState != .connected {
+            connectionGeneration &+= 1
+        }
         onConnectionStateChanged?(connectionState.toStreamKitState())
     }
 

@@ -7,6 +7,7 @@
 
 C++20 StreamKit implementation backed by the LiveKit C++ SDK. It supports
 participant data, status, telemetry, and host-injected audio and video frames.
+Use LiveKit C++ SDK v1.10.2 or newer.
 
 ```bash
 cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk

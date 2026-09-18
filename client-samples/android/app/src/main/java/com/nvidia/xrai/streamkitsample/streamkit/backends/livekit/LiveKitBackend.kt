@@ -45,6 +45,7 @@ import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 /**
@@ -99,6 +100,19 @@ internal class LiveKitBackend(
 
     @Volatile private var room: Room? = null
     @Volatile private var isConnected = false
+    private val connectionGeneration = AtomicLong()
+    private val byteStreamWriter = LiveKitByteStreamWriter(
+        snapshotConnection = {
+            room?.takeIf { isConnected }?.let {
+                ByteStreamConnection(it, connectionGeneration.get())
+            }
+        },
+        isConnectionActive = { connection ->
+            isConnected &&
+                room === connection.room &&
+                connectionGeneration.get() == connection.generation
+        },
+    )
 
     /** Coroutine scope active for the lifetime of one connection. */
     private var connectionScope: CoroutineScope? = null
@@ -307,6 +321,7 @@ internal class LiveKitBackend(
         if (room !== eventRoom) return
         when (event) {
             is RoomEvent.Reconnecting -> {
+                connectionGeneration.incrementAndGet()
                 isConnected = false
                 onConnectionStateChanged?.invoke(ConnectionState.RECONNECTING)
             }
@@ -315,6 +330,7 @@ internal class LiveKitBackend(
                 onConnectionStateChanged?.invoke(ConnectionState.CONNECTED)
             }
             is RoomEvent.Disconnected -> {
+                connectionGeneration.incrementAndGet()
                 isConnected = false
                 room = null
                 connectionScope?.cancel()
@@ -426,6 +442,7 @@ internal class LiveKitBackend(
     // ── Teardown ──────────────────────────────────────────────────────────────
 
     private suspend fun tearDown() {
+        connectionGeneration.incrementAndGet()
         isConnected = false
         connectionScope?.cancel()
         connectionScope = null
