@@ -20,11 +20,12 @@ from ...spatial_ops import TurnGuard, make_appearance_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
-    "Change only the color of existing XR objects: every recolor of an existing object is this "
-    "agent, whatever the verb, never object_agent. The instruction keeps the user's color "
-    "source words verbatim: a color word, an XR object to copy (\"same as capsule-8\"), or a "
-    "physical-world phrase (\"match my jacket\") whose color this agent reads from the camera "
-    "itself; never guess a physical color and never send vision_agent to look one up."
+    "Use for every requested end state that changes only the color of an existing XR object, "
+    "whatever verb expresses it. Examples: "
+    "'paint the ring orange', 'turn the box the color of the sphere', and 'match the cone to my "
+    "jacket'. Pass the target and the user's complete color-source words. This agent reads a "
+    "physical color source itself, so route the recolor directly here without vision_agent. "
+    "Never use for movement, creation, deletion, shape, or size."
 )
 
 
@@ -62,15 +63,29 @@ def make_appearance_agent(
                 )),
             ]
             async def _call_model(transcript, definitions):
-                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+                return await llm.chat(
+                    transcript,
+                    tools=list(definitions) or None,
+                    max_tokens=2048,
+                    temperature=0.0,
+                )
             try:
                 loop_result = await run_tool_loop(messages, toolset, _call_model)
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
             return SubagentResult(result=loop_result.content or "Done.")
 
-    return Tool(name="appearance_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="appearance_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=(
+            "For 'Move X, make Y orange, and create Z', receive the focused instruction "
+            "'Make Y orange'.",
+        ),
+    )
 
 
 __all__ = ["make_appearance_agent"]

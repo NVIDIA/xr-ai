@@ -285,7 +285,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.instrument_state_interval_s == 10.0
     assert config.instrument_lost_after_s == 30.0
     assert "Previous caption" not in config.monitor_prompt
-    assert "current_view" in config.foreground_prompt
+    assert "tool's description as the authoritative statement" in config.foreground_prompt
     monitor_prompt = config.monitor_prompt.lower()
     current_view_prompt = (
         (_WORKER / "lab_instrument_monitoring_worker" / "prompts" / "current_view_prompt.txt").read_text().lower()
@@ -1974,6 +1974,7 @@ def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
         LAB_INSTRUMENTS_STATUS_TOOL,
     }
     assert all(case["query"].lower() not in prompt for case in cases)
+    assert all(tool.name.lower() not in prompt for tool in FOREGROUND_TOOL_DEFS)
 
 
 def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None:

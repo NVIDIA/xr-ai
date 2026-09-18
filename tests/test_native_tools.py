@@ -212,6 +212,28 @@ def test_tool_definitions_adapt_native_tools_for_model_services() -> None:
     )
 
 
+def test_tool_owns_prompt_examples_without_changing_model_definition() -> None:
+    examples = ["Add two positive integers."]
+    tool = Tool(
+        "add",
+        "Add two integers.",
+        AddRequest,
+        AddResult,
+        add,
+        examples=examples,
+    )
+    examples.append("This does not mutate the tool.")
+
+    assert tool.examples == ("Add two positive integers.",)
+    assert tool_definitions((tool,)) == (
+        ToolDef(
+            name="add",
+            description="Add two integers.",
+            parameters=AddRequest.model_json_schema(),
+        ),
+    )
+
+
 async def test_handle_tool_call_returns_a_model_ready_tool_message() -> None:
     tool = Tool("add", "Add two integers.", AddRequest, AddResult, add)
 

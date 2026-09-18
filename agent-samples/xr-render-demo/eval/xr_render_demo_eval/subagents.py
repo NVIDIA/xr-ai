@@ -642,6 +642,218 @@ CASES = (
             },
         ),
     ),
+    SubagentCase(
+        name="move_down_stated_distance",
+        agent="placement",
+        instruction="Move cone-0 down forty centimeters.",
+        scene=(_CONE,),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "y": (0.95, 1.05)}},
+        ),
+    ),
+    SubagentCase(
+        name="move_toward_user",
+        agent="placement",
+        instruction="Bring capsule-2 half a meter closer to me.",
+        scene=(_CAPSULE,),
+        expect=(
+            {
+                "tool": "update_primitive",
+                "args": {
+                    "obj_id": "capsule-2",
+                    "x": (1.55, 1.67),
+                    "y": (1.35, 1.5),
+                    "z": (-1.35, -1.22),
+                },
+            },
+        ),
+    ),
+    SubagentCase(
+        name="placement_rejects_creation",
+        agent="placement",
+        instruction="Create a violet ring in front of the user.",
+        scene=(_CONE,),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="creation",
+    ),
+    SubagentCase(
+        name="placement_rejects_removal",
+        agent="placement",
+        instruction="Delete cone-0.",
+        scene=(_CONE,),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="remov",
+    ),
+    SubagentCase(
+        name="appearance_copies_scene_object_color",
+        agent="appearance",
+        instruction="Make ring-1 the same color as cone-0.",
+        scene=({**_CONE, "color": {"r": 1, "g": 0, "b": 0}}, _RING),
+        expect=(
+            {
+                "tool": "update_primitive",
+                "args": {
+                    "obj_id": "ring-1",
+                    "r": (0.95, 1.0),
+                    "g": (0.0, 0.05),
+                    "b": (0.0, 0.05),
+                },
+            },
+        ),
+    ),
+    SubagentCase(
+        name="appearance_recolors_plural_targets",
+        agent="appearance",
+        instruction="Make cone-0 and ring-1 blue.",
+        scene=(_CONE, _RING),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "b": (0.8, 1.0)}},
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.8, 1.0)}},
+        ),
+    ),
+    SubagentCase(
+        name="qualitative_resize_uses_default_factor",
+        agent="object",
+        instruction="Make cone-0 bigger.",
+        scene=(_CONE,),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "size": (0.145, 0.155)}},
+        ),
+    ),
+    SubagentCase(
+        name="object_agent_rejects_movement",
+        agent="object",
+        instruction="Move cone-0 behind ring-1.",
+        scene=(_CONE, _RING),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="placement",
+    ),
+    SubagentCase(
+        name="describe_surroundings_uses_live_view",
+        agent="vision",
+        instruction="Describe the physical surroundings visible to the user.",
+        scene=(_CONE,),
+        vision_answer="A wooden table and a doorway are visible.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="table",
+    ),
+    SubagentCase(
+        name="recall_original_scene_color",
+        agent="memory",
+        instruction="Recall the original color of the first object the user created.",
+        memory="The user first created an amber ring.",
+        required_tools=("recall_conversation",),
+        answer_contains="amber",
+    ),
+    # Held-out leaf matrix: tool synonyms, rejected cross-domain work, and
+    # fresh perception/history paraphrases.
+    SubagentCase(
+        name="holdout_nudge_right_stated_distance",
+        agent="placement",
+        instruction="Shift cone-0 twenty-five centimeters to my right.",
+        scene=(_CONE,),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "x": (0.70, 0.80)}},
+        ),
+    ),
+    SubagentCase(
+        name="holdout_missing_target_stops",
+        agent="placement",
+        instruction="Move the purple sphere above cone-0.",
+        scene=(_CONE, _RING),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="purple sphere",
+    ),
+    SubagentCase(
+        name="holdout_placement_rejects_recolor",
+        agent="placement",
+        instruction="Turn ring-1 orange.",
+        scene=(_RING,),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="color",
+    ),
+    SubagentCase(
+        name="holdout_physical_color_source_paraphrase",
+        agent="appearance",
+        instruction="Match ring-1 to the physical mug beside the user.",
+        scene=(_RING,),
+        physical_answer="0.2, 0.7, 0.4",
+        physical_expect_source="physical mug beside the user",
+        required_tools=("resolve_physical_color",),
+        expect=(
+            {
+                "tool": "update_primitive",
+                "args": {"obj_id": "ring-1", "r": (0.15, 0.25), "g": (0.65, 0.75), "b": (0.35, 0.45)},
+            },
+        ),
+    ),
+    SubagentCase(
+        name="holdout_appearance_rejects_move",
+        agent="appearance",
+        instruction="Move ring-1 behind cone-0.",
+        scene=(_CONE, _RING),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="move",
+    ),
+    SubagentCase(
+        name="holdout_erase_object_synonym",
+        agent="object",
+        instruction="Erase capsule-2.",
+        scene=(_CAPSULE,),
+        expect=(
+            {"tool": "remove_primitive", "args": {"obj_id": "capsule-2"}},
+        ),
+    ),
+    SubagentCase(
+        name="holdout_qualitative_smaller",
+        agent="object",
+        instruction="Make ring-1 smaller.",
+        scene=(_RING,),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "size": (0.045, 0.055)}},
+        ),
+    ),
+    SubagentCase(
+        name="holdout_reshape_synonym",
+        agent="object",
+        instruction="Turn ring-1 into a capsule.",
+        scene=(_RING,),
+        expect=(
+            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "prim_type": "capsule"}},
+        ),
+    ),
+    SubagentCase(
+        name="holdout_object_rejects_recolor",
+        agent="object",
+        instruction="Paint capsule-2 teal.",
+        scene=(_CAPSULE,),
+        forbid_tools=tuple(sorted(_MUTATING)),
+        answer_contains="recolor",
+    ),
+    SubagentCase(
+        name="holdout_live_surroundings_paraphrase",
+        agent="vision",
+        instruction="Tell me whether an open doorway is ahead of the user now.",
+        vision_answer="An open doorway is directly ahead.",
+        required_tools=("look_at_current_frame",),
+        answer_contains="open doorway",
+    ),
+    SubagentCase(
+        name="holdout_past_view_paraphrase",
+        agent="vision",
+        instruction="Was the doorway open fifteen seconds before the utterance?",
+        vision_answer="The doorway was closed.",
+        required_tools=("look_at_past_frame",),
+        answer_contains="closed",
+    ),
+    SubagentCase(
+        name="holdout_memory_creation_order",
+        agent="memory",
+        instruction="Which object did the user ask to create first?",
+        memory="The user requested a turquoise ring before a gray capsule.",
+        required_tools=("recall_conversation",),
+        answer_contains="turquoise ring",
+    ),
 )
 
 
@@ -730,7 +942,7 @@ async def run_case(case: SubagentCase) -> bool:
         physical_answer=case.physical_answer,
         physical_expect_source=case.physical_expect_source,
     )
-    llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
+    llm = make_llm(load_models_config(harness.models_config_path()), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         context = SceneContext(fake_scene, fake_tracking)

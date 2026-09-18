@@ -20,23 +20,17 @@ from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
-# The creation-always-new rule intentionally duplicates supervisor_prompt.txt; see
-# docs/source/reference/xr-render-demo.md ("stated in both places on purpose").
 DESCRIPTION = (
-    "Create new XR objects at their requested initial positions, and remove, resize, duplicate, "
-    "or reshape existing ones; never moves or recolors an existing object. Moving includes "
-    "putting one in, on, or next to another, and any color change of an existing object belongs "
-    "to appearance_agent. A creation request always makes a new object, even when SCENE OBJECTS "
-    "already lists an identical one. Creation carries its position in the same single call, "
-    "whether user-relative, anchored on scene objects, or between two of them; this agent "
-    "resolves tracking and anchor geometry itself. Phrase creation as: Create <count, when more "
-    "than one> <color> <shape>(s) <the user's own spatial words>, with the user's color words "
-    "verbatim (a color word, \"same as capsule-8\", or a physical phrase like \"the color of my "
-    "apron\") and every requested copy in the one instruction. When the user named no position "
-    "at all, end with \"no position stated\"; never add that phrase when spatial words are "
-    "present, and never invent a position. Removal words with a side (\"the X on the left\") "
-    "stay a removal; a resize instruction carries the resolved id (\"Resize capsule-8 to half "
-    "its current size\")."
+    "Use whenever the requested target is new or absent from SCENE OBJECTS, even with verbs such "
+    "as put or place. Also owns object existence, shape, and size: create any new XR object at "
+    "its requested initial position; remove or delete one; duplicate or copy one; reshape one; "
+    "or resize one. Examples: "
+    "'put a new ring inside the capsule', 'erase the left cone', and 'make ring-alpha smaller'. A "
+    "creation remains new even if an identical object exists, and its initial position stays in "
+    "the same instruction. This agent reads a physical color source for a new object itself, so "
+    "route that creation directly here without vision_agent. Preserve the user's shape, color, "
+    "count, source, and spatial words; include resolved ids for existing targets. Never use for "
+    "moving or recoloring an existing object."
 )
 
 
@@ -77,15 +71,31 @@ def make_object_agent(
                 )),
             ]
             async def _call_model(transcript, definitions):
-                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+                return await llm.chat(
+                    transcript,
+                    tools=list(definitions) or None,
+                    max_tokens=2048,
+                    temperature=0.0,
+                )
             try:
                 loop_result = await run_tool_loop(messages, toolset, _call_model)
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
             return SubagentResult(result=loop_result.content or "Done.")
 
-    return Tool(name="object_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="object_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=(
+            "For 'Move X, make Y orange, and create Z', receive the focused instruction "
+            "'Create Z'.",
+            "If a cone already exists, 'Make a cone beside the capsule' still means create a "
+            "new cone beside the existing capsule.",
+        ),
+    )
 
 
 __all__ = ["make_object_agent"]

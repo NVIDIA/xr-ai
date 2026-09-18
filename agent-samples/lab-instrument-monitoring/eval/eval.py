@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,11 @@ from xr_ai_models import ChatMessage, load_models_config, make_llm
 _SAMPLE = Path(__file__).resolve().parents[1]
 
 
+def _models_config() -> Path:
+    override = os.environ.get("XR_AI_EVAL_MODELS_CONFIG")
+    return Path(override) if override else _SAMPLE / "yaml" / "models.json"
+
+
 async def main() -> None:
     prompt = (
         (_SAMPLE / "worker" / "lab_instrument_monitoring_worker" / "prompts" / "foreground_prompt.txt")
@@ -26,7 +32,7 @@ async def main() -> None:
     )
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     llm = make_llm(
-        load_models_config(_SAMPLE / "yaml" / "models.json"),
+        load_models_config(_models_config()),
         "llm",
     )
     failures: list[str] = []

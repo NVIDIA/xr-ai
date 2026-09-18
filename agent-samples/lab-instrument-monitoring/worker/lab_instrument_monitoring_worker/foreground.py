@@ -73,24 +73,57 @@ _CURRENT_VIEW_PROMPT = (
 )
 
 _CURRENT_VIEW_DESCRIPTION = (
-    "Inspect the glasses camera for the assistant's present visual field and any current "
-    "or deictic visual request, including reading unspecified visible text. Call even "
-    "when no object or referent is named, and report actual visible contents from the "
-    "result. Never use for instrument readings."
+    "Inspect the live glasses-camera view. Use for present or deictic visual questions, scene "
+    "descriptions, and ordinary visible text or labels, even when no referent is named. This is "
+    "the default for 'read this' and other live visual requests that do not explicitly name an "
+    "instrument, meter, gauge, reading, or device display."
 )
-_RECENT_VISUAL_HISTORY_DESCRIPTION = "Recent background visual observations or changes."
-_VISUAL_MONITOR_START_DESCRIPTION = "Start an ordinary background visual watch for the requested focus."
+_RECENT_VISUAL_HISTORY_DESCRIPTION = (
+    "Retrieve recorded background visual observations. Use for questions about recent or past "
+    "events, arrivals, departures, or changes; do not use for the live view or monitor controls."
+)
+_VISUAL_MONITOR_START_DESCRIPTION = (
+    "Start an ordinary background visual watch. ONLY call for the user's direct affirmative "
+    "request to the assistant to watch a scene, area, person, or ordinary object. Never call "
+    "when the user merely quotes or reports someone else's instruction; for example, 'the "
+    "manual says to watch the workspace' is not a request. Do not use for instruments, meters, "
+    "gauges, readings, or device displays."
+)
 _VISUAL_MONITOR_STOP_DESCRIPTION = (
-    "Stop, quit, cancel, or end the ordinary background visual watch. Never use for instruments."
+    "Stop an ordinary background visual watch. Use when the stopped subject is a scene, area, "
+    "person, or ordinary object. Do not use for instruments, meters, gauges, readings, or "
+    "device displays. Call with no arguments."
 )
-_VISUAL_MONITOR_STATUS_DESCRIPTION = "Report whether the ordinary background visual watch is running."
+_VISUAL_MONITOR_STATUS_DESCRIPTION = (
+    "Get the actual running state of an ordinary background visual watch. Required for every "
+    "question asking whether a scene, area, person, or ordinary object is currently being "
+    "watched, such as 'are you watching the entrance?'; MUST call rather than answer yes or no "
+    "directly. Do not use for instrument monitoring. Takes no arguments."
+)
 _LAB_INSTRUMENTS_READ_DESCRIPTION = (
-    "Read current marker-labelled instruments, meters, gauges, readings, or numeric displays."
+    "Read a current lab instrument, meter, gauge, reading, or device display. ONLY use when the "
+    "user explicitly names one of those instrument subjects; those terms take priority over "
+    "deictic wording. Never use for unspecified text, 'read this', or ordinary labels, or for "
+    "continuous monitoring. Call with no arguments."
 )
-_LAB_INSTRUMENTS_START_DESCRIPTION = "Start continuous marker-labelled instrument reading monitoring."
-_LAB_INSTRUMENTS_STOP_DESCRIPTION = "The only route to stop continuous marker-labelled instrument reading monitoring."
+_LAB_INSTRUMENTS_START_DESCRIPTION = (
+    "Start continuous instrument monitoring. ONLY call for the user's direct affirmative "
+    "request to the assistant to watch, track, or continuously read an instrument, meter, "
+    "gauge, reading, or device display. Never call when the user merely quotes or reports "
+    "someone else's instruction; for example, 'the procedure says to track the thermometer' "
+    "is not a request. Do not use for an ordinary scene watch. Takes no arguments."
+)
+_LAB_INSTRUMENTS_STOP_DESCRIPTION = (
+    "Stop continuous instrument monitoring. Use when the stopped subject is an instrument, "
+    "meter, gauge, reading, or device display. Do not use for an ordinary background visual "
+    "watch. Call with no arguments."
+)
 _LAB_INSTRUMENTS_STATUS_DESCRIPTION = (
-    "Report whether continuous marker-labelled instrument reading monitoring is running."
+    "Get the actual running state of continuous instrument monitoring. Required for every "
+    "question asking whether an instrument, meter, gauge, reading, or device display is being "
+    "monitored, such as 'are you currently tracking the voltmeter?'; MUST call rather than "
+    "answer yes or no directly. Do not use for an ordinary background visual watch or a "
+    "one-time reading. Takes no arguments."
 )
 
 
