@@ -29,6 +29,15 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// *(simulator)* `injectVideoFrame(_:)` was called before `startCamera()`.
     case cameraNotStarted
 
+    /// The selected custom backend does not implement file transfer.
+    case fileTransferUnsupported
+
+    /// File-transfer metadata is invalid.
+    case invalidFileMetadata(String)
+
+    /// The local transport could not verify successful stream completion.
+    case fileTransferIncomplete
+
     // MARK: - LocalizedError
 
     public var errorDescription: String? {
@@ -43,6 +52,12 @@ public enum StreamError: Error, LocalizedError, Sendable {
                    "Call openImmersiveSpace() in your app before startCamera()."
         case .cameraNotStarted:
             return "Call startCamera() before injecting frames."
+        case .fileTransferUnsupported:
+            return "The selected streaming backend does not support file transfer."
+        case .invalidFileMetadata(let reason):
+            return "Invalid file metadata: \(reason)"
+        case .fileTransferIncomplete:
+            return "The file stream did not close successfully on the active connection."
         }
     }
 }

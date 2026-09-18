@@ -92,4 +92,28 @@ export class StreamError extends Error {
   static cameraRequiresConnection() {
     return new StreamError('cameraRequiresConnection', 'Connect before starting the camera.');
   }
+
+  /**
+   * The selected custom backend does not implement file transfer.
+   *
+   * @returns {StreamError}
+   */
+  static fileTransferUnsupported() {
+    return new StreamError(
+      'fileTransferUnsupported',
+      'The selected streaming backend does not support file transfer.',
+    );
+  }
+
+  /**
+   * The local transport could not verify successful stream completion.
+   *
+   * @returns {StreamError}
+   */
+  static fileTransferIncomplete() {
+    return new StreamError(
+      'fileTransferIncomplete',
+      'The file stream did not close successfully on the active connection.',
+    );
+  }
 }

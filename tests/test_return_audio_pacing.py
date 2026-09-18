@@ -13,6 +13,7 @@ import pytest
 from device_io_hub.transport.livekit import _room_client as room_client_module
 from device_io_hub.transport.livekit._room_client import (
     RoomClient,
+    _ReturnAudioEntry,
     _ReturnAudioPipe,
 )
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
@@ -215,6 +216,62 @@ async def test_room_client_applies_buffer_limit_per_participant(monkeypatch):
         assert alice_source is not bob_source
     finally:
         await asyncio.gather(alice_pipe.close(), bob_pipe.close())
+
+
+async def test_old_disconnect_preserves_reconnected_participant_audio() -> None:
+    notify_started = asyncio.Event()
+    release_notify = asyncio.Event()
+    unpublished: list[str] = []
+
+    class _Endpoint:
+        async def notify_participant_left(self, *_args) -> None:
+            notify_started.set()
+            await release_notify.wait()
+
+    class _LocalParticipant:
+        async def unpublish_track(self, sid: str) -> None:
+            unpublished.append(sid)
+
+    class _Pipe:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    old_pipe = _Pipe()
+    new_pipe = _Pipe()
+    old_entry = _ReturnAudioEntry(
+        "old-session",
+        SimpleNamespace(),
+        SimpleNamespace(sid="old-track"),
+        old_pipe,
+    )
+    new_entry = _ReturnAudioEntry(
+        "new-session",
+        SimpleNamespace(),
+        SimpleNamespace(sid="new-track"),
+        new_pipe,
+    )
+    client = RoomClient.__new__(RoomClient)
+    client._file_tasks = {}
+    client._return_audio = {"alice": old_entry}
+    client._ep = _Endpoint()
+    client._room = SimpleNamespace(local_participant=_LocalParticipant())
+    client._refresh_return_track_permissions = lambda: None
+
+    leaving = asyncio.create_task(
+        client._handle_left(SimpleNamespace(identity="alice"), "old-session")
+    )
+    await asyncio.wait_for(notify_started.wait(), 1)
+    client._return_audio["alice"] = new_entry
+    release_notify.set()
+    await leaving
+
+    assert client._return_audio["alice"] is new_entry
+    assert old_pipe.closed
+    assert not new_pipe.closed
+    assert unpublished == ["old-track"]
 
 
 async def test_voice_preroll_pacing_does_not_overflow_120ms_pipe(monkeypatch):

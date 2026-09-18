@@ -77,6 +77,16 @@ void StreamSession::Send(std::span<const std::byte> data,
     backend_->Send(data, reliable, topic);
 }
 
+FileTransferInfo StreamSession::SendBytes(std::span<const std::byte> data,
+                                          const FileSendOptions& options) {
+    return backend_->SendBytes(data, options);
+}
+
+FileTransferInfo StreamSession::SendFile(const std::filesystem::path& path,
+                                         const FileSendOptions& options) {
+    return backend_->SendFile(path, options);
+}
+
 // ── Private ───────────────────────────────────────────────────────────────────
 
 /// Subscribe to the backend's event hooks and forward them to this session's
