@@ -36,7 +36,6 @@ from xr_ai_hub import (
     ControlMessage,
     DataMessage,
     FrameSignal,
-    ImageCaptureData,
     MsgType,
     ParticipantEvent,
     PixelFormat,
@@ -45,6 +44,7 @@ from xr_ai_hub import (
     decode,
     encode,
 )
+from xr_ai_hub._types import ImageCaptureData
 
 from ._registration import _CONNECTOR_REGISTER_ACK_TOPIC
 
@@ -293,7 +293,7 @@ class ConnectorEndpoint:
     async def push_data(self, msg: DataMessage) -> None:
         await self._push.send(encode(MsgType.DATA_MESSAGE, msg))
 
-    async def push_image_capture(self, image: ImageCaptureData) -> None:
+    async def _push_image_capture(self, image: ImageCaptureData) -> None:
         """Deliver one complete client-captured encoded image to processors."""
 
         await self._push.send(encode(MsgType.IMAGE_CAPTURE_DATA, image))

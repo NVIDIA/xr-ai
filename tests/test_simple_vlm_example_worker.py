@@ -180,7 +180,7 @@ class _LiveEndpoint:
     def on_frame(self, callback) -> None:
         self.frame_callback = callback
 
-    def on_image_capture(self, _callback):
+    def _on_image_capture(self, _callback):
         return lambda: None
 
     @property

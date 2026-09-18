@@ -23,12 +23,13 @@ from typing import NamedTuple
 import numpy as np
 from livekit import rtc
 from loguru import logger
+from xr_ai_hub._capture import _CAPTURE_REJECTION_MIME_TYPE
+from xr_ai_hub._types import ImageCaptureData
 
 from device_io_hub.ipc import (
     AudioChunk,
     ConnectorEndpoint,
     DataMessage,
-    ImageCaptureData,
     PixelFormat,
     ReturnAudioFlush,
 )
@@ -49,6 +50,9 @@ _RETURN_AUDIO_DROP_LOG_INTERVAL_S = 5.0
 _IMAGE_CAPTURE_TOPIC = "camera.capture.response"
 _IMAGE_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
 _IMAGE_CAPTURE_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+_IMAGE_CAPTURE_RESPONSE_MIME_TYPES = _IMAGE_CAPTURE_MIME_TYPES | {
+    _CAPTURE_REJECTION_MIME_TYPE
+}
 
 
 class _QueuedReturnAudioFrame(NamedTuple):
@@ -310,7 +314,7 @@ class RoomClient:
             if not participant_id or not request_id:
                 logger.warning("Client image stream without sender or request ID — dropped")
                 return
-            if info.mime_type not in _IMAGE_CAPTURE_MIME_TYPES:
+            if info.mime_type not in _IMAGE_CAPTURE_RESPONSE_MIME_TYPES:
                 logger.warning(
                     "Client image stream {} has unsupported media type {!r} — dropped",
                     request_id,
@@ -339,7 +343,7 @@ class RoomClient:
             if not image:
                 logger.warning("Client image stream {} was empty — dropped", request_id)
                 return
-            await self._ep.push_image_capture(
+            await self._ep._push_image_capture(
                 ImageCaptureData(
                     participant_id=participant_id,
                     request_id=request_id,

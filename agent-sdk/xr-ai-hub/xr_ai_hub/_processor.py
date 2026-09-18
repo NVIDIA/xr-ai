@@ -408,7 +408,7 @@ class ProcessorEndpoint:
 
         return unsubscribe
 
-    def on_image_capture(self, cb: ImageCaptureCallback) -> CallbackUnsubscribe:
+    def _on_image_capture(self, cb: ImageCaptureCallback) -> CallbackUnsubscribe:
         """Register for completed participant image-capture requests."""
 
         self._image_capture_cbs.append(cb)
@@ -429,12 +429,12 @@ class ProcessorEndpoint:
         """Send an application data message to its target participant."""
         await self._push.send(encode(MsgType.RETURN_DATA, msg))
 
-    async def request_image_capture(self, request: ImageCaptureRequest) -> None:
+    async def _request_image_capture(self, request: ImageCaptureRequest) -> None:
         """Ask the hub to invoke one participant's image-capture capability."""
 
         await self._push.send(encode(MsgType.IMAGE_CAPTURE_REQUEST, request))
 
-    async def cancel_image_capture(self, cancel: ImageCaptureCancel) -> None:
+    async def _cancel_image_capture(self, cancel: ImageCaptureCancel) -> None:
         """Cancel a previously requested participant image capture."""
 
         await self._push.send(encode(MsgType.IMAGE_CAPTURE_CANCEL, cancel))

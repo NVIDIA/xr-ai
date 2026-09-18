@@ -44,6 +44,7 @@ struct MockBackend : streamkit::StreamingBackend {
     std::vector<std::string> sent_payloads;
     std::vector<std::uint8_t> sent_image;
     std::string sent_image_request_id;
+    std::string sent_image_mime_type;
 
     void Connect(const streamkit::SessionConfig&) override {
         ++connect_calls;
@@ -71,10 +72,11 @@ struct MockBackend : streamkit::StreamingBackend {
     }
     void SendImage(std::span<const std::uint8_t> data,
                    std::string_view request_id,
-                   std::string_view,
+                   std::string_view mime_type,
                    std::string_view) override {
         sent_image.assign(data.begin(), data.end());
         sent_image_request_id = request_id;
+        sent_image_mime_type = mime_type;
     }
 
     // Helpers for tests to drive the event hooks the backend would normally
@@ -201,9 +203,19 @@ int main() {
     ExpectEq(raw->sent_image_request_id, std::string("capture-1"));
     ExpectEq(data_calls, 1);
 
+    session.on_image_capture_requested = {};
     raw->fire_data(
         "camera.capture.request",
-        R"({"version":2,"request_id":"capture-2","timeout_ms":5000})");
+        R"({"version":1,"request_id":"capture-2","timeout_ms":5000})");
+    ExpectEq(raw->sent_image_request_id, std::string("capture-2"));
+    ExpectEq(raw->sent_image_mime_type,
+             std::string("application/vnd.xr-ai.capture-rejection+json"));
+    ExpectEq(std::string(raw->sent_image.begin(), raw->sent_image.end()),
+             std::string(R"({"version":1,"status":"rejected"})"));
+
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":2,"request_id":"capture-3","timeout_ms":5000})");
     ExpectEq(capture_calls, 1);
 
     raw->fire_agent_status("processing");
