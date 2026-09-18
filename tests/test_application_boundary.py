@@ -43,7 +43,11 @@ def test_repository_file_checks_exclude_applications() -> None:
     pre_commit = yaml.safe_load((_ROOT / ".pre-commit-config.yaml").read_text())
     ruff = tomllib.loads((_ROOT / "ruff.toml").read_text())
     lock_workflow = (_ROOT / ".github" / "workflows" / "lock-check.yml").read_text()
+    gitignore = (_ROOT / ".gitignore").read_text().splitlines()
 
     assert pre_commit["exclude"] == "^apps/"
-    assert "apps" in ruff["extend-exclude"]
+    assert "apps/**" in ruff["extend-exclude"]
+    assert "apps" not in ruff["extend-exclude"]
     assert "-not -path './apps/*'" in lock_workflow
+    assert "apps/*" in gitignore
+    assert "!apps/README.md" in gitignore

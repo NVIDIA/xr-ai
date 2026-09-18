@@ -50,6 +50,7 @@ wrapper files (`gradlew`, `gradlew.bat`,
 
 Enforced locally by `.github/scripts/check_spdx_headers.py`, wired into
 `.pre-commit-config.yaml`. Run `pre-commit install` once after cloning to
-enable it; `python3 .github/scripts/check_spdx_headers.py` audits the whole
-tree at any time. The same check runs in CI as a backstop:
+enable it. From a clean checkout, run
+`python3 .github/scripts/check_spdx_headers.py` to audit the repository-owned
+source tree. The same check runs in CI as a backstop:
 `.github/workflows/spdx.yml`.

@@ -43,7 +43,8 @@ Ask the user, then tailor the pointers below to the answers.
   the ref chosen above (latest release tag, run in the clone:
   `git tag --list 'v*' | python3 .github/scripts/select_latest_docs_release.py`;
   it prefers stable releases over prereleases, matching what the docs site
-  serves).
+  serves). If the selector prints no tag, remain on `main` and tell the user
+  that no release tag was found.
 - **Working contract:** read `AGENTS.md` first. Every change must satisfy it,
   and its canonical-references table routes deeper topics.
 - **Docs:** `docs/source/`; published versioned site at
@@ -57,6 +58,6 @@ Ask the user, then tailor the pointers below to the answers.
   full repository boilerplate templates.
 - **Quickstart order:** follow
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
-  `<ref>` replaced as above. Start `model-server-samples/model-servers` and wait for
-  it to report readiness before starting `agent-samples/simple-vlm-example`
-  or another agent sample.
+  `<ref>` replaced as above. Start `model-server-samples/model-servers` and
+  wait for it to report readiness before starting
+  `agent-samples/simple-vlm-example` or another agent sample.

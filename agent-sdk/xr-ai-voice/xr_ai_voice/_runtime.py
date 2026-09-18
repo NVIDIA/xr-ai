@@ -87,7 +87,7 @@ class VoiceOutput(BaseModel):
     """Complete response text or one incremental fragment."""
 
     response_id: str | None = Field(default=None, min_length=1)
-    """Stable stream identifier; reuse after recent closure is ignored and warned."""
+    """Identifier shared by incremental chunks; recent reuse is ignored with one warning."""
 
     final: bool = True
     """Whether this message completes the response."""

@@ -11,9 +11,10 @@ description: >-
 
 # Build your XR AI application
 
-Ask whether to use the latest release (the default) or `main`, then follow the
-build-your-application guide that matches that ref. Before a checkout exists,
-use the published
+Ask whether to use the latest stable release (the default, with the latest
+prerelease as a fallback when no stable release exists) or `main`, then follow
+the build-your-application guide that matches that ref. Before a checkout
+exists, use the published
 [`latest`](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 guide for the latest release or the
 [`main`](https://nvidia.github.io/xr-ai/main/guides/building-your-app.html)

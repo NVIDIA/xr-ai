@@ -22,11 +22,12 @@ from pathlib import Path
 START_MARKER = "<!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->"
 END_MARKER = "<!-- END GENERATED PYTHON DEPENDENCY MAP -->"
 
+# Application workspaces are outside the repository dependency inventory.
+APPLICATIONS_DIRECTORY = "apps"
 # The aggregate manifest is generated from the other projects and validated by
 # its own workflow; discovery skips its sources so a moved project does not
 # fail here before the manifest can be regenerated.
 MANIFEST_DIRECTORY = "dependency-manifest"
-APPLICATIONS_DIRECTORY = "apps"
 
 _IGNORED_DIRECTORIES = {
     ".git",

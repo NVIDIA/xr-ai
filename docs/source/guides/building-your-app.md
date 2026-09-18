@@ -30,10 +30,16 @@ To use the latest stable release, or the latest prerelease when no stable
 release exists, run:
 
 ```bash
-git checkout "$(git tag --list 'v*' | python3 .github/scripts/select_latest_docs_release.py)"
+release_tag="$(git tag --list 'v*' | python3 .github/scripts/select_latest_docs_release.py)"
+if [ -n "$release_tag" ]; then
+  git checkout "$release_tag"
+else
+  echo "No release tag found; continuing on main." >&2
+fi
 ```
 
-After checking out a release, confirm that this guide and
+After checking out a release, confirm that
+`docs/source/guides/building-your-app.md` and
 `skills/build-your-app/SKILL.md` exist in the checkout. If either is absent,
 ask before switching the documentation, skill, and checkout to `main`.
 
@@ -129,10 +135,17 @@ Replace the sample names consistently:
 | `simple_vlm` | `my_app` |
 | `SimpleVlmAgent` | `MyAppAgent` |
 
-Apply these replacements across the entire copied tree, including comments and
-docstrings. Update any remaining `agent-samples/` working-directory references
-to `apps/`, and change prose that still describes the application as a
-repository sample.
+Substitute the application's real kebab-case name for `my-app`, then derive its
+snake-case package and CamelCase class names mechanically. Apply the
+replacements in the listed order across the entire copied tree, including
+comments and docstrings. Update any remaining `agent-samples/`
+working-directory references to `apps/`, and change prose that still describes
+the application as a repository sample. The following check should produce no
+output:
+
+```bash
+grep -rniE 'simple[-_ ]?vlm' apps/my-app
+```
 
 The `apps/` and `agent-samples/` directories are at the same depth, so the
 copied projects' relative sources continue to work. Keep each
@@ -191,7 +204,7 @@ ready:
 
 ```bash
 uv --config-file ../../uv.toml run \
-  --project ../../agent-samples/model-servers model_servers
+  --project ../../model-server-samples/model-servers model_servers
 ```
 
 Then start the application from the same directory:
@@ -233,17 +246,31 @@ Exercise model wire behavior with `tests/_stub_openai.py`, which provides an
 tests exercise `xr_ai_models` clients without importing the application worker.
 Use `tests/test_simple_vlm_example_wire.py` as the small STT, VLM, and TTS
 wire-format pattern; use `tests/test_xr_render_demo_wire.py` for LLM tool-call
-flows. For worker-level tests, follow the `sys.path.insert()` setup in
-`tests/test_simple_vlm_example_worker.py` so the application worker package can
-be imported without adding it to `tests/pyproject.toml`.
+flows.
 
 The `hub`, `make_connector`, and `make_processor` fixtures in
 `tests/conftest.py` run DeviceIOHub IPC over local ZMQ sockets. They demonstrate
 participant routing and worker-facing endpoint coverage without LiveKit, a
-camera, a microphone, Docker, or a GPU. Keep application-owned tests under
-`apps/my-app/tests/`, adapt the repository fixtures they need, and point model
-clients at a `StubOpenAI`-style transport. Run that directory explicitly with
-the repository test environment:
+camera, a microphone, Docker, or a GPU. Pytest does not load that file for
+tests under `apps/my-app/` because it is not an ancestor of the application
+test directory. Keep application-owned fixtures in
+`apps/my-app/tests/conftest.py`; copy and adapt only the repository fixtures the
+application needs.
+
+Add the application's pytest settings to `apps/my-app/pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["worker"]
+markers = [
+  "gpu: requires local GPU, Docker, or NVENC",
+  "integration: starts a real service process",
+]
+```
+
+Point model clients at a `StubOpenAI`-style transport, then run the application
+test directory explicitly with the repository test environment:
 
 ```bash
 uv --config-file uv.toml run --project tests \
@@ -258,7 +285,9 @@ Repository file checks exclude the top-level `apps/` directory. Application
 projects do not enter `DEPENDENCIES.md` or the dependency manifest, and the
 repository's Ruff and SPDX checks do not inspect application-owned files. The
 sample documentation, configuration catalogs, and test discovery remain scoped
-to `agent-samples/` and `tests/`.
+to `agent-samples/` and `tests/`. Git ignores `apps/*` by default so private
+application work is not staged accidentally. Remove that ignore rule when the
+application owner wants to track the application in the fork.
 
 The rest of the checkout remains repository-owned. Commit-wide hooks such as
 DCO sign-off still run when installed, and changes outside `apps/` continue to
