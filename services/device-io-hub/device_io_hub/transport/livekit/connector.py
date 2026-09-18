@@ -164,11 +164,10 @@ class LiveKitConnector:
         Cleanup errors propagate after every cleanup step has been attempted.
         """
         logger.info("LiveKitConnector stopping…")
-        # Start Docker shutdown immediately so it runs in parallel with the
-        # other cleanup steps — docker compose down can take several seconds.
-        docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
         async with AsyncExitStack() as cleanup:
-            cleanup.push_async_callback(asyncio.gather, docker_task)
+            # Registered first, executed last: keep LiveKit available until
+            # media cleanup and room disconnection have finished.
+            cleanup.push_async_callback(self._docker.stop)
             if self._token:
                 cleanup.push_async_callback(self._token.stop)
             if self._web:
