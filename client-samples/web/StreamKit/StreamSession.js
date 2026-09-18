@@ -284,7 +284,10 @@ export class StreamSession {
     const requestId = request?.request_id;
     if (request?.version !== 1 || typeof requestId !== 'string' || !requestId) return;
     const handler = this.onImageCaptureRequested;
-    if (!handler || typeof this.#backend.sendImage !== 'function') return;
+    if (!handler || typeof this.#backend.sendImage !== 'function') {
+      await this.#rejectCaptureRequest(requestId);
+      return;
+    }
 
     this.#captureRequests.get(requestId)?.abort();
     const controller = new AbortController();
@@ -305,11 +308,28 @@ export class StreamSession {
         name: image.name,
       });
     } catch (error) {
-      if (!controller.signal.aborted) console.warn('StreamSession image capture failed', error);
+      if (!controller.signal.aborted) {
+        console.warn('StreamSession image capture failed', error);
+        await this.#rejectCaptureRequest(requestId);
+      }
     } finally {
       if (this.#captureRequests.get(requestId) === controller) {
         this.#captureRequests.delete(requestId);
       }
+    }
+  }
+
+  async #rejectCaptureRequest(requestId) {
+    if (typeof this.#backend.sendImage !== 'function') return;
+    const response = new TextEncoder().encode('{"version":1,"status":"rejected"}');
+    try {
+      await this.#backend.sendImage(response, {
+        requestId,
+        mimeType: 'application/vnd.xr-ai.capture-rejection+json',
+        name: 'capture-rejection.json',
+      });
+    } catch (error) {
+      console.warn('StreamSession image capture rejection failed', error);
     }
   }
 

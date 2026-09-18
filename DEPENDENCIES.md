@@ -51,6 +51,12 @@ most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated per-project lockfiles remain gitignored
 validation artifacts; do not commit them.
 
+An exact client SDK pin may advance in the feature or security change that
+requires it without moving the repository-wide cutoff. Such a targeted change
+must refresh the affected committed client lockfile and license notices. The
+cutoff still bounds resolver-selected versions; moving it remains a dedicated
+dependency refresh because it can change unrelated Python and web packages.
+
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
 `dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
 every package in the repository, so
@@ -74,9 +80,9 @@ without overriding either one. The pre-commit hook runs the script when
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
 
-The same directory holds the client lockfiles. Refresh them by hand in the same
-cutoff change; the `dependency-manifest` workflow repeats each step and fails on
-drift:
+The same directory holds the client lockfiles. Refresh an affected client lock
+with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
+the `dependency-manifest` workflow repeats each step and fails on drift:
 
 - `dependency-manifest/android/*.lockfile`: delete the existing files, then from
   `client-samples/android/` run `./gradlew dependencies :app:dependencies

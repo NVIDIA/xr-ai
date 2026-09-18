@@ -11,11 +11,13 @@ import io
 from PIL import Image
 from pydantic import Field
 from xr_ai_hub import (
-    ClientImageCaptureSource,
     FrameUnavailable,
-    ImageCaptureUnavailable,
     LiveFrameSource,
     ProcessorEndpoint,
+)
+from xr_ai_hub._image_capture import (
+    _ClientImageCaptureSource,
+    _ImageCaptureUnavailable,
 )
 
 from ._pixels import encode_image_bytes, frame_to_pil
@@ -58,7 +60,9 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
 
     A fresh frame already observed by the hub is preferred. When none is
     available, the tool transparently asks the participant client to capture
-    and upload one encoded still image.
+    and upload one encoded still image. Installing a StreamKit capture handler
+    opts the client in; calls from foreground tools or background pollers may
+    briefly activate that client's camera when video is off.
     """
 
     def __init__(
@@ -79,13 +83,15 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
             max_age_s=frame_max_age_s,
             timeout_s=frame_timeout_s,
         )
-        self._captures = ClientImageCaptureSource(
+        self._captures = _ClientImageCaptureSource(
             endpoint,
             timeout_s=frame_timeout_s,
         )
         super().__init__(
             "get_current_frame",
-            "Return a participant's latest available camera frame without interpreting it.",
+            "Return a participant's latest available camera image without interpreting it. "
+            "When video is off, this may ask an opted-in client to activate its camera "
+            "briefly for one still image.",
             CurrentFrameRequest,
             ImageFrame,
             self._get_current_frame,
@@ -119,11 +125,14 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
 
         try:
             captured = await self._captures.capture(request.participant_id)
+        except _ImageCaptureUnavailable as exc:
+            raise FrameUnavailable(str(exc)) from exc
+        try:
             width, height = await asyncio.to_thread(
                 _encoded_image_size,
                 captured.data,
             )
-        except (ImageCaptureUnavailable, OSError, ValueError) as exc:
+        except Exception as exc:
             raise FrameUnavailable(str(exc)) from exc
         return ImageFrame(
             image=self.images.put(captured.data, owner=request.participant_id),

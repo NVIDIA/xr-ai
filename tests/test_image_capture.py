@@ -17,14 +17,13 @@ from device_io_hub.transport.livekit._room_client import (
     RoomClient,
 )
 from PIL import Image
-from xr_ai_hub import (
-    ClientImageCaptureSource,
-    FrameData,
-    FrameSignal,
-    ImageCaptureData,
-    ImageCaptureUnavailable,
-    PixelFormat,
+from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat
+from xr_ai_hub._image_capture import (
+    _CAPTURE_REJECTION_MIME_TYPE,
+    _ClientImageCaptureSource,
+    _ImageCaptureUnavailable,
 )
+from xr_ai_hub._types import ImageCaptureData
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 
@@ -53,14 +52,14 @@ class _Endpoint:
     def on_frame(self, callback) -> None:
         self.frame_callback = callback
 
-    def on_image_capture(self, callback):
+    def _on_image_capture(self, callback):
         self.image_callback = callback
         return lambda: None
 
     def on_participant(self, callback) -> None:
         self.participant_callback = callback
 
-    async def request_image_capture(self, request) -> None:
+    async def _request_image_capture(self, request) -> None:
         self.requests.append(request)
         if self.respond:
             await self.image_callback(ImageCaptureData(
@@ -71,7 +70,7 @@ class _Endpoint:
                 data=_jpeg(),
             ))
 
-    async def cancel_image_capture(self, cancel) -> None:
+    async def _cancel_image_capture(self, cancel) -> None:
         self.cancels.append(cancel)
 
     async def request_frame(self, signal) -> FrameData:
@@ -88,10 +87,16 @@ class _Endpoint:
 
 
 class _ImageReader:
-    def __init__(self, *, size: int | None, chunks: tuple[bytes, ...] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        size: int | None,
+        chunks: tuple[bytes, ...] = (),
+        mime_type: str = "image/jpeg",
+    ) -> None:
         self.info = SimpleNamespace(
             attributes={"request_id": "capture-1"},
-            mime_type="image/jpeg",
+            mime_type=mime_type,
             size=size,
         )
         self._chunks = iter(chunks)
@@ -127,7 +132,7 @@ class _ImageEndpoint:
     def __init__(self) -> None:
         self.images = []
 
-    async def push_image_capture(self, image) -> None:
+    async def _push_image_capture(self, image) -> None:
         self.images.append(image)
 
 
@@ -143,6 +148,18 @@ async def test_current_frame_falls_back_to_client_capture() -> None:
     assert images.resolve(result.image) == _jpeg()
     assert len(endpoint.requests) == 1
     assert endpoint.cancels == []
+
+
+async def test_current_frame_converts_pillow_validation_errors(
+    monkeypatch,
+) -> None:
+    endpoint = _Endpoint()
+    images = ImageRegistry()
+    tool = CurrentFrameTool(endpoint=endpoint, images=images)  # type: ignore[arg-type]
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1)
+
+    with pytest.raises(FrameUnavailable, match="exceeds limit"):
+        await tool._get_current_frame(CurrentFrameRequest(participant_id="alice"))
 
 
 async def test_current_frame_does_not_request_capture_while_video_is_fresh() -> None:
@@ -196,9 +213,9 @@ async def test_current_frame_falls_back_when_fresh_pixels_are_unavailable() -> N
 
 async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
-    source = ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]
+    source = _ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]
 
-    with pytest.raises(ImageCaptureUnavailable, match="timeout"):
+    with pytest.raises(_ImageCaptureUnavailable, match="timeout"):
         await source.capture("alice")
 
     assert len(endpoint.cancels) == 1
@@ -207,7 +224,7 @@ async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
 
 async def test_cancelled_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
-    source = ClientImageCaptureSource(endpoint, timeout_s=1)  # type: ignore[arg-type]
+    source = _ClientImageCaptureSource(endpoint, timeout_s=1)  # type: ignore[arg-type]
     pending = asyncio.create_task(source.capture("alice"))
     await asyncio.sleep(0)
 
@@ -219,12 +236,32 @@ async def test_cancelled_capture_is_cancelled_on_the_client() -> None:
     assert endpoint.cancels[0].request_id == endpoint.requests[0].request_id
 
 
+async def test_client_rejection_fails_capture_without_waiting_for_timeout() -> None:
+    endpoint = _Endpoint(respond=False)
+    source = _ClientImageCaptureSource(endpoint, timeout_s=10)  # type: ignore[arg-type]
+    pending = asyncio.create_task(source.capture("alice"))
+    await asyncio.sleep(0)
+    request = endpoint.requests[0]
+
+    await endpoint.image_callback(ImageCaptureData(
+        participant_id="alice",
+        request_id=request.request_id,
+        pts_us=123,
+        mime_type=_CAPTURE_REJECTION_MIME_TYPE,
+        data=b'{"version":1,"status":"rejected"}',
+    ))
+
+    with pytest.raises(_ImageCaptureUnavailable, match="could not provide"):
+        await pending
+    assert endpoint.cancels == []
+
+
 async def test_capture_rejects_a_disconnected_participant() -> None:
     endpoint = _Endpoint()
     endpoint.connected_participants = frozenset()
-    source = ClientImageCaptureSource(endpoint)  # type: ignore[arg-type]
+    source = _ClientImageCaptureSource(endpoint)  # type: ignore[arg-type]
 
-    with pytest.raises(ImageCaptureUnavailable, match="not connected"):
+    with pytest.raises(_ImageCaptureUnavailable, match="not connected"):
         await source.capture("alice")
 
 
@@ -239,6 +276,25 @@ async def test_rejected_image_stream_closes_reader_without_consuming_it() -> Non
     assert reader.closed
     assert not reader.iterated
     assert endpoint.images == []
+
+
+async def test_capture_rejection_stream_routes_to_the_pending_request() -> None:
+    endpoint = _ImageEndpoint()
+    client = RoomClient.__new__(RoomClient)
+    client._ep = endpoint
+    payload = b'{"version":1,"status":"rejected"}'
+    reader = _ImageReader(
+        size=len(payload),
+        chunks=(payload,),
+        mime_type=_CAPTURE_REJECTION_MIME_TYPE,
+    )
+
+    await client._receive_image_capture(reader, "alice")  # type: ignore[arg-type]
+
+    assert reader.closed
+    assert len(endpoint.images) == 1
+    assert endpoint.images[0].mime_type == _CAPTURE_REJECTION_MIME_TYPE
+    assert endpoint.images[0].data == payload
 
 
 async def test_cancelled_image_stream_closes_reader() -> None:
@@ -276,7 +332,7 @@ async def test_capture_request_and_image_route_through_real_hub(
         if message.topic != "camera.capture.request":
             return
         request = json.loads(message.data)
-        await connector.push_image_capture(ImageCaptureData(
+        await connector._push_image_capture(ImageCaptureData(
             participant_id="alice",
             request_id=request["request_id"],
             pts_us=123,
@@ -287,7 +343,7 @@ async def test_capture_request_and_image_route_through_real_hub(
     connector.on_return_data(respond)
     connector_task = asyncio.create_task(connector.run())
     try:
-        image = await ClientImageCaptureSource(endpoint, timeout_s=1).capture("alice")
+        image = await _ClientImageCaptureSource(endpoint, timeout_s=1).capture("alice")
     finally:
         connector_task.cancel()
         with pytest.raises(asyncio.CancelledError):

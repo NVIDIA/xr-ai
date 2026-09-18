@@ -360,3 +360,28 @@ test('cancels an in-flight image capture on terminal disconnect', async () => {
   assert.equal(aborted, true);
   assert.equal(imagesSent, 0);
 });
+
+test('returns a rejection response when image capture is unavailable', async () => {
+  const responses = [];
+  const backend = {
+    async sendImage(data, options) { responses.push({ data, options }); },
+  };
+  new StreamSession(backend);
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(responses.length, 1);
+  assert.equal(responses[0].options.requestId, 'capture-1');
+  assert.equal(
+    responses[0].options.mimeType,
+    'application/vnd.xr-ai.capture-rejection+json',
+  );
+  assert.deepEqual(
+    JSON.parse(new TextDecoder().decode(responses[0].data)),
+    { version: 1, status: 'rejected' },
+  );
+});

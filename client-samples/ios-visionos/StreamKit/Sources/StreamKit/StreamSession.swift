@@ -247,8 +247,11 @@ public final class StreamSession: ObservableObject {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["version"] as? Int == 1,
               let requestID = object["request_id"] as? String,
-              !requestID.isEmpty,
-              let handler = onImageCaptureRequested else { return }
+              !requestID.isEmpty else { return }
+        guard let handler = onImageCaptureRequested else {
+            Task { [weak self] in await self?.rejectCaptureRequest(requestID) }
+            return
+        }
         captureTasks.removeValue(forKey: requestID)?.task?.cancel()
         let operation = CaptureOperation()
         captureTasks[requestID] = operation
@@ -266,6 +269,7 @@ public final class StreamSession: ObservableObject {
                 try Task.checkCancellation()
                 guard !image.data.isEmpty,
                       ["image/jpeg", "image/png", "image/webp"].contains(image.mimeType) else {
+                    await self?.rejectCaptureRequest(requestID)
                     return
                 }
                 try await self?.backend.sendImage(
@@ -277,9 +281,19 @@ public final class StreamSession: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                return
+                await self?.rejectCaptureRequest(requestID)
             }
         }
+    }
+
+    private func rejectCaptureRequest(_ requestID: String) async {
+        let response = Data(#"{"version":1,"status":"rejected"}"#.utf8)
+        try? await backend.sendImage(
+            response,
+            requestID: requestID,
+            mimeType: "application/vnd.xr-ai.capture-rejection+json",
+            name: "capture-rejection.json"
+        )
     }
 
     private func handleCaptureCancel(_ data: Data) {

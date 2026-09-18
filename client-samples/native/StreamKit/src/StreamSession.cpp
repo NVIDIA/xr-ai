@@ -126,7 +126,6 @@ void StreamSession::WireCallbacks() {
     backend_->on_data_received = [this](std::string_view topic,
                                         std::span<const std::byte> data) {
         if (topic == "camera.capture.request") {
-            if (!on_image_capture_requested) return;
             const auto payload = std::string_view(
                 reinterpret_cast<const char*>(data.data()), data.size());
             if (JsonInteger(payload, "version") != 1) return;
@@ -135,6 +134,24 @@ void StreamSession::WireCallbacks() {
                 .timeout_ms = JsonInteger(payload, "timeout_ms"),
             };
             if (request.request_id.empty()) return;
+            const auto reject = [this, &request]() {
+                static constexpr std::string_view kResponse =
+                    R"({"version":1,"status":"rejected"})";
+                CapturedImage response{
+                    .data = std::vector<std::uint8_t>(kResponse.begin(), kResponse.end()),
+                    .mime_type = "application/vnd.xr-ai.capture-rejection+json",
+                    .name = "capture-rejection.json",
+                };
+                try {
+                    SendImage(response, request.request_id);
+                } catch (...) {
+                    // A disconnect can prevent the best-effort rejection response.
+                }
+            };
+            if (!on_image_capture_requested) {
+                reject();
+                return;
+            }
             try {
                 auto image = on_image_capture_requested(request);
                 if (!image.data.empty() &&
@@ -142,9 +159,11 @@ void StreamSession::WireCallbacks() {
                      image.mime_type == "image/png" ||
                      image.mime_type == "image/webp")) {
                     SendImage(image, request.request_id);
+                } else {
+                    reject();
                 }
             } catch (...) {
-                // Capability errors are request-local and must not escape the SDK callback.
+                reject();
             }
             return;
         }

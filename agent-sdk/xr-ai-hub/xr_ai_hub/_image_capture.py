@@ -6,18 +6,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import suppress
 from uuid import uuid4
 
 from ._processor import ProcessorEndpoint
 from ._types import ImageCaptureCancel, ImageCaptureData, ImageCaptureRequest
 
+_CAPTURE_REJECTION_MIME_TYPE = "application/vnd.xr-ai.capture-rejection+json"
 
-class ImageCaptureUnavailable(RuntimeError):
+
+class _ImageCaptureUnavailable(RuntimeError):
     """Raised when a client image capture does not complete successfully."""
 
 
-class ClientImageCaptureSource:
+class _ClientImageCaptureSource:
     """Request encoded still images from participant clients through the hub."""
 
     def __init__(
@@ -33,7 +36,7 @@ class ClientImageCaptureSource:
         self._pending: dict[
             tuple[str, str], asyncio.Future[ImageCaptureData]
         ] = {}
-        self._unsubscribe = endpoint.on_image_capture(self._on_image)
+        self._unsubscribe = endpoint._on_image_capture(self._on_image)
         endpoint.on_participant(self._on_participant)
 
     async def capture(self, participant_id: str) -> ImageCaptureData:
@@ -42,7 +45,7 @@ class ClientImageCaptureSource:
         if not participant_id.strip():
             raise ValueError("image capture requires a participant")
         if participant_id not in self._endpoint.connected_participants:
-            raise ImageCaptureUnavailable("Participant is not connected.")
+            raise _ImageCaptureUnavailable("Participant is not connected.")
 
         request_id = uuid4().hex
         key = (participant_id, request_id)
@@ -56,13 +59,13 @@ class ClientImageCaptureSource:
             timeout_ms=max(1, int(self._timeout_s * 1_000)),
         )
         try:
-            await self._endpoint.request_image_capture(request)
+            await self._endpoint._request_image_capture(request)
             try:
                 return await asyncio.wait_for(
                     asyncio.shield(future), timeout=self._timeout_s
                 )
             except asyncio.TimeoutError as exc:
-                raise ImageCaptureUnavailable(
+                raise _ImageCaptureUnavailable(
                     "The client did not return a picture before the timeout."
                 ) from exc
         finally:
@@ -70,7 +73,7 @@ class ClientImageCaptureSource:
             if not future.done():
                 future.cancel()
                 with suppress(Exception):
-                    await self._endpoint.cancel_image_capture(
+                    await self._endpoint._cancel_image_capture(
                         ImageCaptureCancel(
                             participant_id=participant_id,
                             request_id=request_id,
@@ -79,8 +82,24 @@ class ClientImageCaptureSource:
 
     async def _on_image(self, image: ImageCaptureData) -> None:
         future = self._pending.get((image.participant_id, image.request_id))
-        if future is not None and not future.done():
-            future.set_result(image)
+        if future is None or future.done():
+            return
+        if image.mime_type == _CAPTURE_REJECTION_MIME_TYPE:
+            try:
+                response = json.loads(image.data)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return
+            if (
+                not isinstance(response, dict)
+                or response.get("version") != 1
+                or response.get("status") != "rejected"
+            ):
+                return
+            future.set_exception(
+                _ImageCaptureUnavailable("The client could not provide a picture.")
+            )
+            return
+        future.set_result(image)
 
     async def _on_participant(self, event) -> None:
         if event.joined:
@@ -88,7 +107,7 @@ class ClientImageCaptureSource:
         for (participant_id, _request_id), future in tuple(self._pending.items()):
             if participant_id == event.participant_id and not future.done():
                 future.set_exception(
-                    ImageCaptureUnavailable("Participant disconnected during capture.")
+                    _ImageCaptureUnavailable("Participant disconnected during capture.")
                 )
 
     def close(self) -> None:
@@ -97,8 +116,5 @@ class ClientImageCaptureSource:
         self._unsubscribe()
         for future in self._pending.values():
             if not future.done():
-                future.set_exception(ImageCaptureUnavailable("Image capture closed."))
+                future.set_exception(_ImageCaptureUnavailable("Image capture closed."))
         self._pending.clear()
-
-
-__all__ = ["ClientImageCaptureSource", "ImageCaptureUnavailable"]

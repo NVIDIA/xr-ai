@@ -248,7 +248,11 @@ class StreamSession(private val backend: StreamingBackend) {
         if (request.optInt("version") != 1) return
         val requestId = request.optString("request_id")
         if (requestId.isBlank()) return
-        val handler = onImageCaptureRequested ?: return
+        val handler = onImageCaptureRequested
+        if (handler == null) {
+            captureScope.launch { rejectCaptureRequest(requestId) }
+            return
+        }
         captureJobs.remove(requestId)?.job?.cancel()
         val operation = CaptureOperation()
         captureJobs[requestId] = operation
@@ -266,9 +270,23 @@ class StreamSession(private val backend: StreamingBackend) {
                 // Cancellation is the normal outcome for a superseded request.
             } catch (error: Exception) {
                 Log.w("StreamSession", "Image capture request failed", error)
+                rejectCaptureRequest(requestId)
             } finally {
                 if (captureJobs[requestId] === operation) captureJobs.remove(requestId)
             }
+        }
+    }
+
+    private suspend fun rejectCaptureRequest(requestId: String) {
+        try {
+            backend.sendImage(
+                "{\"version\":1,\"status\":\"rejected\"}".toByteArray(),
+                requestId,
+                "application/vnd.xr-ai.capture-rejection+json",
+                "capture-rejection.json",
+            )
+        } catch (error: Exception) {
+            Log.w("StreamSession", "Image capture rejection failed", error)
         }
     }
 
