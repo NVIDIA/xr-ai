@@ -51,6 +51,12 @@ most nested projects define one through `[tool.uv.sources]`, so pass the root
 config explicitly. All generated per-project lockfiles remain gitignored
 validation artifacts; do not commit them.
 
+An exact client SDK pin may advance in the feature or security change that
+requires it without moving the repository-wide cutoff. Such a targeted change
+must refresh the affected committed client lockfile and license notices. The
+cutoff still bounds resolver-selected versions; moving it remains a dedicated
+dependency refresh because it can change unrelated Python and web packages.
+
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
 `dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
 every package in the repository, so
@@ -74,9 +80,9 @@ without overriding either one. The pre-commit hook runs the script when
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
 
-The same directory holds the client lockfiles. Refresh them by hand in the same
-cutoff change; the `dependency-manifest` workflow repeats each step and fails on
-drift:
+The same directory holds the client lockfiles. Refresh an affected client lock
+with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
+the `dependency-manifest` workflow repeats each step and fails on drift:
 
 - `dependency-manifest/android/*.lockfile`: delete the existing files, then from
   `client-samples/android/` run `./gradlew dependencies :app:dependencies
@@ -279,7 +285,7 @@ drift:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `pyzmq>=27.0`
-  - `livekit>=1.0`
+  - `livekit>=1.1.15`
   - `livekit-api>=1.0`
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
@@ -738,7 +744,7 @@ drift:
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
     - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
     - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-    - `xr-ai-tools[frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+    - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)

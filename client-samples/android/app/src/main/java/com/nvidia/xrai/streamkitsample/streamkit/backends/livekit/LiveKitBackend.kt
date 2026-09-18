@@ -5,9 +5,11 @@ package com.nvidia.xrai.streamkitsample.streamkit.backends.livekit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkQuality
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
+import com.nvidia.xrai.streamkitsample.streamkit.captureJpeg
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
@@ -45,6 +47,7 @@ import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 /**
@@ -80,13 +83,17 @@ internal class LiveKitBackend(
     // ── Public local preview accessor ─────────────────────────────────────────
 
     /**
-     * Currently published local camera track, or null when stopped.  Used by
+     * Actively capturing local camera track, or null when stopped. Used by
      * `CameraPreviewView` to render the outgoing stream locally; app code
      * goes through that composable rather than touching this directly.
      */
     val localCameraTrack: LocalVideoTrack?
-        get() = room?.localParticipant
-            ?.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack
+        get() {
+            val publication = room?.localParticipant
+                ?.getTrackPublication(Track.Source.CAMERA) ?: return null
+            if (publication.muted) return null
+            return publication.track as? LocalVideoTrack
+        }
 
     /** Initialises a [TextureViewRenderer] with the connected room's EGL
      *  context so it can sink frames from the local camera track. No-op when
@@ -99,6 +106,19 @@ internal class LiveKitBackend(
 
     @Volatile private var room: Room? = null
     @Volatile private var isConnected = false
+    private val connectionGeneration = AtomicLong()
+    private val byteStreamWriter = LiveKitByteStreamWriter(
+        snapshotConnection = {
+            room?.takeIf { isConnected }?.let {
+                ByteStreamConnection(it, connectionGeneration.get())
+            }
+        },
+        isConnectionActive = { connection ->
+            isConnected &&
+                room === connection.room &&
+                connectionGeneration.get() == connection.generation
+        },
+    )
 
     /** Coroutine scope active for the lifetime of one connection. */
     private var connectionScope: CoroutineScope? = null
@@ -240,6 +260,30 @@ internal class LiveKitBackend(
         room?.localParticipant?.setCameraEnabled(false)
     }
 
+    override suspend fun captureImage(config: CameraConfig): CapturedImage {
+        if (!isConnected) throw StreamError.NotConnected
+        localCameraTrack?.let { return CapturedImage(it.captureJpeg()) }
+        val participant = room?.localParticipant ?: throw StreamError.NotConnected
+        val position = when (config.facing) {
+            CameraConfig.CameraFacing.FRONT -> CameraPosition.FRONT
+            CameraConfig.CameraFacing.BACK -> CameraPosition.BACK
+        }
+        val track = participant.createVideoTrack(
+            name = "still-capture",
+            options = participant.videoTrackCaptureDefaults.copy(
+                deviceId = config.deviceId,
+                position = position,
+            ),
+        )
+        return try {
+            track.startCapture()
+            CapturedImage(track.captureJpeg())
+        } finally {
+            track.stop()
+            track.dispose()
+        }
+    }
+
     // ── StreamingBackend: injected video frames ───────────────────────────────
 
     override suspend fun injectVideoFrame(
@@ -301,12 +345,35 @@ internal class LiveKitBackend(
         )
     }
 
+    internal suspend fun sendByteStream(
+        data: ByteArray,
+        topic: String,
+        attributes: Map<String, String>,
+        mimeType: String,
+        name: String,
+    ): String {
+        if (!isConnected) throw StreamError.NotConnected
+        val destinations = config.hubIdentity?.let { listOf(Participant.Identity(it)) }.orEmpty()
+        return byteStreamWriter.sendBytes(
+            data,
+            ByteStreamWireOptions(
+                topic = topic,
+                attributes = attributes,
+                destinationIdentities = destinations,
+                mimeType = mimeType,
+                name = name,
+                totalSize = data.size.toLong(),
+            ),
+        )
+    }
+
     // ── Event dispatcher ───────────────────────────────────────────────────────
 
     private fun handleEvent(eventRoom: Room, event: RoomEvent) {
         if (room !== eventRoom) return
         when (event) {
             is RoomEvent.Reconnecting -> {
+                connectionGeneration.incrementAndGet()
                 isConnected = false
                 onConnectionStateChanged?.invoke(ConnectionState.RECONNECTING)
             }
@@ -315,6 +382,7 @@ internal class LiveKitBackend(
                 onConnectionStateChanged?.invoke(ConnectionState.CONNECTED)
             }
             is RoomEvent.Disconnected -> {
+                connectionGeneration.incrementAndGet()
                 isConnected = false
                 room = null
                 connectionScope?.cancel()
@@ -426,6 +494,7 @@ internal class LiveKitBackend(
     // ── Teardown ──────────────────────────────────────────────────────────────
 
     private suspend fun tearDown() {
+        connectionGeneration.incrementAndGet()
         isConnected = false
         connectionScope?.cancel()
         connectionScope = null

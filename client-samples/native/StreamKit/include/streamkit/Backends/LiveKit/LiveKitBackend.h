@@ -7,7 +7,7 @@
  * StreamKit — LiveKitBackend
  *
  * Implements StreamingBackend using the LiveKit C++ SDK
- * (https://github.com/livekit/rust-sdks → `cpp/`). The SDK headers are kept
+ * (https://github.com/livekit/client-sdk-cpp). The SDK headers are kept
  * out of this header so that consumers only need StreamKit's own includes.
  * All LiveKit types are forward-declared and stored as opaque smart pointers;
  * the destructor lives in the .cpp where the full types are visible.
@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -141,7 +142,15 @@ protected:
                                    const std::string& identity);
 
 private:
+    friend class StreamSession;
     friend struct LiveKitBackendTestAccess;
+
+    std::string SendByteStream(
+        std::span<const std::uint8_t> data,
+        std::string_view topic,
+        const std::map<std::string, std::string>& attributes,
+        std::string_view mime_type,
+        std::string_view name);
 
     // Forward-declared in the .cpp; subclasses livekit::RoomDelegate and
     // bridges its event callbacks into this backend's on_* event hooks.
@@ -163,9 +172,10 @@ private:
     void FireStateChanged(ConnectionState state);
 
     /// Routes incoming data packets: intercepts "_agent.status",
-    /// fires on_data_received for everything else.
+    /// then surfaces packets from the configured hub participant.
     void HandleDataReceived(std::string_view topic,
-                            std::span<const std::byte> payload) const;
+                            std::span<const std::byte> payload,
+                            std::string_view sender_identity) const;
 
     void ApplyConnectionState(ConnectionState state);
     void BlockNetworkMetricsDelivery();

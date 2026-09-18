@@ -3,6 +3,7 @@
 
 package com.nvidia.xrai.streamkitsample.streamkit.backends
 
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
@@ -101,6 +102,11 @@ interface StreamingBackend {
 
     /** Stops camera capture and unpublishes the video track. */
     suspend fun stopCamera()
+
+    /** Capture one still locally without publishing a video track. */
+    suspend fun captureImage(config: CameraConfig): CapturedImage {
+        throw UnsupportedOperationException("This backend does not support still capture.")
+    }
 
     /**
      * Pushes a single externally-sourced I420 video frame to the published

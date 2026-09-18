@@ -42,6 +42,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var sessionConfig: SessionConfig = .default
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
+    private var connectionGeneration: UInt64 = 0
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -299,6 +300,44 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         localCameraTrack = nil
     }
 
+    public func captureImage(config: CameraConfig) async throws -> CapturedImage {
+        guard room?.connectionState == .connected else { throw StreamError.notConnected }
+        if let localCameraTrack {
+            return try await StillImageCapture.capture(track: localCameraTrack)
+        }
+
+        #if targetEnvironment(simulator)
+        let track = LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        let pending = Task { try await StillImageCapture.capture(track: track) }
+        await Task.yield()
+        let pts = CMClockGetTime(CMClockGetHostTimeClock())
+        let sample = Self.loadGIFFrames().flatMap { Self.sampleBuffer(from: $0[0].image, pts: pts) }
+            ?? Self.makeSyntheticSampleBuffer(frameIndex: 0)
+        guard let sample, let capturer = track.capturer as? BufferCapturer else {
+            pending.cancel()
+            throw StreamError.imageCaptureUnavailable("Simulator still capture failed.")
+        }
+        capturer.capture(sample)
+        return try await pending.value
+        #elseif os(visionOS)
+        let track = makeVisionOSTrack()
+        #else
+        let track = makeIOSTrack(config: config)
+        #endif
+
+        #if !targetEnvironment(simulator)
+        try await track.start()
+        do {
+            let image = try await StillImageCapture.capture(track: track)
+            try? await track.stop()
+            return image
+        } catch {
+            try? await track.stop()
+            throw error
+        }
+        #endif
+    }
+
     // MARK: - FrameInjectable
 
     /// Push a ``CMSampleBuffer`` from an external camera source into the LiveKit video stream.
@@ -371,6 +410,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     private func tearDown() async {
+        connectionGeneration &+= 1
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -691,6 +731,43 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 }
 
+extension LiveKitBackend {
+    internal func sendByteStream(
+        _ data: Data,
+        topic: String,
+        attributes: [String: String],
+        mimeType: String?,
+        name: String?
+    ) async throws -> String {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let connection = ByteStreamConnection(
+            room: room,
+            generation: connectionGeneration
+        )
+        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        return try await LiveKitByteStreamWriter.sendBytes(
+            data,
+            options: ByteStreamWireOptions(
+                topic: topic,
+                attributes: attributes,
+                destinationIdentities: destinations,
+                mimeType: mimeType,
+                name: name,
+                totalSize: data.count
+            ),
+            connection: connection,
+            isConnectionActive: { [weak self] candidate in
+                guard let self else { return false }
+                return self.room === candidate.room
+                    && candidate.room.connectionState == .connected
+                    && self.connectionGeneration == candidate.generation
+            }
+        )
+    }
+}
+
 // MARK: - RoomDelegate
 
 extension LiveKitBackend: RoomDelegate {
@@ -698,8 +775,11 @@ extension LiveKitBackend: RoomDelegate {
     public func room(
         _ room: Room,
         didUpdateConnectionState connectionState: LiveKit.ConnectionState,
-        from _: LiveKit.ConnectionState
+        from oldState: LiveKit.ConnectionState
     ) {
+        if self.room === room, oldState == .connected, connectionState != .connected {
+            connectionGeneration &+= 1
+        }
         onConnectionStateChanged?(connectionState.toStreamKitState())
     }
 

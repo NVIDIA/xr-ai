@@ -24,6 +24,7 @@ import {
   stopAudio         as _stopAudio,
   startCamera       as _startCamera,
   stopCamera        as _stopCamera,
+  setCameraMode     as _setCameraMode,
   sendCustom        as _sendCustom,
   wireBaseEvents,
 } from '/App/core.js';
@@ -104,14 +105,24 @@ function render() {
 
   // Camera preview elements.
   const video       = $('camera-preview');
+  const captured    = $('captured-preview');
   const placeholder = $('preview-placeholder');
   const liveBadge   = $('preview-live-badge');
   if (model.isCameraActive) {
     video.classList.add('active');
+    captured.classList.remove('active');
     placeholder.style.display = 'none';
     liveBadge.classList.add('active');
+  } else if (model.capturedImageURL) {
+    video.classList.remove('active');
+    captured.src = model.capturedImageURL;
+    captured.classList.add('active');
+    placeholder.style.display = 'none';
+    liveBadge.classList.remove('active');
   } else {
     video.classList.remove('active');
+    captured.removeAttribute('src');
+    captured.classList.remove('active');
     placeholder.style.display = '';
     liveBadge.classList.remove('active');
   }
@@ -147,6 +158,9 @@ async function startCamera() {
 
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
+function setCameraMode(mode) {
+  return _setCameraMode(model, mode, { render, startCamera, stopCamera });
+}
 async function disconnect() {
   clearCameraPreview();
   try {
@@ -175,7 +189,10 @@ function connect()          {
 // Bootstrap
 // ─────────────────────────────────────────────────────────────────────────────
 
-wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendCustom });
+wireBaseEvents(model, {
+  connect, disconnect, startAudio, stopAudio,
+  startCamera, stopCamera, setCameraMode, sendCustom,
+});
 window.addEventListener('pagehide', () => {
   clearCameraPreview();
   const pendingDisconnect = model.session?.disconnect();

@@ -67,7 +67,6 @@ struct MockBackend : streamkit::StreamingBackend {
         sent_topics.emplace_back(topic);
         sent_payloads.emplace_back(BytesToString(data));
     }
-
     // Helpers for tests to drive the event hooks the backend would normally
     // fire from its event loop.
     void fire_data(std::string_view topic, std::string_view payload) const {
@@ -176,6 +175,30 @@ int main() {
     ExpectEq(data_calls, 1);
     ExpectEq(last_topic, std::string("incoming.topic"));
     ExpectEq(last_payload, std::string("world"));
+
+    int capture_calls = 0;
+    session.on_image_capture_requested = [&capture_calls](const auto& request) {
+        ++capture_calls;
+        ExpectEq(request.request_id, std::string("capture-1"));
+        ExpectEq(request.timeout_ms, std::int64_t{5000});
+        return streamkit::CapturedImage{.data = {1, 2, 3}};
+    };
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":1,"request_id":"capture-1","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
+    ExpectEq(data_calls, 1);
+
+    session.on_image_capture_requested = {};
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":1,"request_id":"capture-2","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
+
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":2,"request_id":"capture-3","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
 
     raw->fire_agent_status("processing");
     ExpectEq(agent_calls, 1);

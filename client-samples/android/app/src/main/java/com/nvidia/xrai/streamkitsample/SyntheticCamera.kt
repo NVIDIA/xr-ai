@@ -12,6 +12,9 @@ import java.nio.ByteBuffer
  * API: an external frame source (no physical camera) feeding raw I420 buffers
  * into the stream. Produces scrolling SMPTE-style colour bars plus a bouncing
  * white box so motion is obvious on the receiver and in the local preview.
+ * The sample routes these frames through `injectVideoFrame` only in Live video
+ * mode; its On-demand images handler encodes one generated frame without
+ * publishing a track. External camera SDK adapters should use the same split.
  *
  * Not thread-safe: drive it from a single coroutine. The returned buffer is
  * reused across calls — `injectVideoFrame` copies the planes before returning,

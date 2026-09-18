@@ -5,7 +5,7 @@
  * StreamKit — LiveKitBackend
  *
  * The single bridge between StreamKit and the upstream LiveKit C++ SDK
- * (https://github.com/livekit/rust-sdks → `cpp/`). All `livekit::` includes
+ * (https://github.com/livekit/client-sdk-cpp). All `livekit::` includes
  * live in this file; the rest of StreamKit never sees the SDK.
  *
  * When `STREAMKIT_HAVE_LIVEKIT` is not defined (i.e. the SDK was not found
@@ -18,6 +18,7 @@
 #include "streamkit/StreamError.h"
 
 #include "AgentStatusParser.h"
+#include "ByteStreamTransport.h"
 
 #include <algorithm>
 #include <chrono>
@@ -93,6 +94,18 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
     }
     return livekit::VideoBufferType::I420;
 }
+
+std::shared_ptr<livekit::LocalParticipant> RequireLocalParticipant(
+    const std::shared_ptr<livekit::Room>& room) {
+    if (!room) {
+        throw NotConnectedError{};
+    }
+    auto participant = room->localParticipant().lock();
+    if (!participant) {
+        throw NotConnectedError{};
+    }
+    return participant;
+}
 #endif // STREAMKIT_HAVE_LIVEKIT
 
 // Required tightly-packed buffer size for a frame of the given dimensions
@@ -157,13 +170,15 @@ public:
         // -Wc++11-narrowing.
         std::span<const std::byte> bytes(
             reinterpret_cast<const std::byte*>(e.data.data()), e.data.size());
-        owner_->HandleDataReceived(e.topic, bytes);
+        const auto sender_identity =
+            e.participant ? e.participant->identity() : std::string{};
+        owner_->HandleDataReceived(e.topic, bytes, sender_identity);
     }
 
     void onConnectionQualityChanged(
         livekit::Room& room,
         const livekit::ConnectionQualityChangedEvent& e) override {
-        const auto* local = room.localParticipant();
+        const auto local = room.localParticipant().lock();
         if (local && e.participant && e.participant->identity() == local->identity()) {
             owner_->HandleNetworkQualityChange(static_cast<int>(e.quality));
         }
@@ -296,7 +311,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     StopAudio();
     std::scoped_lock lock(tracks_mutex_);
     audio_source_ = std::make_shared<livekit::AudioSource>(48000, 1, 0);
-    audio_track_ = room_->localParticipant()->publishAudioTrack(
+    audio_track_ = RequireLocalParticipant(room_)->publishAudioTrack(
         "mic", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
     audio_armed_.store(true);
 #else
@@ -309,7 +324,9 @@ void LiveKitBackend::StopAudio() {
 #if STREAMKIT_HAVE_LIVEKIT
     std::scoped_lock lock(tracks_mutex_);
     if (audio_track_ && room_) {
-        room_->localParticipant()->unpublishTrack(audio_track_->sid());
+        if (const auto participant = room_->localParticipant().lock()) {
+            participant->unpublishTrack(audio_track_->sid());
+        }
     }
     audio_track_.reset();
     audio_source_.reset();
@@ -341,7 +358,9 @@ void LiveKitBackend::StopCamera() {
 #if STREAMKIT_HAVE_LIVEKIT
     std::scoped_lock lock(tracks_mutex_);
     if (video_track_ && room_) {
-        room_->localParticipant()->unpublishTrack(video_track_->sid());
+        if (const auto participant = room_->localParticipant().lock()) {
+            participant->unpublishTrack(video_track_->sid());
+        }
     }
     video_track_.reset();
     video_source_.reset();
@@ -428,7 +447,7 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
                     options.simulcast = encoding.simulcast;
                 }
             }
-            room_->localParticipant()->publishTrack(video_track_, options);
+            RequireLocalParticipant(room_)->publishTrack(video_track_, options);
         }
         source = video_source_;
     }
@@ -510,11 +529,43 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #if STREAMKIT_HAVE_LIVEKIT
     std::vector<std::uint8_t> payload(data.size());
     std::memcpy(payload.data(), data.data(), data.size());
-    room_->localParticipant()->publishData(payload, reliable, {}, std::string(topic));
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    RequireLocalParticipant(room_)->publishData(
+        payload, reliable, destinations, std::string(topic));
 #else
     (void)data;
     (void)reliable;
 #endif
+}
+
+std::string LiveKitBackend::SendByteStream(
+    std::span<const std::uint8_t> data,
+    std::string_view topic,
+    const std::map<std::string, std::string>& attributes,
+    std::string_view mime_type,
+    std::string_view name) {
+    if (!is_connected_.load()) throw NotConnectedError{};
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    const auto generation = connect_generation_.load();
+    return detail::LiveKitByteStreamWriter::SendBytes(
+        std::as_bytes(data),
+        detail::ByteStreamWireOptions{
+            .topic = std::string(topic),
+            .attributes = attributes,
+            .destination_identities = std::move(destinations),
+            .mime_type = std::string(mime_type),
+            .name = std::string(name),
+            .total_size = data.size(),
+        },
+        detail::ByteStreamConnection{
+            .room = room_,
+            .is_active = [this, generation]() {
+                return is_connected_.load() &&
+                    connect_generation_.load() == generation;
+            },
+        });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -583,13 +634,17 @@ void LiveKitBackend::FireStateChanged(ConnectionState state) {
 }
 
 void LiveKitBackend::HandleDataReceived(std::string_view topic,
-                                        std::span<const std::byte> payload) const {
+                                        std::span<const std::byte> payload,
+                                        std::string_view sender_identity) const {
     if (topic == kAgentStatusTopic) {
         if (auto status = internal::ExtractAgentStatus(payload)) {
             if (!status->empty() && on_agent_status) {
                 on_agent_status(*status);
             }
         }
+        return;
+    }
+    if (config_.hub_identity && sender_identity != *config_.hub_identity) {
         return;
     }
     if (on_data_received) {
@@ -699,7 +754,8 @@ void LiveKitBackend::PublishNetworkMetrics(std::uint64_t connection_epoch) {
             if (audio_track_) tracks.push_back(audio_track_);
             if (video_track_) tracks.push_back(video_track_);
         }
-        for (const auto& participant : room->remoteParticipants()) {
+        for (const auto& participant_handle : room->remoteParticipants()) {
+            const auto participant = participant_handle.lock();
             if (!participant) continue;
             for (const auto& [_, publication] : participant->trackPublications()) {
                 if (publication && publication->track()) {

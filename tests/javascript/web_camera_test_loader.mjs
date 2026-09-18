@@ -4,6 +4,9 @@
 const LIVEKIT_URL = 'mock:livekit-client';
 const APP_CORE_URL = 'mock:app-core';
 const WEB_CLIENT_ROOT = new URL('../../client-samples/web/', import.meta.url).href;
+const STREAMKIT_INDEX_URL = new URL(
+  '../../client-samples/web/StreamKit/index.js', import.meta.url,
+).href;
 
 function isWebClientJavaScript(url) {
   return url.startsWith(WEB_CLIENT_ROOT) && new URL(url).pathname.endsWith('.js');
@@ -15,6 +18,9 @@ export async function resolve(specifier, context, nextResolve) {
   }
   if (specifier === '/App/core.js') {
     return { url: APP_CORE_URL, shortCircuit: true };
+  }
+  if (specifier === '/StreamKit/index.js') {
+    return { url: STREAMKIT_INDEX_URL, shortCircuit: true };
   }
   return nextResolve(specifier, context);
 }
@@ -73,6 +79,11 @@ export async function load(url, context, nextLoad) {
         export async function stopCamera(model) {
           await model.session?.stopCamera();
           model.isCameraActive = false;
+        }
+        export async function setCameraMode(model, mode, { startCamera, stopCamera }) {
+          model.cameraMode = mode;
+          if (mode === 'live') await startCamera();
+          else if (model.isCameraActive) await stopCamera();
         }
         export const sendCustom = async () => {};
         export function wireBaseEvents(model, actions) {

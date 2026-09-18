@@ -10,6 +10,18 @@ register('./web_camera_test_loader.mjs', import.meta.url);
 const { LiveKitBackend } = await import(
   '../../client-samples/web/StreamKit/Backends/LiveKit/LiveKitBackend.js'
 );
+const { StreamSession } = await import(
+  '../../client-samples/web/StreamKit/StreamSession.js'
+);
+const { INTERNAL_SEND_BYTE_STREAM } = await import(
+  '../../client-samples/web/StreamKit/Backends/LiveKit/ByteStreamTransport.js'
+);
+const { ConnectionState } = await import(
+  '../../client-samples/web/StreamKit/ConnectionState.js'
+);
+const { createBaseModel, disconnect: disconnectApp, setCameraMode } = await import(
+  '../../client-samples/web/App/core.js'
+);
 
 function makeMediaTrack(settings = {}) {
   return {
@@ -32,7 +44,12 @@ function makePublishedTrack(mediaTrack) {
   };
 }
 
-function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality = 'unknown' } = {}) {
+function makeRoom(publishTrack, {
+  localTracks = [],
+  remoteTracks = [],
+  quality = 'unknown',
+  streamBytes = async () => {},
+} = {}) {
   const handlers = new Map();
   const room = {
     state: 'disconnected',
@@ -47,6 +64,7 @@ function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality =
       trackPublications: new Map(localTracks.map((track, i) => [String(i), { track }])),
       publishTrack,
       publishData: async () => {},
+      streamBytes,
       unpublishTrack: async track => {
         globalThis.__livekitRoom.unpublishedTracks.push(track);
       },
@@ -83,7 +101,7 @@ async function connectedBackend(t, publishTrack, options = {}) {
     secure: false,
     token: 'test-token',
     tokenURL: null,
-    hubIdentity: null,
+    hubIdentity: options.hubIdentity ?? null,
   });
   t.after(() => backend.disconnect());
   options.configure?.(backend);
@@ -128,6 +146,11 @@ function installAppBrowser(model) {
   });
   globalThis.__elements = new Map([
     ['camera-preview', video],
+    ['captured-preview', {
+      classList: new FakeClassList(),
+      removeAttribute() {},
+      src: '',
+    }],
     ['preview-placeholder', element()],
     ['preview-live-badge', element()],
     ['agent-response-text', element()],
@@ -318,4 +341,151 @@ test('stops network polling after a terminal room disconnect', async (t) => {
   await new Promise(resolve => setTimeout(resolve, 1_100));
 
   assert.equal(statsCalls, 1);
+});
+
+test('routes capture responses through the private byte-stream writer', async (t) => {
+  const writes = [];
+  const closes = [];
+  const wireOptions = [];
+  const { backend } = await connectedBackend(t, async () => {}, {
+    hubIdentity: 'hub-1',
+    streamBytes: async options => {
+      wireOptions.push(options);
+      return {
+        info: { id: 'stream-1' },
+        async write(data) { writes.push([...data]); },
+        async close(reason) { closes.push(reason); },
+      };
+    },
+  });
+
+  const streamId = await backend[INTERNAL_SEND_BYTE_STREAM](new Uint8Array([1, 2, 3]), {
+    topic: 'camera.capture.response',
+    attributes: { request_id: 'capture-1' },
+    mimeType: 'image/jpeg',
+    name: 'capture.jpg',
+  });
+
+  assert.equal(streamId, 'stream-1');
+  assert.deepEqual(writes, [[1, 2, 3]]);
+  assert.deepEqual(closes, [undefined]);
+  assert.deepEqual(wireOptions, [{
+    topic: 'camera.capture.response',
+    attributes: { request_id: 'capture-1' },
+    destinationIdentities: ['hub-1'],
+    mimeType: 'image/jpeg',
+    name: 'capture.jpg',
+    totalSize: 3,
+  }]);
+});
+
+test('cancels an in-flight image capture on terminal disconnect', async () => {
+  let resolveStarted;
+  const started = new Promise(resolve => { resolveStarted = resolve; });
+  let aborted = false;
+  let imagesSent = 0;
+  const backend = {
+    async disconnect() {},
+    async [INTERNAL_SEND_BYTE_STREAM]() { imagesSent += 1; },
+  };
+  const session = new StreamSession(backend);
+  session.onImageCaptureRequested = ({ signal }) => new Promise((resolve, reject) => {
+    resolveStarted();
+    signal.addEventListener('abort', () => {
+      aborted = true;
+      reject(new DOMException('Capture cancelled', 'AbortError'));
+    }, { once: true });
+  });
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
+  );
+  await started;
+  backend.onConnectionStateChanged(ConnectionState.DISCONNECTED);
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(aborted, true);
+  assert.equal(imagesSent, 0);
+});
+
+test('returns a rejection response when image capture is unavailable', async () => {
+  const responses = [];
+  const backend = {
+    async [INTERNAL_SEND_BYTE_STREAM](data, request) { responses.push({ data, request }); },
+  };
+  new StreamSession(backend);
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(responses.length, 1);
+  assert.equal(responses[0].request.attributes.request_id, 'capture-1');
+  assert.equal(
+    responses[0].request.mimeType,
+    'application/vnd.xr-ai.capture-rejection+json',
+  );
+  assert.deepEqual(
+    JSON.parse(new TextDecoder().decode(responses[0].data)),
+    { version: 1, status: 'rejected' },
+  );
+});
+
+test('camera modes are exclusive and survive disconnect', async () => {
+  const saved = new Map();
+  globalThis.window = {
+    location: { hostname: 'localhost', port: '8080', protocol: 'https:' },
+    localStorage: {
+      getItem: key => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+    },
+  };
+  const handler = async () => ({ data: new Uint8Array([1]), mimeType: 'image/jpeg' });
+  const session = {
+    onImageCaptureRequested: null,
+    async disconnect() {},
+  };
+  const model = {
+    cameraMode: 'off',
+    connectionState: ConnectionState.CONNECTED,
+    imageCaptureHandler: handler,
+    isCameraActive: false,
+    session,
+    captureSequence: 0,
+    capturedImageURL: null,
+  };
+  let starts = 0;
+  let stops = 0;
+  const actions = {
+    render() {},
+    async startCamera() {
+      starts += 1;
+      model.isCameraActive = true;
+    },
+    async stopCamera() {
+      stops += 1;
+      model.isCameraActive = false;
+    },
+  };
+
+  await setCameraMode(model, 'on-demand', actions);
+  assert.equal(session.onImageCaptureRequested, handler);
+  assert.equal(starts, 0);
+
+  await setCameraMode(model, 'live', actions);
+  assert.equal(session.onImageCaptureRequested, null);
+  assert.equal(starts, 1);
+
+  await setCameraMode(model, 'off', actions);
+  assert.equal(stops, 1);
+  assert.equal(saved.get('streamkit.cameraMode'), 'off');
+
+  await setCameraMode(model, 'on-demand', actions);
+  await disconnectApp(model, () => {});
+  assert.equal(model.cameraMode, 'on-demand');
+  assert.equal(saved.get('streamkit.cameraMode'), 'on-demand');
+  assert.equal(createBaseModel().cameraMode, 'on-demand');
 });

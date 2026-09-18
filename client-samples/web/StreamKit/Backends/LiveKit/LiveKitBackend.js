@@ -25,6 +25,10 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
+import {
+  INTERNAL_SEND_BYTE_STREAM,
+  LiveKitByteStreamWriter,
+} from './ByteStreamTransport.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -102,6 +106,10 @@ export class LiveKitBackend {
 
   #networkMetricsPollActive = false;
 
+  #connectionGeneration = 0;
+
+  #byteStreamWriter;
+
   // ── Public event hooks ──────────────────────────────────────────────────────
 
   /**
@@ -141,6 +149,17 @@ export class LiveKitBackend {
    */
   constructor(config) {
     this.#config = config;
+    this.#byteStreamWriter = new LiveKitByteStreamWriter(
+      () => {
+        const room = this.#room;
+        return room?.state === 'connected'
+          ? { room, generation: this.#connectionGeneration }
+          : null;
+      },
+      connection => this.#room === connection.room
+        && connection.room.state === 'connected'
+        && this.#connectionGeneration === connection.generation,
+    );
   }
 
   /**
@@ -211,6 +230,9 @@ export class LiveKitBackend {
 
     // ── Wire Room events ──────────────────────────────────────────────────────
     room.on(RoomEvent.ConnectionStateChanged, (lkState) => {
+      if (this.#room === room && lkState !== 'connected') {
+        this.#connectionGeneration += 1;
+      }
       if (lkState === 'disconnected' && this.#room === room) {
         this.#stopNetworkMetricsReporting();
       }
@@ -465,6 +487,25 @@ export class LiveKitBackend {
     await room.localParticipant.publishData(bytes, opts);
   }
 
+  async [INTERNAL_SEND_BYTE_STREAM](data, request) {
+    const room = this.#room;
+    if (!room || room.state !== 'connected') {
+      throw StreamError.notConnected();
+    }
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const options = {
+      topic: request.topic,
+      attributes: request.attributes,
+      mimeType: request.mimeType,
+      name: request.name,
+      totalSize: bytes.byteLength,
+    };
+    if (this.#config.hubIdentity) {
+      options.destinationIdentities = [this.#config.hubIdentity];
+    }
+    return this.#byteStreamWriter.sendBytes(bytes, options);
+  }
+
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   /**
@@ -484,6 +525,7 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async #tearDown() {
+    this.#connectionGeneration += 1;
     this.#stopNetworkMetricsReporting();
     const room = this.#room;
     this.#room = null;
