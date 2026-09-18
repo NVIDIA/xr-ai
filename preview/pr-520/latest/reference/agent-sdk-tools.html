@@ -336,6 +336,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -477,6 +478,28 @@ ownership. Preserve <code class="docutils literal notranslate"><span class="pre"
 <p>Use <code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced()</span></code> when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a
 <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; callers consume an <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> explicitly with <code class="docutils literal notranslate"><span class="pre">stream()</span></code>.</p>
+</section>
+<section id="agent-controlled-recording">
+<h2>Agent-controlled recording<a class="headerlink" href="#agent-controlled-recording" title="Link to this heading">#</a></h2>
+<p>Install the <code class="docutils literal notranslate"><span class="pre">capture</span></code> extra to expose recording controls through the same
+native <code class="docutils literal notranslate"><span class="pre">Tool</span></code> contract. <code class="docutils literal notranslate"><span class="pre">CaptureTools</span></code> takes its relative output namespace and
+fixed metadata at application initialization, then binds tools to a participant:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">CaptureTools</span>
+
+<span class="n">capture</span> <span class="o">=</span> <span class="n">CaptureTools</span><span class="p">(</span>
+    <span class="n">endpoint</span><span class="o">=</span><span class="n">endpoint</span><span class="p">,</span>
+    <span class="n">target</span><span class="o">=</span><span class="s2">"sop-capture/assembly-line"</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"workflow"</span><span class="p">:</span> <span class="s2">"wheel-install"</span><span class="p">,</span> <span class="s2">"station"</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="n">capture</span><span class="o">.</span><span class="n">participant_tools</span><span class="p">(</span><span class="n">participant_id</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The returned <code class="docutils literal notranslate"><span class="pre">start_recording</span></code> and <code class="docutils literal notranslate"><span class="pre">stop_recording</span></code> tools accept <code class="docutils literal notranslate"><span class="pre">{}</span></code> only.
+The model cannot choose the participant, filesystem path, or metadata. Each
+successful start command creates a new timestamped bundle beneath the configured
+namespace. Run the media-capture service with <code class="docutils literal notranslate"><span class="pre">profile:</span> <span class="pre">raw</span></code> and
+<code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">explicit</span></code>; the commands use reserved hub traffic and are not
+forwarded to the XR client.</p>
 </section>
 <section id="capability-services">
 <span id="typed-capability-services"></span><h2>Capability services<a class="headerlink" href="#capability-services" title="Link to this heading">#</a></h2>
@@ -623,6 +646,7 @@ internal tool exception.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bounded-model-tool-loops">Bounded model tool loops</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-controlled-recording">Agent-controlled recording</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capability-services">Capability services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-inference">Image selection and inference</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#marker-tracking">Marker tracking</a></li>

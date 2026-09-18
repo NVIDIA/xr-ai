@@ -336,6 +336,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -595,6 +596,33 @@ workflow.</p></li>
 <span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
 <span class="c1"># networking; see the note in services/device-io-hub/device_io_hub.yaml).</span>
 <span class="c1"># token_server_port: 8000</span>
+</pre></div>
+</div>
+</section>
+<section id="config-simple-vlm-example-yaml-media-capture-yaml">
+<h3>yaml/media_capture.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-media-capture-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Opt-in server-side capture for Simple VLM. Each participant gets a</span>
+<span class="c1"># timestamped bundle with fast-start H.264/AAC-LC .mp4 video, retained raw media,</span>
+<span class="c1"># and the exact inbound/outbound data timeline.</span>
+<span class="nt">hub_sub_addr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ipc:///tmp/xr_hub_pub</span>
+<span class="nt">hub_push_addr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ipc:///tmp/xr_hub_in</span>
+<span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.local/share/xr-ai/captures/simple-vlm-example</span>
+<span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="nt">session_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">participant</span>
+
+<span class="nt">sample_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="nt">bitrate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6000000</span>
+<span class="nt">gpu_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="nt">frame_queue_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="nt">encoder_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="nt">audio_sample_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48000</span>
+
+<span class="nt">overlay_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12.0</span>
+<span class="nt">overlay_lines</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="nt">max_total_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10737418240</span>
 </pre></div>
 </div>
 </section>
@@ -1194,6 +1222,33 @@ workflow.</p></li>
 <span class="c1"># Enable this and set recordings_dir in video_memory_service.yaml for history.</span>
 <span class="nt">video_recording</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</section>
+<section id="config-xr-render-demo-yaml-media-capture-yaml">
+<h3>yaml/media_capture.yaml<a class="headerlink" href="#config-xr-render-demo-yaml-media-capture-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Opt-in server-side capture for the XR render demo. Each participant gets</span>
+<span class="c1"># a timestamped bundle with composited H.264/AAC-LC .mp4 video, retained raw</span>
+<span class="c1"># media, and the exact inbound/outbound data timeline.</span>
+<span class="nt">hub_sub_addr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ipc:///tmp/xr_hub_pub</span>
+<span class="nt">hub_push_addr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ipc:///tmp/xr_hub_in</span>
+<span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.local/share/xr-ai/captures/xr-render-demo</span>
+<span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="nt">session_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">participant</span>
+
+<span class="nt">sample_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="nt">bitrate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6000000</span>
+<span class="nt">gpu_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="nt">frame_queue_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="nt">encoder_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="nt">audio_sample_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48000</span>
+
+<span class="nt">overlay_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12.0</span>
+<span class="nt">overlay_lines</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="nt">max_total_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10737418240</span>
 </pre></div>
 </div>
 </section>
@@ -2248,6 +2303,7 @@ workflow.</p></li>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example">simple-vlm-example</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-json">yaml/models.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-simple-vlm-example-worker-yaml">yaml/simple_vlm_example_worker.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
@@ -2267,6 +2323,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-scene-scene-service-yaml">scene/scene_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-cloudxr-runtime-yaml">yaml/cloudxr_runtime.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-models-json">yaml/models.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-openxr-service-yaml">yaml/openxr_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-video-memory-service-yaml">yaml/video_memory_service.yaml</a></li>
