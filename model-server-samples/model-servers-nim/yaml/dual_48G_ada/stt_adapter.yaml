@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Preserve the original Parakeet HTTP endpoint using the typed Riva client.
+kind: stt
+alias: stt
+base_url: localhost:50051
+health_url: http://localhost:9010/v1/health/ready
+language: en-GB
+host: "0.0.0.0"
+port: 8103

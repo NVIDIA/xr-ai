@@ -700,6 +700,56 @@ drift:
 - Commands:
   - `model_servers` → `main:run`
 
+#### `model-servers-nim` — [`model-server-samples/model-servers-nim/`](model-server-samples/model-servers-nim/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups:
+  - `test`:
+    - `pytest>=8.0`
+    - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
+    - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
+    - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
+- Commands:
+  - `model_servers_nim` → `main:run`
+
+#### `nim-model-adapter` — [`model-server-samples/model-servers-nim/compatibility-adapter/`](model-server-samples/model-servers-nim/compatibility-adapter/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `fastapi>=0.115`
+  - `uvicorn>=0.30`
+  - `pyyaml>=6.0`
+  - `httpx>=0.27`
+  - `python-multipart>=0.0.18`
+- Optional dependency groups: none
+- Commands:
+  - `nim_model_adapter` → `nim_model_adapter.__main__:run`
+
+#### `nim-riva-server` — [`model-server-samples/model-servers-nim/riva-server/`](model-server-samples/model-servers-nim/riva-server/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `nim_riva_server` → `nim_riva_server.__main__:run`
+
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
