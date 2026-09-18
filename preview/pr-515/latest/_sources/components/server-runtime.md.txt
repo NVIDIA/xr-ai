@@ -64,8 +64,9 @@ This is enforced at several layers:
   validate that the target participant is currently connected; messages for
   unknown participants are dropped with a warning.
 - Return-traffic topics (`return_audio.*`, `return_audio_flush.*`,
-  `return_data.*`) are connector-only — an agent's default subscription
-  excludes them.
+  `return_data.*`) are transport-infrastructure-only. Connectors consume them
+  for delivery and the optional capture process observes them read-only; an
+  agent's default subscription excludes them.
 - On the LiveKit side, return audio is published as one track per participant
   with subscribe permissions restricted to that participant, and return data
   is addressed with `destination_identities` (refer to
@@ -174,6 +175,117 @@ avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `device_io_hub.ipc` re-exports the same names for the
 server side.
 ```
+
+## Media-hub session capture
+
+`device_io_capture` is an optional process from the DeviceIOHub package. It
+sits downstream of `HubEndpoint`, not inside the LiveKit connector:
+
+```
+device transport → connector → HubEndpoint → agents
+                                  └────────→ capture
+                         agent return media ─┘
+```
+
+This boundary is transport-independent. Incoming camera, microphone, and data
+have already been decoded, timestamped, and tagged with participant and track
+identities. The capture process uses a normal `ProcessorEndpoint` for that
+stream and a private read-only subscription to the hub's routed return topics
+for agent audio and data. It does not expose return traffic to agent APIs.
+
+Run the hub first, then start capture from the repository root:
+
+```
+uv run --project services/device-io-hub device_io_capture \
+  --config services/device-io-hub/media_capture.yaml
+```
+
+Capture is split into a raw timestamped session writer and a derived capture
+renderer. The writer owns participant/session boundaries, NVENC encoding, raw
+float32 audio, the aligned stereo WAV, transcripts, observations, event
+records, retention, and the manifest. Raw capture is the default. The
+configured `profile` controls only whether rendering follows capture:
+
+- `raw` writes the canonical camera H.264, audio, transcript, event, and timing
+  artifacts and performs no presentation rendering. It does not require
+  FFmpeg.
+- `demo` writes the same raw bundle, then invokes `CaptureRenderer` after the
+  session closes. The renderer adds caption and data panels and produces a
+  fast-start MP4 with H.264 video and 48 kHz stereo AAC-LC audio.
+
+The canonical `video/session.264` is always encoded from unmodified camera
+pixels. `video/packets.jsonl` records each encoded packet's byte range, source
+track, key-frame state, and exact timestamp. The renderer consumes those raw
+artifacts and the transcript/event timeline, performs a separate NVDEC/NVENC
+pass for its burned-in panels, and records the derived result under
+`renderings.captioned_mp4` in the manifest. It never replaces the raw media.
+
+Render or re-render any completed bundle independently of the capture process:
+
+```
+uv run --project services/device-io-hub device_io_capture_render \
+  ~/.local/share/xr-ai/captures/<session-directory>
+```
+
+`session_mode: participant` records from participant join to leave.
+`session_mode: explicit` creates bundles only between reserved agent start and
+stop messages. A background agent wrapper initializes the private controller
+with a destination namespace relative to `out_dir` and fixed capture metadata;
+the semantic actions exposed to the model can therefore remain parameterless
+``start recording`` and ``stop recording``. Each accepted start creates a new
+timestamped child directory in that namespace. The model never selects a
+filesystem path. These messages remain an internal adapter seam rather than a
+public agent tool API, and the wrapper can publish frame-linked observations
+without changing the storage engine.
+
+The SDK implementation is `xr_ai_tools.capture.CaptureTools`. Applications
+construct it with the fixed target and metadata, then call
+`participant_tools(participant_id)` to obtain the two participant-bound native
+tools.
+
+Every bundle uses one Unix-microsecond clock and records both absolute and
+session-relative timing. `video/frames.jsonl` indexes source sequence,
+timestamp, track, pixel format, and source/encoded dimensions.
+`video/packets.jsonl` retains the encoded-packet byte ranges and timing needed
+for deterministic derived video.
+`audio/chunks.jsonl` indexes direction, sample format, byte range, duration,
+and timestamps. `transcript.jsonl` contains final STT and spoken TTS text, and
+`observations.jsonl` accepts derived records linked to an exact frame
+timestamp. `events.jsonl` remains the complete directional data timeline, and
+`manifest.json` is the machine-readable entry point. Its `complete` and
+`incomplete_reason` fields distinguish a normally drained session from a
+bounded recovery when the return-traffic departure marker is lost.
+
+In a captioned rendering, final STT and the text actually sent to TTS appear as the
+large primary caption below the sensor image. Each TTS sentence travels through
+the paced media queue, so its caption is timestamped from the first
+corresponding audio chunk rather
+than from synthesis completion. Every UTF-8 data-channel message, inbound or
+outbound, scrolls through a smaller right-side panel with its direction and
+topic. Binary data is not rendered, but every data payload remains in
+`events.jsonl`. Both panels sit outside the sensor image, so composition
+never replaces camera
+pixels. Reserved speech-caption metadata stays inside hub IPC and is never
+forwarded to the client data channel.
+
+Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
+dedicated threads in the capture process. Recorder overload therefore drops
+capture frames without delaying the hub's publish path. PyNvVideoCodec receives
+contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
+sets and no B-frames. At session finalization, each raw stream's chunks are
+joined in timestamp order. When requested, the renderer reconstructs captions
+from the bundle timeline. FFmpeg preserves the temporary composed H.264 stream,
+converts the aligned PCM mix to AAC-LC with an explicit
+48 kHz stereo layout, preserves recorded frame timing across sparse or dropped
+frames, resets trimmed audio to the same zero-based timeline, and writes one
+`.mp4` with fast-start metadata. Resolution or
+LiveKit track changes therefore do not create additional playable outputs.
+This does not affect the live path.
+
+`CaptureRenderer` and the demo profile require an `ffmpeg` executable on `PATH`
+with the native AAC encoder. They validate that requirement before rendering so
+a session cannot silently fall back to an MP4-incompatible PCM or MP3 track.
+The raw profile has no MP4 projection and therefore no FFmpeg requirement.
 
 ## Per-participant return path
 
