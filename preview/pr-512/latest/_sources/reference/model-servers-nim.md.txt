@@ -75,10 +75,38 @@ Docker with NVIDIA Container Toolkit and `NGC_API_KEY` are required. Spark also
 uses `HF_TOKEN` for its local STT fallback. Credentials can be exported in the
 environment or loaded from the repository's existing credential store.
 Refer to the [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html).
-First startup downloads container images and model engines and can take tens
-of minutes. The caches persist under the repository's `models/` directory.
-A fresh speech container can rebuild TensorRT engines even with cached model
-weights, so a later startup can also take tens of minutes.
+First startup downloads container images and models and can take tens of
+minutes. The caches persist under the repository's `models/` directory.
+
+Parakeet NIM and Magpie additionally compile TensorRT engines. The sample's
+Riva launcher exports the compiled repositories once and reuses them after
+containers are stopped and removed. Downloads remain in each container's
+`nim_cache` subdirectory; compiled exports live beneath
+`<nim_cache>/<container_name>/riva-repositories/<cache-key>/`. Cache paths can
+be symlinked to another disk without changing the checked-in configuration.
+
+The cache key includes the resolved container image ID, configured environment
+settings, GPU model and compute capability, driver version, CPU architecture,
+and repository-bootstrap version. Changing these inputs builds a separate
+export. An exclusive lock prevents concurrent builds of the same export;
+only complete, validated archives are published. An interrupted build is
+retried on the next launch, and archive checksums detect damaged exports.
+
+Compilation and serving use the same managed container, so cancellation and
+`--stop` also work during engine generation. The bootstrap uses NVIDIA's
+`NIM_EXPORT_PATH` workflow, then starts the server with
+`NIM_DISABLE_MODEL_DOWNLOAD=true` and a fresh workspace. Refer to
+[NVIDIA's model caching guide](https://docs.nvidia.com/nim/speech/latest/deployment/docker/model-caching.html).
+The launcher manages these settings automatically; no additional user command
+or client configuration change is required. Spark's native STT fallback does
+not use this Riva cache.
+
+The first launch after enabling repository caching still builds an export;
+existing download caches alone do not contain one. Later launches still verify
+and extract the archives, load engines onto the GPU, and initialize Riva.
+Stopping servers preserves downloads and exports. To reclaim compiled-cache
+space, stop the stack and remove the corresponding `riva-repositories/`
+directory; the next launch rebuilds it.
 
 The default GPU detection is shared with `model-servers`. Explicit selections:
 
@@ -225,6 +253,20 @@ shutdown, restart, and rejection of unhealthy or conflicting listeners:
 uv run --extra test python -m pytest tests -q
 ```
 
+Repository-cache tests also exercise real subprocesses, interrupted builds,
+concurrent launches, checksum failures, and configuration changes. An optional
+Docker test verifies container removal, cache reuse, and stopping during a
+build. It uses small stand-in engines and a test HTTP server on temporary ports,
+so it does not qualify GPU inference. With a speech container already running,
+select its locally installed image and run the isolated Docker test:
+
+```bash
+XR_AI_TEST_RIVA_IMAGE=$(docker inspect --format '{{.Image}}' xr-ai-model-servers-nim-tts) \
+  uv run --extra test python -m pytest tests/test_riva_repository.py -m gpu -q
+```
+
+The compiled-repository workflow still needs full inference validation after
+both the initial export and a container-removing restart on each GPU profile.
 After startup, check every endpoint through the same SDK that agents use:
 
 ```bash

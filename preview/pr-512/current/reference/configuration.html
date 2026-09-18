@@ -2388,6 +2388,9 @@ workflow.</p></li>
 <span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-model-servers-nim-stt</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
 <span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
+<span class="c1"># Downloads and compiled repositories persist in separate per-container subdirectories.</span>
+<span class="c1"># The launcher manages NIM_CACHE_PATH, NIM_EXPORT_PATH, NIM_WORKSPACE, and</span>
+<span class="c1"># NIM_DISABLE_MODEL_DOWNLOAD; do not override those settings in env.</span>
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
@@ -2401,7 +2404,7 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Reuses services/nim-server and the repository's Magpie Riva gRPC adapter.</span>
+<span class="c1"># Uses the sample-local Riva launcher to export and reuse compiled engines.</span>
 <span class="c1"># The pinned manifest provides batch sizes 8, 32, and 64; reserve about 13 GiB.</span>
 <span class="c1"># Pin the digest: older documentation for this tag lists an absent bs=1 profile.</span>
 <span class="c1"># https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html</span>
@@ -2409,6 +2412,9 @@ workflow.</p></li>
 <span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-model-servers-nim-tts</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
 <span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+<span class="c1"># Downloads and compiled repositories persist in separate per-container subdirectories.</span>
+<span class="c1"># The launcher manages NIM_CACHE_PATH, NIM_EXPORT_PATH, NIM_WORKSPACE, and</span>
+<span class="c1"># NIM_DISABLE_MODEL_DOWNLOAD; do not override those settings in env.</span>
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
@@ -2696,6 +2702,9 @@ workflow.</p></li>
 <span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-model-servers-nim-stt</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
 <span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
+<span class="c1"># Downloads and compiled repositories persist in separate per-container subdirectories.</span>
+<span class="c1"># The launcher manages NIM_CACHE_PATH, NIM_EXPORT_PATH, NIM_WORKSPACE, and</span>
+<span class="c1"># NIM_DISABLE_MODEL_DOWNLOAD; do not override those settings in env.</span>
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
@@ -2709,7 +2718,7 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Reuses services/nim-server and the repository's Magpie Riva gRPC adapter.</span>
+<span class="c1"># Uses the sample-local Riva launcher to export and reuse compiled engines.</span>
 <span class="c1"># The pinned manifest provides batch sizes 8, 32, and 64; reserve about 13 GiB.</span>
 <span class="c1"># Pin the digest: older documentation for this tag lists an absent bs=1 profile.</span>
 <span class="c1"># https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html</span>
@@ -2717,6 +2726,9 @@ workflow.</p></li>
 <span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-model-servers-nim-tts</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
 <span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+<span class="c1"># Downloads and compiled repositories persist in separate per-container subdirectories.</span>
+<span class="c1"># The launcher manages NIM_CACHE_PATH, NIM_EXPORT_PATH, NIM_WORKSPACE, and</span>
+<span class="c1"># NIM_DISABLE_MODEL_DOWNLOAD; do not override those settings in env.</span>
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
@@ -3005,7 +3017,7 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Reuses services/nim-server and the repository's Magpie Riva gRPC adapter.</span>
+<span class="c1"># Uses the sample-local Riva launcher to export and reuse compiled engines.</span>
 <span class="c1"># The pinned manifest provides batch sizes 8, 32, and 64; reserve about 13 GiB.</span>
 <span class="c1"># Pin the digest: older documentation for this tag lists an absent bs=1 profile.</span>
 <span class="c1"># https://docs.nvidia.com/nim/speech/latest/reference/support-matrix/tts.html</span>
@@ -3013,6 +3025,9 @@ workflow.</p></li>
 <span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-model-servers-nim-tts</span>
 <span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
 <span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
+<span class="c1"># Downloads and compiled repositories persist in separate per-container subdirectories.</span>
+<span class="c1"># The launcher manages NIM_CACHE_PATH, NIM_EXPORT_PATH, NIM_WORKSPACE, and</span>
+<span class="c1"># NIM_DISABLE_MODEL_DOWNLOAD; do not override those settings in env.</span>
 <span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
 <span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">env</span><span class="p">:</span>
