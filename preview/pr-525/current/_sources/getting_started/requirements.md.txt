@@ -37,7 +37,7 @@ NVDEC.
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
-| NVIDIA Container Toolkit | latest | required: configures the `nvidia` runtime that gives Docker access to the GPU |
+| NVIDIA Container Toolkit | latest | required, with the `nvidia` runtime registered in Docker; refer to {ref}`docker-host-setup` |
 | Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
@@ -47,8 +47,9 @@ virtual-environment setup needed. If you do not have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
+(docker-access-and-nvidia-runtime-including-dgx-spark)=
 (docker-host-setup)=
-### Docker access and NVIDIA runtime (including DGX Spark)
+### Docker access and NVIDIA runtime
 
 Complete these checks on the model-server host before launching a stack. They
 also apply to DGX Spark: having Docker and the NVIDIA Container Toolkit installed
@@ -71,26 +72,42 @@ permission denied for `/var/run/docker.sock`, add your user to the Docker group:
 sudo usermod -aG docker "$USER"
 ```
 
-Log out completely and log back in, disconnect and reconnect your SSH session,
-or reboot the host, then retry `docker ps` without `sudo`. If group membership
-still has not refreshed after logging back in, reboot the host. Opening another
-terminal in the same desktop session does not refresh its group membership.
+Log out completely and log back in, or disconnect and reconnect your SSH
+session, then retry `docker ps` without `sudo`. If the session still has not
+picked up the new group membership, reboot the host. Opening another terminal
+in the same desktop session does not refresh its group membership.
+
+For an immediate alternative after adding your user to the group, run
+`newgrp docker` to start a shell with the updated group. Run `docker ps` and
+launch `model_servers` from that shell; existing terminals and applications
+keep their previous group membership.
+
 The `docker` group grants root-level privileges; refer to
 [Docker's Linux post-installation instructions](https://docs.docker.com/engine/install/linux-postinstall/)
 for group creation if needed and access details.
 
 #### NVIDIA runtime
 
-Check that the toolkit is installed:
+Check Docker's registered runtimes without `sudo`:
+
+```bash
+docker info --format '{{json .Runtimes}}'
+```
+
+The command must succeed. If it lists `nvidia`, continue to the GPU smoke test
+below without reconfiguring or restarting Docker. If `nvidia` is absent, check
+that the toolkit is installed:
 
 ```bash
 nvidia-ctk --version
 ```
 
-If the command is missing, follow the Ubuntu installation steps in the
+If the toolkit command is missing, follow the Ubuntu installation steps in the
 [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-Install the toolkit once per host. Registering the runtime is a separate step,
-including when the toolkit is already installed:
+Installing the toolkit and registering its runtime in Docker are separate steps.
+
+When `nvidia` is absent, register it and restart Docker. Schedule this restart
+when other container workloads can be interrupted:
 
 ```bash
 sudo nvidia-ctk runtime configure --runtime=docker
@@ -98,7 +115,6 @@ sudo systemctl restart docker
 docker info --format '{{json .Runtimes}}'
 ```
 
-Schedule the Docker restart when other container workloads can be interrupted.
 The final command must succeed without `sudo` and list an `nvidia` runtime.
 The model-server wrappers explicitly request that runtime; installing the
 toolkit alone is insufficient.

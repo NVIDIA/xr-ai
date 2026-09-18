@@ -10,29 +10,45 @@ issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
 ## Setup-time issues
 
-### DGX Spark — Docker socket permission denied during model-server cleanup
+(dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
+### Docker socket permission denied during model-server cleanup
 
-**Symptom:** launching `model_servers` reports an ownership-inspection failure,
-prints `No persistent servers found running`, and then fails with:
+**Symptom:** launching `model_servers` prints a line like this for each port
+whose ownership cannot be inspected:
+
+```text
+[<service>] cannot inspect :<port> ownership — not stopping
+```
+
+It can then print `No persistent servers found running` before failing with:
 
 ```text
 RuntimeError: could not stop persistent servers outside the profile
 ```
 
+Running `uv run model_servers --stop` encounters the same inspection failure
+but ends with:
+
+```text
+model-servers: failed to stop persistent servers: one or more persistent servers are still running
+```
+
+**Cause:** the login session lacks Docker socket access. This can affect DGX
+Spark and other Linux model-server hosts. Startup checks for persistent servers
+outside the selected profile before launching new ones. When Docker inspection
+fails, the empty-result message does not establish that no servers are running,
+and cleanup aborts because ownership could not be verified.
+
 **Diagnosis:** run `docker ps` without `sudo` from the same login session. If
 it reports permission denied for `/var/run/docker.sock`, the launcher cannot
-inspect persistent containers. The cleanup exception can have other causes;
-the direct Docker command exposes the socket-access error in this case.
+inspect persistent containers. Its internal Docker check suppresses stderr,
+so running the command directly exposes the underlying error. These cleanup
+errors can have other causes; use the Docker output to confirm socket access
+is the problem.
 
-**Cause:** the login session lacks Docker socket access. Startup checks for
-persistent servers outside the selected profile before launching new ones.
-When Docker inspection fails, the empty-result message does not establish that
-no servers are running, and startup aborts because cleanup could not be verified.
-
-**Fix:** complete the Docker group setup and start a new login session as
+**Fix:** complete the Docker group setup and refresh the launch session as
 described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
-`sudo`, then retry the model-server command. These checks also apply to other
-Linux model-server hosts.
+`sudo`, then retry the model-server command.
 
 ### DGX Spark — `uv sync` fails to build a wheel
 
@@ -204,11 +220,9 @@ becomes healthy on a Blackwell-class system.
 vLLM image does not contain compatible kernels. Any first-use kernel
 compilation occurs inside the container; host NVCC is not required.
 
-**Fix:** install the NVIDIA Container Toolkit, restart Docker as its installation
-guide requires, and retain the vLLM image pinned by the reviewed hardware
-profile:
-
-[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+**Fix:** follow {ref}`docker-host-setup` to verify Docker access, register the
+NVIDIA runtime if needed, and check GPU access from a container. Retain the
+vLLM image pinned by the reviewed hardware profile.
 
 This applies to the
 `model-server-samples/model-servers/yaml/96G_blackwell/` profile.
