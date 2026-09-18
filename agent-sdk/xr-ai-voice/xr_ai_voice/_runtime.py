@@ -228,7 +228,13 @@ class VoiceAgent(Agent):
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
+        stop_ack_enabled: Callable[[str], bool] | None = None,
     ) -> None:
+        """Configure participant-aware voice I/O.
+
+        ``stop_ack_enabled`` may silence STOP acknowledgements per participant
+        without disabling interruption. None preserves spoken acknowledgements.
+        """
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         super().__init__()
@@ -243,6 +249,7 @@ class VoiceAgent(Agent):
             text_topic=text_topic,
             idle_timeout_secs=idle_timeout_secs,
             transport=transport,
+            stop_ack_enabled=stop_ack_enabled,
         )
         self.query_topic = query_topic
         self.response_capacity = response_capacity

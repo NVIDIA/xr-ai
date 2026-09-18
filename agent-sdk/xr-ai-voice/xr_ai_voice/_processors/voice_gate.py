@@ -62,6 +62,7 @@ class VoiceGateProcessor(FrameProcessor):
         cfg: VoiceGateConfig,
         tts: TTSService,
         gate: VoiceGate | None = None,
+        stop_ack_enabled: Callable[[str], bool] | None = None,
     ) -> None:
         """Build the gate-backed processor.
 
@@ -76,6 +77,7 @@ class VoiceGateProcessor(FrameProcessor):
         """
         super().__init__()
         self._gate = gate or VoiceGate(cfg, audio_sink=self, tts=tts)
+        self._stop_ack_enabled = stop_ack_enabled
         self._gate.bind(
             on_query              = self._on_gate_query,
             on_stop               = self._on_gate_stop,
@@ -209,7 +211,8 @@ class VoiceGateProcessor(FrameProcessor):
         f = InterruptionFrame()
         f.transport_source = pid
         await self.push_frame(f)
-        await self._emit_text_response(pid, _STOP_ACK_TEXT)
+        if self._stop_ack_enabled is None or self._stop_ack_enabled(pid):
+            await self._emit_text_response(pid, _STOP_ACK_TEXT)
 
     async def _on_gate_phrase_only(self, pid: str) -> None:
         await self._emit_chime(pid, early=False)

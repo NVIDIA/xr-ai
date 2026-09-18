@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Recording to Guide"
+  short_description: "Turn an XR recording packet into a runnable workflow guide"
+  default_prompt: "Convert the newest complete recording packet into a workflow guide in the configured guides folder."

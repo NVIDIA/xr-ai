@@ -72,6 +72,7 @@ _SAMPLE_WEB_CLIENTS = {
     "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "tea-making-sample": _ROOT / "client-samples" / "web",
+    "workflow-recorder": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }
 _RETIRED_AGENT_SDK_PATHS = (
@@ -396,6 +397,10 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
         "service_layout_render_demo",
         "agent-samples/xr-render-demo/main.py",
     )
+    workflow_recorder = _load_module(
+        "service_layout_workflow_recorder",
+        "agent-samples/workflow-recorder/main.py",
+    )
     monkeypatch.setattr(model_servers, "detect_gpu_config", lambda: "spark")
 
     declarations = [
@@ -411,6 +416,10 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
         (
             _ROOT / "agent-samples/xr-render-demo",
             render_demo._build_processes(),
+        ),
+        (
+            _ROOT / "agent-samples/workflow-recorder",
+            workflow_recorder.PROCESSES,
         ),
     ]
 
