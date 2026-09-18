@@ -16,6 +16,7 @@ from xr_ai_tools.text_memory import (
 )
 from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
+from xr_render_demo_worker import supervisor as supervisor_module
 from xr_render_demo_worker.agent import RenderAgent
 from xr_render_demo_worker.models import SceneRequest
 from xr_render_demo_worker.supervisor import SceneSupervisor
@@ -46,6 +47,20 @@ class _RecordingMemory:
             if record.source_id.startswith(f"{req.participant_id}:")
         ]
         return RecallConversationResult(entries=entries)
+
+
+def test_supervisor_prompt_has_no_tool_specific_routing_inventory() -> None:
+    prompt = supervisor_module._PROMPT.read_text(encoding="utf-8")
+
+    assert "Routes:" not in prompt
+    assert "_agent" not in prompt
+    assert not {
+        "placement_agent",
+        "appearance_agent",
+        "object_agent",
+        "vision_agent",
+        "memory_agent",
+    } & set(prompt.split())
 
 
 def _make_supervisor(memory: _RecordingMemory | None = None) -> tuple[SceneSupervisor, harness.FakeScene]:

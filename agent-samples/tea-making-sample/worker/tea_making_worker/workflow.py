@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from contextlib import suppress
+from dataclasses import dataclass, field
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +72,26 @@ _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
+_DURATION_RANGE = re.compile(
+    r"(?<![\w.])(\d+(?:\.\d+)?)\s*[-\u2013\u2014]\s*"
+    r"(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?)(?!\w)",
+    re.IGNORECASE,
+)
+_DURATION_VALUE = re.compile(
+    r"(?<![\w.])(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?)(?!\w)",
+    re.IGNORECASE,
+)
+_TEMPERATURE_RANGE = re.compile(
+    r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*[-\u2013\u2014]\s*"
+    r"(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*)?"
+    r"(celsius|fahrenheit|°\s*[cf]|[cf])(?!\w)",
+    re.IGNORECASE,
+)
+_TEMPERATURE_VALUE = re.compile(
+    r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*)?"
+    r"(celsius|fahrenheit|°\s*[cf]|[cf])(?!\w)",
+    re.IGNORECASE,
+)
 
 
 class _TriggerResult(BaseModel):
@@ -79,6 +102,46 @@ class _TriggerResult(BaseModel):
 
 class _StaleObservation(RuntimeError):
     """Stop an observation turn after its workflow revision changes."""
+
+
+@dataclass(slots=True)
+class _ObservationProvenance:
+    """Values produced by trusted tools during one observation turn."""
+
+    observation: Any
+    retrieved_text: list[str] = field(default_factory=list)
+    clock_values: set[int] = field(default_factory=set)
+
+    def record(self, name: str, result: Any) -> None:
+        if name == "rag_lookup":
+            self.retrieved_text.extend(
+                str(chunk.text)
+                for chunk in getattr(result, "results", ())
+            )
+        elif name == "clock__now":
+            epoch_us = getattr(result, "epoch_us", None)
+            if isinstance(epoch_us, int):
+                self.clock_values.add(epoch_us)
+
+    def package_durations(self) -> set[int]:
+        return _duration_seconds(_evidence_text(self.observation))
+
+    def retrieved_durations(self) -> set[int]:
+        return {
+            duration
+            for text in self.retrieved_text
+            for duration in _duration_seconds(text)
+        }
+
+    def package_temperatures(self) -> set[float]:
+        return _temperatures_c(_evidence_text(self.observation))
+
+    def retrieved_temperatures(self) -> set[float]:
+        return {
+            temperature
+            for text in self.retrieved_text
+            for temperature in _temperatures_c(text)
+        }
 
 
 class GuidanceAgent(Agent):
@@ -407,8 +470,17 @@ class GuidanceAgent(Agent):
         state: dict[str, Any],
         revision: int,
     ) -> None:
-        quick = self._named_tools(session, step.agent.tools)
-        commit = self._observation_commit_tool(session, step, revision)
+        provenance = _ObservationProvenance(observation)
+        quick = _recording_tools(
+            self._named_tools(session, step.agent.tools),
+            provenance,
+        )
+        commit = self._observation_commit_tool(
+            session,
+            step,
+            revision,
+            provenance,
+        )
         tools = ToolSet(
             {
                 commit.name: commit,
@@ -507,6 +579,7 @@ class GuidanceAgent(Agent):
         session: WorkflowSession,
         step: Step,
         revision: int,
+        provenance: _ObservationProvenance,
     ) -> Tool:
         """Count model completion judgments before applying guarded state."""
 
@@ -533,23 +606,31 @@ class GuidanceAgent(Agent):
                     step,
                     updates,
                 )
+                if not invalid:
+                    invalid = _provenance_error(updates, provenance)
                 if invalid:
                     self.store.observe(session, None)
-                else:
-                    completion_proposed = self.store._completion_proposed(
-                        session,
-                        updates,
+                    self.store.record(session, "step.commit_rejected", invalid)
+                    return WorkflowCommitResult(
+                        accepted=False,
+                        complete=False,
+                        message=invalid,
+                        revision=session.revision,
                     )
-                    self.store.observe(
-                        session,
-                        "accepted"
-                        if completion_proposed
-                        else (
-                            None
-                            if request.evidence == "unknown"
-                            else "rejected"
-                        ),
-                    )
+                completion_proposed = self.store._completion_proposed(
+                    session,
+                    updates,
+                )
+                self.store.observe(
+                    session,
+                    "accepted"
+                    if completion_proposed
+                    else (
+                        None
+                        if request.evidence == "unknown"
+                        else "rejected"
+                    ),
+                )
                 result = self.store.commit(session, updates, request.message)
             return WorkflowCommitResult(
                 accepted=result.accepted,
@@ -665,6 +746,121 @@ def _resolve(value: Any, state: dict[str, Any]) -> Any:
             raise ValueError(f"trigger references missing state: {name}")
         return state[name]
     return value
+
+
+def _recording_tools(
+    tools: ToolSet,
+    provenance: _ObservationProvenance,
+) -> ToolSet:
+    """Record only source and clock results needed to validate state commits."""
+
+    recorded: dict[str, Tool[Any, Any]] = {}
+    for name, tool in tools.items():
+        if name not in {"rag_lookup", "clock__now"}:
+            recorded[name] = tool
+            continue
+
+        async def handle(request: Any, *, wrapped: Tool[Any, Any] = tool) -> Any:
+            result = wrapped.handler(request)
+            if isawaitable(result):
+                result = await result
+            provenance.record(wrapped.name, result)
+            return result
+
+        recorded[name] = Tool(
+            tool.name,
+            tool.description,
+            tool.request_model,
+            tool.result_model,
+            handle,
+            return_direct=tool.return_direct,
+            examples=tool.examples,
+        )
+    return ToolSet(recorded)
+
+
+def _provenance_error(
+    updates: dict[str, Any],
+    provenance: _ObservationProvenance,
+) -> str:
+    duration = updates.get("steep_duration_s")
+    if duration is not None:
+        package = provenance.package_durations()
+        retrieved = provenance.retrieved_durations()
+        if duration not in package | retrieved:
+            return (
+                "steep_duration_s must equal a duration with explicit units "
+                "from the fresh observation or rag_lookup result"
+            )
+
+    temperature = updates.get("target_temperature_c")
+    if temperature is not None:
+        supported = (
+            provenance.package_temperatures()
+            | provenance.retrieved_temperatures()
+        )
+        if not isinstance(temperature, (int, float)) or not any(
+            abs(float(temperature) - candidate) <= 0.6
+            for candidate in supported
+        ):
+            return (
+                "target_temperature_c must equal a temperature with explicit "
+                "units from the fresh observation or rag_lookup result"
+            )
+
+    started_at_us = updates.get("steeping_started_at_us")
+    if (
+        started_at_us is not None
+        and started_at_us not in provenance.clock_values
+    ):
+        return "steeping_started_at_us must equal this turn's clock__now result"
+    return ""
+
+
+def _evidence_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _duration_seconds(text: str) -> set[int]:
+    """Return explicit unit-bearing durations normalized to whole seconds."""
+
+    durations: set[int] = set()
+    for match in _DURATION_RANGE.finditer(text):
+        multiplier = _duration_multiplier(match.group(3))
+        for raw in match.group(1, 2):
+            normalized = float(raw) * multiplier
+            if normalized.is_integer():
+                durations.add(int(normalized))
+    without_ranges = _DURATION_RANGE.sub("", text)
+    for match in _DURATION_VALUE.finditer(without_ranges):
+        normalized = float(match.group(1)) * _duration_multiplier(match.group(2))
+        if normalized.is_integer():
+            durations.add(int(normalized))
+    return durations
+
+
+def _duration_multiplier(unit: str) -> int:
+    return 60 if unit.lower().startswith("min") else 1
+
+
+def _temperatures_c(text: str) -> set[float]:
+    """Return explicit unit-bearing temperatures normalized to Celsius."""
+
+    temperatures: set[float] = set()
+    for match in _TEMPERATURE_RANGE.finditer(text):
+        for raw in match.group(1, 2):
+            temperatures.add(_temperature_c(float(raw), match.group(3)))
+    without_ranges = _TEMPERATURE_RANGE.sub("", text)
+    for match in _TEMPERATURE_VALUE.finditer(without_ranges):
+        temperatures.add(_temperature_c(float(match.group(1)), match.group(2)))
+    return temperatures
+
+
+def _temperature_c(value: float, unit: str) -> float:
+    normalized = unit.lower().replace("°", "").strip()
+    return (value - 32) * 5 / 9 if normalized.startswith("f") else value
 
 
 def _state_contract(workflow: Workflow, step: Step) -> str:

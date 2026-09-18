@@ -24,7 +24,8 @@ _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
     "Recall what was said, asked, or done in earlier conversation turns, including objects and "
     "colors mentioned there. Every history question (\"which shape did I request first?\", "
-    "\"what did I ask you to build?\") routes here, even when [Recent conversation] seems to "
+    "\"what was the original shade?\", \"what did I ask you to build?\") routes here, even "
+    "when current scene state or [Recent conversation] seems to "
     "contain the answer; that block only resolves references, and guessing a history answer is "
     "always wrong. Never a source for present-day or physical-world facts, and what the camera "
     "saw earlier belongs to vision_agent, not memory: only the conversation's own turns live "
@@ -74,7 +75,12 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
             )),
         ]
         async def _call_model(transcript, definitions):
-            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+            return await llm.chat(
+                transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
+            )
         try:
             loop_result = await run_tool_loop(messages, toolset, _call_model)
         except ToolLoopError:

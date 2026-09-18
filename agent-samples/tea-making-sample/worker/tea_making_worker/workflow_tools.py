@@ -209,7 +209,9 @@ def rag_lookup_tool(
     return Tool(
         "rag_lookup",
         (
-            "Retrieve tea and brewing knowledge from the sample documents. "
+            "USE WHEN: the user requests any tea, brewing, or hot-water fact; always retrieve even "
+            "if model memory seems sufficient. DO NOT USE WHEN: general knowledge, calculation, "
+            "live visual evidence, or starting/managing a guide. "
             "Retrieval never identifies a visible tea; exact-variety workflow "
             "values require a matching variety in the result."
         ),
@@ -254,7 +256,8 @@ def clock_timer_tool() -> Tool[TimerRequest, TimerResult]:
 
     return Tool(
         "clock__timer",
-        "Return fresh elapsed, remaining, and expiry values for a timer.",
+        "Return fresh elapsed, remaining, and expiry values when the user asks about timer time, "
+        "completion, or readiness. Do not substitute workflow status for a timer question.",
         TimerRequest,
         TimerResult,
         timer,
@@ -340,7 +343,9 @@ def workflow_start_tool(
 
     return _control_tool(
         "workflow__start",
-        "Start tea guidance and capture future turns for the current step.",
+        "USE WHEN: the user directly requests starting step-by-step tea guidance now. DO NOT USE "
+        "WHEN: tea facts, capability/how-to questions, hypothetical starts, quotations, reports, "
+        "or negations.",
         EmptyRequest,
         start,
     )
@@ -375,27 +380,28 @@ def workflow_management_tools(
         _control_tool(
             "workflow__advance",
             (
-                "Change steps only when the user's main intent directly commands "
-                "advance, continue, or skip now. Never call for a question, "
-                "hypothetical, deliberation, negation, or unrelated use. Set skip "
-                "true only for a direct skip command; the tool decides readiness."
+                "USE WHEN: the user directly commands the active tea guide to move forward now; "
+                "the tool decides readiness. Set skip=false for continue/next/move-on commands and "
+                "skip=true only for bypass/skip-this-step commands. DO NOT USE WHEN: a question, "
+                "quotation, hypothetical, deliberation, negation, report, or unrelated wording."
             ),
             AdvanceRequest,
             advance,
         ),
         _control_tool(
             "workflow__reset",
-            "Call only when the user asks you to exit, stop, reset, or cancel the "
-            "guide now. A statement about words or another person's instruction is "
-            "not the user's request. A capability, how-to, hypothetical, quoted, "
-            "reported, or negated statement must not call this tool.",
+            "USE WHEN: the user directly commands exiting, stopping, resetting, cancelling, or "
+            "clearing the active tea guide now. DO NOT USE WHEN: restart/start-over, a question, "
+            "quotation, hypothetical, reported speech, negation, word discussion, or unrelated "
+            "reset/cancel wording.",
             EmptyRequest,
             reset,
         ),
         _control_tool(
             "workflow__restart",
-            "Clear progress only when the user directly asks to restart the guide "
-            "now; never for questions, hypotheticals, reports, or negations.",
+            "USE WHEN: the user directly commands restarting the active tea guide from step one "
+            "now; this owns restart/start-over/begin-again requests instead of reset. DO NOT USE "
+            "WHEN: a question, quotation, hypothetical, report, or negation.",
             EmptyRequest,
             restart,
         ),
@@ -416,9 +422,10 @@ def workflow_status_tool(
 
     return _control_tool(
         "workflow__status",
-        "Report state only for an explicit guide-status request. Never substitute "
-        "this for another unavailable tool, timer/readiness questions, or "
-        "instructions about what to do.",
+        "USE WHEN: the user explicitly asks for the active guide's actual status, step, or "
+        "progress. DO NOT USE WHEN: timer/readiness, procedural or what-to-do questions, a "
+        "command, negation, another unavailable capability, or an answer already present in the "
+        "supplied step state.",
         EmptyRequest,
         status,
     )

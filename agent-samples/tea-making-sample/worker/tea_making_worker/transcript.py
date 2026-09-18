@@ -113,7 +113,7 @@ class TranscriptAgent(Agent):
             (
                 Tool(
                     "transcript__start",
-                    "Start recording final speech transcripts in the background.",
+                    "USE WHEN: a direct present request to start transcript recording.",
                     TranscriptControlRequest,
                     TranscriptState,
                     start,
@@ -122,7 +122,7 @@ class TranscriptAgent(Agent):
                 ),
                 Tool(
                     "transcript__stop",
-                    "Stop background transcript recording.",
+                    "USE WHEN: a direct present request to stop transcript recording.",
                     TranscriptControlRequest,
                     TranscriptState,
                     stop,
@@ -131,7 +131,8 @@ class TranscriptAgent(Agent):
                 ),
                 Tool(
                     "transcript__status",
-                    "Report whether transcript recording is running.",
+                    "USE WHEN: a question asks for the actual current transcript-recording state; "
+                    "never answer from model identity or memory.",
                     TranscriptControlRequest,
                     TranscriptState,
                     status,

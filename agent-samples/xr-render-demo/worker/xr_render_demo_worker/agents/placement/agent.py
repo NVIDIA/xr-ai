@@ -21,10 +21,13 @@ from ...spatial_ops import TurnGuard, make_placement_tools
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
-    "Move, swap, contain, stack, or restore existing XR objects; never creates, recolors, or "
-    "removes them. Only an object already listed in SCENE OBJECTS can move: \"put the X "
-    "in/on/inside the Y\" with X listed is a move for this agent, while placing an X not yet "
-    "in the scene is a creation for object_agent, initial position included."
+    "Use only when every target being repositioned already exists in SCENE OBJECTS; a verb such "
+    "as put or place does not by itself make a placement task. Owns spatial changes to existing "
+    "XR objects only: move, nudge, swap, contain, stack, or "
+    "restore a target already listed in SCENE OBJECTS. Examples: 'move ring-alpha left', 'put the "
+    "existing ring inside capsule-beta', and 'swap the cone and box'. If the object being placed is "
+    "absent from SCENE OBJECTS, it is a new-object task for object_agent. Never use for creation, "
+    "deletion, duplication, recoloring, reshaping, or resizing."
 )
 
 
@@ -62,15 +65,29 @@ def make_placement_agent(
                 )),
             ]
             async def _call_model(transcript, definitions):
-                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+                return await llm.chat(
+                    transcript,
+                    tools=list(definitions) or None,
+                    max_tokens=2048,
+                    temperature=0.0,
+                )
             try:
                 loop_result = await run_tool_loop(messages, toolset, _call_model)
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
             return SubagentResult(result=loop_result.content or "Done.")
 
-    return Tool(name="placement_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="placement_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=(
+            "For 'Move X, make Y orange, and create Z', receive the focused instruction "
+            "'Move X'.",
+        ),
+    )
 
 
 __all__ = ["make_placement_agent"]

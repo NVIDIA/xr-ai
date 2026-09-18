@@ -69,7 +69,6 @@ _RECENT_WINDOW_US = 10 * 60 * 1_000_000
 # the cube?"); unlike can/could/will, they cannot open a polite command.
 _STATUS_OPENERS = frozenset("did have has had was were".split())
 
-
 def _wants_mutation(transcript: str) -> bool:
     words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
     words = [w for w in words if w]
@@ -93,6 +92,18 @@ def _claims_completion(text: str) -> bool:
 
 def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
+
+
+def _prompt_with_tool_examples(prompt: str, toolset: ToolSet) -> str:
+    sections = [
+        f"{name}:\n" + "\n".join(f"- {example}" for example in tool.examples)
+        for name, tool in toolset.items()
+        if tool.examples
+    ]
+    if not sections:
+        return prompt
+    examples = "\n\n".join(sections)
+    return f"{prompt}\n\n<tool_examples>\n{examples}\n</tool_examples>"
 
 
 class SceneSupervisor:
@@ -222,7 +233,6 @@ class SceneSupervisor:
         evidence = MutationEvidence()
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
-
         user_message = (
             f"Active participant: {request.participant_id}\n"
             f"Utterance timestamp: {request.timestamp_us}\n"
@@ -230,18 +240,25 @@ class SceneSupervisor:
             f"{conversation}"
             f"User request: {transcript}"
         )
+        toolset = self._toolset
         messages = [
-            ChatMessage(role="system", content=self._prompt),
+            ChatMessage(
+                role="system",
+                content=_prompt_with_tool_examples(self._prompt, toolset),
+            ),
             ChatMessage(role="user", content=user_message),
         ]
 
         async def _call_model(model_transcript, definitions):
             return await self._llm.chat(
-                model_transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0
+                model_transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
             )
 
         try:
-            result = await run_tool_loop(messages, self._toolset, _call_model, max_iterations=12)
+            result = await run_tool_loop(messages, toolset, _call_model, max_iterations=12)
         except ToolLoopError as exc:
             logger.warning("supervisor loop failed ({})", exc)
             reply = "I'm sorry — something went wrong. Please try again."
@@ -278,7 +295,7 @@ class SceneSupervisor:
             ]
             try:
                 result2 = await run_tool_loop(
-                    verification_messages, self._toolset, _call_model, max_iterations=6
+                    verification_messages, toolset, _call_model, max_iterations=6
                 )
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)

@@ -62,16 +62,11 @@ _WORKFLOW_CONTROLS = frozenset(
     {"workflow__advance", "workflow__reset", "workflow__restart", "workflow__status"}
 )
 _TEA_PROMPT = (
-    "Workflow controls change guide state. Call one only when the user's main "
-    "intent directly requests that change now; otherwise answer without a control. "
-    "Questions about how, whether, or what would happen are informational; only "
-    "'can/could/would you' followed by an action asks you to act. Never act on "
-    "negated, quoted, hypothetical, reported, deliberative, or unrelated wording. "
-    "For example, 'please stop the guide' acts, while 'how do I stop?', 'someone "
-    "said stop', and discussion of the word stop do not. "
-    "Next or continue advances with skip false; skip advances with skip true. Exit, "
-    "stop, reset, or cancel the guide resets it. Restart restarts it. Status reports "
-    "status. The tool, not you, decides whether an authorized change is ready."
+    "Workflow controls change guide state. Select one only when the user's main "
+    "intent directly requests that change now, using the control's own description "
+    "as the authoritative contract. Questions and negated, quoted, hypothetical, "
+    "reported, deliberative, or unrelated wording are not control requests. The "
+    "selected tool decides whether an authorized change is ready."
 )
 _VOICE_PROMPT = (
     "Answer in at most two short sentences. Use a tool for requested live "
@@ -304,7 +299,13 @@ class ForegroundAgent(Agent):
         try:
             result = await run_tool_loop(
                 (
-                    ChatMessage(role="system", content=turn.agent.system_prompt),
+                    ChatMessage(
+                        role="system",
+                        content=_prompt_with_tool_examples(
+                            turn.agent.system_prompt,
+                            turn.tools,
+                        ),
+                    ),
                     ChatMessage(role="user", content=turn.user_message),
                 ),
                 turn.tools,
@@ -435,13 +436,19 @@ class ForegroundAgent(Agent):
 
         return Tool(
             "current_view",
-            "Inspect the participant's camera only when answering requires "
-            "evidence from the visible present scene.",
+            "USE WHEN: the answer requires evidence from the participant's present visible scene, "
+            "surroundings, appearance, or unnamed/deictic referent. A present visual request always "
+            "requires this call before prose. DO NOT USE WHEN: general knowledge, calculation, "
+            "hypothetical visual content, past events, or non-visual ambiguity.",
             CurrentViewRequest,
             ImageQueryResult,
             inspect,
             return_direct=True,
             render_result=lambda result: result.text,
+            examples=(
+                "'What color is the cloth beside me?' requires current_view before answering.",
+                "'What is photosynthesis?' is general knowledge and does not use current_view.",
+            ),
         )
 
     async def _stream_current_view(
@@ -656,6 +663,18 @@ def _merge_tool_sets(*catalogs: ToolSet) -> ToolSet:
                 raise ValueError(f"duplicate participant tool: {name}")
             tools[name] = tool
     return ToolSet(tools)
+
+
+def _prompt_with_tool_examples(prompt: str, tools: ToolSet) -> str:
+    sections = [
+        f"{name}:\n" + "\n".join(f"- {example}" for example in tool.examples)
+        for name, tool in tools.items()
+        if tool.examples
+    ]
+    if not sections:
+        return prompt
+    examples = "\n\n".join(sections)
+    return f"{prompt}\n\n<tool_examples>\n{examples}\n</tool_examples>"
 
 
 def _build_tea_agents(workflow: Workflow) -> dict[str, _FocusedAgent]:
