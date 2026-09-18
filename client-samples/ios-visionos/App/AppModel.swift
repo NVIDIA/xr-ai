@@ -31,6 +31,20 @@ enum XRState: Equatable {
     }
 }
 
+enum CameraMode: String, CaseIterable {
+    case off
+    case onDemand
+    case live
+
+    var displayName: String {
+        switch self {
+        case .off: "Off"
+        case .onDemand: "On-demand images"
+        case .live: "Live video"
+        }
+    }
+}
+
 // MARK: - AppModel
 
 /// Observable state shared across the sample app.
@@ -74,6 +88,9 @@ final class AppModel {
     var cameraPosition: CameraConfig.Position = AppModel.loadCameraPosition() {
         didSet { AppModel.defaults.set(AppModel.encode(cameraPosition), forKey: Keys.cameraPosition) }
     }
+    var cameraMode: CameraMode = AppModel.loadCameraMode() {
+        didSet { AppModel.defaults.set(cameraMode.rawValue, forKey: Keys.cameraMode) }
+    }
 
     // MARK: - Topic routing
 
@@ -92,6 +109,7 @@ final class AppModel {
         static let identity       = "settings.identity"
         static let audioMode      = "settings.audioMode"
         static let cameraPosition = "settings.cameraPosition"
+        static let cameraMode     = "settings.cameraMode"
     }
 
     private static func encode(_ mode: AudioConfig.MicrophoneMode) -> String {
@@ -120,6 +138,9 @@ final class AppModel {
         // Default to the back camera; honour an explicitly saved "front".
         defaults.string(forKey: Keys.cameraPosition) == "front" ? .front : .back
     }
+    private static func loadCameraMode() -> CameraMode {
+        defaults.string(forKey: Keys.cameraMode).flatMap(CameraMode.init(rawValue:)) ?? .off
+    }
 
     // MARK: - Live state
 
@@ -135,7 +156,8 @@ final class AppModel {
     private(set) var isAudioStarting = false
     var isCameraActive = false
     private var isCameraStarting = false
-    private var cameraIntendedOn = false
+    private var imageCaptureHandler:
+        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)?
     private var isTearingDown = false
     var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
@@ -232,7 +254,6 @@ final class AppModel {
                 self.micEnabledByUser = false
                 self.isAudioStarting = false
                 self.isCameraActive = false
-                self.cameraIntendedOn = false
                 self.agentStatus = nil
                 self.networkMetrics = nil
                 self.agentResponse = nil
@@ -246,15 +267,11 @@ final class AppModel {
                 #endif
             case .reconnecting:
                 self.networkMetrics = nil
-                // Preserve camera intent across a transient reconnect: drop the
-                // track now, restore it on `.connected`.
                 if self.isCameraActive {
-                    self.cameraIntendedOn = true
                     Task { await self.stopCamera() }
                 }
             case .connected:
-                if self.cameraIntendedOn {
-                    self.cameraIntendedOn = false
+                if self.cameraMode == .live {
                     Task { await self.startCamera() }
                 }
                 #if os(visionOS)
@@ -277,14 +294,20 @@ final class AppModel {
             guard let self, self.session === newSession else { return }
             self.networkMetrics = metrics
         }
-        newSession.onImageCaptureRequested = { [weak self, weak newSession] _ in
+        imageCaptureHandler = { [weak self, weak newSession] _ in
             guard let self, let newSession, self.session === newSession else {
                 throw CancellationError()
+            }
+            guard self.cameraMode == .onDemand else {
+                throw StreamError.imageCaptureUnavailable("On-demand image capture is not enabled.")
             }
             return try await newSession.captureImage(
                 config: CameraConfig(position: self.cameraPosition)
             )
         }
+        newSession.onImageCaptureRequested = cameraMode == .onDemand
+            ? imageCaptureHandler
+            : nil
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
 
@@ -316,6 +339,7 @@ final class AppModel {
             // when the connection never fully established.
             await newSession.disconnect()
             session = nil
+            imageCaptureHandler = nil
             connectionState = .disconnected
         }
     }
@@ -334,6 +358,7 @@ final class AppModel {
         #endif
         await session?.disconnect()
         session = nil
+        imageCaptureHandler = nil
         connectionState = .disconnected
         agentStatus = nil
         networkMetrics = nil
@@ -342,7 +367,6 @@ final class AppModel {
         micEnabledByUser = false
         isAudioStarting = false
         isCameraActive = false
-        cameraIntendedOn = false
         isTearingDown = false
     }
 
@@ -391,12 +415,28 @@ final class AppModel {
 
     // MARK: - Camera
 
+    func applyCameraMode(_ mode: CameraMode) async {
+        cameraMode = mode
+        session?.onImageCaptureRequested = mode == .onDemand
+            ? imageCaptureHandler
+            : nil
+        if mode == .live, connectionState == .connected {
+            await startCamera()
+        } else if isCameraActive || isCameraStarting {
+            await stopCamera()
+        }
+    }
+
     func startCamera() async {
-        guard !isCameraStarting, !isCameraActive else { return }
+        guard cameraMode == .live, !isCameraStarting, !isCameraActive else { return }
         isCameraStarting = true
         defer { isCameraStarting = false }
 
         #if os(visionOS)
+        guard immersiveSpaceIsOpen else {
+            lastError = "Open the immersive space before enabling live video."
+            return
+        }
         // Surface a friendly message when main-camera access is permanently
         // denied. Without this probe the user sees `LiveKitError.deviceAccessDenied`
         // from StreamKit's internal ARCameraCapturer.
@@ -407,8 +447,14 @@ final class AppModel {
         }
         #endif
 
+        guard cameraMode == .live, connectionState == .connected else { return }
+
         do {
             try await session?.startCamera(config: CameraConfig(position: cameraPosition))
+            guard cameraMode == .live, connectionState == .connected else {
+                try? await session?.stopCamera()
+                return
+            }
             isCameraActive = true
         } catch {
             #if DEBUG

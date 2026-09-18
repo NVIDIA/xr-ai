@@ -163,6 +163,10 @@ class StreamSession(private val backend: StreamingBackend) {
      * Used by clients that inject frames from their own pipeline (external
      * camera adapters, screen capture, synthetic frame sources). Mirror of
      * iOS `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     * Call it only for a user-authorized live-video mode because the first
+     * frame publishes a track. An on-demand mode should retain or request a
+     * frame in the source adapter and encode it from [onImageCaptureRequested]
+     * without calling this method.
      *
      * @param i420         Read-only buffer containing Y, U, V planes back-to-back.
      * @param width        Y-plane pixel width (must be even).

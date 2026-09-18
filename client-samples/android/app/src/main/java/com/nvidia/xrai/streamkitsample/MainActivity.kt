@@ -168,7 +168,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
                 AgentSection(vm)
                 ConnectionSection(vm)
                 NetworkSection(vm)
-                MediaSection(vm, requestCameraPermission)
+                MediaSection(vm)
                 DataChannelSection(vm)
                 if (vm.receivedMessages.isNotEmpty()) {
                     ReceivedSection(vm)
@@ -549,13 +549,9 @@ private fun FieldRow(
 // ── Media section ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun MediaSection(
-    vm: AppViewModel,
-    requestCameraPermission: suspend () -> Boolean,
-) {
+private fun MediaSection(vm: AppViewModel) {
     val isConnected = vm.connectionState == ConnectionState.CONNECTED
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // Permission launchers
     val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -612,35 +608,10 @@ private fun MediaSection(
             )
         }
 
-        // Camera toggle
-        CardRow {
-            val camLabel = if (vm.isCameraActive) "Stop Camera" else "Start Camera"
-            val camColor = if (vm.isCameraActive) ColorRed else ColorSecondary
-            Button(
-                onClick = {
-                    if (vm.isCameraActive) {
-                        vm.stopCamera()
-                    } else if (vm.selectedCameraId == VIRTUAL_CAMERA_ID) {
-                        // Synthetic frames — no physical camera, no CAMERA permission.
-                        vm.startCamera()
-                    } else {
-                        val hasPerm = ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.CAMERA
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasPerm) vm.startCamera()
-                        else scope.launch {
-                            if (requestCameraPermission()) vm.startCamera()
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isConnected,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isConnected) camColor else ColorSecondary,
-                ),
-                shape = RoundedCornerShape(8.dp),
-            ) { Text(camLabel) }
-        }
+        CameraModeSelectorRow(
+            selected = vm.cameraMode,
+            onSelect = vm::setCameraMode,
+        )
 
         // Camera status
         CardRow(showDivider = false) {
@@ -648,10 +619,56 @@ private fun MediaSection(
             Spacer(Modifier.weight(1f))
             val (statusText, statusColor) = when {
                 vm.isCameraActive -> "Streaming" to ColorGreen
-                isConnected       -> "Idle" to ColorSecondary
-                else              -> "Not connected" to ColorSecondary
+                vm.cameraMode == CameraMode.ON_DEMAND && isConnected -> "On demand" to ColorGreen
+                vm.cameraMode == CameraMode.LIVE && isConnected -> "Starting…" to ColorOrange
+                vm.cameraMode == CameraMode.OFF -> "Off" to ColorSecondary
+                else -> "Not connected" to ColorSecondary
             }
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CameraModeSelectorRow(
+    selected: CameraMode,
+    onSelect: (CameraMode) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    CardRow {
+        Text(
+            "Camera Mode",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.width(110.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            ) {
+                Text(selected.displayName, style = MaterialTheme.typography.bodyMedium)
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            }
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                CameraMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode.displayName) },
+                        onClick = {
+                            onSelect(mode)
+                            expanded = false
+                        },
+                    )
+                }
+            }
         }
     }
 }

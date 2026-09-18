@@ -175,6 +175,10 @@ public final class StreamSession: ObservableObject {
     /// automatically on the first call; subsequent calls deliver frames to the
     /// already-published track.
     ///
+    /// Call this only for a user-authorized live-video mode. For on-demand images,
+    /// retain or request a frame in the external-camera adapter and return its encoded
+    /// bytes from ``onImageCaptureRequested`` without calling this publishing API.
+    ///
     /// On the **simulator**, ``startCamera()`` calls this method internally with synthetic
     /// test frames, so you can develop and test without wearable hardware.
     ///
