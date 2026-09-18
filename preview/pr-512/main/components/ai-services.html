@@ -897,10 +897,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.</
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
-<li><p><strong>Docker Engine</strong> with the user in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">version</span></code>
-must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
-<li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
-<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
+<li><p><strong>Docker Engine</strong> accessible from the launch session (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> must
+succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>). Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for group setup.</p></li>
+<li><p><strong>NVIDIA Container Toolkit</strong> installed, with its <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime registered
+in Docker. Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for the runtime check,
+configuration steps, and GPU smoke test.</p></li>
 <li><p><strong>NGC pull access</strong>, when the configured <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code> is restricted or
 requires authentication on <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by

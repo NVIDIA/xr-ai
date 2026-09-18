@@ -477,6 +477,9 @@ conversational introduction rather than an exhaustive capability reference.</p>
 </section>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
+<p>Before the first launch, complete <a class="reference internal" href="requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>, including on DGX
+Spark. Docker must be accessible without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the launch session, and
+the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime must be registered.</p>
 <p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,

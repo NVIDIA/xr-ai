@@ -550,7 +550,7 @@ OpenAI-compatible endpoints.</p>
 <td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
-<td><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one</p></td>
+<td><p>Riva TTS client with incremental PCM and buffered WAV or PCM synthesis.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2076,8 +2076,7 @@ adapter kind.</p>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.RivaTTS" title="Link to this definition">#</a></dt>
-<dd><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one
-WAV (or raw PCM) result.</p>
+<dd><p>Riva TTS client with incremental PCM and buffered WAV or PCM synthesis.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.RivaTTS.synthesize">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">synthesize</span></span><span class="sig-paren">(</span>
@@ -2091,6 +2090,24 @@ WAV (or raw PCM) result.</p>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="headerlink" href="#xr_ai_models.RivaTTS.synthesize" title="Link to this definition">#</a></dt>
 <dd><p>Synthesize <em>text</em> and return WAV bytes (or raw 16-bit PCM).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.RivaTTS.stream_pcm">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stream_pcm</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">collections.abc.AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.RivaTTS.stream_pcm" title="Link to this definition">#</a></dt>
+<dd><p>Yield raw mono 16-bit PCM bytes for a complete text input.</p>
+<p>Chunks use the configured sample rate and contain only whole samples.
+The timeout bounds the stream’s lifetime, checked on each read. Closing
+or cancelling the iterator cancels the RPC and joins its pending read
+before returning, so callers can safely release a synthesis lock.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2381,6 +2398,7 @@ WAV (or raw PCM) result.</p>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS"><code class="docutils literal notranslate"><span class="pre">RivaTTS</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.synthesize"><code class="docutils literal notranslate"><span class="pre">synthesize()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.stream_pcm"><code class="docutils literal notranslate"><span class="pre">stream_pcm()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaTTS.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>

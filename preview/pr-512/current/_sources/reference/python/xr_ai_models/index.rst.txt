@@ -1319,8 +1319,7 @@ Package Contents
 
 .. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
 
-   Riva TTS client: streaming synthesis over gRPC, concatenated to one
-   WAV (or raw PCM) result.
+   Riva TTS client with incremental PCM and buffered WAV or PCM synthesis.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
@@ -1328,6 +1327,19 @@ Package Contents
 
 
       Synthesize *text* and return WAV bytes (or raw 16-bit PCM).
+
+
+
+   .. py:method:: stream_pcm(text: str, *, timeout: float | None = None) -> collections.abc.AsyncIterator[bytes]
+      :async:
+
+
+      Yield raw mono 16-bit PCM bytes for a complete text input.
+
+      Chunks use the configured sample rate and contain only whole samples.
+      The timeout bounds the stream's lifetime, checked on each read. Closing
+      or cancelling the iterator cancels the RPC and joins its pending read
+      before returning, so callers can safely release a synthesis lock.
 
 
 

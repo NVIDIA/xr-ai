@@ -33,9 +33,13 @@ chat for function calls and reasoning.
 
 Magpie returns mono 16-bit audio at 44,100 Hz. Its HTTP endpoint supports WAV
 synthesis and the existing Pocket client's PCM streaming protocol, including
-sample-rate headers. The shared Riva client collects each synthesis request
-before returning audio, so time to first audio can be longer than Pocket TTS.
-The voice pipeline can still submit sentences separately.
+sample-rate headers. Streaming requests forward Magpie's PCM chunks as they
+arrive over gRPC, so playback can start before a sentence finishes synthesis.
+The voice pipeline still submits complete sentences rather than token-by-token
+text. WAV requests remain buffered. A client disconnect cancels the upstream
+RPC before the adapter admits another synthesis request. Failures before the
+first audio return an HTTP error; failures after streaming starts terminate the
+response instead of appending an error message to the PCM audio.
 
 Native NIM endpoints are separate from the client ports:
 
