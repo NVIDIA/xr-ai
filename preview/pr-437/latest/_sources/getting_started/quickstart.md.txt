@@ -33,6 +33,10 @@ conversational introduction rather than an exhaustive capability reference.
 
 ## Model servers (shared AI services)
 
+Before the first launch, complete {ref}`docker-host-setup`, including on DGX
+Spark. Docker must be accessible without `sudo` from the launch session, and
+the `nvidia` runtime must be registered.
+
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `simple-vlm-example`,
