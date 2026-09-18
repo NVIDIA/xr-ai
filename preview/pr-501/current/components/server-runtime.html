@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -472,8 +473,9 @@ supported flow is:</p>
 validate that the target participant is currently connected; messages for
 unknown participants are dropped with a warning.</p></li>
 <li><p>Return-traffic topics (<code class="docutils literal notranslate"><span class="pre">return_audio.*</span></code>, <code class="docutils literal notranslate"><span class="pre">return_audio_flush.*</span></code>,
-<code class="docutils literal notranslate"><span class="pre">return_data.*</span></code>) are connector-only — an agent’s default subscription
-excludes them.</p></li>
+<code class="docutils literal notranslate"><span class="pre">return_data.*</span></code>) are transport-infrastructure-only. Connectors consume them
+for delivery and the optional capture process observes them read-only; an
+agent’s default subscription excludes them.</p></li>
 <li><p>On the LiveKit side, return audio is published as one track per participant
 with subscribe permissions restricted to that participant, and return data
 is addressed with <code class="docutils literal notranslate"><span class="pre">destination_identities</span></code> (refer to
@@ -589,6 +591,104 @@ avoids pulling in the full DeviceIOHub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). <code class="docutils literal notranslate"><span class="pre">device_io_hub.ipc</span></code> re-exports the same names for the
 server side.</p>
 </div>
+</section>
+<section id="media-hub-session-capture">
+<h2>Media-hub session capture<a class="headerlink" href="#media-hub-session-capture" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> is an optional process from the DeviceIOHub package. It
+sits downstream of <code class="docutils literal notranslate"><span class="pre">HubEndpoint</span></code>, not inside the LiveKit connector:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>device transport → connector → HubEndpoint → agents
+                                  └────────→ capture
+                         agent return media ─┘
+</pre></div>
+</div>
+<p>This boundary is transport-independent. Incoming camera, microphone, and data
+have already been decoded, timestamped, and tagged with participant and track
+identities. The capture process uses a normal <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> for that
+stream and a private read-only subscription to the hub’s routed return topics
+for agent audio and data. It does not expose return traffic to agent APIs.</p>
+<p>Run the hub first, then start capture from the repository root:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="o">--</span><span class="n">project</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span> <span class="n">device_io_capture</span> \
+  <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">media_capture</span><span class="o">.</span><span class="n">yaml</span>
+</pre></div>
+</div>
+<p>Capture is split into a raw timestamped session writer and a derived capture
+renderer. The writer owns participant/session boundaries, NVENC encoding, raw
+float32 audio, the aligned stereo WAV, transcripts, observations, event
+records, retention, and the manifest. Raw capture is the default. The
+configured <code class="docutils literal notranslate"><span class="pre">profile</span></code> controls only whether rendering follows capture:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">raw</span></code> writes the canonical camera H.264, audio, transcript, event, and timing
+artifacts and performs no presentation rendering. It does not require
+FFmpeg.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">demo</span></code> writes the same raw bundle, then invokes <code class="docutils literal notranslate"><span class="pre">CaptureRenderer</span></code> after the
+session closes. The renderer adds caption and data panels and produces a
+fast-start MP4 with H.264 video and 48 kHz stereo AAC-LC audio.</p></li>
+</ul>
+<p>The canonical <code class="docutils literal notranslate"><span class="pre">video/session.264</span></code> is always encoded from unmodified camera
+pixels. <code class="docutils literal notranslate"><span class="pre">video/packets.jsonl</span></code> records each encoded packet’s byte range, source
+track, key-frame state, and exact timestamp. The renderer consumes those raw
+artifacts and the transcript/event timeline, performs a separate NVDEC/NVENC
+pass for its burned-in panels, and records the derived result under
+<code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> in the manifest. It never replaces the raw media.</p>
+<p>Render or re-render any completed bundle independently of the capture process:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="n">run</span> <span class="o">--</span><span class="n">project</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span> <span class="n">device_io_capture_render</span> \
+  <span class="o">~/.</span><span class="n">local</span><span class="o">/</span><span class="n">share</span><span class="o">/</span><span class="n">xr</span><span class="o">-</span><span class="n">ai</span><span class="o">/</span><span class="n">captures</span><span class="o">/&lt;</span><span class="n">session</span><span class="o">-</span><span class="n">directory</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> records from participant join to leave.
+<code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">explicit</span></code> creates bundles only between reserved agent start and
+stop messages. A background agent wrapper initializes the private controller
+with a destination namespace relative to <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> and fixed capture metadata;
+the semantic actions exposed to the model can therefore remain parameterless
+<code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">recording</span></code> and <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">recording</span></code>. Each accepted start creates a new
+timestamped child directory in that namespace. The model never selects a
+filesystem path. These messages remain an internal adapter seam rather than a
+public agent tool API, and the wrapper can publish frame-linked observations
+without changing the storage engine.</p>
+<p>The SDK implementation is <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.capture.CaptureTools</span></code>. Applications
+construct it with the fixed target and metadata, then call
+<code class="docutils literal notranslate"><span class="pre">participant_tools(participant_id)</span></code> to obtain the two participant-bound native
+tools.</p>
+<p>Every bundle uses one Unix-microsecond clock and records both absolute and
+session-relative timing. <code class="docutils literal notranslate"><span class="pre">video/frames.jsonl</span></code> indexes source sequence,
+timestamp, track, pixel format, and source/encoded dimensions.
+<code class="docutils literal notranslate"><span class="pre">video/packets.jsonl</span></code> retains the encoded-packet byte ranges and timing needed
+for deterministic derived video.
+<code class="docutils literal notranslate"><span class="pre">audio/chunks.jsonl</span></code> indexes direction, sample format, byte range, duration,
+and timestamps. <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> contains final STT and spoken TTS text, and
+<code class="docutils literal notranslate"><span class="pre">observations.jsonl</span></code> accepts derived records linked to an exact frame
+timestamp. <code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code> remains the complete directional data timeline, and
+<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> is the machine-readable entry point. Its <code class="docutils literal notranslate"><span class="pre">complete</span></code> and
+<code class="docutils literal notranslate"><span class="pre">incomplete_reason</span></code> fields distinguish a normally drained session from a
+bounded recovery when the return-traffic departure marker is lost.</p>
+<p>In a captioned rendering, final STT and the text actually sent to TTS appear as the
+large primary caption below the sensor image. Each TTS sentence travels through
+the paced media queue, so its caption is timestamped from the first
+corresponding audio chunk rather
+than from synthesis completion. Every UTF-8 data-channel message, inbound or
+outbound, scrolls through a smaller right-side panel with its direction and
+topic. Binary data is not rendered, but every data payload remains in
+<code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code>. Both panels sit outside the sensor image, so composition
+never replaces camera
+pixels. Reserved speech-caption metadata stays inside hub IPC and is never
+forwarded to the client data channel.</p>
+<p>Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
+dedicated threads in the capture process. Recorder overload therefore drops
+capture frames without delaying the hub’s publish path. PyNvVideoCodec receives
+contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
+sets and no B-frames. At session finalization, each raw stream’s chunks are
+joined in timestamp order. When requested, the renderer reconstructs captions
+from the bundle timeline. FFmpeg preserves the temporary composed H.264 stream,
+converts the aligned PCM mix to AAC-LC with an explicit
+48 kHz stereo layout, preserves recorded frame timing across sparse or dropped
+frames, resets trimmed audio to the same zero-based timeline, and writes one
+<code class="docutils literal notranslate"><span class="pre">.mp4</span></code> with fast-start metadata. Resolution or
+LiveKit track changes therefore do not create additional playable outputs.
+This does not affect the live path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">CaptureRenderer</span></code> and the demo profile require an <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> executable on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>
+with the native AAC encoder. They validate that requirement before rendering so
+a session cannot silently fall back to an MP4-incompatible PCM or MP3 track.
+The raw profile has no MP4 projection and therefore no FFmpeg requirement.</p>
 </section>
 <section id="per-participant-return-path">
 <h2>Per-participant return path<a class="headerlink" href="#per-participant-return-path" title="Link to this heading">#</a></h2>
@@ -739,6 +839,7 @@ Custom clients behind the TLS terminator must use the external same-origin
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#internal-livekit-transport">Internal LiveKit transport</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ipc-boundary-to-agents">IPC boundary to agents</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#media-hub-session-capture">Media-hub session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-participant-return-path">Per-participant return path</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-status-aggregation">Agent status aggregation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#same-origin-wss-proxy">Same-origin wss proxy</a></li>
