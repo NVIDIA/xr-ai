@@ -35,8 +35,8 @@ The site also publishes the current `main` branch and release-tagged versions.
 
 Build an application in the XR AI source tree so its unpublished SDK
 dependencies resolve from their repository paths. Start from
-`agent-samples/simple-vlm-example/`, keep only the SDK layers and services the
-application needs, and follow the
+`agent-samples/simple-vlm-example/`, copy it to `apps/<your-app>/`, keep only
+the SDK layers and services the application needs, and follow the
 [build-your-application guide](https://nvidia.github.io/xr-ai/latest/guides/building-your-app.html)
 through scaffolding, startup, and hardware-free verification.
 
@@ -62,6 +62,7 @@ evaluation, and adaptation guidance.
 | `agent-sdk/` | Hub IPC, model clients, runtime, tools, voice, and web events |
 | `agent-samples/` | Runnable agent stacks |
 | `model-server-samples/` | Shared model-server launch samples |
+| `apps/` | Application workspaces outside repository sample tooling |
 | `services/` | Hub, model servers, and typed capability services |
 | `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |
 | `tests/` | Cross-package and integration tests |

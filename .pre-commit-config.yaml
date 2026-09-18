@@ -8,6 +8,10 @@
 #
 # See CONTRIBUTING.md for DCO and docs/source/guides/spdx-headers.md for SPDX.
 
+# Application-owned files are outside repository file checks. Commit-wide hooks
+# such as DCO still run when installed.
+exclude: ^apps/
+
 repos:
   # ── Ruff lint (matches CI: ruff.toml at repo root, version pinned to CI) ──
   - repo: https://github.com/astral-sh/ruff-pre-commit

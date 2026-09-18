@@ -6,9 +6,10 @@
 # Build your application
 
 Read this when building an XR AI application. The directions below assume the
-application is under `agent-samples/<your-app>/`. The XR AI SDK distributions
-are not published to a package registry; they resolve through relative
-`[tool.uv.sources]` entries in each application's `pyproject.toml`.
+application is under `apps/<your-app>/`. This directory is for applications
+that are not part of the repository's sample catalog. The XR AI SDK
+distributions are not published to a package registry; they resolve through
+relative `[tool.uv.sources]` entries in each application's `pyproject.toml`.
 
 ## Start from a source checkout
 
@@ -110,10 +111,11 @@ application. Copy its tracked files from the repository root and rename its
 Python package and worker configuration:
 
 ```bash
-mkdir agent-samples/my-app
-git archive HEAD agent-samples/simple-vlm-example | tar -x --strip-components=2 -C agent-samples/my-app
-mv agent-samples/my-app/worker/simple_vlm_example_worker agent-samples/my-app/worker/my_app_worker
-mv agent-samples/my-app/yaml/simple_vlm_example_worker.yaml agent-samples/my-app/yaml/my_app_worker.yaml
+mkdir -p apps/my-app
+git archive HEAD agent-samples/simple-vlm-example |
+  tar -x --strip-components=2 -C apps/my-app
+mv apps/my-app/worker/simple_vlm_example_worker apps/my-app/worker/my_app_worker
+mv apps/my-app/yaml/simple_vlm_example_worker.yaml apps/my-app/yaml/my_app_worker.yaml
 ```
 
 Replace the sample names consistently:
@@ -127,10 +129,16 @@ Replace the sample names consistently:
 | `simple_vlm` | `my_app` |
 | `SimpleVlmAgent` | `MyAppAgent` |
 
-The copied projects already contain working relative sources for the assumed
-`agent-samples/<your-app>/` location. Keep each `[tool.uv.sources]` entry paired
-with its distribution in `[project].dependencies`. Every unpublished XR AI
-dependency must retain a repository source mapping.
+Apply these replacements across the entire copied tree, including comments and
+docstrings. Update any remaining `agent-samples/` working-directory references
+to `apps/`, and change prose that still describes the application as a
+repository sample.
+
+The `apps/` and `agent-samples/` directories are at the same depth, so the
+copied projects' relative sources continue to work. Keep each
+`[tool.uv.sources]` entry paired with its distribution in
+`[project].dependencies`. Every unpublished XR AI dependency must retain a
+repository source mapping.
 
 Use this map to separate reusable scaffolding from the VLM example:
 
@@ -149,7 +157,8 @@ Use this map to separate reusable scaffolding from the VLM example:
 Rewrite the copied README as application-owned documentation. Replace its title
 and the “Simple VLM example” and “This sample” descriptions, and remove links to
 the Simple VLM sample reference. In particular, make sure the name replacements
-did not leave a nonexistent `/reference/my-app.html` link.
+did not leave a nonexistent `/reference/my-app.html` link. Change its working
+directory to `apps/my-app/` and use the model-server command shown below.
 
 The copied DeviceIOHub YAML contains development-only credential placeholders.
 They can remain in place: `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` from the
@@ -163,7 +172,7 @@ live-frame selection from `xr_ai_tools.current_frame` and image inference from
 
 ## Resolve and run the application
 
-From `agent-samples/my-app/`, resolve both projects before starting the stack:
+From `apps/my-app/`, resolve both projects before starting the stack:
 
 ```bash
 uv --config-file ../../uv.toml sync
@@ -181,7 +190,8 @@ services first and wait for the launcher to report that all processes are
 ready:
 
 ```bash
-uv --config-file ../../uv.toml run --project ../model-servers model_servers
+uv --config-file ../../uv.toml run \
+  --project ../../agent-samples/model-servers model_servers
 ```
 
 Then start the application from the same directory:
@@ -209,12 +219,12 @@ services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:
 
 ```bash
-uv --config-file uv.toml run --project agent-samples/my-app/worker \
+uv --config-file uv.toml run --project apps/my-app/worker \
   python - <<'PY'
 from pathlib import Path
 from my_app_worker.config import load_config
 
-load_config(Path("agent-samples/my-app/yaml/my_app_worker.yaml"))
+load_config(Path("apps/my-app/yaml/my_app_worker.yaml"))
 PY
 ```
 
@@ -228,32 +238,28 @@ flows. For worker-level tests, follow the `sys.path.insert()` setup in
 be imported without adding it to `tests/pyproject.toml`.
 
 The `hub`, `make_connector`, and `make_processor` fixtures in
-`tests/conftest.py` run DeviceIOHub IPC over local ZMQ sockets. They cover
-participant routing and worker-facing endpoint behavior without LiveKit, a
-camera, a microphone, Docker, or a GPU. Put application tests in
-`tests/test_my_app_*.py`, point model clients at `StubOpenAI`, and run the
-CPU-only selection from the repository root:
+`tests/conftest.py` run DeviceIOHub IPC over local ZMQ sockets. They demonstrate
+participant routing and worker-facing endpoint coverage without LiveKit, a
+camera, a microphone, Docker, or a GPU. Keep application-owned tests under
+`apps/my-app/tests/`, adapt the repository fixtures they need, and point model
+clients at a `StubOpenAI`-style transport. Run that directory explicitly with
+the repository test environment:
 
 ```bash
-uv --config-file uv.toml run --project tests pytest -v -k my_app -m "not gpu"
+uv --config-file uv.toml run --project tests \
+  pytest -v apps/my-app/tests -m "not gpu"
 ```
 
 Refer to {doc}`testing` for the complete test commands and marker rules.
 
-## Avoid upstream repository checks
+## Understand the application boundary
 
-Installing the repository's pre-commit hooks enables automatic checks during
-commits. The hooks and their underlying scripts can also be run explicitly.
-When the hooks run, the SPDX hook can add the NVIDIA copyright header to staged
-application files, and a staged `pyproject.toml` triggers the dependency
-generator, which inventories every project in the source tree. The full
-repository documentation and test suites also treat top-level directories under
-`agent-samples/` as repository samples.
+Repository file checks exclude the top-level `apps/` directory. Application
+projects do not enter `DEPENDENCIES.md` or the dependency manifest, and the
+repository's Ruff and SPDX checks do not inspect application-owned files. The
+sample documentation, configuration catalogs, and test discovery remain scoped
+to `agent-samples/` and `tests/`.
 
-For an application that is not a repository sample, leave the repository's
-pre-commit hooks uninstalled and use the focused application test command
-above. If you choose to use those hooks or other repository-wide checks in your
-fork, first adapt the pre-commit SPDX exclusion and standalone SPDX checker, the
-dependency generator's discovery rules, and the sample catalogs and tests for
-the application path. The checkout's `AGENTS.md` continues to apply; this
-directory is not automatically exempt from its repository-wide instructions.
+The rest of the checkout remains repository-owned. Commit-wide hooks such as
+DCO sign-off still run when installed, and changes outside `apps/` continue to
+follow `AGENTS.md` and the repository's contribution checks.

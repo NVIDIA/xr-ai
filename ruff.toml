@@ -13,10 +13,12 @@ target-version = "py311"
 
 # Nested per-package .venv dirs hold third-party code; ruff's default excludes
 # the top-level .venv but not these. .claude holds agent worktrees (copies of
-# the repo) that must never be linted; deps/models are auto-downloaded assets.
+# the repo) that must never be linted; apps holds application-owned code; and
+# deps/models are auto-downloaded assets.
 extend-exclude = [
     "**/.venv",
     ".claude",
+    "apps",
     "deps",
     "models",
 ]

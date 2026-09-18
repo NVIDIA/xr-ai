@@ -88,6 +88,16 @@ def test_inventory_is_generated_from_project_metadata(tmp_path: Path) -> None:
     )
 
 
+def test_discovery_excludes_only_top_level_application_projects(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library")
+    _write_project(tmp_path, "apps/private-app", name="private-app")
+    _write_project(tmp_path, "services/apps/helper", name="nested-helper")
+
+    projects = dependency_map.discover_projects(tmp_path)
+
+    assert {project.name for project in projects} == {"library", "nested-helper"}
+
+
 def test_internal_dependency_requires_matching_local_source(tmp_path: Path) -> None:
     _write_project(tmp_path, "agent-sdk/library", name="library")
     _write_project(

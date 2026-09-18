@@ -5,8 +5,10 @@
 
 # SPDX license headers
 
-The hard rule lives in `AGENTS.md`: every new source file gets the SPDX
-header at the top. This file documents comment-style choices and edge cases.
+The hard rule lives in `AGENTS.md`: every new repository source file gets the
+SPDX header at the top. Application-owned files under the top-level `apps/`
+directory are outside this policy. This file documents comment-style choices
+and edge cases.
 
 ## The header
 
@@ -37,10 +39,12 @@ the header by hand in such files.
 
 ## Files to skip
 
-Skip files that can't carry comments or aren't ours to license: `LICENSE`,
-`*.json`, `*.resolved`, Gradle `*.lockfile`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
+Skip application-owned files under `apps/`, files that can't carry comments,
+and files that aren't ours to license: `LICENSE`, `*.json`, `*.resolved`,
+Gradle `*.lockfile`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
 Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
-wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.properties`).
+wrapper files (`gradlew`, `gradlew.bat`,
+`gradle/wrapper/gradle-wrapper.properties`).
 
 ## Enforcement
 
