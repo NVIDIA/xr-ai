@@ -5,6 +5,7 @@
 
 import argparse
 import asyncio
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,12 @@ from .cases import CASES as CORPUS_CASES
 _HERE = Path(__file__).resolve().parent
 _CONFIG = load_config((_HERE / "../../yaml/xr_render_demo_worker.yaml").resolve())
 _PARTICIPANT = "eval-user"
+
+
+def models_config_path() -> Path:
+    override = os.environ.get("XR_AI_EVAL_MODELS_CONFIG")
+    return Path(override) if override else _CONFIG.models_config
+
 
 _DEFAULT_POSE = {
     "is_valid": True,
@@ -691,7 +698,7 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
 
 async def run_corpus_case(case: dict[str, Any]) -> bool:
     scene = FakeScene.from_corpus_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
+    llm = make_llm(load_models_config(models_config_path()), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
@@ -754,6 +761,7 @@ UTTERANCES = (
         vision="The ceiling is purple.",
         physical_expect_source="ceiling",
         required_tools=frozenset({"resolve_physical_color", "update_primitive"}),
+        forbidden_tools=frozenset({"look_at_current_frame"}),
         expected_colors=(("cylinder-0", (0.6, 0.0, 1.0)),),
     ),
     Case(
@@ -762,6 +770,7 @@ UTTERANCES = (
         vision="A hand holding a blue lid.",
         physical_expect_source="holding",
         required_tools=frozenset({"resolve_physical_color", "add_primitive"}),
+        forbidden_tools=frozenset({"look_at_current_frame"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
     Case(
@@ -1177,7 +1186,7 @@ UTTERANCES = (
 
 async def run_case(case: Case) -> bool:
     scene = FakeScene.from_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
+    llm = make_llm(load_models_config(models_config_path()), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
