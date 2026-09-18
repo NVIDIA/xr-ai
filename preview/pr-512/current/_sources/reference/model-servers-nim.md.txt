@@ -87,10 +87,18 @@ be symlinked to another disk without changing the checked-in configuration.
 
 The cache key includes the resolved container image ID, configured environment
 settings, GPU model and compute capability, driver version, CPU architecture,
-and repository-bootstrap version. Changing these inputs builds a separate
-export. An exclusive lock prevents concurrent builds of the same export;
-only complete, validated archives are published. An interrupted build is
-retried on the next launch, and archive checksums detect damaged exports.
+and an explicit build-format version. Change that version only when build or
+export semantics make existing engines incompatible. Changing compatibility
+inputs builds a separate export. Bootstrap source edits update the container
+fingerprint without invalidating compatible engines. Adapter settings, including
+the post-synthesis silence duration, do not affect the engine cache key.
+
+An exclusive lock prevents concurrent builds of the same export; only complete,
+validated archives are published. Every reuse verifies archive checksums and
+the complete tar structure, including gzip integrity for compressed exports.
+Compatible exports from the earlier source-hash cache are validated and reused
+in place without rebuilding or copying them. Invalid or interrupted exports
+are rebuilt when no valid compatible export is available.
 
 Compilation and serving use the same managed container, so cancellation and
 `--stop` also work during engine generation. The bootstrap uses NVIDIA's
