@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import nemo_relay
 import pytest
+from loguru import logger
 from pydantic import ValidationError
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
@@ -882,37 +883,160 @@ async def test_cancelled_response_stream_releases_blocked_publishers() -> None:
         text_input=False,
     )
     runtime.register("voice", agent)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
 
-    async with _running_voice(runtime, agent, session):
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(text="one", response_id="turn", final=False),
-            participant_id="alice",
-            source="observer",
-        )
-        await asyncio.sleep(0)
-        assert session.response_tasks
-        session.response_tasks[0].cancel()
-        await asyncio.gather(*session.response_tasks, return_exceptions=True)
-        await asyncio.wait_for(
-            runtime.publish(
+    try:
+        async with _running_voice(runtime, agent, session):
+            await runtime.publish(
                 VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text="two", response_id="turn", final=False),
+                VoiceOutput(text="one", response_id="turn", final=False),
                 participant_id="alice",
                 source="observer",
-            ),
-            1.0,
-        )
-        await runtime.publish(
-            VOICE_OUTPUT_TOPIC,
-            VoiceOutput(response_id="turn"),
-            participant_id="alice",
-            source="observer",
-        )
-        assert len(session.response_tasks) == 1
+            )
+            await asyncio.sleep(0)
+            assert session.response_tasks
+            session.response_tasks[0].cancel()
+            await asyncio.gather(*session.response_tasks, return_exceptions=True)
+            await asyncio.wait_for(
+                runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text="two", response_id="turn", final=False),
+                    participant_id="alice",
+                    source="observer",
+                ),
+                1.0,
+            )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(response_id="turn"),
+                participant_id="alice",
+                source="observer",
+            )
+            assert len(session.response_tasks) == 1
 
-        assert agent._closed_streams  # noqa: SLF001
+            assert agent._closed_streams  # noqa: SLF001
+    finally:
+        logger.remove(handler_id)
     assert agent._streams == {}  # noqa: SLF001
+    assert sum(
+        "ignored voice output for closed response" in message for message in messages
+    ) == 1
+
+
+async def test_reused_finalized_response_id_is_ignored_and_warned_once() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, voice, session):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="first response", response_id="turn"),
+                participant_id="alice",
+                source="observer",
+            )
+            await asyncio.wait_for(session.wait_for(1), 1.0)
+            for text in ("second", "third"):
+                await runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text=text, response_id="turn"),
+                    participant_id="alice",
+                    source="observer",
+                )
+    finally:
+        logger.remove(handler_id)
+
+    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+        "first response"
+    ]
+    assert sum(
+        "ignored voice output for closed response" in message for message in messages
+    ) == 1
+
+
+async def test_reused_streamed_response_id_is_ignored_and_warned_once() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, voice, session):
+            for text, final in (("first ", False), ("response", True)):
+                await runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text=text, response_id="turn", final=final),
+                    participant_id="alice",
+                    source="observer",
+                )
+            await asyncio.wait_for(session.wait_for(1), 1.0)
+            for text in ("second", "third"):
+                await runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text=text, response_id="turn"),
+                    participant_id="alice",
+                    source="observer",
+                )
+    finally:
+        logger.remove(handler_id)
+
+    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+        "first response"
+    ]
+    assert sum(
+        "ignored voice output for closed response" in message for message in messages
+    ) == 1
+
+
+async def test_closed_response_keys_are_evicted_in_insertion_order(monkeypatch) -> None:
+    monkeypatch.setattr(voice_runtime_module, "_CLOSED_STREAM_CAPACITY", 2)
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    messages: list[str] = []
+    handler_id = logger.add(messages.append, format="{message}", level="WARNING")
+
+    try:
+        async with _running_voice(runtime, voice, session):
+            for response_id in ("first", "second", "third"):
+                await runtime.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(text=response_id, response_id=response_id),
+                    participant_id="alice",
+                    source="observer",
+                )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="first again", response_id="first"),
+                participant_id="alice",
+                source="observer",
+            )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="third again", response_id="third"),
+                participant_id="alice",
+                source="observer",
+            )
+    finally:
+        logger.remove(handler_id)
+
+    assert [text for _pid, text, _interrupt, _pts in session.responses] == [
+        "first",
+        "second",
+        "third",
+        "first again",
+    ]
+    assert sum(
+        "ignored voice output for closed response" in message for message in messages
+    ) == 1
 
 
 async def test_voice_output_preserves_originating_query_timestamp() -> None:

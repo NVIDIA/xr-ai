@@ -22,6 +22,8 @@ from pathlib import Path
 START_MARKER = "<!-- BEGIN GENERATED PYTHON DEPENDENCY MAP -->"
 END_MARKER = "<!-- END GENERATED PYTHON DEPENDENCY MAP -->"
 
+# Application workspaces are outside the repository dependency inventory.
+APPLICATIONS_DIRECTORY = "apps"
 # The aggregate manifest is generated from the other projects and validated by
 # its own workflow; discovery skips its sources so a moved project does not
 # fail here before the manifest can be regenerated.
@@ -97,11 +99,15 @@ def _string_mapping(value: object, *, field: str, path: Path) -> dict[str, str]:
 
 
 def _is_ignored(path: Path, root: Path) -> bool:
-    return any(part in _IGNORED_DIRECTORIES for part in path.relative_to(root).parts)
+    relative_parts = path.relative_to(root).parts
+    return (
+        relative_parts[:1] == (APPLICATIONS_DIRECTORY,)
+        or any(part in _IGNORED_DIRECTORIES for part in relative_parts)
+    )
 
 
 def discover_projects(root: Path) -> tuple[Project, ...]:
-    """Read every repository Python project without importing project code."""
+    """Read every repository-owned Python project without importing project code."""
 
     projects: list[Project] = []
     for pyproject in sorted(root.rglob("pyproject.toml")):

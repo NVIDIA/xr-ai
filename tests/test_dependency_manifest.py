@@ -173,15 +173,17 @@ def test_manifest_orders_by_path_not_name(tmp_path: Path) -> None:
     assert manifest.index('"zzz"') < manifest.index('"aaa"')
 
 
-def test_manifest_excludes_its_own_directory_only(tmp_path: Path) -> None:
+def test_manifest_excludes_generated_and_application_projects(tmp_path: Path) -> None:
     _write_project(tmp_path, "agent-sdk/library", name="library")
     _write_project(tmp_path, MANIFEST, name="anything")
+    _write_project(tmp_path, "apps/private-app", name="private-app")
     _write_project(tmp_path, "utils/twin", name=dependency_manifest.MANIFEST_NAME)
 
     manifest = _render(tmp_path)
 
     assert '"anything"' not in manifest
     assert "anything =" not in manifest
+    assert '"private-app"' not in manifest
     assert f'"{dependency_manifest.MANIFEST_NAME}"' in manifest
     assert '"library"' in manifest
 

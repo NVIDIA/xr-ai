@@ -3,6 +3,10 @@
 
 .claudelearnings
 
+# Private application workspaces; remove this rule to track them in a fork.
+apps/*
+!apps/README.md
+
 # AI model weights — every models/ subtree is gitignored; only .gitkeep is tracked
 **/models/**
 models
