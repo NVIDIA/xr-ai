@@ -647,7 +647,11 @@ FileTransferInfo LiveKitBackend::SendBytes(
     std::uint64_t generation;
     {
         std::scoped_lock lock(teardown_mutex_);
-        if (!is_connected_.load() || !room_) {
+        if (!is_connected_.load()
+#if STREAMKIT_HAVE_LIVEKIT
+            || !room_
+#endif
+        ) {
             throw NotConnectedError{};
         }
         active_room = room_;
@@ -697,7 +701,11 @@ FileTransferInfo LiveKitBackend::SendFile(
     std::uint64_t generation;
     {
         std::scoped_lock lock(teardown_mutex_);
-        if (!is_connected_.load() || !room_) {
+        if (!is_connected_.load()
+#if STREAMKIT_HAVE_LIVEKIT
+            || !room_
+#endif
+        ) {
             throw NotConnectedError{};
         }
         active_room = room_;
