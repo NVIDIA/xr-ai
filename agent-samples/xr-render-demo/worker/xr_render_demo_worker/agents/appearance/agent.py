@@ -17,11 +17,17 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_appearance_tools
+from .._adaptive import adaptive_result, reasoning_messages
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+_RESPONSIBILITY = (
+    "Owns requested color changes to existing XR objects, including copying color from another "
+    "scene object or a physical source. Does not own movement, creation, deletion, shape, or size."
+)
 DESCRIPTION = (
     "Use for every requested end state that changes only the color of an existing XR object, "
-    "whatever verb expresses it. Examples: "
+    "whatever verb expresses it. "
+    f"{_RESPONSIBILITY} Examples: "
     "'paint the ring orange', 'turn the box the color of the sphere', and 'match the cone to my "
     "jacket'. Pass the target and the user's complete color-source words. This agent reads a "
     "physical color source itself, so route the recolor directly here without vision_agent. "
@@ -64,17 +70,27 @@ def make_appearance_agent(
             ]
             async def _call_model(transcript, definitions):
                 return await llm.chat(
-                    transcript,
+                    reasoning_messages(transcript, enabled=request.reasoning_mode == "deliberate"),
                     tools=list(definitions) or None,
                     max_tokens=2048,
                     temperature=0.0,
-                    enable_thinking=False,
+                    enable_thinking=request.reasoning_mode == "deliberate",
                 )
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=_RESPONSIBILITY,
+                result=loop_result,
+            )
 
     return Tool(
         name="appearance_agent",

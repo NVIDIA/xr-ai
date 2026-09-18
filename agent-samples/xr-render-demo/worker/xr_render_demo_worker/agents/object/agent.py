@@ -18,6 +18,7 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
+from .._adaptive import adaptive_result, reasoning_messages, refusal_toolset
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
@@ -60,6 +61,7 @@ def make_object_agent(
                 lambda _: scene.get_scene_state.execute(EmptyRequest()),
             ))
             toolset = tolerant_toolset(tools)
+            toolset = refusal_toolset(toolset)
             prompt = _prompt_text
             messages = [
                 ChatMessage(role="system", content=prompt),
@@ -72,17 +74,27 @@ def make_object_agent(
             ]
             async def _call_model(transcript, definitions):
                 return await llm.chat(
-                    transcript,
+                    reasoning_messages(transcript, enabled=request.reasoning_mode == "deliberate"),
                     tools=list(definitions) or None,
                     max_tokens=2048,
                     temperature=0.0,
-                    enable_thinking=False,
+                    enable_thinking=request.reasoning_mode == "deliberate",
                 )
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=DESCRIPTION,
+                result=loop_result,
+            )
 
     return Tool(
         name="object_agent",
@@ -92,9 +104,12 @@ def make_object_agent(
         handler=handle,
         examples=(
             "For 'Move X, make Y orange, and create Z', receive the focused instruction "
-            "'Create Z'.",
+            "'Create Z' with reasoning_mode='fast'.",
             "If a cone already exists, 'Make a cone beside the capsule' still means create a "
-            "new cone beside the existing capsule.",
+            "new cone beside the existing capsule with reasoning_mode='fast'.",
+            "Direct deletion, duplication, reshaping, and resizing use reasoning_mode='fast'.",
+            "For a novel creation that must reconcile multiple interacting relative constraints "
+            "before its first creation call, use reasoning_mode='deliberate'.",
         ),
     )
 

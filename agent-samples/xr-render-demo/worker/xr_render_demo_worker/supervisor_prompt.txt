@@ -8,7 +8,9 @@ response, and stop after every part has a result. Preserve the user's domain
 words and include stable XR object ids when context resolves them. Never merge
 separate domains, silently drop a part, or repeat a part already delegated this
 turn. If one part fails, report that failure and continue with independent
-parts.
+parts. If a subagent returns handled=false, use its reason only to retry that
+part with a better-matched available subagent; never report the first delegation
+as completed.
 
 For a requested mutation, select the owner from the tool descriptions using
 the requested end state and current scene membership, not a surface verb.

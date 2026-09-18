@@ -14,10 +14,13 @@ localises in seconds instead of a full nested rollout.
 import argparse
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from xr_ai_models import load_models_config, make_llm
-from xr_ai_tools import Tool
+from xr_ai_models import ChatMessage, ToolCall, load_models_config, make_llm
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.tool_calling import run_tool_loop
+from xr_ai_voice import VoiceTurnController
 from xr_render_demo_worker.agents.appearance.agent import DESCRIPTION as appearance_description
 from xr_render_demo_worker.agents.memory.agent import DESCRIPTION as memory_description
 from xr_render_demo_worker.agents.object.agent import DESCRIPTION as object_description
@@ -35,11 +38,18 @@ _DESCRIPTIONS = {
     "vision_agent": vision_description,
     "memory_agent": memory_description,
 }
+_REFUSAL_CASE = "misrouted_subagent_refusal_recovers"
+_SUPERVISOR_PROMPT = (
+    Path(__file__).resolve().parents[2]
+    / "worker"
+    / "xr_render_demo_worker"
+    / "supervisor_prompt.txt"
+).read_text(encoding="utf-8").strip()
 
 
 def _make_fake_agent(name: str, description: str, calls: list) -> Tool:
     async def act(request: SubagentTask) -> SubagentResult:
-        calls.append((name, request.instruction))
+        calls.append((name, request.instruction, request.reasoning_mode == "deliberate"))
         return SubagentResult(result="Done.")
 
     return Tool(name, description, SubagentTask, SubagentResult, act)
@@ -56,6 +66,8 @@ class RoutingCase:
     instruction_contains: tuple[str, ...] = ()
     instruction_forbids: tuple[str, ...] = ()
     forbid_agents: tuple[str, ...] = ()
+    expect_supervisor_reasoning: bool | None = None
+    expect_leaf_reasoning: bool | None = None
 
 
 CASES = (
@@ -105,6 +117,8 @@ CASES = (
         name="create_routes_to_object",
         request="Add a red sphere.",
         expect_agent="object_agent",
+        expect_supervisor_reasoning=False,
+        expect_leaf_reasoning=False,
     ),
     RoutingCase(
         name="remove_routes_to_object",
@@ -360,6 +374,7 @@ CASES = (
         ),
         expect_agent="object_agent",
         forbid_agents=("appearance_agent", "placement_agent"),
+        expect_leaf_reasoning=False,
     ),
     RoutingCase(
         name="holdout_existing_containment_routes_to_placement",
@@ -457,6 +472,21 @@ CASES = (
         ),
         expect_agents=("vision_agent", "placement_agent"),
     ),
+    RoutingCase(
+        name="novel_arrangement_enables_leaf_reasoning",
+        request=(
+            "Rearrange the ring and cone into the most compact non-overlapping vertical "
+            "composition, while keeping whichever is currently closer to me on top and "
+            "preserving their left-to-right order as much as possible."
+        ),
+        scene=(
+            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.1], "color": [1, 1, 1], "size": 0.08},
+            {"id": "cone-3", "type": "cone", "pos": [0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.15},
+        ),
+        expect_agent="placement_agent",
+        expect_supervisor_reasoning=False,
+        expect_leaf_reasoning=True,
+    ),
 )
 
 
@@ -464,7 +494,7 @@ async def run_case(case: RoutingCase) -> bool:
     scene = harness.FakeScene.from_corpus_case(
         {"name": case.name, "scene": list(case.scene), "history": list(case.history), "user": case.request}
     )
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, bool]] = []
     fake_tools = [
         _make_fake_agent(name, desc, calls) for name, desc in _DESCRIPTIONS.items()
     ]
@@ -479,21 +509,28 @@ async def run_case(case: RoutingCase) -> bool:
             subagent_tools=fake_tools,
         )
         errored = False
+        controller = VoiceTurnController(
+            turn_id=f"eval:{case.name}",
+            timestamp_us=harness.EVAL_REFERENCE_US,
+            publish=None,
+            acknowledgement=True,
+        )
         try:
-            reply = await supervisor.handle(
-                SceneRequest(
-                    transcript=case.request,
-                    participant_id="eval-user",
-                    timestamp_us=harness.EVAL_REFERENCE_US,
+            with controller.activate():
+                reply = await supervisor.handle(
+                    SceneRequest(
+                        transcript=case.request,
+                        participant_id="eval-user",
+                        timestamp_us=harness.EVAL_REFERENCE_US,
+                    )
                 )
-            )
         except Exception as exc:
             reply = type("R", (), {"response": f"<workflow error: {exc}>"})()
             errored = True
     finally:
         await llm.close()
 
-    called = [name for name, _instruction in calls]
+    called = [name for name, _instruction, _reasoning in calls]
     ok, why = True, "ok"
     if errored:
         ok, why = False, f"workflow error: {reply.response[:160]}"
@@ -504,19 +541,119 @@ async def run_case(case: RoutingCase) -> bool:
     for forbidden in case.forbid_agents:
         if forbidden in called:
             ok, why = False, f"{forbidden} called; called={called}"
+    if (
+        ok
+        and case.expect_supervisor_reasoning is not None
+        and controller.reasoning_enabled is not case.expect_supervisor_reasoning
+    ):
+        ok, why = False, (
+            f"supervisor reasoning={controller.reasoning_enabled}, "
+            f"expected {case.expect_supervisor_reasoning}"
+        )
+    if ok and case.expect_leaf_reasoning is not None:
+        selected_reasoning = [
+            reasoning for name, _instruction, reasoning in calls if name == case.expect_agent
+        ]
+        if selected_reasoning != [case.expect_leaf_reasoning]:
+            ok, why = False, (
+                f"leaf reasoning={selected_reasoning}, expected [{case.expect_leaf_reasoning}]"
+            )
     if ok and case.instruction_forbids:
-        instructions = " | ".join(i for name, i in calls if name == case.expect_agent)
+        instructions = " | ".join(
+            i for name, i, _reasoning in calls if name == case.expect_agent
+        )
         for needle in case.instruction_forbids:
             if needle.lower() in instructions.lower():
                 ok, why = False, f"instruction contains forbidden {needle!r}: {instructions[:160]!r}"
     if ok and case.instruction_contains:
-        instructions = " | ".join(i for name, i in calls if name == case.expect_agent)
+        instructions = " | ".join(
+            i for name, i, _reasoning in calls if name == case.expect_agent
+        )
         for needle in case.instruction_contains:
             if needle.lower() not in instructions.lower():
                 ok, why = False, f"instruction missing {needle!r}: {instructions[:160]!r}"
     status = "PASS" if ok else f"FAIL {why}"
-    detail = "; ".join(f"{name}({instruction[:80]})" for name, instruction in calls)
+    detail = "; ".join(
+        f"{name}(reasoning={reasoning}, {instruction[:80]})"
+        for name, instruction, reasoning in calls
+    )
     print(f"{status:32} {case.name}: {detail or reply.response}", flush=True)
+    return ok
+
+
+async def run_refusal_case() -> bool:
+    """Verify that a structured leaf refusal causes a fresh delegation."""
+
+    calls: list[tuple[str, str, bool]] = []
+    tools = ToolSet(
+        _make_fake_agent(name, description, calls)
+        for name, description in _DESCRIPTIONS.items()
+    )
+    prior_call_id = "misrouted-placement"
+    messages = (
+        ChatMessage(role="system", content=_SUPERVISOR_PROMPT),
+        ChatMessage(
+            role="user",
+            content=(
+                "Active participant: eval-user\n"
+                f"Utterance timestamp: {harness.EVAL_REFERENCE_US}\n\n"
+                "SCENE OBJECTS: none\n\n"
+                "User request: Add a red sphere in front of me."
+            ),
+        ),
+        ChatMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id=prior_call_id,
+                    name="placement_agent",
+                    arguments=(
+                        '{"instruction":"Add a red sphere in front of me.",'
+                        '"reasoning_mode":"fast"}'
+                    ),
+                )
+            ],
+        ),
+        ChatMessage(
+            role="tool",
+            content=SubagentResult(
+                result="This is creation of a new object, not movement of an existing object.",
+                handled=False,
+                suggested_owner="object_agent",
+            ).model_dump_json(),
+            tool_call_id=prior_call_id,
+        ),
+    )
+    llm = make_llm(load_models_config(harness.models_config_path()), "agent_llm")
+
+    async def call_model(transcript, definitions):
+        return await llm.chat(
+            transcript,
+            tools=list(definitions) or None,
+            max_tokens=2048,
+            temperature=0.0,
+            enable_thinking=False,
+        )
+
+    try:
+        try:
+            result = await run_tool_loop(
+                messages,
+                tools,
+                call_model,
+                max_iterations=4,
+            )
+        except Exception as exc:
+            print(f"FAIL workflow error: {exc!r:23} {_REFUSAL_CASE}", flush=True)
+            return False
+    finally:
+        await llm.close()
+
+    called = [name for name, _instruction, _reasoning in calls]
+    ok = called == ["object_agent"]
+    status = "PASS" if ok else f"FAIL called={called}"
+    print(f"{status:32} {_REFUSAL_CASE}: {result.content}", flush=True)
     return ok
 
 
@@ -527,9 +664,14 @@ async def main() -> None:
     args = parser.parse_args()
     wanted = set(args.cases)
     selected = [case for case in CASES if not wanted or case.name in wanted]
-    if not selected:
+    run_refusal = not wanted or _REFUSAL_CASE in wanted
+    known = {case.name for case in CASES} | {_REFUSAL_CASE}
+    unknown = sorted(wanted - known)
+    if unknown:
         raise SystemExit(f"unknown cases: {args.cases}")
     results = [await run_case(case) for case in selected]
+    if run_refusal:
+        results.append(await run_refusal_case())
     print(f"\ndelegation: {sum(results)}/{len(results)} passed")
     if not all(results):
         raise SystemExit(1)

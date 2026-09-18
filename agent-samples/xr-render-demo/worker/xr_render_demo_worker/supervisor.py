@@ -21,6 +21,7 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_voice import VoiceTurnController
 from xr_render_scene import SceneTools
 
 from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
@@ -330,6 +331,15 @@ class SceneSupervisor:
                 for name, tool in self._toolset.items()
                 if name == "memory_agent"
             )
+        controller = VoiceTurnController.current()
+        if controller is None:
+            controller = VoiceTurnController(
+                turn_id=request.trace_id or f"{request.participant_id}:{request.timestamp_us}",
+                timestamp_us=request.timestamp_us,
+                publish=None,
+                acknowledgement=True,
+            )
+        toolset = controller.extend(toolset)
         messages = [
             ChatMessage(
                 role="system",
@@ -340,15 +350,21 @@ class SceneSupervisor:
 
         async def _call_model(model_transcript, definitions):
             return await self._llm.chat(
-                model_transcript,
+                controller.messages(model_transcript),
                 tools=list(definitions) or None,
                 max_tokens=2048,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=controller.reasoning_enabled,
             )
 
         try:
-            result = await run_tool_loop(messages, toolset, _call_model, max_iterations=12)
+            with controller.activate():
+                result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=12,
+                )
         except ToolLoopError as exc:
             logger.warning("supervisor loop failed ({})", exc)
             reply = "I'm sorry — something went wrong. Please try again."
@@ -384,9 +400,13 @@ class SceneSupervisor:
                 ChatMessage(role="user", content=nudge),
             ]
             try:
-                result2 = await run_tool_loop(
-                    verification_messages, toolset, _call_model, max_iterations=6
-                )
+                with controller.activate():
+                    result2 = await run_tool_loop(
+                        verification_messages,
+                        toolset,
+                        _call_model,
+                        max_iterations=6,
+                    )
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)
             else:

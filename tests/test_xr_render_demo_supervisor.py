@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from xr_ai_tools import Tool
+from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
     ConversationEntry,
@@ -17,6 +17,7 @@ from xr_ai_tools.text_memory import (
 from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
 from xr_render_demo_worker.agent import RenderAgent
+from xr_render_demo_worker.agents._adaptive import _Disposition, refusal_toolset
 from xr_render_demo_worker.models import SceneRequest
 from xr_render_demo_worker.supervisor import SceneSupervisor
 
@@ -46,6 +47,31 @@ class _RecordingMemory:
             if record.source_id.startswith(f"{req.participant_id}:")
         ]
         return RecallConversationResult(entries=entries)
+
+
+def test_subagent_disposition_keeps_reason_and_owner() -> None:
+    disposition = _Disposition.model_validate(
+        {
+            "reroute": True,
+            "reason": "This is movement.",
+            "suggested_owner": "placement_agent",
+        }
+    )
+
+    assert disposition.reason == "This is movement."
+    assert disposition.suggested_owner == "placement_agent"
+
+
+async def test_destructive_leaf_decline_tool_returns_direct_structured_result() -> None:
+    tool = refusal_toolset(ToolSet([])).get("subagent__decline")
+    assert tool is not None
+
+    result = await tool.invoke(
+        '{"reason":"This is movement.","suggested_owner":"placement_agent"}'
+    )
+
+    assert result.return_direct is True
+    assert '"reason":"This is movement."' in result.content
 
 
 def _make_supervisor(memory: _RecordingMemory | None = None) -> tuple[SceneSupervisor, harness.FakeScene]:
@@ -328,7 +354,7 @@ async def test_supervisor_eval_fails_on_exception_after_delegation(monkeypatch) 
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
         tool = toolset.get(case.expect_agent)
-        await tool.execute(SubagentTask(instruction="do the thing"))
+        await tool.execute(SubagentTask(instruction="do the thing", reasoning_mode="fast"))
         raise RuntimeError("boom after delegation")
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
@@ -356,7 +382,9 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert len(published) == 1
     assert published[0].text == "Something went wrong. Please try again."
     assert published[0].final is True
-    assert published[0].response_id == "trace-1"
+    assert published[0].response_id is None
+    assert published[0].kind == "result"
+    assert published[0].turn_id == "trace-1"
 
 
 _REF_US = harness.EVAL_REFERENCE_US
