@@ -235,7 +235,7 @@ Package Contents
    .. py:attribute:: response_id
       :type:  str | None
 
-      Identifier shared by incremental chunks; recent reuse is ignored with one warning.
+      Stable identifier shared by chunks of an incremental response.
 
 
 

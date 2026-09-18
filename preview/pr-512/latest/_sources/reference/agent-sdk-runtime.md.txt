@@ -64,7 +64,4 @@ scope instead. Runtime publication and delivery scopes carry participant,
 message, correlation, parent-message, source, and subscriber metadata. A
 detached agent task whose lifetime exceeds its callback starts a fresh Relay
 scope stack and preserves logical correlation in metadata rather than retaining
-an ended delivery scope. Pass `context=nemo_relay.fork_asyncio_context()` to
-`asyncio.create_task()`, then enter
-`nemo_relay.use_scope_stack(nemo_relay.create_scope_stack())` inside the
-detached coroutine before opening its operation scope or calling tools.
+an ended delivery scope.

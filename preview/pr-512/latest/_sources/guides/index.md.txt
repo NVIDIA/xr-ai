@@ -5,8 +5,8 @@
 
 # Guides
 
-Guides for adding a sample, building an application, wiring CloudXR,
-documentation style, troubleshooting, and contribution conventions.
+Guides for adding a sample, wiring CloudXR, documentation style,
+troubleshooting, and contribution conventions.
 
 ```{toctree}
 :glob:

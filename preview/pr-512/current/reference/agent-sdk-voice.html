@@ -305,7 +305,6 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -485,13 +484,6 @@ stream share <code class="docutils literal notranslate"><span class="pre">respon
 participant; <code class="docutils literal notranslate"><span class="pre">interrupt=True</span></code> flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
 independent agents cannot merge accidentally.</p>
-<p>Each running <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> remembers its 1,024 most recently closed stream keys.
-Output that reuses one of those keys is ignored, and the runtime logs one
-warning for that participant, producer, and <code class="docutils literal notranslate"><span class="pre">response_id</span></code>. Streams close by
-finalization, cancellation, or eviction; waiting does not reopen a retained
-key. Use one identifier per inbound query, such as
-<code class="docutils literal notranslate"><span class="pre">ctx.metadata.message_id</span></code>, or omit <code class="docutils literal notranslate"><span class="pre">response_id</span></code> when publishing a finite
-response in one <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">text_topic</span></code> controls the completed-response data echo and defaults to
 <code class="docutils literal notranslate"><span class="pre">agent.response</span></code>. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
