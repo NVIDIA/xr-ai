@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""DeviceIOHub startup ordering and readiness regressions."""
+"""DeviceIOHub startup, shutdown ordering, and readiness regressions."""
 from __future__ import annotations
 
 import asyncio
@@ -82,6 +82,51 @@ async def test_connector_start_failure_cleans_up_all_resources(livekit_connector
     assert endpoint._sub.closed
     with pytest.raises(FileNotFoundError):
         SharedMemory(name=endpoint._shm_base_name, create=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("disconnect_error", [None, RuntimeError, asyncio.CancelledError])
+async def test_docker_shutdown_waits_for_room_disconnect(livekit_connector, disconnect_error):
+    connector = livekit_connector
+    disconnect_started = asyncio.Event()
+    release_disconnect = asyncio.Event()
+    events = []
+
+    async def disconnect():
+        events.append("disconnect-start")
+        disconnect_started.set()
+        await release_disconnect.wait()
+        events.append("disconnect-finished")
+        if disconnect_error is not None:
+            raise disconnect_error("disconnect failed")
+
+    connector._room_client.disconnect.side_effect = disconnect
+    connector._web.stop.side_effect = lambda: events.append("web-stop")
+    connector._token.stop.side_effect = lambda: events.append("token-stop")
+    connector._docker.stop.side_effect = lambda: events.append("docker-stop")
+    await connector.start()
+    stopping = asyncio.create_task(connector.stop())
+    try:
+        await asyncio.wait_for(disconnect_started.wait(), timeout=1)
+        # Let a prematurely scheduled Docker task run while disconnect is blocked.
+        await asyncio.sleep(0)
+        connector._room_client.stop.assert_called_once()
+        connector._docker.stop.assert_not_awaited()
+        connector._web.stop.assert_not_awaited()
+        connector._token.stop.assert_not_awaited()
+        release_disconnect.set()
+        if disconnect_error is None:
+            await asyncio.wait_for(stopping, timeout=1)
+        else:
+            with pytest.raises(disconnect_error, match="disconnect failed"):
+                await asyncio.wait_for(stopping, timeout=1)
+    finally:
+        release_disconnect.set()
+        await asyncio.gather(stopping, return_exceptions=True)
+
+    assert events == ["disconnect-start", "disconnect-finished", "web-stop", "token-stop", "docker-stop"]
+    assert not connector._room_connect_started
+    assert connector._ep._push.closed and connector._ep._sub.closed
 
 
 @pytest.mark.asyncio
