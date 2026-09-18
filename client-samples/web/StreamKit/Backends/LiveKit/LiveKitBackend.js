@@ -25,7 +25,10 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
-import { LiveKitByteStreamWriter } from './ByteStreamTransport.js';
+import {
+  INTERNAL_SEND_BYTE_STREAM,
+  LiveKitByteStreamWriter,
+} from './ByteStreamTransport.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -484,23 +487,23 @@ export class LiveKitBackend {
     await room.localParticipant.publishData(bytes, opts);
   }
 
-  /** Send one encoded image through LiveKit's chunked byte-stream transport. */
-  async sendImage(data, { requestId, mimeType, name = 'capture' }) {
+  async [INTERNAL_SEND_BYTE_STREAM](data, request) {
     const room = this.#room;
     if (!room || room.state !== 'connected') {
       throw StreamError.notConnected();
     }
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
     const options = {
-      topic: 'camera.capture.response',
-      attributes: { request_id: requestId },
-      mimeType,
-      name,
+      topic: request.topic,
+      attributes: request.attributes,
+      mimeType: request.mimeType,
+      name: request.name,
+      totalSize: bytes.byteLength,
     };
     if (this.#config.hubIdentity) {
       options.destinationIdentities = [this.#config.hubIdentity];
     }
-    await room.localParticipant.sendBytes(bytes, options);
+    return this.#byteStreamWriter.sendBytes(bytes, options);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@
 #include "streamkit/StreamError.h"
 
 #include "AgentStatusParser.h"
+#include "ByteStreamTransport.h"
 
 #include <algorithm>
 #include <chrono>
@@ -37,7 +38,6 @@
 
 #if STREAMKIT_HAVE_LIVEKIT
 #include "livekit/audio_frame.h"
-#include "livekit/data_stream.h"
 #include "livekit/audio_source.h"
 #include "livekit/livekit.h"
 #include "livekit/local_audio_track.h"
@@ -539,28 +539,33 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #endif
 }
 
-void LiveKitBackend::SendImage(std::span<const std::uint8_t> data,
-                               std::string_view request_id,
-                               std::string_view mime_type,
-                               std::string_view name) {
+std::string LiveKitBackend::SendByteStream(
+    std::span<const std::uint8_t> data,
+    std::string_view topic,
+    const std::map<std::string, std::string>& attributes,
+    std::string_view mime_type,
+    std::string_view name) {
     if (!is_connected_.load()) throw NotConnectedError{};
-#if STREAMKIT_HAVE_LIVEKIT
     std::vector<std::string> destinations;
     if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
-    const auto participant = room_->localParticipant().lock();
-    if (!participant) throw NotConnectedError{};
-    livekit::ByteStreamWriter writer(
-        *participant, std::string(name), "camera.capture.response",
-        {{"request_id", std::string(request_id)}}, "", data.size(),
-        std::string(mime_type), destinations);
-    writer.write(std::vector<std::uint8_t>(data.begin(), data.end()));
-    writer.close();
-#else
-    (void)data;
-    (void)request_id;
-    (void)mime_type;
-    (void)name;
-#endif
+    const auto generation = connect_generation_.load();
+    return detail::LiveKitByteStreamWriter::SendBytes(
+        std::as_bytes(data),
+        detail::ByteStreamWireOptions{
+            .topic = std::string(topic),
+            .attributes = attributes,
+            .destination_identities = std::move(destinations),
+            .mime_type = std::string(mime_type),
+            .name = std::string(name),
+            .total_size = data.size(),
+        },
+        detail::ByteStreamConnection{
+            .room = room_,
+            .is_active = [this, generation]() {
+                return is_connected_.load() &&
+                    connect_generation_.load() == generation;
+            },
+        });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

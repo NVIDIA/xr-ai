@@ -13,6 +13,9 @@ const { LiveKitBackend } = await import(
 const { StreamSession } = await import(
   '../../client-samples/web/StreamKit/StreamSession.js'
 );
+const { INTERNAL_SEND_BYTE_STREAM } = await import(
+  '../../client-samples/web/StreamKit/Backends/LiveKit/ByteStreamTransport.js'
+);
 const { ConnectionState } = await import(
   '../../client-samples/web/StreamKit/ConnectionState.js'
 );
@@ -41,7 +44,12 @@ function makePublishedTrack(mediaTrack) {
   };
 }
 
-function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality = 'unknown' } = {}) {
+function makeRoom(publishTrack, {
+  localTracks = [],
+  remoteTracks = [],
+  quality = 'unknown',
+  streamBytes = async () => {},
+} = {}) {
   const handlers = new Map();
   const room = {
     state: 'disconnected',
@@ -56,6 +64,7 @@ function makeRoom(publishTrack, { localTracks = [], remoteTracks = [], quality =
       trackPublications: new Map(localTracks.map((track, i) => [String(i), { track }])),
       publishTrack,
       publishData: async () => {},
+      streamBytes,
       unpublishTrack: async track => {
         globalThis.__livekitRoom.unpublishedTracks.push(track);
       },
@@ -92,7 +101,7 @@ async function connectedBackend(t, publishTrack, options = {}) {
     secure: false,
     token: 'test-token',
     tokenURL: null,
-    hubIdentity: null,
+    hubIdentity: options.hubIdentity ?? null,
   });
   t.after(() => backend.disconnect());
   options.configure?.(backend);
@@ -334,6 +343,42 @@ test('stops network polling after a terminal room disconnect', async (t) => {
   assert.equal(statsCalls, 1);
 });
 
+test('routes capture responses through the private byte-stream writer', async (t) => {
+  const writes = [];
+  const closes = [];
+  const wireOptions = [];
+  const { backend } = await connectedBackend(t, async () => {}, {
+    hubIdentity: 'hub-1',
+    streamBytes: async options => {
+      wireOptions.push(options);
+      return {
+        info: { id: 'stream-1' },
+        async write(data) { writes.push([...data]); },
+        async close(reason) { closes.push(reason); },
+      };
+    },
+  });
+
+  const streamId = await backend[INTERNAL_SEND_BYTE_STREAM](new Uint8Array([1, 2, 3]), {
+    topic: 'camera.capture.response',
+    attributes: { request_id: 'capture-1' },
+    mimeType: 'image/jpeg',
+    name: 'capture.jpg',
+  });
+
+  assert.equal(streamId, 'stream-1');
+  assert.deepEqual(writes, [[1, 2, 3]]);
+  assert.deepEqual(closes, [undefined]);
+  assert.deepEqual(wireOptions, [{
+    topic: 'camera.capture.response',
+    attributes: { request_id: 'capture-1' },
+    destinationIdentities: ['hub-1'],
+    mimeType: 'image/jpeg',
+    name: 'capture.jpg',
+    totalSize: 3,
+  }]);
+});
+
 test('cancels an in-flight image capture on terminal disconnect', async () => {
   let resolveStarted;
   const started = new Promise(resolve => { resolveStarted = resolve; });
@@ -341,7 +386,7 @@ test('cancels an in-flight image capture on terminal disconnect', async () => {
   let imagesSent = 0;
   const backend = {
     async disconnect() {},
-    async sendImage() { imagesSent += 1; },
+    async [INTERNAL_SEND_BYTE_STREAM]() { imagesSent += 1; },
   };
   const session = new StreamSession(backend);
   session.onImageCaptureRequested = ({ signal }) => new Promise((resolve, reject) => {
@@ -367,7 +412,7 @@ test('cancels an in-flight image capture on terminal disconnect', async () => {
 test('returns a rejection response when image capture is unavailable', async () => {
   const responses = [];
   const backend = {
-    async sendImage(data, options) { responses.push({ data, options }); },
+    async [INTERNAL_SEND_BYTE_STREAM](data, request) { responses.push({ data, request }); },
   };
   new StreamSession(backend);
 
@@ -378,9 +423,9 @@ test('returns a rejection response when image capture is unavailable', async () 
   await new Promise(resolve => setTimeout(resolve, 0));
 
   assert.equal(responses.length, 1);
-  assert.equal(responses[0].options.requestId, 'capture-1');
+  assert.equal(responses[0].request.attributes.request_id, 'capture-1');
   assert.equal(
-    responses[0].options.mimeType,
+    responses[0].request.mimeType,
     'application/vnd.xr-ai.capture-rejection+json',
   );
   assert.deepEqual(

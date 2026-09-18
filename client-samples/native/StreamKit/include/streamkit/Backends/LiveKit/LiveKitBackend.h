@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -86,11 +87,6 @@ public:
               bool reliable = true,
               std::string_view topic = "") override;
 
-    void SendImage(std::span<const std::uint8_t> data,
-                   std::string_view request_id,
-                   std::string_view mime_type,
-                   std::string_view name) override;
-
     // ── FrameSink ──────────────────────────────────────────────────────────
 
     /// Push a video frame into the published video track. The first call
@@ -146,7 +142,15 @@ protected:
                                    const std::string& identity);
 
 private:
+    friend class StreamSession;
     friend struct LiveKitBackendTestAccess;
+
+    std::string SendByteStream(
+        std::span<const std::uint8_t> data,
+        std::string_view topic,
+        const std::map<std::string, std::string>& attributes,
+        std::string_view mime_type,
+        std::string_view name);
 
     // Forward-declared in the .cpp; subclasses livekit::RoomDelegate and
     // bridges its event callbacks into this backend's on_* event hooks.

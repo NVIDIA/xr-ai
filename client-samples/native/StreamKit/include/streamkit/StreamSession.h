@@ -134,8 +134,6 @@ public:
               bool reliable = true,
               std::string_view topic = "");
 
-    void SendImage(const CapturedImage& image, std::string_view request_id);
-
     // ── Advanced ──────────────────────────────────────────────────────────
 
     /// Returns the underlying backend. Cast to `FrameSink*` to inject video
@@ -144,6 +142,7 @@ public:
     StreamingBackend* GetBackend() { return backend_.get(); }
 
 private:
+    void SendCaptureResponse(const CapturedImage& image, std::string_view request_id);
     void WireCallbacks();
 
     std::unique_ptr<StreamingBackend> backend_;

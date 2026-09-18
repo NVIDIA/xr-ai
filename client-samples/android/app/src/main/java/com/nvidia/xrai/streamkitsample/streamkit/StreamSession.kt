@@ -269,7 +269,7 @@ class StreamSession(private val backend: StreamingBackend) {
                 require(image.mimeType in setOf("image/jpeg", "image/png", "image/webp")) {
                     "image capture returned an unsupported media type"
                 }
-                backend.sendImage(image.data, requestId, image.mimeType, image.name)
+                sendCaptureResponse(image.data, requestId, image.mimeType, image.name)
             } catch (_: CancellationException) {
                 // Cancellation is the normal outcome for a superseded request.
             } catch (error: Exception) {
@@ -283,7 +283,7 @@ class StreamSession(private val backend: StreamingBackend) {
 
     private suspend fun rejectCaptureRequest(requestId: String) {
         try {
-            backend.sendImage(
+            sendCaptureResponse(
                 "{\"version\":1,\"status\":\"rejected\"}".toByteArray(),
                 requestId,
                 "application/vnd.xr-ai.capture-rejection+json",
@@ -292,6 +292,23 @@ class StreamSession(private val backend: StreamingBackend) {
         } catch (error: Exception) {
             Log.w("StreamSession", "Image capture rejection failed", error)
         }
+    }
+
+    private suspend fun sendCaptureResponse(
+        data: ByteArray,
+        requestId: String,
+        mimeType: String,
+        name: String,
+    ) {
+        val liveKitBackend = backend as? LiveKitBackend
+            ?: throw UnsupportedOperationException("This backend does not support byte streams.")
+        liveKitBackend.sendByteStream(
+            data,
+            topic = "camera.capture.response",
+            attributes = mapOf("request_id" to requestId),
+            mimeType = mimeType,
+            name = name,
+        )
     }
 
     private fun handleCaptureCancel(data: ByteArray) {

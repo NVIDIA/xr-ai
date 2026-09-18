@@ -276,7 +276,7 @@ public final class StreamSession: ObservableObject {
                     await self?.rejectCaptureRequest(requestID)
                     return
                 }
-                try await self?.backend.sendImage(
+                try await self?.sendCaptureResponse(
                     image.data,
                     requestID: requestID,
                     mimeType: image.mimeType,
@@ -292,11 +292,29 @@ public final class StreamSession: ObservableObject {
 
     private func rejectCaptureRequest(_ requestID: String) async {
         let response = Data(#"{"version":1,"status":"rejected"}"#.utf8)
-        try? await backend.sendImage(
+        try? await sendCaptureResponse(
             response,
             requestID: requestID,
             mimeType: "application/vnd.xr-ai.capture-rejection+json",
             name: "capture-rejection.json"
+        )
+    }
+
+    private func sendCaptureResponse(
+        _ data: Data,
+        requestID: String,
+        mimeType: String,
+        name: String
+    ) async throws {
+        guard let liveKitBackend = backend as? LiveKitBackend else {
+            throw StreamError.notConnected
+        }
+        _ = try await liveKitBackend.sendByteStream(
+            data,
+            topic: "camera.capture.response",
+            attributes: ["request_id": requestID],
+            mimeType: mimeType,
+            name: name
         )
     }
 

@@ -25,7 +25,6 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
-import io.livekit.android.room.datastream.StreamBytesOptions
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
@@ -346,32 +345,26 @@ internal class LiveKitBackend(
         )
     }
 
-    override suspend fun sendImage(
+    internal suspend fun sendByteStream(
         data: ByteArray,
-        requestId: String,
+        topic: String,
+        attributes: Map<String, String>,
         mimeType: String,
         name: String,
-    ) {
+    ): String {
         if (!isConnected) throw StreamError.NotConnected
-        val participant = room?.localParticipant ?: throw StreamError.NotConnected
         val destinations = config.hubIdentity?.let { listOf(Participant.Identity(it)) }.orEmpty()
-        val sender = participant.streamBytes(
-            StreamBytesOptions(
-                topic = "camera.capture.response",
-                attributes = mapOf("request_id" to requestId),
+        return byteStreamWriter.sendBytes(
+            data,
+            ByteStreamWireOptions(
+                topic = topic,
+                attributes = attributes,
                 destinationIdentities = destinations,
                 mimeType = mimeType,
                 name = name,
                 totalSize = data.size.toLong(),
-            )
+            ),
         )
-        try {
-            sender.write(data).getOrThrow()
-            sender.close()
-        } catch (error: Throwable) {
-            if (sender.isOpen) sender.close(error.message)
-            throw error
-        }
     }
 
     // ── Event dispatcher ───────────────────────────────────────────────────────

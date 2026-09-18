@@ -107,8 +107,19 @@ void StreamSession::Send(std::span<const std::byte> data,
     backend_->Send(data, reliable, topic);
 }
 
-void StreamSession::SendImage(const CapturedImage& image, std::string_view request_id) {
-    backend_->SendImage(image.data, request_id, image.mime_type, image.name);
+void StreamSession::SendCaptureResponse(
+    const CapturedImage& image,
+    std::string_view request_id) {
+    auto* livekit_backend = dynamic_cast<LiveKitBackend*>(backend_.get());
+    if (livekit_backend == nullptr) {
+        throw std::runtime_error("This backend does not support byte streams.");
+    }
+    livekit_backend->SendByteStream(
+        image.data,
+        "camera.capture.response",
+        {{"request_id", std::string(request_id)}},
+        image.mime_type,
+        image.name);
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────
@@ -143,7 +154,7 @@ void StreamSession::WireCallbacks() {
                     .name = "capture-rejection.json",
                 };
                 try {
-                    SendImage(response, request.request_id);
+                    SendCaptureResponse(response, request.request_id);
                 } catch (...) {
                     // A disconnect can prevent the best-effort rejection response.
                 }
@@ -158,7 +169,7 @@ void StreamSession::WireCallbacks() {
                     (image.mime_type == "image/jpeg" ||
                      image.mime_type == "image/png" ||
                      image.mime_type == "image/webp")) {
-                    SendImage(image, request.request_id);
+                    SendCaptureResponse(image, request.request_id);
                 } else {
                     reject();
                 }

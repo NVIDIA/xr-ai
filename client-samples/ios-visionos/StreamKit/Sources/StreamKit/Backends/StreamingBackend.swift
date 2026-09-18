@@ -134,14 +134,6 @@ public protocol StreamingBackend: AnyObject, Sendable {
     ///   - reliable: `true` for ordered, guaranteed delivery (default).
     ///   - topic: Optional topic name; nil means the transport-default topic.
     func send(_ data: Data, reliable: Bool, topic: String?) async throws
-
-    /// Send an encoded image through the backend's chunked stream transport.
-    func sendImage(
-        _ data: Data,
-        requestID: String,
-        mimeType: String,
-        name: String
-    ) async throws
 }
 
 public extension StreamingBackend {
@@ -151,14 +143,5 @@ public extension StreamingBackend {
 
     func send(_ data: Data, reliable: Bool, topic: String?) async throws {
         try await send(data, reliable: reliable)
-    }
-
-    func sendImage(
-        _: Data,
-        requestID _: String,
-        mimeType _: String,
-        name _: String
-    ) async throws {
-        throw StreamError.notConnected
     }
 }
