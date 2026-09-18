@@ -52,10 +52,17 @@ export class LiveKitByteStreamWriter {
       await writer.close();
       this.#requireActive(connection);
     } catch (error) {
-      await Promise.race([
-        writer.close('StreamKit send failed').catch(() => {}),
-        new Promise(resolve => setTimeout(resolve, 2000)),
-      ]);
+      let closeTimeout;
+      try {
+        await Promise.race([
+          writer.close('StreamKit send failed').catch(() => {}),
+          new Promise(resolve => {
+            closeTimeout = setTimeout(resolve, 2000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(closeTimeout);
+      }
       throw error;
     }
     return writer.info.id;

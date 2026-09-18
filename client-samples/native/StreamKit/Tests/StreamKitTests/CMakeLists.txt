@@ -25,3 +25,8 @@ _streamkit_add_test(streamkit_audio_sink_tests       AudioSinkTests.cpp)
 _streamkit_add_test(streamkit_session_tests          StreamSessionTests.cpp)
 _streamkit_add_test(streamkit_livekit_backend_tests  LiveKitBackendTests.cpp)
 _streamkit_add_test(streamkit_byte_stream_tests      ByteStreamTransportTests.cpp)
+
+if(STREAMKIT_HAVE_LIVEKIT)
+    target_compile_definitions(streamkit_byte_stream_tests
+        PRIVATE STREAMKIT_HAVE_LIVEKIT=1)
+endif()

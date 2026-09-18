@@ -35,8 +35,18 @@ int main() {
         std::byte{3},
     };
 
+#if STREAMKIT_HAVE_LIVEKIT
+    bool missing_room_rejected = false;
+    try {
+        (void)LiveKitByteStreamWriter::SendBytes(bytes, options, connection);
+    } catch (const ByteStreamConnectionChanged&) {
+        missing_room_rejected = true;
+    }
+    Expect(missing_room_rejected);
+#else
     const auto id = LiveKitByteStreamWriter::SendBytes(bytes, options, connection);
     Expect(id.starts_with("stub-"));
+#endif
 
     active = false;
     bool rejected = false;
