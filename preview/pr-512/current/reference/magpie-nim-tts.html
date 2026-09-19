@@ -445,7 +445,10 @@ and post-synthesis pause in <code class="docutils literal notranslate"><span cla
 configured Pocket client port, 8105; stop any other listener before using it.
 The backend must already be healthy before the adapter announces readiness.
 A repeated launch reuses a healthy, ownership-marked adapter with the same
-configuration. Configuration changes require stopping and restarting it.</p>
+configuration. A running pre-split TTS adapter reporting the
+<code class="docutils literal notranslate"><span class="pre">nim-model-adapter</span></code> identity is also reusable when its complete configuration
+matches; ownership and health checks still apply. Other legacy adapter kinds
+are not accepted. Configuration changes require stopping and restarting it.</p>
 </section>
 <section id="http-contract">
 <h2>HTTP contract<a class="headerlink" href="#http-contract" title="Link to this heading">#</a></h2>
