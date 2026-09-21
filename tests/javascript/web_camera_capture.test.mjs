@@ -19,7 +19,12 @@ const { INTERNAL_SEND_BYTE_STREAM } = await import(
 const { ConnectionState } = await import(
   '../../client-samples/web/StreamKit/ConnectionState.js'
 );
-const { createBaseModel, disconnect: disconnectApp, setCameraMode } = await import(
+const {
+  createBaseModel,
+  disconnect: disconnectApp,
+  setCameraMode,
+  startCamera: startAppCamera,
+} = await import(
   '../../client-samples/web/App/core.js'
 );
 
@@ -488,4 +493,39 @@ test('camera modes are exclusive and survive disconnect', async () => {
   assert.equal(model.cameraMode, 'on-demand');
   assert.equal(saved.get('streamkit.cameraMode'), 'on-demand');
   assert.equal(createBaseModel().cameraMode, 'on-demand');
+});
+
+test('failed live camera start falls back to persisted Off mode', async () => {
+  const saved = new Map();
+  globalThis.window = {
+    isSecureContext: true,
+    localStorage: {
+      getItem: key => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+    },
+  };
+  installMediaDevices(async () => ({ getVideoTracks: () => [] }));
+  const failure = new Error('permission denied');
+  const model = {
+    cameraMode: 'live',
+    connectionState: ConnectionState.CONNECTED,
+    isCameraActive: false,
+    selectedCameraId: 'camera-1',
+    session: {
+      onImageCaptureRequested: null,
+      async startCamera() { throw failure; },
+    },
+  };
+  let shownError;
+
+  await startAppCamera(model, {
+    render() {},
+    showError(message) { shownError = message; },
+    async enumerateCameras() {},
+  });
+
+  assert.equal(shownError, String(failure));
+  assert.equal(model.isCameraActive, false);
+  assert.equal(model.cameraMode, 'off');
+  assert.equal(saved.get('streamkit.cameraMode'), 'off');
 });

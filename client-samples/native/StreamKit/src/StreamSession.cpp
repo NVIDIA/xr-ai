@@ -110,16 +110,10 @@ void StreamSession::Send(std::span<const std::byte> data,
 void StreamSession::SendCaptureResponse(
     const CapturedImage& image,
     std::string_view request_id) {
-    auto* livekit_backend = dynamic_cast<LiveKitBackend*>(backend_.get());
-    if (livekit_backend == nullptr) {
+    if (!capture_response_sender_) {
         throw std::runtime_error("This backend does not support byte streams.");
     }
-    livekit_backend->SendByteStream(
-        image.data,
-        "camera.capture.response",
-        {{"request_id", std::string(request_id)}},
-        image.mime_type,
-        image.name);
+    capture_response_sender_(image, "camera.capture.response", request_id);
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────
@@ -127,6 +121,20 @@ void StreamSession::SendCaptureResponse(
 /// Subscribe to the backend's event hooks and forward them to this session's
 /// own public callbacks. Called once immediately after the backend is set.
 void StreamSession::WireCallbacks() {
+    if (auto* livekit_backend = dynamic_cast<LiveKitBackend*>(backend_.get())) {
+        capture_response_sender_ = [livekit_backend](
+            const CapturedImage& image,
+            std::string_view topic,
+            std::string_view request_id) {
+            livekit_backend->SendByteStream(
+                image.data,
+                topic,
+                {{"request_id", std::string(request_id)}},
+                image.mime_type,
+                image.name);
+        };
+    }
+
     backend_->on_connection_state_changed = [this](ConnectionState state) {
         connection_state_ = state;
         if (on_connection_state_changed) {

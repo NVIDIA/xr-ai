@@ -142,10 +142,18 @@ public:
     StreamingBackend* GetBackend() { return backend_.get(); }
 
 private:
+    // Lets the native regression observe private capture-response framing
+    // without adding byte streams to StreamingBackend's public contract.
+    friend struct StreamSessionTestAccess;
+
+    using CaptureResponseSender = std::function<void(
+        const CapturedImage&, std::string_view, std::string_view)>;
+
     void SendCaptureResponse(const CapturedImage& image, std::string_view request_id);
     void WireCallbacks();
 
     std::unique_ptr<StreamingBackend> backend_;
+    CaptureResponseSender capture_response_sender_;
     ConnectionState connection_state_ = ConnectionState::kDisconnected;
 };
 

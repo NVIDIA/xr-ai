@@ -358,6 +358,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val granted = requestCameraPermission?.invoke() == true
                 if (!granted) {
                     lastError = "Camera permission is required for live video."
+                    fallBackToCameraOff()
                     return@launch
                 }
                 if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) {
@@ -373,6 +374,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 isCameraActive = true
             } catch (e: Exception) {
                 lastError = e.message
+                fallBackToCameraOff()
             } finally {
                 isCameraStarting = false
             }
@@ -429,9 +431,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     lastError = e.message
                     isCameraActive = false
+                    fallBackToCameraOff()
                 }
             }
         }
+    }
+
+    private fun fallBackToCameraOff() {
+        if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) return
+        cameraMode = CameraMode.OFF
+        settings.edit().putString("camera.mode", CameraMode.OFF.name).apply()
+        session?.onImageCaptureRequested = null
     }
 
     fun stopCamera() {

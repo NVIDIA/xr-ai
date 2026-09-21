@@ -66,6 +66,14 @@ function saveCameraMode(mode) {
   } catch { /* Storage can be unavailable in private or embedded contexts. */ }
 }
 
+function fallBackToCameraOff(model) {
+  if (model.cameraMode !== 'live'
+      || model.connectionState !== ConnectionState.CONNECTED) return;
+  model.cameraMode = 'off';
+  saveCameraMode('off');
+  if (model.session) model.session.onImageCaptureRequested = null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -722,6 +730,8 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
     showError(window.isSecureContext
       ? 'mediaDevices API unavailable in this browser'
       : 'Mic/camera require a secure context (https:// or localhost).');
+    fallBackToCameraOff(model);
+    render();
     return;
   }
   await _ec?.();
@@ -739,6 +749,7 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
     model.isCameraActive = true;
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
+    fallBackToCameraOff(model);
   }
   render();
 }

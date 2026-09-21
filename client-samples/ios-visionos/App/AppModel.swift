@@ -435,6 +435,7 @@ final class AppModel {
         #if os(visionOS)
         guard immersiveSpaceIsOpen else {
             lastError = "Open the immersive space before enabling live video."
+            fallBackToCameraOff()
             return
         }
         // Surface a friendly message when main-camera access is permanently
@@ -443,6 +444,7 @@ final class AppModel {
         let result = await ARKitSession().requestAuthorization(for: [.cameraAccess])
         guard result[.cameraAccess] == .allowed else {
             lastError = "Main camera access was not granted. Enable it in Settings → Apps → NVIDIA XR-AI Sample."
+            fallBackToCameraOff()
             return
         }
         #endif
@@ -467,7 +469,14 @@ final class AppModel {
             }
             #endif
             lastError = error.localizedDescription
+            fallBackToCameraOff()
         }
+    }
+
+    private func fallBackToCameraOff() {
+        guard cameraMode == .live, connectionState == .connected else { return }
+        cameraMode = .off
+        session?.onImageCaptureRequested = nil
     }
 
     func stopCamera() async {
