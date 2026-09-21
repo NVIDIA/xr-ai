@@ -354,7 +354,7 @@ class TTSService(Protocol):
 
 
 @dataclass(frozen=True)
-class TTSChunk:
+class _TTSChunk:
     """One signed 16-bit PCM chunk from streaming speech synthesis."""
 
     data: bytes
@@ -365,10 +365,6 @@ class TTSChunk:
 
     channels: int = 1
     """Number of interleaved audio channels."""
-
-
-# Keep the internal streaming protocol and its existing consumers compatible.
-_TTSChunk = TTSChunk
 
 
 @runtime_checkable

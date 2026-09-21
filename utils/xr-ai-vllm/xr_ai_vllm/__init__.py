@@ -52,7 +52,6 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
-from ._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
@@ -301,8 +300,6 @@ def stop_persistent_servers(
 __all__ = [
     "serve",
     "serve_nim",
-    "has_xr_ai_ownership_marker",
-    "pid_on_port_checked",
     "stop_persistent_servers",
     "DEFAULT_IMAGE",
     "resolve_model_cache",

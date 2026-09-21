@@ -18,7 +18,7 @@ import wave
 from contextlib import aclosing
 
 import pytest
-from xr_ai_models import STTService, TTSService, load_models_config, make_stt, make_tts
+from xr_ai_models import RivaTTS, STTService, TTSService, load_models_config, make_stt, make_tts
 
 # ── riva.client stub ──────────────────────────────────────────────────────
 
@@ -430,9 +430,9 @@ async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, a
             assert call.read_finished.is_set()
 
 
-@pytest.mark.parametrize("buffered", [False, True])
+@pytest.mark.parametrize("client_mode", ["stream", "buffered", "direct"])
 @pytest.mark.parametrize("initial_exit", ["timeout", "cancel"])
-async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit, buffered):
+async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit, client_mode):
     """A disconnect during RPC unwinding must not release the synthesis lock."""
     class SlowCancelledAudio(_ControlledAudio):
         def __init__(self):
@@ -449,7 +449,8 @@ async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_st
                 self.read_finished.set()
 
     cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
-    async with make_tts(cfg, "tts") as tts:
+    client = RivaTTS("localhost:50052") if client_mode == "direct" else make_tts(cfg, "tts")
+    async with client as tts:
         call = SlowCancelledAudio()
         tts._tts.synthesize_online = lambda *a, **kw: call
         lock = asyncio.Lock()
@@ -457,7 +458,7 @@ async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_st
 
         async def synthesize():
             async with lock:
-                if buffered:
+                if client_mode != "stream":
                     return await tts.synthesize("hello", timeout=0.1 if initial_exit == "timeout" else 5)
                 async with aclosing(tts.stream("hello", timeout=0.1 if initial_exit == "timeout" else 5)) as stream:
                     return await anext(stream)
@@ -491,3 +492,21 @@ async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_st
         finally:
             call.release.set()
             await asyncio.gather(pending, *([following] if following else []), return_exceptions=True)
+
+
+async def test_factory_streaming_does_not_expand_public_sdk_contract(tmp_path, riva_stub):
+    import xr_ai_models
+    import xr_ai_vllm
+    from xr_ai_models._protocols import _StreamingTTSService, _TTSChunk
+
+    assert not hasattr(xr_ai_models, "TTSChunk")
+    assert not hasattr(xr_ai_vllm, "has_xr_ai_ownership_marker")
+    assert not hasattr(xr_ai_vllm, "pid_on_port_checked")
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as streaming, RivaTTS("localhost:50052") as buffered:
+        assert isinstance(streaming, _StreamingTTSService)
+        assert isinstance(buffered, TTSService)
+        assert not hasattr(buffered, "stream")
+        chunks = [chunk async for chunk in streaming.stream("hello")]
+        assert chunks and all(isinstance(chunk, _TTSChunk) for chunk in chunks)
+        assert b"".join(chunk.data for chunk in chunks) == await buffered.synthesize("hello", response_format="pcm")

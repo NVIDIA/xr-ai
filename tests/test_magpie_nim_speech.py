@@ -196,12 +196,12 @@ def test_failure_after_audio_aborts_http_stream():
 
 
 def test_timeout_before_audio_returns_504_and_releases_rpc(monkeypatch):
-    original = RivaTTS.stream
+    original = RivaTTS._stream
 
     def short_timeout(self, text, *, timeout=None):
         return original(self, text, timeout=0.1 if text == "before-first" else 5)
 
-    monkeypatch.setattr(RivaTTS, "stream", short_timeout)
+    monkeypatch.setattr(RivaTTS, "_stream", short_timeout)
 
     async def run():
         async with running_adapter() as (client, backend):
@@ -264,12 +264,12 @@ def test_invalid_pause_configuration_is_rejected(pause_ms):
 
 @pytest.mark.parametrize("stream", [False, True])
 def test_timeout_after_audio_cancels_rpc_and_allows_following_request(monkeypatch, stream):
-    original = RivaTTS.stream
+    original = RivaTTS._stream
 
     def short_timeout(self, text, *, timeout=None):
         return original(self, text, timeout=0.1 if text == "hold" else 5)
 
-    monkeypatch.setattr(RivaTTS, "stream", short_timeout)
+    monkeypatch.setattr(RivaTTS, "_stream", short_timeout)
 
     async def run():
         async with running_adapter() as (client, backend):

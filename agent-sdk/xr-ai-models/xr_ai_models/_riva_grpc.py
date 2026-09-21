@@ -26,7 +26,7 @@ from typing import Any
 from loguru import logger
 
 from ._openai_compat import _pcm_to_wav
-from ._protocols import TTSChunk
+from ._protocols import _TTSChunk
 
 _LOOPBACK_PREFIXES = ("localhost:", "127.0.0.1:", "[::1]:")
 
@@ -166,7 +166,7 @@ class RivaSTT:
 
 
 class RivaTTS:
-    """Riva TTS client with incremental PCM and buffered WAV or PCM synthesis."""
+    """Riva TTS client with buffered WAV or PCM synthesis."""
 
     def __init__(
         self,
@@ -211,18 +211,18 @@ class RivaTTS:
         # segfaults some Riva NIM builds (magpie-tts-multilingual) after
         # producing its response; synthesize_online works on hosted NVCF and
         # self-hosted NIMs alike.
-        async with aclosing(self.stream(text, timeout=timeout)) as chunks:
+        async with aclosing(self._stream(text, timeout=timeout)) as chunks:
             pcm = b"".join([chunk.data async for chunk in chunks])
         if response_format == "pcm":
             return pcm
         return _pcm_to_wav(pcm, self._sample_rate, 1)
 
-    async def stream(
+    async def _stream(
         self,
         text: str,
         *,
         timeout: float | None = None,
-    ) -> AsyncIterator[TTSChunk]:
+    ) -> AsyncIterator[_TTSChunk]:
         """Yield mono 16-bit PCM chunks for a complete text input.
 
         Chunks use the configured sample rate and contain only whole samples.
@@ -254,7 +254,7 @@ class RivaTTS:
                 pending += response.audio
                 complete = len(pending) - len(pending) % 2
                 if complete:
-                    yield TTSChunk(pending[:complete], self._sample_rate, 1)
+                    yield _TTSChunk(pending[:complete], self._sample_rate, 1)
                     pending = pending[complete:]
             if pending:
                 raise ValueError("Riva returned an incomplete PCM sample")
@@ -290,3 +290,16 @@ class RivaTTS:
 
     async def __aexit__(self, *exc: Any) -> None:
         await self.close()
+
+
+class _StreamingRivaTTS(RivaTTS):
+    """Factory adapter for the voice pipeline's internal streaming TTS protocol."""
+
+    def stream(
+        self,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[_TTSChunk]:
+        """Yield PCM through the same cancel-and-join path as buffered synthesis."""
+        return self._stream(text, timeout=timeout)
