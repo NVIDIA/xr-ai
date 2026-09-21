@@ -19,7 +19,8 @@ from xr_ai_launcher import (
     run_stack,
 )
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import has_xr_ai_ownership_marker, pid_on_port_checked, stop_persistent_servers
+from xr_ai_vllm import stop_persistent_servers
+from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 
 _BASE = Path(__file__).resolve().parent
 

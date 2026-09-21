@@ -14,7 +14,7 @@ import httpx
 import uvicorn
 import yaml
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import has_xr_ai_ownership_marker, pid_on_port_checked
+from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 
 from .common import identity
 
