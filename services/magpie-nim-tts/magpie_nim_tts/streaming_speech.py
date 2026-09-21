@@ -9,6 +9,7 @@ from contextlib import aclosing
 
 import grpc
 from fastapi.responses import JSONResponse, StreamingResponse
+from loguru import logger
 
 
 class SpeechStreamResponse(StreamingResponse):
@@ -18,13 +19,11 @@ class SpeechStreamResponse(StreamingResponse):
             # as generation. A disconnected client must not overlap the next RPC.
             async with lock:
                 has_audio = False
-                async with aclosing(backend.stream_pcm(text, timeout=120)) as chunks:
+                async with aclosing(backend.stream(text)) as chunks:
                     async for chunk in chunks:
-                        if len(chunk) % 2:
-                            raise ValueError("NIM returned invalid mono PCM")
-                        if chunk:
+                        if chunk.data:
                             has_audio = True
-                            yield chunk
+                            yield chunk.data
                 # Silence belongs to the audio timeline; sleeping here can be
                 # hidden by playback buffering. Never pad failed or empty RPCs.
                 if has_audio and trailing_silence:
@@ -53,8 +52,16 @@ class SpeechStreamResponse(StreamingResponse):
                         "headers": self.raw_headers})
             if first is not None:
                 await send({"type": "http.response.body", "body": first, "more_body": True})
-            async for chunk in self.body_iterator:
-                await send({"type": "http.response.body", "body": chunk, "more_body": True})
+            try:
+                async for chunk in self.body_iterator:
+                    await send({"type": "http.response.body", "body": chunk, "more_body": True})
+            except (grpc.RpcError, TimeoutError, ValueError) as exc:
+                detail = f"{exc.code()}: {exc.details()}" if isinstance(exc, grpc.RpcError) else repr(exc)
+                logger.error("Speech NIM failed after audio started: {}", detail)
+                # A successful final body would bless truncated audio. Abort with
+                # an unhandled transport error, not a handled HTTP-status error
+                # that Starlette can no longer send after response headers.
+                raise RuntimeError("Speech NIM stream interrupted after audio started") from exc
             await send({"type": "http.response.body", "body": b"", "more_body": False})
 
     async def __call__(self, scope, receive, send):

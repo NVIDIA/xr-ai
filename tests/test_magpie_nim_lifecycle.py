@@ -4,6 +4,7 @@
 """Exercise real adapter processes, port ownership, reuse, and --stop without GPUs."""
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import signal
@@ -17,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import grpc
 import httpx
+import magpie_nim_tts.__main__ as launcher
 import pytest
 import yaml
 from xr_ai_vllm import stop_persistent_servers
@@ -72,7 +74,7 @@ def servers(tmp_path, monkeypatch, grpc_backend):
               "health_url": f"http://127.0.0.1:{upstream.server_port}"}
     processes = []
 
-    def launch(overrides=None, *, ready=True, legacy=False):
+    def launch(overrides=None, *, ready=True, legacy=False, may_exit=False):
         number = len(processes)
         path = tmp_path / f"config-{number}.yaml"
         settings = config | (overrides or {})
@@ -86,7 +88,11 @@ def servers(tmp_path, monkeypatch, grpc_backend):
         ]
         # Set markers at exec time so the legacy fixture retains its health
         # implementation instead of re-execing the current module.
-        env = os.environ | {"XR_AI_VLLM_MANAGED": "1", "XR_AI_VLLM_PORT": str(settings["port"])} if legacy else None
+        env = os.environ.copy()
+        if legacy:
+            env.update(XR_AI_VLLM_MANAGED="1", XR_AI_VLLM_PORT=str(settings["port"]))
+        if may_exit:
+            env["_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"] = "1"
         process = subprocess.Popen(
             [*command, "--config", str(path), "--ready-file", str(ready_file)],
             stdout=log, stderr=log, start_new_session=True, env=env,
@@ -101,7 +107,8 @@ def servers(tmp_path, monkeypatch, grpc_backend):
         if ready:
             log.seek(0)
             assert ready_file.exists(), log.read()
-            assert process.poll() is None
+            if not may_exit:
+                assert process.poll() is None
         else:
             reaper.join(15)
             assert not reaper.is_alive(), "conflicting adapter did not fail promptly"
@@ -156,7 +163,8 @@ def test_two_launches_reuse_one_listener_and_real_stop_allows_restart(servers, l
     assert pid_on_port_checked(port) == (first.pid, True, True)
     assert second.poll() is None
 
-    assert stop_persistent_servers([("tts-adapter", port)])
+    stopped = stop_persistent_servers([("tts-adapter", port)])
+    assert stopped
     second.wait(timeout=5)
     assert first.poll() in (0, -signal.SIGTERM)
     assert second.returncode == 0
@@ -165,7 +173,8 @@ def test_two_launches_reuse_one_listener_and_real_stop_allows_restart(servers, l
     restarted, _ = launch()
     assert restarted.pid != first.pid
     assert pid_on_port_checked(port) == (restarted.pid, True, True)
-    assert stop_persistent_servers([("tts-adapter", port)])
+    stopped = stop_persistent_servers([("tts-adapter", port)])
+    assert stopped
     assert restarted.poll() in (0, -signal.SIGTERM)
 
 
@@ -212,3 +221,32 @@ def test_legacy_identity_is_only_accepted_for_tts(servers):
     assert "different adapter configuration" in output
     assert pid_on_port_checked(config["port"]) == (first.pid, True, True)
     assert first.poll() is None
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_persistent_reuse_exits_wrapper_without_stopping_listener(servers, legacy):
+    config, _, launch = servers
+    first, _ = launch(legacy=legacy)
+    second, output = launch(may_exit=True)
+    assert second.wait(timeout=5) == 0
+    assert "reusing managed listener" in output
+    assert pid_on_port_checked(config["port"]) == (first.pid, True, True)
+
+
+async def test_reuse_monitor_tolerates_inconclusive_inspection(monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+    monkeypatch.delenv("_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT", raising=False)
+    monkeypatch.setattr(launcher, "_reusable_listener", AsyncMock(return_value=123))
+    probes = iter([(None, False, False), (123, True, True), (None, True, False)])
+    observed = []
+
+    def inspect(port):
+        result = next(probes)
+        observed.append(result)
+        return result
+
+    monkeypatch.setattr(launcher, "pid_on_port_checked", inspect)
+    ready = tmp_path / "ready"
+    await asyncio.wait_for(launcher._serve({"port": 8105}, ready), 2)
+    assert ready.exists()
+    assert len(observed) == 3

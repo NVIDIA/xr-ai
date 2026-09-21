@@ -20,11 +20,13 @@ import io
 import os
 import wave
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from typing import Any
 
 from loguru import logger
 
 from ._openai_compat import _pcm_to_wav
+from ._protocols import _TTSChunk
 
 _LOOPBACK_PREFIXES = ("localhost:", "127.0.0.1:", "[::1]:")
 
@@ -209,32 +211,19 @@ class RivaTTS:
         # segfaults some Riva NIM builds (magpie-tts-multilingual) after
         # producing its response; synthesize_online works on hosted NVCF and
         # self-hosted NIMs alike.
-        def _collect() -> bytes:
-            return b"".join(
-                resp.audio
-                for resp in self._tts.synthesize_online(
-                    text,
-                    voice_name=self._voice,
-                    language_code=self._language,
-                    encoding=self._rc.AudioEncoding.LINEAR_PCM,
-                    sample_rate_hz=self._sample_rate,
-                )
-            )
-
-        pcm = await asyncio.wait_for(
-            asyncio.to_thread(_collect), timeout or self._timeout,
-        )
+        async with aclosing(self.stream(text, timeout=timeout)) as chunks:
+            pcm = b"".join([chunk.data async for chunk in chunks])
         if response_format == "pcm":
             return pcm
         return _pcm_to_wav(pcm, self._sample_rate, 1)
 
-    async def stream_pcm(
+    async def stream(
         self,
         text: str,
         *,
         timeout: float | None = None,
-    ) -> AsyncIterator[bytes]:
-        """Yield raw mono 16-bit PCM bytes for a complete text input.
+    ) -> AsyncIterator[_TTSChunk]:
+        """Yield mono 16-bit PCM chunks for a complete text input.
 
         Chunks use the configured sample rate and contain only whole samples.
         The timeout bounds the stream's lifetime, checked on each read. Closing
@@ -265,7 +254,7 @@ class RivaTTS:
                 pending += response.audio
                 complete = len(pending) - len(pending) % 2
                 if complete:
-                    yield pending[:complete]
+                    yield _TTSChunk(pending[:complete], self._sample_rate, 1)
                     pending = pending[complete:]
             if pending:
                 raise ValueError("Riva returned an incomplete PCM sample")

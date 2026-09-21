@@ -34,7 +34,8 @@ class ControlledSpeech(rpc.RivaSpeechSynthesisServicer):
         self.calls = []
 
     def SynthesizeOnline(self, requests, context):
-        request = next(requests)
+        # Qualified Riva clients use unary input; newer clients stream input.
+        request = requests if isinstance(requests, pb.SynthesizeSpeechRequest) else next(requests)
         self.calls.append(request)
         self.started.set()
         try:
@@ -195,12 +196,12 @@ def test_failure_after_audio_aborts_http_stream():
 
 
 def test_timeout_before_audio_returns_504_and_releases_rpc(monkeypatch):
-    original = RivaTTS.stream_pcm
+    original = RivaTTS.stream
 
     def short_timeout(self, text, *, timeout=None):
         return original(self, text, timeout=0.1 if text == "before-first" else 5)
 
-    monkeypatch.setattr(RivaTTS, "stream_pcm", short_timeout)
+    monkeypatch.setattr(RivaTTS, "stream", short_timeout)
 
     async def run():
         async with running_adapter() as (client, backend):
@@ -259,3 +260,30 @@ def test_empty_synthesis_does_not_produce_silence(stream, response_format):
 def test_invalid_pause_configuration_is_rejected(pause_ms):
     with pytest.raises(ValueError, match="post_synthesis_pause_ms must be a non-negative integer"):
         build_app({"kind": "tts", "post_synthesis_pause_ms": pause_ms}, backend=object())
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_timeout_after_audio_cancels_rpc_and_allows_following_request(monkeypatch, stream):
+    original = RivaTTS.stream
+
+    def short_timeout(self, text, *, timeout=None):
+        return original(self, text, timeout=0.1 if text == "hold" else 5)
+
+    monkeypatch.setattr(RivaTTS, "stream", short_timeout)
+
+    async def run():
+        async with running_adapter() as (client, backend):
+            if stream:
+                async with client.stream("POST", "/v1/audio/speech", json=request()) as response:
+                    assert response.status_code == 200
+                    chunks = response.aiter_bytes()
+                    assert await anext(chunks) == FIRST
+                    with pytest.raises(httpx.RemoteProtocolError):
+                        await anext(chunks)
+            else:
+                response = await client.post("/v1/audio/speech", json=request() | {"stream": False})
+                assert response.status_code == 504
+            assert await asyncio.to_thread(backend.exited.wait, 2)
+            following = await client.post("/v1/audio/speech", json=request("immediate"))
+            assert following.status_code == 200 and following.content == FIRST + LAST + SILENCE
+    asyncio.run(run())

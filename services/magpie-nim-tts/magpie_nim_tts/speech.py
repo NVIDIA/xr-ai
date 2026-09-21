@@ -47,7 +47,7 @@ def build_app(config: dict, *, backend=None):
             return SpeechStreamResponse(backend, request.input, rate, generation_lock,
                                         trailing_silence=trailing_silence)
         async with generation_lock:
-            audio = await backend.synthesize(request.input, response_format="pcm", timeout=120)
+            audio = await backend.synthesize(request.input, response_format="pcm")
         if audio:
             audio += trailing_silence
         if request.response_format == "wav":

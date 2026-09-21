@@ -77,8 +77,7 @@ class _FakeSynthesisService:
             "sample_rate_hz": sample_rate_hz,
         })
         half = len(self.pcm) // 2
-        yield types.SimpleNamespace(audio=self.pcm[:half])
-        yield types.SimpleNamespace(audio=self.pcm[half:])
+        return _ControlledAudio([self.pcm[:half], self.pcm[half:]])
 
 
 @pytest.fixture
@@ -389,8 +388,11 @@ async def test_riva_pcm_stream_preserves_split_samples_and_closes(tmp_path, riva
     async with make_tts(cfg, "tts") as tts:
         call = _ControlledAudio([b"", b"\x01", b"\x02\x03", b"\x04"])
         tts._tts.synthesize_online = lambda *a, **kw: call
-        chunks = [chunk async for chunk in tts.stream_pcm("hello")]
-        assert chunks == [b"\x01\x02", b"\x03\x04"]
+        chunks = [chunk async for chunk in tts.stream("hello")]
+        assert [chunk.data for chunk in chunks] == [b"\x01\x02", b"\x03\x04"]
+        assert all(chunk.sample_rate == tts._sample_rate and chunk.channels == 1 for chunk in chunks)
+        from xr_ai_models._protocols import _StreamingTTSService
+        assert isinstance(tts, _StreamingTTSService)
         assert call.cancelled.is_set()
 
 
@@ -400,7 +402,7 @@ async def test_riva_pcm_stream_rejects_incomplete_final_sample(tmp_path, riva_st
         call = _ControlledAudio([b"\x01"])
         tts._tts.synthesize_online = lambda *a, **kw: call
         with pytest.raises(ValueError, match="incomplete PCM"):
-            await anext(tts.stream_pcm("hello"))
+            await anext(tts.stream("hello"))
         assert call.cancelled.is_set()
 
 
@@ -410,9 +412,9 @@ async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, a
     async with make_tts(cfg, "tts") as tts:
         call = _ControlledAudio([b"\x01\x02"], block=action != "close")
         tts._tts.synthesize_online = lambda *a, **kw: call
-        stream = tts.stream_pcm("hello", timeout=0.1 if action == "timeout" else 5)
+        stream = tts.stream("hello", timeout=0.1 if action == "timeout" else 5)
         if action == "close":
-            assert await anext(stream) == b"\x01\x02"
+            assert (await anext(stream)).data == b"\x01\x02"
             await stream.aclose()
         elif action == "timeout":
             with pytest.raises(TimeoutError):
@@ -428,8 +430,9 @@ async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, a
             assert call.read_finished.is_set()
 
 
+@pytest.mark.parametrize("buffered", [False, True])
 @pytest.mark.parametrize("initial_exit", ["timeout", "cancel"])
-async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit):
+async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit, buffered):
     """A disconnect during RPC unwinding must not release the synthesis lock."""
     class SlowCancelledAudio(_ControlledAudio):
         def __init__(self):
@@ -454,7 +457,9 @@ async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_st
 
         async def synthesize():
             async with lock:
-                async with aclosing(tts.stream_pcm("hello", timeout=0.1 if initial_exit == "timeout" else 5)) as stream:
+                if buffered:
+                    return await tts.synthesize("hello", timeout=0.1 if initial_exit == "timeout" else 5)
+                async with aclosing(tts.stream("hello", timeout=0.1 if initial_exit == "timeout" else 5)) as stream:
                     return await anext(stream)
 
         async def following_request():
