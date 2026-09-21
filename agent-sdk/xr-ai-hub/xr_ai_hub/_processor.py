@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections import deque
 import json
 import logging
 import os
@@ -241,8 +242,18 @@ class ProcessorEndpoint:
             self._file_sub = ctx.socket(zmq.SUB)
             self._file_sub.setsockopt(zmq.RCVHWM, file_hwm)
             self._file_sub.connect(file_sub_addr)
+            if auto_subscribe and filter & Subscribe.FILE:
+                # The participant join travels on another socket and may arrive
+                # after its first file. Receive the bounded file lane eagerly;
+                # participant/session/subscription checks still gate delivery.
+                self._file_sub.setsockopt(zmq.SUBSCRIBE, b"file.")
+        self._file_hwm = file_hwm
         self._file_queue: asyncio.Queue[FileMessage] = asyncio.Queue(
             maxsize=file_hwm,
+        )
+        self._pending_files: deque[FileMessage] = deque()
+        self._recent_file_departures: deque[tuple[str, str]] = deque(
+            maxlen=file_hwm,
         )
         if filter & Subscribe.FILE and self._file_sub is None:
             raise ValueError("file_sub_addr is required when subscribing to files")
@@ -756,25 +767,98 @@ class ProcessorEndpoint:
                 if type_id != MsgType.FILE_MESSAGE:
                     log.debug("Unhandled message type %d on file endpoint", type_id)
                     continue
-                if not self._file_delivery_is_active(msg):
-                    log.debug(
-                        "Dropping inactive file %s for participant %s",
-                        msg.transfer_id,
-                        msg.participant_id,
-                    )
-                    continue
-                try:
-                    self._file_queue.put_nowait(msg)
-                except asyncio.QueueFull:
-                    log.warning(
-                        "Dropping file %s for participant %s: callback queue is full",
-                        msg.transfer_id,
-                        msg.participant_id,
-                    )
+                self._route_file(msg)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("Error dispatching file message")
+
+    def _enqueue_file(self, msg: FileMessage) -> None:
+        try:
+            self._file_queue.put_nowait(msg)
+        except asyncio.QueueFull:
+            log.warning(
+                "Dropping file %s for participant %s: callback queue is full",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+
+    def _route_file(self, msg: FileMessage) -> None:
+        """Queue an active file, or briefly retain one that beat its join."""
+        active_session = self._participant_sessions.get(msg.participant_id)
+        session = (msg.participant_id, msg.participant_session_id)
+        waiting_for_join = (
+            msg.participant_id not in self._participants
+            or (
+                bool(msg.participant_session_id)
+                and active_session != msg.participant_session_id
+            )
+        )
+        if waiting_for_join:
+            if session in self._recent_file_departures:
+                log.debug(
+                    "Dropping inactive file %s for participant %s",
+                    msg.transfer_id,
+                    msg.participant_id,
+                )
+                return
+            if len(self._pending_files) >= self._file_hwm:
+                log.warning(
+                    "Dropping file %s for participant %s: pre-join buffer is full",
+                    msg.transfer_id,
+                    msg.participant_id,
+                )
+                return
+            self._pending_files.append(msg)
+            log.debug(
+                "Buffering file %s until participant %s joins",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+            return
+        if not self._file_delivery_is_active(msg):
+            log.debug(
+                "Dropping unsubscribed file %s for participant %s",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+            return
+        self._enqueue_file(msg)
+
+    def _flush_pending_files(
+        self,
+        participant_id: str,
+        participant_session_id: str,
+    ) -> None:
+        pending = self._pending_files
+        self._pending_files = deque()
+        while pending:
+            msg = pending.popleft()
+            if msg.participant_id != participant_id:
+                self._pending_files.append(msg)
+            elif msg.participant_session_id == participant_session_id:
+                if self._file_delivery_is_active(msg):
+                    self._enqueue_file(msg)
+            else:
+                log.debug(
+                    "Dropping inactive file %s for participant %s",
+                    msg.transfer_id,
+                    msg.participant_id,
+                )
+
+    def _discard_pending_files(
+        self,
+        participant_id: str,
+        participant_session_id: str,
+    ) -> None:
+        self._pending_files = deque(
+            msg
+            for msg in self._pending_files
+            if not (
+                msg.participant_id == participant_id
+                and msg.participant_session_id == participant_session_id
+            )
+        )
 
     def _file_session_is_active(self, msg: FileMessage) -> bool:
         active_session = self._participant_sessions.get(msg.participant_id)
@@ -914,8 +998,24 @@ class ProcessorEndpoint:
                 self._participant_sessions[msg.participant_id] = (
                     msg.participant_session_id
                 )
+                self._recent_file_departures = deque(
+                    [
+                        (participant_id, participant_session_id)
+                        for participant_id, participant_session_id
+                        in self._recent_file_departures
+                        if not (
+                            participant_id == msg.participant_id
+                            and participant_session_id == msg.participant_session_id
+                        )
+                    ],
+                    maxlen=self._file_hwm,
+                )
                 if self._auto_subscribe:
                     self.subscribe(msg.participant_id)
+                self._flush_pending_files(
+                    msg.participant_id,
+                    msg.participant_session_id,
+                )
                 status = self._participant_status.get(
                     msg.participant_id, self._default_status,
                 )
@@ -931,6 +1031,15 @@ class ProcessorEndpoint:
                     and msg.participant_session_id != active_session
                 ):
                     return
+                departed_session = msg.participant_session_id or active_session
+                if departed_session:
+                    self._recent_file_departures.append(
+                        (msg.participant_id, departed_session),
+                    )
+                    self._discard_pending_files(
+                        msg.participant_id,
+                        departed_session,
+                    )
                 self._participants.discard(msg.participant_id)
                 self._participant_sessions.pop(msg.participant_id, None)
                 if self._auto_subscribe:

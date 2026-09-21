@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections import deque
 from loguru import logger
 import json
 import time
@@ -136,6 +137,7 @@ class HubEndpoint:
 
         self._file_pull: zmq.asyncio.Socket | None = None
         self._file_pub: zmq.asyncio.Socket | None = None
+        self._file_hwm = file_hwm
         self._file_max_bytes = file_max_bytes
         if (file_pull_addr is None) != (file_pub_addr is None):
             raise ValueError("file_pull_addr and file_pub_addr must be configured together")
@@ -157,6 +159,15 @@ class HubEndpoint:
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
         self._participant_sessions: dict[str, str] = {}
+        # The connector and file lanes use different sockets, so a completed
+        # file can arrive just before the participant join that authorizes it.
+        # Hold only the same bounded number of files accepted by the socket.
+        self._pending_files: deque[FileMessage] = deque()
+        self._recent_file_departures: deque[tuple[str, str]] = deque(
+            maxlen=file_hwm,
+        )
+        self._file_sessions_releasing: set[tuple[str, str]] = set()
+        self._file_publish_lock = asyncio.Lock()
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
         # The slot is held open (not released) until the next frame for the same
         # track arrives, the participant disconnects, or the hub shuts down — so
@@ -395,16 +406,7 @@ class HubEndpoint:
                         self._file_max_bytes,
                     )
                     continue
-                active_session = self._participant_sessions.get(msg.participant_id)
-                if active_session is None or msg.participant_session_id != active_session:
-                    logger.info(
-                        "File {} dropped: participant session is no longer active",
-                        msg.transfer_id,
-                    )
-                    continue
-                topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
-                encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
-                await self._file_pub.send_multipart([topic, encoded])
+                await self._route_file(msg)
             except asyncio.CancelledError:
                 raise
             except zmq.ZMQError as exc:
@@ -413,6 +415,99 @@ class HubEndpoint:
                 logger.error("File IPC ZMQ error: {}", exc)
             except Exception:
                 logger.exception("Error routing file message")
+
+    async def _publish_file(self, msg: FileMessage) -> None:
+        assert self._file_pub is not None
+        async with self._file_publish_lock:
+            topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
+            encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
+            await self._file_pub.send_multipart([topic, encoded])
+
+    def _ensure_file_ordering_state(self) -> None:
+        """Initialize file ordering state for lightweight test embedders."""
+        if not hasattr(self, "_file_hwm"):
+            self._file_hwm = 2
+        if not hasattr(self, "_pending_files"):
+            self._pending_files = deque()
+        if not hasattr(self, "_recent_file_departures"):
+            self._recent_file_departures = deque(maxlen=self._file_hwm)
+        if not hasattr(self, "_file_sessions_releasing"):
+            self._file_sessions_releasing = set()
+        if not hasattr(self, "_file_publish_lock"):
+            self._file_publish_lock = asyncio.Lock()
+
+    async def _route_file(self, msg: FileMessage) -> None:
+        """Publish an active file, or briefly retain one that beat its join."""
+        self._ensure_file_ordering_state()
+        active_session = self._participant_sessions.get(msg.participant_id)
+        session = (msg.participant_id, msg.participant_session_id)
+        waiting_for_join = (
+            active_session is None
+            or session in self._file_sessions_releasing
+            or msg.participant_session_id != active_session
+        )
+        if waiting_for_join:
+            if session in self._recent_file_departures:
+                logger.info(
+                    "File {} dropped: participant session is no longer active",
+                    msg.transfer_id,
+                )
+                return
+            if len(self._pending_files) >= self._file_hwm:
+                logger.warning(
+                    "File {} dropped: pre-join file buffer is full",
+                    msg.transfer_id,
+                )
+                return
+            self._pending_files.append(msg)
+            logger.debug(
+                "Buffering file {} until participant {} joins",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+            return
+        await self._publish_file(msg)
+
+    async def _flush_pending_files(
+        self,
+        participant_id: str,
+        participant_session_id: str,
+    ) -> None:
+        self._ensure_file_ordering_state()
+        while True:
+            pending = self._pending_files
+            self._pending_files = deque()
+            ready: list[FileMessage] = []
+            while pending:
+                msg = pending.popleft()
+                if msg.participant_id != participant_id:
+                    self._pending_files.append(msg)
+                elif msg.participant_session_id == participant_session_id:
+                    ready.append(msg)
+                else:
+                    logger.info(
+                        "File {} dropped: participant session is no longer active",
+                        msg.transfer_id,
+                    )
+            if not ready:
+                return
+            for msg in ready:
+                await self._publish_file(msg)
+
+    def _discard_pending_files(
+        self,
+        participant_id: str,
+        participant_session_id: str,
+    ) -> None:
+        self._ensure_file_ordering_state()
+        self._pending_files = deque(
+            msg
+            for msg in self._pending_files
+            if not (
+                msg.participant_id == participant_id
+                and msg.participant_session_id == participant_session_id
+            )
+        )
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.CONNECTOR_REGISTER:
@@ -582,11 +677,27 @@ class HubEndpoint:
                 participant_sessions = {}
                 self._participant_sessions = participant_sessions
             if msg.joined:
+                self._ensure_file_ordering_state()
+                file_session = (msg.participant_id, msg.participant_session_id)
+                self._file_sessions_releasing.add(file_session)
                 self._participant_connector[msg.participant_id] = msg.connector_id
                 participant_sessions[msg.participant_id] = (
                     msg.participant_session_id
                 )
+                self._recent_file_departures = deque(
+                    [
+                        (participant_id, participant_session_id)
+                        for participant_id, participant_session_id
+                        in self._recent_file_departures
+                        if not (
+                            participant_id == msg.participant_id
+                            and participant_session_id == msg.participant_session_id
+                        )
+                    ],
+                    maxlen=self._file_hwm,
+                )
             else:
+                self._ensure_file_ordering_state()
                 active_session = participant_sessions.get(msg.participant_id, "")
                 if (
                     msg.participant_session_id
@@ -600,6 +711,15 @@ class HubEndpoint:
                     return
                 self._participant_connector.pop(msg.participant_id, None)
                 participant_sessions.pop(msg.participant_id, None)
+                departed_session = msg.participant_session_id or active_session
+                if departed_session:
+                    self._recent_file_departures.append(
+                        (msg.participant_id, departed_session),
+                    )
+                    self._discard_pending_files(
+                        msg.participant_id,
+                        departed_session,
+                    )
                 self._published_status.pop(msg.participant_id, None)
                 for per_participant in self._agent_status.values():
                     per_participant.pop(msg.participant_id, None)
@@ -619,12 +739,29 @@ class HubEndpoint:
                     await cb(msg)
                 except Exception:
                     logger.exception("participant callback error")
-            await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
             if msg.joined:
+                # The participant event is handed to the main publisher before
+                # any file that raced ahead of it is released on the file lane.
+                try:
+                    await self._pub.send_multipart([
+                        b"participant",
+                        encode(MsgType.PARTICIPANT_EVENT, msg),
+                    ])
+                    await self._flush_pending_files(
+                        msg.participant_id,
+                        msg.participant_session_id,
+                    )
+                finally:
+                    self._file_sessions_releasing.discard(file_session)
                 # A joining client has no status yet; publish the aggregate
                 # unconditionally so it starts from a real state instead of
                 # inheriting whatever the previous occupant of this pid saw.
                 await self.publish_agent_status(msg.participant_id, force=True)
+            else:
+                await self._pub.send_multipart([
+                    b"participant",
+                    encode(MsgType.PARTICIPANT_EVENT, msg),
+                ])
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:

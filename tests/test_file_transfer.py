@@ -14,7 +14,15 @@ from device_io_hub.ipc import ConnectorEndpoint, HubEndpoint
 from device_io_hub.ipc._hub import _file_prefix as hub_file_prefix
 from device_io_hub.transport.livekit._room_client import RoomClient
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
-from xr_ai_hub import FileMessage, MsgType, ProcessorEndpoint, Subscribe, decode, encode
+from xr_ai_hub import (
+    FileMessage,
+    MsgType,
+    ParticipantEvent,
+    ProcessorEndpoint,
+    Subscribe,
+    decode,
+    encode,
+)
 from xr_ai_hub._processor import _file_prefix as processor_file_prefix
 
 
@@ -382,3 +390,141 @@ def test_file_fanout_uses_per_subscriber_drop_policy() -> None:
         assert hub._file_pub.getsockopt(zmq.SNDHWM) == 1
     finally:
         hub.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prior_session", [None, "session-0"])
+async def test_hub_buffers_file_that_arrives_before_participant_join(
+    monkeypatch,
+    prior_session,
+) -> None:
+    hub = HubEndpoint(
+        "inproc://prejoin-hub-in",
+        "inproc://prejoin-hub-pub",
+        file_pull_addr="inproc://prejoin-hub-file-in",
+        file_pub_addr="inproc://prejoin-hub-file-pub",
+    )
+    message = FileMessage(
+        participant_id="alice",
+        topic="image.response",
+        pts_us=123,
+        transfer_id="stream-prejoin-hub",
+        name="capture.png",
+        mime_type="image/png",
+        attributes={},
+        data=b"png",
+        participant_session_id="session-1",
+    )
+    published: list[FileMessage] = []
+
+    async def record_file(msg: FileMessage) -> None:
+        published.append(msg)
+
+    monkeypatch.setattr(hub, "_publish_file", record_file)
+    try:
+        if prior_session is not None:
+            await hub._dispatch(
+                MsgType.PARTICIPANT_EVENT,
+                ParticipantEvent(
+                    participant_id="alice",
+                    joined=True,
+                    pts_us=122,
+                    connector_id="connector-1",
+                    participant_session_id=prior_session,
+                ),
+            )
+        await hub._route_file(message)
+        assert published == []
+
+        if prior_session is not None:
+            await hub._dispatch(
+                MsgType.PARTICIPANT_EVENT,
+                ParticipantEvent(
+                    participant_id="alice",
+                    joined=False,
+                    pts_us=123,
+                    connector_id="connector-1",
+                    participant_session_id=prior_session,
+                ),
+            )
+
+        await hub._dispatch(
+            MsgType.PARTICIPANT_EVENT,
+            ParticipantEvent(
+                participant_id="alice",
+                joined=True,
+                pts_us=124,
+                connector_id="connector-1",
+                participant_session_id="session-1",
+            ),
+        )
+
+        assert published == [message]
+    finally:
+        hub.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prior_session", [None, "session-0"])
+async def test_processor_buffers_file_that_arrives_before_participant_join(
+    prior_session,
+) -> None:
+    processor = ProcessorEndpoint(
+        "inproc://prejoin-processor-pub",
+        "inproc://prejoin-processor-in",
+        file_sub_addr="inproc://prejoin-processor-file",
+        filter=Subscribe.DEFAULT | Subscribe.FILE,
+    )
+    message = FileMessage(
+        participant_id="alice",
+        topic="image.response",
+        pts_us=123,
+        transfer_id="stream-prejoin-processor",
+        name="capture.png",
+        mime_type="image/png",
+        attributes={},
+        data=b"png",
+        participant_session_id="session-1",
+    )
+    try:
+        if prior_session is not None:
+            await processor._dispatch(
+                MsgType.PARTICIPANT_EVENT,
+                ParticipantEvent(
+                    participant_id="alice",
+                    joined=True,
+                    pts_us=122,
+                    connector_id="connector-1",
+                    participant_session_id=prior_session,
+                ),
+            )
+        processor._route_file(message)
+        assert processor._file_queue.empty()
+
+        if prior_session is not None:
+            await processor._dispatch(
+                MsgType.PARTICIPANT_EVENT,
+                ParticipantEvent(
+                    participant_id="alice",
+                    joined=False,
+                    pts_us=123,
+                    connector_id="connector-1",
+                    participant_session_id=prior_session,
+                ),
+            )
+
+        await processor._dispatch(
+            MsgType.PARTICIPANT_EVENT,
+            ParticipantEvent(
+                participant_id="alice",
+                joined=True,
+                pts_us=124,
+                connector_id="connector-1",
+                participant_session_id="session-1",
+            ),
+        )
+
+        assert processor._file_queue.get_nowait() == message
+        processor._file_queue.task_done()
+    finally:
+        processor.close()

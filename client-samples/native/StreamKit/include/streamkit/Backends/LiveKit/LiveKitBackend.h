@@ -218,6 +218,9 @@ private:
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
     std::atomic<std::uint64_t> connect_generation_{0};
+    // Unlike connect_generation_, this also advances for SDK-managed
+    // reconnects so an in-flight byte stream can never become active again.
+    std::atomic<std::uint64_t> byte_stream_epoch_{0};
 
     // Serializes liveness checks, delivery, and state transitions. Shared
     // ownership lets a callback finish unlocking if it destroys the backend.
