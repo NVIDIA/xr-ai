@@ -52,7 +52,6 @@ Classes
    xr_ai_models.ToolCall
    xr_ai_models.ToolDef
    xr_ai_models.TTSService
-   xr_ai_models.TTSChunk
    xr_ai_models.VideoPart
    xr_ai_models.VLMService
    xr_ai_models.OpenAICompatLLM
@@ -461,34 +460,6 @@ Package Contents
 
 
       Release resources owned by the service.
-
-
-
-.. py:class:: TTSChunk
-
-   One signed 16-bit PCM chunk from streaming speech synthesis.
-
-
-   .. py:attribute:: data
-      :type:  bytes
-
-      Interleaved signed 16-bit PCM samples.
-
-
-
-   .. py:attribute:: sample_rate
-      :type:  int
-
-      Sample rate in hertz.
-
-
-
-   .. py:attribute:: channels
-      :type:  int
-      :value: 1
-
-
-      Number of interleaved audio channels.
 
 
 
@@ -1348,7 +1319,7 @@ Package Contents
 
 .. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
 
-   Riva TTS client with incremental PCM and buffered WAV or PCM synthesis.
+   Riva TTS client with buffered WAV or PCM synthesis.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
@@ -1356,19 +1327,6 @@ Package Contents
 
 
       Synthesize *text* and return WAV bytes (or raw 16-bit PCM).
-
-
-
-   .. py:method:: stream(text: str, *, timeout: float | None = None) -> collections.abc.AsyncIterator[xr_ai_models.TTSChunk]
-      :async:
-
-
-      Yield mono 16-bit PCM chunks for a complete text input.
-
-      Chunks use the configured sample rate and contain only whole samples.
-      The timeout bounds the stream's lifetime, checked on each read. Closing
-      or cancelling the iterator cancels the RPC and joins its pending read
-      before returning, so callers can safely release a synthesis lock.
 
 
 
