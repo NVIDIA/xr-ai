@@ -26,7 +26,7 @@ from typing import Any
 from loguru import logger
 
 from ._openai_compat import _pcm_to_wav
-from ._protocols import _TTSChunk
+from ._protocols import TTSChunk
 
 _LOOPBACK_PREFIXES = ("localhost:", "127.0.0.1:", "[::1]:")
 
@@ -222,7 +222,7 @@ class RivaTTS:
         text: str,
         *,
         timeout: float | None = None,
-    ) -> AsyncIterator[_TTSChunk]:
+    ) -> AsyncIterator[TTSChunk]:
         """Yield mono 16-bit PCM chunks for a complete text input.
 
         Chunks use the configured sample rate and contain only whole samples.
@@ -254,7 +254,7 @@ class RivaTTS:
                 pending += response.audio
                 complete = len(pending) - len(pending) % 2
                 if complete:
-                    yield _TTSChunk(pending[:complete], self._sample_rate, 1)
+                    yield TTSChunk(pending[:complete], self._sample_rate, 1)
                     pending = pending[complete:]
             if pending:
                 raise ValueError("Riva returned an incomplete PCM sample")
