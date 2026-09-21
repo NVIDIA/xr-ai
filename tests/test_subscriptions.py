@@ -5,8 +5,8 @@
 Tests for the participant-keyed subscription API on ProcessorEndpoint.
 
 Covers:
-* ``Subscribe.ALL`` / ``Subscribe.AUDIO`` / ``Subscribe.DATA`` / ``Subscribe.VIDEO``
-  filters at the ZMQ kernel.
+* ``Subscribe.REALTIME`` / ``Subscribe.AUDIO`` / ``Subscribe.DATA`` /
+  ``Subscribe.VIDEO`` filters at the ZMQ kernel.
 * ``auto_subscribe=True`` (default): agents auto-subscribe to every joining
   participant; auto-unsubscribe on leave.
 * ``auto_subscribe=False``: agents see only participant + control until
@@ -29,6 +29,15 @@ from xr_ai_hub import AudioChunk, DataMessage, Subscribe
 from _helpers import setup_client, silence, teardown_clients, wait_for, wait_for_subscribed
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_realtime_filter_excludes_files_and_preserves_all_alias() -> None:
+    assert Subscribe.REALTIME == (
+        Subscribe.DATA | Subscribe.AUDIO | Subscribe.VIDEO
+    )
+    assert Subscribe.DEFAULT is Subscribe.REALTIME
+    assert Subscribe.ALL is Subscribe.REALTIME
+    assert not Subscribe.REALTIME & Subscribe.FILE
 
 
 # ── auto_subscribe=True (default) ──────────────────────────────────────────
@@ -214,7 +223,7 @@ async def test_filter_combination_data_plus_audio(
 async def test_per_pid_filter_override_at_subscribe_time(
     hub, make_connector, make_processor, settle,
 ):
-    """The default filter is ``Subscribe.ALL`` but a per-pid call to
+    """The default filter is ``Subscribe.REALTIME`` but a per-pid call to
     ``subscribe(pid, filter=...)`` overrides it just for that pid."""
     saw_alice_data:  list[DataMessage] = []
     saw_alice_audio: list[AudioChunk]  = []

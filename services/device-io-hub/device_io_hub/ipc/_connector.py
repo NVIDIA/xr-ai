@@ -324,7 +324,7 @@ class ConnectorEndpoint:
         await self._push.send(encode(MsgType.IMAGE_CAPTURE_DATA, image))
 
     async def push_file(self, msg: FileMessage) -> bool:
-        """Queue a completed file without blocking real-time connector traffic."""
+        """Queue a completed file on the dedicated bounded IPC lane."""
         if self._file_push is None:
             logger.warning(
                 "File transfer {} dropped: file IPC is not configured",
@@ -379,7 +379,7 @@ class ConnectorEndpoint:
         participant_id: str,
         pts_us: int = 0,
         participant_session_id: str | None = None,
-    ) -> str:
+    ) -> None:
         """
         Call when a LiveKit participant connects to the room.
 
@@ -403,7 +403,6 @@ class ConnectorEndpoint:
             participant_session_id=session_id,
         )
         await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
-        return session_id
 
     async def notify_participant_left(
         self,

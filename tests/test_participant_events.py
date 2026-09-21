@@ -486,10 +486,12 @@ async def test_participant_leave_continues_when_held_slot_release_fails():
         signal=SimpleNamespace(slot=0),
     )
     hub._participant_connector = {"alice": "conn"}
+    hub._participant_sessions = {"alice": ""}
     hub._published_status = {"alice": "ready"}
     hub._agent_status = {"agent": {"alice": "ready"}}
     hub._latest_slots = {("alice", "cam"): (FailingRing(), view)}
     hub._participant_cbs = []
+    hub._file_pull = None
     hub._pub = FakePublisher()
     event = ParticipantEvent(
         participant_id="alice",

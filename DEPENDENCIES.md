@@ -285,7 +285,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `pyzmq>=27.0`
-  - `livekit>=1.1.15`
+  - `livekit>=1.1.16`
   - `livekit-api>=1.0`
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`

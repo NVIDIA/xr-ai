@@ -41,6 +41,10 @@ class LocalVideoTrack;
 
 namespace streamkit {
 
+namespace detail {
+struct ByteStreamConnection;
+}
+
 /// StreamingBackend implementation using the upstream LiveKit C++ SDK.
 ///
 /// Do not construct this directly — use `BackendConfiguration{LiveKitConfig{…}}`
@@ -182,6 +186,7 @@ private:
                             std::span<const std::byte> payload,
                             std::string_view sender_identity) const;
 
+    detail::ByteStreamConnection ActiveByteStreamConnection();
     void ApplyConnectionState(ConnectionState state);
     void BlockNetworkMetricsDelivery();
     void HandleNetworkQualityChange(int lk_quality);
@@ -218,8 +223,8 @@ private:
     std::atomic<bool> audio_armed_{false};
     std::atomic<ConnectionState> last_fired_state_{ConnectionState::kDisconnected};
     std::atomic<std::uint64_t> connect_generation_{0};
-    // Unlike connect_generation_, this also advances for SDK-managed
-    // reconnects so an in-flight byte stream can never become active again.
+    // Bumped on every disconnect and SDK reconnect. Byte streams capture it
+    // and abort on mismatch.
     std::atomic<std::uint64_t> byte_stream_epoch_{0};
 
     // Serializes liveness checks, delivery, and state transitions. Shared

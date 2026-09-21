@@ -12,19 +12,22 @@
 
 #include "test_assert.h"
 
+#include "Backends/LiveKit/ByteStreamTransport.h"
 #include "streamkit/Backends/LiveKit/LiveKitBackend.h"
 #include "streamkit/Config/BackendConfiguration.h"
 #include "streamkit/ConnectionState.h"
 #include "streamkit/FrameSink.h"
+#include "streamkit/StreamError.h"
 #include "streamkit/StreamSession.h"
 
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <future>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -37,6 +40,15 @@ public:
 };
 
 struct NonStandardCallbackFailure {};
+
+struct TemporaryFile {
+    std::filesystem::path path;
+
+    ~TemporaryFile() {
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+    }
+};
 
 } // namespace
 
@@ -73,6 +85,10 @@ struct LiveKitBackendTestAccess {
         return backend.byte_stream_epoch_.load();
     }
 
+    static std::function<bool()> ByteStreamLiveness(LiveKitBackend& backend) {
+        return backend.ActiveByteStreamConnection().is_active;
+    }
+
     static void ApplyConnectionState(LiveKitBackend& backend,
                                      ConnectionState state) {
         backend.ApplyConnectionState(state);
@@ -102,6 +118,32 @@ int main() {
         states.push_back(s);
     };
 
+    bool rejected_invalid_metadata = false;
+    try {
+        (void)session.SendBytes(
+            {},
+            streamkit::FileSendOptions{
+                .topic = {},
+                .name = "capture.png",
+            });
+    } catch (const streamkit::InvalidFileMetadataError&) {
+        rejected_invalid_metadata = true;
+    }
+    Expect(rejected_invalid_metadata);
+
+    bool rejected_disconnected_send = false;
+    try {
+        (void)session.SendBytes(
+            {},
+            streamkit::FileSendOptions{
+                .topic = "image.response",
+                .name = "capture.png",
+            });
+    } catch (const streamkit::NotConnectedError&) {
+        rejected_disconnected_send = true;
+    }
+    Expect(rejected_disconnected_send);
+
     // ── First Connect — must NOT emit a spurious initial kDisconnected
     //    from TearDown(), and must emit exactly one kConnected. ────────────
     session.Connect();
@@ -126,8 +168,48 @@ int main() {
     ExpectEq(byte_info.size, file_bytes.size());
     ExpectEq(byte_info.topic, std::string("image.response"));
 
-    const auto file_path = std::filesystem::temp_directory_path() /
-        "streamkit-livekit-backend-file-test.bin";
+    bool rejected_reserved_topic = false;
+    try {
+        (void)session.SendBytes(
+            file_bytes,
+            streamkit::FileSendOptions{
+                .topic = "_streamkit.private",
+                .name = "capture.png",
+            });
+    } catch (const streamkit::InvalidFileMetadataError&) {
+        rejected_reserved_topic = true;
+    }
+    Expect(rejected_reserved_topic);
+
+    bool validated_before_filesystem = false;
+    try {
+        (void)session.SendFile(
+            std::filesystem::temp_directory_path() / "streamkit-missing-file",
+            streamkit::FileSendOptions{
+                .topic = {},
+                .name = "capture.png",
+            });
+    } catch (const streamkit::InvalidFileMetadataError&) {
+        validated_before_filesystem = true;
+    }
+    Expect(validated_before_filesystem);
+
+    bool rejected_directory = false;
+    try {
+        (void)session.SendFile(
+            std::filesystem::temp_directory_path(),
+            byte_options);
+    } catch (const streamkit::InvalidFileMetadataError&) {
+        rejected_directory = true;
+    }
+    Expect(rejected_directory);
+
+    const TemporaryFile temporary_file{
+        std::filesystem::temp_directory_path() /
+        ("streamkit-livekit-backend-file-test-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+         ".bin")};
+    const auto& file_path = temporary_file.path;
     {
         std::ofstream file(file_path, std::ios::binary);
         file.write("png", 3);
@@ -149,6 +231,14 @@ int main() {
     ExpectEq(states.size(), std::size_t{3});
     Expect(states[2] == ConnectionState::kDisconnected);
     Expect(!livekit_backend->GetRoom());
+
+    rejected_disconnected_send = false;
+    try {
+        (void)session.SendBytes(file_bytes, byte_options);
+    } catch (const streamkit::NotConnectedError&) {
+        rejected_disconnected_send = true;
+    }
+    Expect(rejected_disconnected_send);
 
     // ── Reconnect — still no spurious leading kDisconnected. The
     //    TearDown() at the top of Connect sees last_fired_state_ ==
@@ -298,6 +388,9 @@ int main() {
     // chunk or close check.
     streamkit::LiveKitBackend reconnecting_backend{lk};
     reconnecting_backend.Connect(streamkit::SessionConfig::Default());
+    const auto byte_stream_is_active =
+        streamkit::LiveKitBackendTestAccess::ByteStreamLiveness(reconnecting_backend);
+    Expect(byte_stream_is_active());
     const auto active_byte_stream_epoch =
         streamkit::LiveKitBackendTestAccess::ByteStreamEpoch(reconnecting_backend);
     streamkit::LiveKitBackendTestAccess::ApplyConnectionState(
@@ -307,6 +400,7 @@ int main() {
     Expect(
         streamkit::LiveKitBackendTestAccess::ByteStreamEpoch(reconnecting_backend) !=
         active_byte_stream_epoch);
+    Expect(!byte_stream_is_active());
     reconnecting_backend.Disconnect();
 
     // User callback exceptions are contained at the delivery boundary and do

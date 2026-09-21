@@ -40,9 +40,15 @@ therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
+`Subscribe.REALTIME` combines data, audio, and video. `Subscribe.DEFAULT` is
+the same real-time-only filter. `Subscribe.ALL` remains an equivalent but
+deprecated compatibility alias; completed files stay explicitly opt-in.
+
 ### Completed files
 
-File transfer is opt-in and uses a bounded IPC lane separate from real-time messages. Pass the file publisher address and include `Subscribe.FILE`, then register an async callback:
+File transfer is opt-in and uses a bounded IPC lane separate from real-time
+messages. Pass the file publisher address and include `Subscribe.FILE`, then
+register an async callback:
 
 ```python
 from xr_ai_hub import FileMessage, ProcessorEndpoint, Subscribe
@@ -51,7 +57,7 @@ endpoint = ProcessorEndpoint(
     sub_addr="ipc:///tmp/xr_hub_pub",
     push_addr="ipc:///tmp/xr_hub_in",
     file_sub_addr="ipc:///tmp/xr_hub_file_pub",
-    filter=Subscribe.DEFAULT | Subscribe.FILE,
+    filter=Subscribe.REALTIME | Subscribe.FILE,
 )
 
 async def on_file(message: FileMessage) -> None:
@@ -60,7 +66,11 @@ async def on_file(message: FileMessage) -> None:
 unsubscribe = endpoint.on_file(on_file)
 ```
 
-The callback runs only after DeviceIOHub has received and validated the complete LiveKit byte stream. File callbacks are awaited serially on their own receive loop, so a slow file handler does not block audio, lifecycle, or packet-data traffic. `attributes` contains only application metadata; StreamKit's reserved routing attributes are removed.
+The callback runs only after DeviceIOHub has received and validated the complete
+LiveKit byte stream. File callbacks are awaited serially on their own receive
+loop. Audio, lifecycle, and packet-data traffic continue on the real-time loop.
+`attributes` contains only application metadata; StreamKit's reserved routing
+attributes are removed.
 
 <a id="frames"></a>
 (agent-sdk-hub-frames)=

@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections import deque
 import json
 import logging
 import os
@@ -65,6 +64,7 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode, encode
+from ._file_ordering import FileRoute, FileSessionOrderer
 from ._types import (AgentPresence, AudioChunk, DataMessage, FileMessage, FrameData,
                      FrameRequest, FrameSignal, ImageCaptureCancel,
                      ImageCaptureData, ImageCaptureRequest, MsgType,
@@ -107,6 +107,7 @@ class Subscribe(Flag):
 
     The real-time flags correspond to pid-scoped topics on the hub's main PUB
     socket. ``Subscribe.FILE`` is opt-in and uses the bounded file publisher.
+    ``Subscribe.ALL`` is a deprecated alias for ``Subscribe.REALTIME``.
 
     Example
     -------
@@ -130,11 +131,14 @@ class Subscribe(Flag):
     FILE  = auto()  # `file.{pid}.*` on the bounded file IPC lane
     """Completed file transfers for a participant."""
 
-    DEFAULT = DATA | AUDIO | VIDEO
-    """Existing real-time categories selected by default."""
+    REALTIME = DATA | AUDIO | VIDEO
+    """All real-time message categories, excluding completed files."""
 
-    ALL   = DEFAULT
-    """Compatibility alias for all existing real-time message categories."""
+    DEFAULT = REALTIME
+    """Real-time categories selected by default."""
+
+    ALL   = REALTIME
+    """Deprecated compatibility alias; use :attr:`REALTIME`."""
 
 
 # Real-time topic-prefix categories used by the main subscription socket. Each
@@ -204,6 +208,9 @@ class ProcessorEndpoint:
     file_hwm :
         Maximum complete-file messages queued in each file-subscriber and
         callback-worker buffer. Must be a positive integer; defaults to 2.
+        When auto-subscription and the initial filter include files, the file
+        lane subscribes eagerly and gates callbacks by session and filter.
+        Other modes use participant-scoped ZMQ filters.
     auto_subscribe :
         Whether participant join and leave events automatically manage
         subscriptions. Defaults to ``True``.
@@ -230,6 +237,8 @@ class ProcessorEndpoint:
     ) -> None:
         if isinstance(file_hwm, bool) or not isinstance(file_hwm, int) or file_hwm <= 0:
             raise ValueError("file_hwm must be a positive integer")
+        if filter & Subscribe.FILE and file_sub_addr is None:
+            raise ValueError("file_sub_addr is required when subscribing to files")
         ctx = zmq.asyncio.Context.instance()
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
@@ -238,25 +247,19 @@ class ProcessorEndpoint:
             self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
         self._file_sub: zmq.asyncio.Socket | None = None
+        self._file_subscribe_all = bool(auto_subscribe and filter & Subscribe.FILE)
         if file_sub_addr is not None:
             self._file_sub = ctx.socket(zmq.SUB)
             self._file_sub.setsockopt(zmq.RCVHWM, file_hwm)
             self._file_sub.connect(file_sub_addr)
-            if auto_subscribe and filter & Subscribe.FILE:
-                # The participant join travels on another socket and may arrive
-                # after its first file. Receive the bounded file lane eagerly;
-                # participant/session/subscription checks still gate delivery.
+            if self._file_subscribe_all:
                 self._file_sub.setsockopt(zmq.SUBSCRIBE, b"file.")
         self._file_hwm = file_hwm
         self._file_queue: asyncio.Queue[FileMessage] = asyncio.Queue(
             maxsize=file_hwm,
         )
-        self._pending_files: deque[FileMessage] = deque()
-        self._recent_file_departures: deque[tuple[str, str]] = deque(
-            maxlen=file_hwm,
-        )
-        if filter & Subscribe.FILE and self._file_sub is None:
-            raise ValueError("file_sub_addr is required when subscribing to files")
+        self._file_orderer = FileSessionOrderer(file_hwm)
+        self._file_session_events: asyncio.Queue[ParticipantEvent] = asyncio.Queue()
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)    # same — outbound messages queue until hub is ready
@@ -361,7 +364,7 @@ class ProcessorEndpoint:
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
         for pre in _prefixes(added, participant_id):
             self._sub.setsockopt(zmq.SUBSCRIBE, pre)
-        if self._file_sub is not None:
+        if self._file_sub is not None and not self._file_subscribe_all:
             file_prefix = _file_prefix(participant_id)
             if removed & Subscribe.FILE:
                 self._file_sub.setsockopt(zmq.UNSUBSCRIBE, file_prefix)
@@ -382,7 +385,11 @@ class ProcessorEndpoint:
         old = self._subscribed.pop(participant_id, Subscribe(0))
         for pre in _prefixes(old, participant_id):
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
-        if old & Subscribe.FILE and self._file_sub is not None:
+        if (
+            old & Subscribe.FILE
+            and self._file_sub is not None
+            and not self._file_subscribe_all
+        ):
             self._file_sub.setsockopt(
                 zmq.UNSUBSCRIBE,
                 _file_prefix(participant_id),
@@ -421,13 +428,17 @@ class ProcessorEndpoint:
         """Round-trip probes through every active subscription lane."""
         deadline = asyncio.get_running_loop().time() + timeout
         if not await self._probe_socket(self._sub, deadline):
+            log.warning("Subscription probe timed out on the real-time IPC lane")
             return False
         has_file_subscriptions = any(
             filter_ & Subscribe.FILE for filter_ in self._subscribed.values()
         )
         if has_file_subscriptions:
             assert self._file_sub is not None
-            return await self._probe_socket(self._file_sub, deadline)
+            confirmed = await self._probe_socket(self._file_sub, deadline)
+            if not confirmed:
+                log.warning("Subscription probe timed out on the file IPC lane")
+            return confirmed
         return True
 
     async def _probe_socket(
@@ -753,25 +764,83 @@ class ProcessorEndpoint:
             self._announce_presence(attached=False)
 
     async def _run_files(self) -> None:
-        """Receive file-lane messages without waiting for application callbacks."""
+        """Receive file-lane messages independently of application callbacks."""
         assert self._file_sub is not None
-        while self._running:
+        receive = asyncio.ensure_future(self._file_sub.recv_multipart())
+        lifecycle = asyncio.create_task(self._file_session_events.get())
+        try:
+            while self._running:
+                timeout = self._file_orderer.seconds_until_expiry()
+                done, _ = await asyncio.wait(
+                    (receive, lifecycle),
+                    timeout=timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not done:
+                    self._log_expired_files()
+                    continue
+                if lifecycle in done:
+                    lifecycle = await self._drain_file_session_events(lifecycle)
+                if receive not in done:
+                    continue
+                completed_receive = receive
+                try:
+                    _topic, raw = completed_receive.result()
+                except zmq.ZMQError as exc:
+                    if not self._running:
+                        break
+                    log.error("File IPC ZMQ error: %s", exc)
+                    receive = asyncio.ensure_future(self._file_sub.recv_multipart())
+                    continue
+                if not self._running:
+                    break
+                try:
+                    receive = asyncio.ensure_future(self._file_sub.recv_multipart())
+                except zmq.ZMQError as exc:
+                    if self._running:
+                        log.error("File IPC ZMQ error: %s", exc)
+                    break
+                try:
+                    type_id, msg = await asyncio.to_thread(decode, raw)
+                    if type_id == MsgType.SUBSCRIPTION_PROBE:
+                        fut = self._probe_waiters.get(msg.token)
+                        if fut is not None and not fut.done():
+                            fut.set_result(None)
+                        continue
+                    if type_id != MsgType.FILE_MESSAGE:
+                        log.debug("Unhandled message type %d on file endpoint", type_id)
+                        continue
+                    lifecycle = await self._drain_file_session_events(lifecycle)
+                    self._route_file(msg)
+                except Exception:
+                    log.exception("Error dispatching file message")
+        except asyncio.CancelledError:
+            raise
+        finally:
+            receive.cancel()
+            lifecycle.cancel()
+            await asyncio.gather(receive, lifecycle, return_exceptions=True)
+
+    async def _drain_file_session_events(
+        self,
+        lifecycle: asyncio.Task,
+    ) -> asyncio.Task:
+        """Apply every lifecycle event already pending on the file lane."""
+        await asyncio.sleep(0)
+        while True:
+            if lifecycle.done():
+                event = lifecycle.result()
+                lifecycle = asyncio.create_task(self._file_session_events.get())
+            else:
+                try:
+                    event = self._file_session_events.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
             try:
-                _topic, raw = await self._file_sub.recv_multipart()
-                type_id, msg = await asyncio.to_thread(decode, raw)
-                if type_id == MsgType.SUBSCRIPTION_PROBE:
-                    fut = self._probe_waiters.get(msg.token)
-                    if fut is not None and not fut.done():
-                        fut.set_result(None)
-                    continue
-                if type_id != MsgType.FILE_MESSAGE:
-                    log.debug("Unhandled message type %d on file endpoint", type_id)
-                    continue
-                self._route_file(msg)
-            except asyncio.CancelledError:
-                raise
+                self._apply_file_session_event(event)
             except Exception:
-                log.exception("Error dispatching file message")
+                log.exception("Error applying file-lane participant event")
+        return lifecycle
 
     def _enqueue_file(self, msg: FileMessage) -> None:
         try:
@@ -784,81 +853,72 @@ class ProcessorEndpoint:
             )
 
     def _route_file(self, msg: FileMessage) -> None:
-        """Queue an active file, or briefly retain one that beat its join."""
-        active_session = self._participant_sessions.get(msg.participant_id)
-        session = (msg.participant_id, msg.participant_session_id)
-        waiting_for_join = (
-            msg.participant_id not in self._participants
-            or (
-                bool(msg.participant_session_id)
-                and active_session != msg.participant_session_id
-            )
-        )
-        if waiting_for_join:
-            if session in self._recent_file_departures:
+        """Queue an active file or retain one until its lifecycle event arrives."""
+        route = self._file_orderer.route(msg)
+        if route is FileRoute.READY:
+            if not self._file_delivery_is_active(msg):
                 log.debug(
-                    "Dropping inactive file %s for participant %s",
+                    "Dropping unsubscribed file %s for participant %s",
                     msg.transfer_id,
                     msg.participant_id,
                 )
                 return
-            if len(self._pending_files) >= self._file_hwm:
-                log.warning(
-                    "Dropping file %s for participant %s: pre-join buffer is full",
-                    msg.transfer_id,
-                    msg.participant_id,
-                )
-                return
-            self._pending_files.append(msg)
+            self._enqueue_file(msg)
+        elif route is FileRoute.BUFFERED:
             log.debug(
                 "Buffering file %s until participant %s joins",
                 msg.transfer_id,
                 msg.participant_id,
             )
-            return
-        if not self._file_delivery_is_active(msg):
+        elif route is FileRoute.INACTIVE:
             log.debug(
-                "Dropping unsubscribed file %s for participant %s",
+                "Dropping inactive file %s for participant %s",
                 msg.transfer_id,
                 msg.participant_id,
             )
-            return
-        self._enqueue_file(msg)
+        else:
+            log.warning(
+                "Dropping file %s for participant %s: pre-join buffer is full",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+        self._log_expired_files()
 
-    def _flush_pending_files(
-        self,
-        participant_id: str,
-        participant_session_id: str,
-    ) -> None:
-        pending = self._pending_files
-        self._pending_files = deque()
-        while pending:
-            msg = pending.popleft()
-            if msg.participant_id != participant_id:
-                self._pending_files.append(msg)
-            elif msg.participant_session_id == participant_session_id:
+    def _apply_file_session_event(self, event: ParticipantEvent) -> None:
+        if event.joined:
+            ready, inactive = self._file_orderer.participant_joined(
+                event.participant_id,
+                event.participant_session_id,
+            )
+            for msg in ready:
                 if self._file_delivery_is_active(msg):
                     self._enqueue_file(msg)
-            else:
+            for msg in inactive:
                 log.debug(
                     "Dropping inactive file %s for participant %s",
                     msg.transfer_id,
                     msg.participant_id,
                 )
-
-    def _discard_pending_files(
-        self,
-        participant_id: str,
-        participant_session_id: str,
-    ) -> None:
-        self._pending_files = deque(
-            msg
-            for msg in self._pending_files
-            if not (
-                msg.participant_id == participant_id
-                and msg.participant_session_id == participant_session_id
+        else:
+            discarded = self._file_orderer.participant_left(
+                event.participant_id,
+                event.participant_session_id,
             )
-        )
+            for msg in discarded:
+                log.debug(
+                    "Dropping inactive file %s for participant %s",
+                    msg.transfer_id,
+                    msg.participant_id,
+                )
+        self._log_expired_files()
+
+    def _log_expired_files(self) -> None:
+        for msg in self._file_orderer.expire():
+            log.debug(
+                "Dropping file %s for participant %s: join timed out",
+                msg.transfer_id,
+                msg.participant_id,
+            )
 
     def _file_session_is_active(self, msg: FileMessage) -> bool:
         active_session = self._participant_sessions.get(msg.participant_id)
@@ -998,24 +1058,10 @@ class ProcessorEndpoint:
                 self._participant_sessions[msg.participant_id] = (
                     msg.participant_session_id
                 )
-                self._recent_file_departures = deque(
-                    [
-                        (participant_id, participant_session_id)
-                        for participant_id, participant_session_id
-                        in self._recent_file_departures
-                        if not (
-                            participant_id == msg.participant_id
-                            and participant_session_id == msg.participant_session_id
-                        )
-                    ],
-                    maxlen=self._file_hwm,
-                )
                 if self._auto_subscribe:
                     self.subscribe(msg.participant_id)
-                self._flush_pending_files(
-                    msg.participant_id,
-                    msg.participant_session_id,
-                )
+                if self._file_sub is not None:
+                    self._file_session_events.put_nowait(msg)
                 status = self._participant_status.get(
                     msg.participant_id, self._default_status,
                 )
@@ -1032,19 +1078,21 @@ class ProcessorEndpoint:
                 ):
                     return
                 departed_session = msg.participant_session_id or active_session
-                if departed_session:
-                    self._recent_file_departures.append(
-                        (msg.participant_id, departed_session),
-                    )
-                    self._discard_pending_files(
-                        msg.participant_id,
-                        departed_session,
-                    )
                 self._participants.discard(msg.participant_id)
                 self._participant_sessions.pop(msg.participant_id, None)
                 if self._auto_subscribe:
                     self.unsubscribe(msg.participant_id)
                 self._participant_status.pop(msg.participant_id, None)
+                if self._file_sub is not None and departed_session:
+                    self._file_session_events.put_nowait(
+                        ParticipantEvent(
+                            participant_id=msg.participant_id,
+                            joined=False,
+                            pts_us=msg.pts_us,
+                            connector_id=msg.connector_id,
+                            participant_session_id=departed_session,
+                        ),
+                    )
             for cb in self._participant_cbs:
                 self._spawn(cb(msg))
         elif type_id == MsgType.SUBSCRIPTION_PROBE:

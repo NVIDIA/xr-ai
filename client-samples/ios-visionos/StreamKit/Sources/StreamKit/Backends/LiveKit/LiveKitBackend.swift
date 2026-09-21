@@ -423,16 +423,24 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     public func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
-        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .nameKey])
-        guard let size = values.fileSize else {
-            throw StreamError.invalidFileMetadata("file size is unavailable")
-        }
-        let effective = try makeFileOptions(
+        var effective = try makeFileOptions(
             options,
-            size: size,
-            defaultName: values.name ?? fileURL.lastPathComponent
+            size: 0,
+            defaultName: fileURL.lastPathComponent
         )
         let connection = try activeByteStreamConnection()
+        let values: URLResourceValues
+        do {
+            values = try fileURL.resourceValues(
+                forKeys: [.fileSizeKey, .isRegularFileKey]
+            )
+        } catch {
+            throw StreamError.invalidFileMetadata("file is not readable")
+        }
+        guard values.isRegularFile == true, let size = values.fileSize else {
+            throw StreamError.invalidFileMetadata("file is not readable")
+        }
+        effective = effective.withSize(size)
         let streamID: String
         do {
             streamID = try await LiveKitByteStreamWriter.sendFile(
@@ -475,6 +483,23 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 size: size
             )
         }
+
+        func withSize(_ size: Int) -> EffectiveFileOptions {
+            EffectiveFileOptions(
+                topic: topic,
+                name: name,
+                mimeType: mimeType,
+                size: size,
+                wire: ByteStreamWireOptions(
+                    topic: wire.topic,
+                    attributes: wire.attributes,
+                    destinationIdentities: wire.destinationIdentities,
+                    mimeType: wire.mimeType,
+                    name: wire.name,
+                    totalSize: size
+                )
+            )
+        }
     }
 
     private func makeFileOptions(
@@ -496,7 +521,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             maxBytes: Self.fileMaxFieldBytes
         )
         let mimeType = try Self.validateFileField(
-            options.mimeType ?? "application/octet-stream",
+            options.mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream",
             name: "MIME type",
             maxBytes: Self.fileMaxFieldBytes
         )

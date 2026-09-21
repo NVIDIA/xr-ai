@@ -311,7 +311,7 @@ class RoomClient:
             asyncio.Task, tuple[str, str, rtc.ByteStreamReader]
         ] = {}
         self._participant_sessions: dict[str, str] = {}
-        self._accepting_files = True
+        self._accepting_files = False
         self._stop = asyncio.Event()
         # Per-participant return audio: pid → (AudioSource, LocalTrackPublication, ReturnPipe).
         # Lazy-published on first send_return_audio for a pid; subscribe permissions
@@ -416,7 +416,7 @@ class RoomClient:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
-        self._accepting_files = True
+        self._accepting_files = False
         await self._room.connect(
             self._cfg.lk_internal_url,
             make_client_token(self._cfg, identity=self._cfg.identity),
@@ -433,13 +433,23 @@ class RoomClient:
             self._cfg.lk_internal_url, self._cfg.room_name, self._cfg.identity,
         )
 
-        # Notify IPC about participants already in the room when we joined.
-        for participant in self._room.remote_participants.values():
-            session_id = self._participant_sessions.setdefault(
+        participants = list(self._room.remote_participants.values())
+        for participant in participants:
+            self._participant_sessions.setdefault(
                 participant.identity,
                 uuid.uuid4().hex,
             )
-            await self._handle_joined(participant, session_id)
+        # Byte-stream handlers can run as soon as Room.connect() returns. Give
+        # every existing participant a session before awaiting IPC notification.
+        await asyncio.gather(*(
+            self._handle_joined(
+                participant,
+                self._participant_sessions[participant.identity],
+            )
+            for participant in participants
+        ))
+        self._accepting_files = True
+        for participant in participants:
             for pub in participant.track_publications.values():
                 if pub.track is not None and pub.subscribed:
                     self._maybe_start_track(pub.track, participant.identity)
@@ -518,6 +528,11 @@ class RoomClient:
         """Synchronously admit or reject a newly opened LiveKit byte stream."""
         participant_session_id = self._participant_sessions.get(participant_id)
         if not self._accepting_files or participant_session_id is None:
+            logger.debug(
+                "File {} from {!r} rejected: participant session is not active",
+                reader.info.stream_id,
+                participant_id,
+            )
             reader.close()
             return
         if len(self._file_tasks) >= self._cfg.incoming_file_max_concurrent:
@@ -655,7 +670,7 @@ class RoomClient:
             ))
             if accepted:
                 logger.info(
-                    "File received: participant={!r} stream={!r} name={!r} bytes={}",
+                    "File queued to IPC: participant={!r} stream={!r} name={!r} bytes={}",
                     participant_id,
                     header["transfer_id"],
                     header["name"],

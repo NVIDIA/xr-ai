@@ -6,8 +6,8 @@ pyzmq>=27.0
 msgpack>=1.0
 
 # LiveKit transport
-livekit>=0.17
-livekit-api>=0.7
+livekit>=1.1.16
+livekit-api>=1.0
 
 # Token server
 fastapi>=0.111

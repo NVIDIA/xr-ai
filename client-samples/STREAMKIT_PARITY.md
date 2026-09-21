@@ -6,10 +6,10 @@
 # StreamKit cross-platform API parity
 
 The four StreamKit client SDKs (web `web/StreamKit/`, iOS/visionOS
-`ios-visionos/StreamKit/`, Android `android/.../streamkit/`, and native C++) are intended to
-mirror one another. The table tracks selected shared surfaces. **parity** means
-the capability is equivalent, **idiom** marks an intentional platform-specific
-shape, and **to-fix** identifies a current gap.
+`ios-visionos/StreamKit/`, Android `android/.../streamkit/`, and native C++) are
+intended to mirror one another. A full-repo audit found the divergences below.
+Each is tagged **parity** (the capability is equivalent), **idiom** (intentional
+platform-specific shape), or **to-fix** (a real gap to close in future work).
 
 | Surface | web | iOS / visionOS | Android | Native C++ | Status | Notes |
 |---|---|---|---|---|---|---|

@@ -166,7 +166,7 @@ class CaptureService:
         self._endpoint = ProcessorEndpoint(
             sub_addr=config.hub_sub_addr,
             push_addr=config.hub_push_addr,
-            filter=Subscribe.ALL,
+            filter=Subscribe.REALTIME,
             agent_id="media-capture",
             announces_readiness=False,
         )
