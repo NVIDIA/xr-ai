@@ -615,6 +615,11 @@ restarting a consuming worker alone does not replace the running servers.</p>
 <section id="configure">
 <h2>Configure<a class="headerlink" href="#configure" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">yaml/&lt;gpu-profile&gt;/models.json</span></code> selects the deployment and client adapters.
+When switching to a smaller deployment, startup stops known unselected services
+before launching the selected stack. Explicitly reused services and their adapter
+backends are preserved. An owned adapter infers its backend only when that backend
+is not explicitly declared reused; declared credentials remain explicit profile
+requirements. Dry-run and export never stop services.
 The adjacent server YAML files own image versions and digests, model profiles,
 ports, GPU placement, and runtime limits. Refer to the generated
 <a class="reference external" href="https://nvidia.github.io/xr-ai/latest/reference/configuration.html">configuration reference</a>
