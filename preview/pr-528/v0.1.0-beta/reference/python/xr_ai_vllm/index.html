@@ -493,6 +493,12 @@ docker path stays light even when pip vllm is not installed.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.setup_hf_env" title="xr_ai_vllm.setup_hf_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup_hf_env</span></code></a>(→ str | None)</p></td>
 <td><p>Apply the shared HuggingFace / CUDA env block.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.has_xr_ai_ownership_marker" title="xr_ai_vllm.has_xr_ai_ownership_marker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_xr_ai_ownership_marker</span></code></a>(→ bool)</p></td>
+<td><p>Return whether <em>pid</em> carries xr-ai's matching managed-port marker.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.pid_on_port_checked" title="xr_ai_vllm.pid_on_port_checked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pid_on_port_checked</span></code></a>(→ tuple[int | None, bool, bool])</p></td>
+<td><p>Return the listening PID, inspection status, and listener presence.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.serve_nim" title="xr_ai_vllm.serve_nim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve_nim</span></code></a>(→ None)</p></td>
 <td><p>Pull (if needed) and run a NIM container, blocking until stopped.</p></td>
 </tr>
@@ -561,6 +567,21 @@ docs/source/getting_started/credentials.md. <code class="docutils literal notran
 <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>.</p>
 <p>Returns the resolved <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> string (or <code class="docutils literal notranslate"><span class="pre">None</span></code>) so
 callers that run GPU detection can confirm the device filter is applied.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_vllm.has_xr_ai_ownership_marker">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">has_xr_ai_ownership_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_vllm.has_xr_ai_ownership_marker" title="Link to this definition">#</a></dt>
+<dd><p>Return whether <em>pid</em> carries xr-ai’s matching managed-port marker.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_vllm.pid_on_port_checked">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">pid_on_port_checked</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_vllm.pid_on_port_checked" title="Link to this definition">#</a></dt>
+<dd><p>Return the listening PID, inspection status, and listener presence.</p>
+<p>Tries <cite>ss</cite> first (always present on modern Linux), falls back to <cite>lsof</cite>.
+A listener without a visible PID is still reported so callers fail closed
+instead of mistaking an uninspectable listener for an unused port.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -728,6 +749,8 @@ identified as xr-ai services fail closed without sending a signal.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.resolve_model_cache"><code class="docutils literal notranslate"><span class="pre">resolve_model_cache()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.setup_hf_env"><code class="docutils literal notranslate"><span class="pre">setup_hf_env()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.has_xr_ai_ownership_marker"><code class="docutils literal notranslate"><span class="pre">has_xr_ai_ownership_marker()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.pid_on_port_checked"><code class="docutils literal notranslate"><span class="pre">pid_on_port_checked()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve_nim"><code class="docutils literal notranslate"><span class="pre">serve_nim()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.DEFAULT_IMAGE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_IMAGE</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve"><code class="docutils literal notranslate"><span class="pre">serve()</span></code></a></li>

@@ -61,6 +61,8 @@ Functions
    xr_ai_vllm.load_config
    xr_ai_vllm.resolve_model_cache
    xr_ai_vllm.setup_hf_env
+   xr_ai_vllm.has_xr_ai_ownership_marker
+   xr_ai_vllm.pid_on_port_checked
    xr_ai_vllm.serve_nim
    xr_ai_vllm.serve
    xr_ai_vllm.stop_persistent_servers
@@ -108,6 +110,20 @@ Package Contents
 
    Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
    callers that run GPU detection can confirm the device filter is applied.
+
+
+.. py:function:: has_xr_ai_ownership_marker(pid: int, port: int) -> bool
+
+   Return whether *pid* carries xr-ai's matching managed-port marker.
+
+
+.. py:function:: pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]
+
+   Return the listening PID, inspection status, and listener presence.
+
+   Tries `ss` first (always present on modern Linux), falls back to `lsof`.
+   A listener without a visible PID is still reported so callers fail closed
+   instead of mistaking an uninspectable listener for an unused port.
 
 
 .. py:function:: serve_nim(*, image: str, container_name: str, log_prefix: str, http_port: int, grpc_port: int | None = None, nim_cache: pathlib.Path, cuda_visible_devices: str | None = None, extra_env: dict[str, str] | None = None, ready_file: pathlib.Path | None = None) -> None

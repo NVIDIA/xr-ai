@@ -52,6 +52,7 @@ Classes
    xr_ai_models.ToolCall
    xr_ai_models.ToolDef
    xr_ai_models.TTSService
+   xr_ai_models.TTSChunk
    xr_ai_models.VideoPart
    xr_ai_models.VLMService
    xr_ai_models.OpenAICompatLLM
@@ -460,6 +461,34 @@ Package Contents
 
 
       Release resources owned by the service.
+
+
+
+.. py:class:: TTSChunk
+
+   One signed 16-bit PCM chunk from streaming speech synthesis.
+
+
+   .. py:attribute:: data
+      :type:  bytes
+
+      Interleaved signed 16-bit PCM samples.
+
+
+
+   .. py:attribute:: sample_rate
+      :type:  int
+
+      Sample rate in hertz.
+
+
+
+   .. py:attribute:: channels
+      :type:  int
+      :value: 1
+
+
+      Number of interleaved audio channels.
 
 
 
@@ -1330,11 +1359,11 @@ Package Contents
 
 
 
-   .. py:method:: stream_pcm(text: str, *, timeout: float | None = None) -> collections.abc.AsyncIterator[bytes]
+   .. py:method:: stream(text: str, *, timeout: float | None = None) -> collections.abc.AsyncIterator[xr_ai_models.TTSChunk]
       :async:
 
 
-      Yield raw mono 16-bit PCM bytes for a complete text input.
+      Yield mono 16-bit PCM chunks for a complete text input.
 
       Chunks use the configured sample rate and contain only whole samples.
       The timeout bounds the stream's lifetime, checked on each read. Closing

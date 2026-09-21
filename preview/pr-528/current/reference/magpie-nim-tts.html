@@ -477,7 +477,7 @@ inserting error text into PCM.</p>
 <section id="test">
 <h2>Test<a class="headerlink" href="#test" title="Link to this heading">#</a></h2>
 <p>From the service directory:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests<span class="w"> </span>-q
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../tests<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>../../tests/test_magpie_nim_lifecycle.py<span class="w"> </span>../../tests/test_magpie_nim_speech.py<span class="w"> </span>-q
 </pre></div>
 </div>
 <p>Tests use controlled local gRPC and HTTP servers and require no model or GPU.</p>
