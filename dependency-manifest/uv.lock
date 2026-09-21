@@ -22,6 +22,9 @@ conflicts = [[
 [options]
 exclude-newer = "2026-08-27T17:15:48Z"
 
+[options.exclude-newer-package]
+transformers = "2026-09-10T00:00:00Z"
+
 [[package]]
 name = "absl-py"
 version = "2.5.0"
@@ -985,6 +988,7 @@ dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -995,6 +999,7 @@ requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2088,6 +2093,7 @@ dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2098,6 +2104,7 @@ requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2247,6 +2254,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pyyaml" },
     { name = "soundfile" },
+    { name = "transformers" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-logging" },
 ]
@@ -2261,6 +2269,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "soundfile", specifier = ">=0.12" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -2777,6 +2786,7 @@ dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2787,6 +2797,7 @@ requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2800,6 +2811,7 @@ dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2810,6 +2822,7 @@ requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -5229,6 +5242,7 @@ dependencies = [
     { name = "nemo-toolkit", extra = ["asr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-logging" },
 ]
@@ -5242,6 +5256,7 @@ requires-dist = [
     { name = "nemo-toolkit", extras = ["asr"], specifier = ">=2.5" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -5677,7 +5692,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.16.1"
+version = "5.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
@@ -5691,9 +5706,9 @@ dependencies = [
     { name = "tqdm", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "typer", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/2e/ba418680ab901dae269360bb8642485eae04f1af91ee2ebb8bd6f3607305/transformers-5.16.1.tar.gz", hash = "sha256:17b0eac726ddc55e84ac58946063e0c6d37fd000c456b581f050ea0f4e822869", size = 9650542, upload-time = "2026-08-26T14:48:58.789Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/9e/750649904a065007a838981785b2bd8d9ff26154c6c341ac67d0b7f82c68/transformers-5.17.0.tar.gz", hash = "sha256:a153be279169b55b92d8000bf4af294aed684503d091cca7804da2dd8a9de000", size = 9817878, upload-time = "2026-09-09T15:39:56.886Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/4d/ee3728674c0bbc637bb4af88ccf0be697f92e4e90b55f5dc110c44d61b61/transformers-5.16.1-py3-none-any.whl", hash = "sha256:2f2d5b98a5ad3718713653734298fa620754ed683702a635ebb587df3ed29c7e", size = 12080592, upload-time = "2026-08-26T14:48:55.083Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/d0/c502b60d684adbd98a8dc7d5bb866842772b816ac4354e4608be240041ae/transformers-5.17.0-py3-none-any.whl", hash = "sha256:78ec1ce21579b38dfb83950a0658cd119f87212a2fcfdff478096ce9d6c03801", size = 12295140, upload-time = "2026-09-09T15:39:53.746Z" },
 ]
 
 [[package]]
@@ -5929,6 +5944,7 @@ dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "transformers" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -5939,6 +5955,7 @@ requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "transformers", specifier = ">=5.17.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },

@@ -3,3 +3,6 @@
 
 # Advance only as part of a repository-wide dependency qualification change.
 exclude-newer = "2026-08-27T17:15:48Z"
+
+# CVE-2026-80047: qualify the fixed Transformers release independently.
+exclude-newer-package = { transformers = "2026-09-10T00:00:00Z" }

@@ -10,6 +10,8 @@ name = "nemotron3-nano-llm-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    # CVE-2026-80047: check remote-code consent before caching custom generation code.
+    "transformers>=5.17.0",
     # vLLM provides the OpenAI-compatible HTTP server, the Qwen3-coder
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
     # FlashInfer NVFP4 MoE kernels. 0.27.0 is the security floor that fixes

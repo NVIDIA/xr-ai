@@ -301,6 +301,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -317,6 +318,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -333,6 +335,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
   - `soundfile>=0.12`
@@ -353,6 +356,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -369,6 +373,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -447,6 +452,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
   - `fastapi>=0.111`
@@ -482,6 +488,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`

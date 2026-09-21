@@ -10,6 +10,8 @@ name = "nemotron-omni-llm-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    # CVE-2026-80047: check remote-code consent before caching custom generation code.
+    "transformers>=5.17.0",
     "vllm>=0.27.0",
     "pyyaml>=6.0",
     "huggingface-hub>=0.32.0",
