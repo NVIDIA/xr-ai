@@ -144,6 +144,7 @@ def test_hardware_profiles_pin_reasoner_cache_with_admission_limits() -> None:
     ):
         assert config["gpu_memory_utilization"] == expected_utilization
         assert config["kv_cache_memory_bytes"] == 1610612736
+        assert config["max_model_len"] == 8192
     assert "spark_uma" not in blackwell
     assert "spark_uma" not in dual_ada
     assert blackwell["max_num_seqs"] == 4

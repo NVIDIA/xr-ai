@@ -25,15 +25,18 @@ cuda_visible_devices: "0"   # share GPU 0 with embeddings; Nemotron/STT use GPU 
 
 model_cache: ../../../../models
 
-# The 0.47 fraction keeps startup admission within the per-GPU memory available
-# after colocated services. Pin 1.5 GiB of KV cache for deterministic capacity.
+# The Reasoner weights were measured at 16.8 GiB. The 0.47 fraction is the
+# startup admission threshold; the explicit 1.5 GiB allocation bounds the KV
+# cache independently.
 gpu_memory_utilization: 0.47
 kv_cache_memory_bytes: 1610612736
+max_model_len: 8192
 enforce_eager: true
 async_scheduling: true
 mm_encoder_tp_mode: data
 max_videos_per_prompt: 0
-# Raise max_model_len too if multi-image turns outgrow the context window.
+# Increasing max_model_len also requires recalculating the fixed KV cache and
+# cold-start validation on the target profile.
 max_images_per_prompt: 4
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).

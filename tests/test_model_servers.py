@@ -271,6 +271,7 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
         profile_path.parent.name
     ]
     assert config["kv_cache_memory_bytes"] == 2147483648
+    assert config["max_model_len"] == 32768
     if profile_path.parent.name == "spark":
         assert config["max_num_seqs"] == 4
         assert "moe_backend" not in config
