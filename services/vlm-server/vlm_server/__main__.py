@@ -24,12 +24,10 @@ Config keys
     max_num_seqs:            int    vLLM --max-num-seqs (default: 4).
     tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
     max_model_len:           int    vLLM --max-model-len (default: 8192).
-    gpu_memory_utilization:  float  Automatic vLLM KV-cache sizing fraction
-                                    (default: 0.85; ignored when
-                                    kv_cache_memory_bytes is set).
+    gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
     kv_cache_memory_bytes:   int    Explicit vLLM KV-cache size in bytes (optional).
-                                    Mutually exclusive with automatic fractional
-                                    sizing.
+                                    When set, gpu_memory_utilization remains the
+                                    startup free-memory admission threshold.
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     async_scheduling:        bool   Enable vLLM async scheduling (default: false).
     hf_overrides:            dict   Hugging Face config overrides passed as JSON.
@@ -144,11 +142,10 @@ def run() -> None:
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
         "--max-model-len", str(max_ctx),
+        "--gpu-memory-utilization", str(gpu_mem),
         "--limit-mm-per-prompt", json.dumps({"image": max_images, "video": max_videos}),
     ]
-    if kv_cache_memory_bytes is None:
-        extra_serve_args.extend(["--gpu-memory-utilization", str(gpu_mem)])
-    else:
+    if kv_cache_memory_bytes is not None:
         extra_serve_args.extend(
             ["--kv-cache-memory-bytes", str(kv_cache_memory_bytes)]
         )

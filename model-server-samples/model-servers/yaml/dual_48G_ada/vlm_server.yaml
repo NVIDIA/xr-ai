@@ -25,8 +25,9 @@ cuda_visible_devices: "0"   # share GPU 0 with embeddings; Nemotron/STT use GPU 
 
 model_cache: ../../../../models
 
-# Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.
-# Pin 1.5 GiB while retaining capacity for concurrent shorter requests.
+# The 0.47 fraction keeps startup admission within the per-GPU memory available
+# after colocated services. Pin 1.5 GiB of KV cache for deterministic capacity.
+gpu_memory_utilization: 0.47
 kv_cache_memory_bytes: 1610612736
 enforce_eager: true
 async_scheduling: true
