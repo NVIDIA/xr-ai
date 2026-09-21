@@ -472,7 +472,9 @@ to NIM’s input types, preserving input order and avoiding duplicated prefixes.
 Unprefixed strings default to passages; callers can also set <code class="docutils literal notranslate"><span class="pre">input_type</span></code>.
 The chat adapters translate model aliases and normalize Nemotron reasoning.
 Streaming chat returns visible text, matching the shared SDK; use non-streaming
-chat for function calls and reasoning.</p>
+chat for function calls and reasoning. Requests combining <code class="docutils literal notranslate"><span class="pre">stream:</span> <span class="pre">true</span></code> with
+<code class="docutils literal notranslate"><span class="pre">tools</span></code> are rejected before inference. The text-only stream does not expose
+provider finish metadata such as a token-limit stop.</p>
 <p>The Magpie HTTP service forwards PCM chunks as synthesis proceeds and appends
 the configured 300 ms pause after each successful nonempty request. This sample
 owns the per-profile voice and pause settings in <code class="docutils literal notranslate"><span class="pre">tts_adapter.yaml</span></code>; sentence
@@ -655,7 +657,8 @@ for this tag listing one. Embeddings use one FP8 engine on Blackwell and Ada
 renderer or unrelated GPU workloads.</p>
 <p>Omni is pinned to its generic TP=1 NVFP4 profile on Blackwell and Spark and
 its FP8 profile on Ada. Cosmos selects Nano, with an 8,192-token context and
-four image inputs. Ada explicitly selects the FP8 vLLM checkpoint profile
+four image inputs to limit memory use while sharing the GPU with the other
+models. Larger contexts need a separately qualified memory budget. Ada explicitly selects the FP8 vLLM checkpoint profile
 shipped under L40S, which shares SM 8.9 with RTX 6000 Ada; this profile contains
 weights rather than a GPU-specific TensorRT engine. The generic BF16 fallback
 would exceed the shared-GPU budget.
@@ -697,7 +700,7 @@ function calls, reasoning, and embeddings through real SDK HTTP serialization.
 Linux lifecycle tests launch actual adapters on temporary ports with a local
 health stub, without Docker or GPUs. They verify ownership, repeated launch,
 shutdown, restart, and rejection of unhealthy or conflicting listeners:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests<span class="w"> </span>-q
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../tests<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>../../tests/test_model_servers_nim_*.py<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span><span class="w"> </span>-q
 </pre></div>
 </div>
 <p>Repository-cache tests also exercise real subprocesses, interrupted builds,
@@ -707,14 +710,14 @@ build. It uses small stand-in engines and a test HTTP server on temporary ports,
 so it does not qualify GPU inference. With a speech container already running,
 select its locally installed image and run the isolated Docker test:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">XR_AI_TEST_RIVA_IMAGE</span><span class="o">=</span><span class="k">$(</span>docker<span class="w"> </span>inspect<span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{.Image}}'</span><span class="w"> </span>xr-ai-model-servers-nim-tts<span class="k">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_riva_repository.py<span class="w"> </span>-m<span class="w"> </span>gpu<span class="w"> </span>-q
+<span class="w">  </span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../tests<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>../../tests/test_model_servers_nim_riva_repository.py<span class="w"> </span>-m<span class="w"> </span>gpu<span class="w"> </span>-q
 </pre></div>
 </div>
 <p>The compiled-repository workflow still needs full inference validation after
 both the initial export and a container-removing restart on each GPU profile.
 After startup, check every endpoint through the same SDK that agents use:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py
-uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span><span class="nb">test</span><span class="w"> </span>python<span class="w"> </span>smoke_test.py<span class="w"> </span>--models<span class="w"> </span>../../agent-samples/simple-vlm-example/yaml/models.json
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../tests<span class="w"> </span>python<span class="w"> </span>smoke_test.py
+uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../tests<span class="w"> </span>python<span class="w"> </span>smoke_test.py<span class="w"> </span>--models<span class="w"> </span>../../agent-samples/simple-vlm-example/yaml/models.json
 </pre></div>
 </div>
 <p>The default smoke test loads the original <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> configuration unchanged.

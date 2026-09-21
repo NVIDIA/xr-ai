@@ -30,7 +30,9 @@ to NIM's input types, preserving input order and avoiding duplicated prefixes.
 Unprefixed strings default to passages; callers can also set `input_type`.
 The chat adapters translate model aliases and normalize Nemotron reasoning.
 Streaming chat returns visible text, matching the shared SDK; use non-streaming
-chat for function calls and reasoning.
+chat for function calls and reasoning. Requests combining `stream: true` with
+`tools` are rejected before inference. The text-only stream does not expose
+provider finish metadata such as a token-limit stop.
 
 The Magpie HTTP service forwards PCM chunks as synthesis proceeds and appends
 the configured 300 ms pause after each successful nonempty request. This sample
@@ -210,7 +212,8 @@ renderer or unrelated GPU workloads.
 
 Omni is pinned to its generic TP=1 NVFP4 profile on Blackwell and Spark and
 its FP8 profile on Ada. Cosmos selects Nano, with an 8,192-token context and
-four image inputs. Ada explicitly selects the FP8 vLLM checkpoint profile
+four image inputs to limit memory use while sharing the GPU with the other
+models. Larger contexts need a separately qualified memory budget. Ada explicitly selects the FP8 vLLM checkpoint profile
 shipped under L40S, which shares SM 8.9 with RTX 6000 Ada; this profile contains
 weights rather than a GPU-specific TensorRT engine. The generic BF16 fallback
 would exceed the shared-GPU budget.
@@ -256,7 +259,7 @@ health stub, without Docker or GPUs. They verify ownership, repeated launch,
 shutdown, restart, and rejection of unhealthy or conflicting listeners:
 
 ```bash
-uv run --extra test python -m pytest tests -q
+uv --config-file ../../uv.toml run --project ../../tests python -m pytest ../../tests/test_model_servers_nim_*.py -m "not gpu" -q
 ```
 
 Repository-cache tests also exercise real subprocesses, interrupted builds,
@@ -268,7 +271,7 @@ select its locally installed image and run the isolated Docker test:
 
 ```bash
 XR_AI_TEST_RIVA_IMAGE=$(docker inspect --format '{{.Image}}' xr-ai-model-servers-nim-tts) \
-  uv run --extra test python -m pytest tests/test_riva_repository.py -m gpu -q
+  uv --config-file ../../uv.toml run --project ../../tests python -m pytest ../../tests/test_model_servers_nim_riva_repository.py -m gpu -q
 ```
 
 The compiled-repository workflow still needs full inference validation after
@@ -276,8 +279,8 @@ both the initial export and a container-removing restart on each GPU profile.
 After startup, check every endpoint through the same SDK that agents use:
 
 ```bash
-uv run --extra test python smoke_test.py
-uv run --extra test python smoke_test.py --models ../../agent-samples/simple-vlm-example/yaml/models.json
+uv --config-file ../../uv.toml run --project ../../tests python smoke_test.py
+uv --config-file ../../uv.toml run --project ../../tests python smoke_test.py --models ../../agent-samples/simple-vlm-example/yaml/models.json
 ```
 
 The default smoke test loads the original `model-servers` configuration unchanged.

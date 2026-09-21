@@ -65,7 +65,7 @@ inserting error text into PCM.
 From the service directory:
 
 ```bash
-uv --config-file ../../uv.toml run --extra test python -m pytest tests -q
+uv --config-file ../../uv.toml run --project ../../tests python -m pytest ../../tests/test_magpie_nim_lifecycle.py ../../tests/test_magpie_nim_speech.py -q
 ```
 
 Tests use controlled local gRPC and HTTP servers and require no model or GPU.
