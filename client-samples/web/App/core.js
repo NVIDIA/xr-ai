@@ -504,6 +504,9 @@ export async function connect(model, {
           video: constraints,
         });
         try {
+          if (model.cameraMode !== 'on-demand' || signal.aborted) {
+            throw new DOMException('Capture cancelled', 'AbortError');
+          }
           const track = media.getVideoTracks()[0];
           await enableContinuousExposure(track);
           image = await captureCameraTrack(track, signal, { settleExposure: true });
@@ -774,6 +777,10 @@ export async function stopCamera(model, render, showError) {
  */
 export async function setCameraMode(model, mode, { render, startCamera, stopCamera }) {
   if (!CAMERA_MODES.has(mode)) return;
+  if (model.cameraMode === 'on-demand' && mode !== 'on-demand') {
+    model.captureSequence = (model.captureSequence ?? 0) + 1;
+    model.captureState = 'idle';
+  }
   model.cameraMode = mode;
   saveCameraMode(mode);
   if (model.session) {

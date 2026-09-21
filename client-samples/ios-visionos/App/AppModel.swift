@@ -301,9 +301,13 @@ final class AppModel {
             guard self.cameraMode == .onDemand else {
                 throw StreamError.imageCaptureUnavailable("On-demand image capture is not enabled.")
             }
-            return try await newSession.captureImage(
+            let image = try await newSession.captureImage(
                 config: CameraConfig(position: self.cameraPosition)
             )
+            guard self.cameraMode == .onDemand else {
+                throw CancellationError()
+            }
+            return image
         }
         newSession.onImageCaptureRequested = cameraMode == .onDemand
             ? imageCaptureHandler

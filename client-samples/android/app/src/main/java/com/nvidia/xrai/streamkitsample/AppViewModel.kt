@@ -229,11 +229,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (!granted) {
                             throw SecurityException("Camera permission is required for image capture.")
                         }
+                        if (cameraMode != CameraMode.ON_DEMAND) {
+                            throw CancellationException("On-demand image capture was disabled.")
+                        }
                         val info = availableCameras.firstOrNull { it.id == selectedCameraId }
                         val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
-                        newSession.captureImage(
+                        val image = newSession.captureImage(
                             CameraConfig(deviceId = selectedCameraId, facing = facing)
                         )
+                        if (cameraMode != CameraMode.ON_DEMAND) {
+                            throw CancellationException("On-demand image capture was disabled.")
+                        }
+                        image
                     }
                 }
                 newSession.onImageCaptureRequested = if (cameraMode == CameraMode.ON_DEMAND) {

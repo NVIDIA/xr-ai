@@ -414,6 +414,57 @@ test('cancels an in-flight image capture on terminal disconnect', async () => {
   assert.equal(imagesSent, 0);
 });
 
+test('turning camera mode Off cancels and rejects an in-flight image capture', async () => {
+  let resolveStarted;
+  const started = new Promise(resolve => { resolveStarted = resolve; });
+  let aborted = false;
+  let released = false;
+  const responses = [];
+  const backend = {
+    async [INTERNAL_SEND_BYTE_STREAM](data, request) { responses.push({ data, request }); },
+  };
+  const session = new StreamSession(backend);
+  const handler = ({ signal }) => new Promise((resolve, reject) => {
+    resolveStarted();
+    signal.addEventListener('abort', () => {
+      aborted = true;
+      reject(new DOMException('Capture cancelled', 'AbortError'));
+    }, { once: true });
+  }).finally(() => { released = true; });
+  const model = {
+    cameraMode: 'on-demand',
+    connectionState: ConnectionState.CONNECTED,
+    imageCaptureHandler: handler,
+    isCameraActive: false,
+    session,
+    captureSequence: 1,
+    captureState: 'starting',
+  };
+  session.onImageCaptureRequested = handler;
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
+  );
+  await started;
+  await setCameraMode(model, 'off', {
+    render() {},
+    async startCamera() {},
+    async stopCamera() {},
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(aborted, true);
+  assert.equal(released, true);
+  assert.equal(model.captureState, 'idle');
+  assert.equal(responses.length, 1);
+  assert.equal(responses[0].request.attributes.request_id, 'capture-1');
+  assert.equal(
+    responses[0].request.mimeType,
+    'application/vnd.xr-ai.capture-rejection+json',
+  );
+});
+
 test('returns a rejection response when image capture is unavailable', async () => {
   const responses = [];
   const backend = {
