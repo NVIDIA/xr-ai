@@ -457,8 +457,10 @@ if not build:
                 identity = subprocess.check_output(['docker', 'inspect', '--format', '{{.Id}}', name])
                 reused_ready, reused_process, reused_log = start(cfg, 'reuse')
                 wait_until(reused_ready.is_file, reused_process, reused_log)
-                assert subprocess.check_output(['docker', 'inspect', '--format', '{{.Id}}', name]) == identity
-            assert stop_persistent_servers([('riva-test', port)])
+                reused_identity = subprocess.check_output(['docker', 'inspect', '--format', '{{.Id}}', name])
+                assert reused_identity == identity
+            stopped = stop_persistent_servers([('riva-test', port)])
+            assert stopped
             process.wait(timeout=15)
             assert not server._docker.container_exists(name)
         rows = events({'EVENTS': str(tmp_path / 'events')})
@@ -469,7 +471,8 @@ if not build:
         ready, process, log = start(cfg, 3)
         wait_until(lambda: len(events({'EVENTS': str(tmp_path / 'events')})) == 4, process, log)
         assert not ready.exists()
-        assert stop_persistent_servers([('riva-test', port)])
+        stopped = stop_persistent_servers([('riva-test', port)])
+        assert stopped
         process.wait(timeout=15)
         assert not server._docker.container_exists(name)
         assert len(list(cache.rglob('complete.json'))) == 1

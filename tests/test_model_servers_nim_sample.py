@@ -269,3 +269,86 @@ def test_gpu_profile_names_follow_checked_in_directories(tmp_path, monkeypatch):
     assert sample._gpu_profile_name("custom") == "custom"
     with pytest.raises(sample.argparse.ArgumentTypeError, match="available profiles: custom"):
         sample._gpu_profile_name("unknown")
+
+
+def reduced_profile(tmp_path, *, reused_backend=False, reused_adapter=False):
+    original = json.loads((BASE / "yaml/96G_blackwell/models.json").read_text())["models"]
+    tts = original["tts"]
+    tts["deployment"]["credentials"] = []
+    models = {"tts": tts}
+    if reused_backend:
+        models["tts_backend"] = {
+            "adapter": {"kind": "riva_grpc"}, "endpoint": {"base_url": "localhost:50052"},
+            "deployment": {"ownership": "reused", "service": "tts-nim"},
+        }
+    if reused_adapter:
+        models["vlm"] = original["vlm"]
+        models["vlm"]["deployment"].update(ownership="reused", credentials=[])
+    path = tmp_path / "reduced.json"
+    path.write_text(json.dumps({"models": models}))
+    return path
+
+
+def test_owned_adapter_does_not_launch_explicitly_reused_backend(tmp_path):
+    profile = reduced_profile(tmp_path, reused_backend=True)
+    processes, credentials, _ = sample._build_processes("96G_blackwell", profile)
+    assert [process.name for process in processes] == ["tts-adapter"]
+    assert not credentials
+
+
+@pytest.mark.parametrize("reused_backend", [False, True])
+@pytest.mark.parametrize("reused_adapter", [False, True])
+def test_reduced_profile_stops_omitted_services_before_launch(
+    tmp_path, monkeypatch, reused_backend, reused_adapter,
+):
+    profile = reduced_profile(tmp_path, reused_backend=reused_backend, reused_adapter=reused_adapter)
+    known = [("tts-adapter", 8105), ("tts-nim", 9011), ("vlm-adapter", 8100),
+             ("vlm-nim", 8110), ("llm-adapter", 8108), ("llm-nim", 8118)]
+    monkeypatch.setattr(sample, "_known_ports", lambda: known)
+    events = []
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sample, "require_credentials", lambda *args, **kwargs: pytest.fail("no credentials needed"))
+    monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: events.append(("stop", ports)) or True)
+    monkeypatch.setattr(sample, "run_stack", lambda *args, **kwargs: events.append(("launch", args[0])))
+    monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--gpu-profile", "96G_blackwell", "--models", str(profile)])
+    sample.run()
+    assert [event for event, _ in events] == ["stop", "launch"]
+    stopped = set(events[0][1])
+    assert ("tts-adapter", 8105) not in stopped and ("tts-nim", 9011) not in stopped
+    assert ("llm-adapter", 8108) in stopped and ("llm-nim", 8118) in stopped
+    assert (("vlm-adapter", 8100) not in stopped) == reused_adapter
+    assert (("vlm-nim", 8110) not in stopped) == reused_adapter
+    launched = {process.name for process in events[1][1]}
+    assert launched == ({"tts-adapter"} if reused_backend else {"tts-adapter", "tts-nim"})
+
+
+def test_failed_profile_cleanup_prevents_launch(tmp_path, monkeypatch, capsys):
+    profile = reduced_profile(tmp_path)
+    monkeypatch.setattr(sample, "_known_ports", lambda: [("llm-nim", 8118)])
+    monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: False)
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sample, "run_stack", lambda *args, **kwargs: pytest.fail("launched despite failed cleanup"))
+    monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--gpu-profile", "96G_blackwell", "--models", str(profile)])
+    with pytest.raises(SystemExit) as caught:
+        sample.run()
+    assert caught.value.code == 2
+    assert "could not stop persistent model servers" in capsys.readouterr().err
+
+
+
+def test_cleanup_preserves_external_local_endpoint_but_not_old_owned_port(tmp_path, monkeypatch):
+    profile = reduced_profile(tmp_path)
+    data = json.loads(profile.read_text())
+    data["models"]["external"] = {
+        "adapter": {"preset": "nemotron_omni"},
+        "endpoint": {"base_url": "http://localhost:8118"},
+        "deployment": {"ownership": "external"},
+    }
+    profile.write_text(json.dumps(data))
+    processes, _, _ = sample._build_processes("96G_blackwell", profile)
+    monkeypatch.setattr(sample, "_known_ports", lambda: [("tts-adapter", 8105), ("tts-adapter", 8205),
+                                                        ("tts-nim", 9011), ("llm-nim", 8118)])
+    stopped = []
+    monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: stopped.extend(ports) or True)
+    sample._stop_unselected_services(processes, profile)
+    assert stopped == [("tts-adapter", 8205)]

@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from xr_ai_launcher import (
     GPUInventoryError,
@@ -73,7 +74,10 @@ def _build_processes(
     if unknown:
         raise ValueError(f"unknown model services: {sorted(unknown)}")
     managed = {service for service in deployment.services if deployment.launch_mode(service) == "own"}
-    managed.update(_BACKENDS[service] for service in tuple(managed) if service in _BACKENDS)
+    managed.update(
+        _BACKENDS[service] for service in tuple(managed)
+        if service in _BACKENDS and deployment.launch_mode(_BACKENDS[service]) != "reuse"
+    )
     processes = []
     ports: set[int] = set()
     for service, (project, command, filename) in _SERVICES.items():
@@ -126,6 +130,27 @@ def _known_ports() -> list[tuple[str, int]]:
     return sorted(targets)
 
 
+def _stop_unselected_services(processes: list[Process], profile: Path) -> None:
+    """Free omitted services while preserving explicitly reused endpoints and dependencies."""
+    deployment = load_deployment_profile(profile)
+    selected_services = {name for name, mode in deployment.services.items() if mode == "reuse"}
+    # A reused adapter still needs its backend even though neither is launched.
+    selected_services.update(_BACKENDS[name] for name in tuple(selected_services) if name in _BACKENDS)
+    selected_ports = {process.port for process in processes}
+    # Explicit local endpoints can be external to this launcher's ownership.
+    # They must survive cleanup even when they use one of our known ports.
+    models = json.loads(profile.read_text(encoding="utf-8"))["models"]
+    for model in models.values():
+        if url := model["endpoint"].get("base_url"):
+            endpoint = urlsplit(url if "://" in url else "//" + url)
+            if endpoint.hostname in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} and endpoint.port:
+                selected_ports.add(endpoint.port)
+    unselected = [(service, port) for service, port in _known_ports()
+                  if service not in selected_services and port not in selected_ports]
+    if not stop_persistent_servers(unselected):
+        raise RuntimeError("could not stop persistent model servers outside the selected profile")
+
+
 def run() -> None:
     """Launch, inspect, export client settings, or stop the shared model stack."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -176,6 +201,7 @@ def run() -> None:
                 credential,
                 allow_missing=credential == "HF_TOKEN" and args.allow_anonymous,
             )
+        _stop_unselected_services(processes, profile)
         run_stack(processes, _BASE, exit_after_ready=True)
     except (GPUInventoryError, OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))
