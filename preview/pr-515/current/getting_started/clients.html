@@ -476,7 +476,11 @@ file transfer, and network metrics remain separate operations.</p>
 </section>
 <section id="client-to-agent-files">
 <span id="client-file-transfer"></span><h2>Client-to-agent files<a class="headerlink" href="#client-to-agent-files" title="Link to this heading">#</a></h2>
-<p>Every StreamKit client exposes <code class="docutils literal notranslate"><span class="pre">sendBytes</span></code> and <code class="docutils literal notranslate"><span class="pre">sendFile</span></code> (<code class="docutils literal notranslate"><span class="pre">SendBytes</span></code> and <code class="docutils literal notranslate"><span class="pre">SendFile</span></code> in C++). Both operations require an application topic; in-memory bytes also require a name. MIME type and string attributes are optional. Send completion confirms that the local LiveKit byte stream closed, not that an agent processed the file.</p>
+<p>Every StreamKit client exposes <code class="docutils literal notranslate"><span class="pre">sendBytes</span></code> and <code class="docutils literal notranslate"><span class="pre">sendFile</span></code> (<code class="docutils literal notranslate"><span class="pre">SendBytes</span></code> and
+<code class="docutils literal notranslate"><span class="pre">SendFile</span></code> in C++). Both operations require an application topic; in-memory
+bytes also require a name. MIME type and string attributes are optional. Send
+completion confirms that the local LiveKit byte stream closed. Applications
+define their own agent-processing acknowledgement when needed.</p>
 <div class="highlight-javascript notranslate"><div class="highlight"><pre><span></span><span class="k">await</span><span class="w"> </span><span class="nx">session</span><span class="p">.</span><span class="nx">sendBytes</span><span class="p">(</span><span class="nx">pngBytes</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nx">topic</span><span class="o">:</span><span class="w"> </span><span class="s1">'image.response'</span><span class="p">,</span>
 <span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'capture.png'</span><span class="p">,</span>
@@ -485,8 +489,13 @@ file transfer, and network metrics remain separate operations.</p>
 <span class="p">});</span>
 </pre></div>
 </div>
-<p>Applications can group independent transfers with attributes such as a request ID and index. StreamKit supplies transport framing and emits only complete files, but it does not impose application-specific grouping or timing.</p>
-<p>Topics, names, and MIME types are limited to 255 UTF-8 bytes. A transfer may include up to 32 application attributes; keys are limited to 128 bytes, values to 1 KiB, and their combined encoded size to 8 KiB. Every client validates these protocol limits before opening the transfer.</p>
+<p>Applications can group independent transfers with attributes such as a request
+ID and index. StreamKit supplies transport framing and emits only complete files,
+but it does not impose application-specific grouping or timing.</p>
+<p>Topics, names, and MIME types are limited to 255 UTF-8 bytes. A transfer may
+include up to 32 application attributes; keys are limited to 128 bytes, values
+to 1 KiB, and their combined encoded size to 8 KiB. Every client validates
+these protocol limits before opening the transfer.</p>
 <p id="network-telemetry">Graphical clients display LiveKit connection quality, round-trip time, and
 receive jitter; the C++ sample reports them through its callback. Backends sample
 existing WebRTC statistics about once per second. No hub message or separate

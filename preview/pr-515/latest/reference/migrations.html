@@ -466,6 +466,10 @@ that require the former behavior can explicitly pass
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> is deprecated because it names the pre-file-transfer set of
+data, audio, and video subscriptions rather than every available category.
+Use <code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code> for the same behavior. Files remain opt-in through
+<code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span> <span class="pre">|</span> <span class="pre">Subscribe.FILE</span></code> and require <code class="docutils literal notranslate"><span class="pre">file_sub_addr</span></code>.</p></li>
 <li><p>A <code class="docutils literal notranslate"><span class="pre">VoiceOutput</span></code> sent with both <code class="docutils literal notranslate"><span class="pre">response_id</span></code> and <code class="docutils literal notranslate"><span class="pre">final=True</span></code> now closes that
 response key even when the response contains only one message. Later output
 from the same participant and producer with that <code class="docutils literal notranslate"><span class="pre">response_id</span></code> is dropped,

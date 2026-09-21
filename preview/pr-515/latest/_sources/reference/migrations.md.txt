@@ -50,6 +50,10 @@ that require the former behavior can explicitly pass
 
 ## Operator-visible runtime changes
 
+- `Subscribe.ALL` is deprecated because it names the pre-file-transfer set of
+  data, audio, and video subscriptions rather than every available category.
+  Use `Subscribe.REALTIME` for the same behavior. Files remain opt-in through
+  `Subscribe.REALTIME | Subscribe.FILE` and require `file_sub_addr`.
 - A `VoiceOutput` sent with both `response_id` and `final=True` now closes that
   response key even when the response contains only one message. Later output
   from the same participant and producer with that `response_id` is dropped,

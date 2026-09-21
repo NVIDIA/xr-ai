@@ -219,6 +219,9 @@ Package Contents
    file_hwm :
        Maximum complete-file messages queued in each file-subscriber and
        callback-worker buffer. Must be a positive integer; defaults to 2.
+       When auto-subscription and the initial filter include files, the file
+       lane subscribes eagerly and gates callbacks by session and filter.
+       Other modes use participant-scoped ZMQ filters.
    auto_subscribe :
        Whether participant join and leave events automatically manage
        subscriptions. Defaults to ``True``.
@@ -491,6 +494,7 @@ Package Contents
 
    The real-time flags correspond to pid-scoped topics on the hub's main PUB
    socket. ``Subscribe.FILE`` is opt-in and uses the bounded file publisher.
+   ``Subscribe.ALL`` is a deprecated alias for ``Subscribe.REALTIME``.
 
    Example
    -------
@@ -527,15 +531,21 @@ Package Contents
 
 
 
+   .. py:attribute:: REALTIME
+
+      All real-time message categories, excluding completed files.
+
+
+
    .. py:attribute:: DEFAULT
 
-      Existing real-time categories selected by default.
+      Real-time categories selected by default.
 
 
 
    .. py:attribute:: ALL
 
-      Compatibility alias for all existing real-time message categories.
+      Deprecated compatibility alias; use :attr:`REALTIME`.
 
 
 

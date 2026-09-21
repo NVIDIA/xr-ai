@@ -729,7 +729,10 @@ constructor filter or a later per-participant filter includes
 <code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code>.</p>
 </dd>
 <dt>file_hwm :</dt><dd><p>Maximum complete-file messages queued in each file-subscriber and
-callback-worker buffer. Must be a positive integer; defaults to 2.</p>
+callback-worker buffer. Must be a positive integer; defaults to 2.
+When auto-subscription and the initial filter include files, the file
+lane subscribes eagerly and gates callbacks by session and filter.
+Other modes use participant-scoped ZMQ filters.</p>
 </dd>
 <dt>auto_subscribe :</dt><dd><p>Whether participant join and leave events automatically manage
 subscriptions. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
@@ -979,7 +982,8 @@ to the processor process in either case.</p>
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">Subscribe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_hub.Subscribe" title="Link to this definition">#</a></dt>
 <dd><p>Per-participant message-category filter.</p>
 <p>The real-time flags correspond to pid-scoped topics on the hub’s main PUB
-socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code> is opt-in and uses the bounded file publisher.</p>
+socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code> is opt-in and uses the bounded file publisher.
+<code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> is a deprecated alias for <code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code>.</p>
 <section id="example">
 <h3>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Audio-only processor; ignores data + video on every pid.</span>
@@ -1014,15 +1018,21 @@ socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.F
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.Subscribe.REALTIME">
+<span class="sig-name descname"><span class="pre">REALTIME</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.REALTIME" title="Link to this definition">#</a></dt>
+<dd><p>All real-time message categories, excluding completed files.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.Subscribe.DEFAULT">
 <span class="sig-name descname"><span class="pre">DEFAULT</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.DEFAULT" title="Link to this definition">#</a></dt>
-<dd><p>Existing real-time categories selected by default.</p>
+<dd><p>Real-time categories selected by default.</p>
 </dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.Subscribe.ALL">
 <span class="sig-name descname"><span class="pre">ALL</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.ALL" title="Link to this definition">#</a></dt>
-<dd><p>Compatibility alias for all existing real-time message categories.</p>
+<dd><p>Deprecated compatibility alias; use <a class="reference internal" href="#xr_ai_hub.Subscribe.REALTIME" title="xr_ai_hub.Subscribe.REALTIME"><code class="xref py py-attr docutils literal notranslate"><span class="pre">REALTIME</span></code></a>.</p>
 </dd></dl>
 
 </section>
@@ -1799,6 +1809,7 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.AUDIO"><code class="docutils literal notranslate"><span class="pre">AUDIO</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.VIDEO"><code class="docutils literal notranslate"><span class="pre">VIDEO</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.FILE"><code class="docutils literal notranslate"><span class="pre">FILE</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.REALTIME"><code class="docutils literal notranslate"><span class="pre">REALTIME</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.DEFAULT"><code class="docutils literal notranslate"><span class="pre">DEFAULT</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.ALL"><code class="docutils literal notranslate"><span class="pre">ALL</span></code></a></li>
 </ul>
