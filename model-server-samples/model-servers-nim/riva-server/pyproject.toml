@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "nim-riva-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
-dependencies = ["pyyaml>=6.0", "xr-ai-logging", "xr-ai-vllm"]
+dependencies = ["xr-ai-logging", "xr-ai-vllm"]
 
 [project.scripts]
 nim_riva_server = "nim_riva_server.__main__:run"

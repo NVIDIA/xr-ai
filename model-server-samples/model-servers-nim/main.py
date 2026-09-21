@@ -18,8 +18,7 @@ from xr_ai_launcher import (
     run_stack,
 )
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import stop_persistent_servers
-from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
+from xr_ai_vllm import has_xr_ai_ownership_marker, pid_on_port_checked, stop_persistent_servers
 
 _BASE = Path(__file__).resolve().parent
 
@@ -44,6 +43,13 @@ _BACKENDS = {
     "stt-adapter": "stt-nim", "tts-adapter": "tts-nim",
     "llm-adapter": "llm-nim", "vlm-adapter": "vlm-nim", "embedding": "embedding-nim",
 }
+
+
+def _gpu_profile_name(value: str) -> str:
+    names = sorted(path.parent.name for path in (_BASE / "yaml").glob("*/models.json"))
+    if value not in names:
+        raise argparse.ArgumentTypeError(f"unknown GPU profile {value!r}; available profiles: {', '.join(names)}")
+    return value
 
 
 def _port(config: Path) -> int:
@@ -134,7 +140,7 @@ def run() -> None:
         help="Write a reusable client models JSON and exit without launching servers.",
     )
     parser.add_argument(
-        "--gpu-profile", choices=["96G_blackwell", "dual_48G_ada", "spark"],
+        "--gpu-profile", metavar="NAME", type=_gpu_profile_name,
         help="Select a hardware profile; otherwise detect Blackwell, dual Ada, or Spark.",
     )
     parser.add_argument(

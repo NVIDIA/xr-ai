@@ -27,7 +27,7 @@ def build_app(config: dict, *, backend=None):
         audio = await file.read()
         try:
             with wave.open(io.BytesIO(audio), "rb") as wav:
-                if wav.getsampwidth() != 2 or wav.getnchannels() != 1:
+                if wav.getsampwidth() != 2 or wav.getnchannels() != 1 or wav.getframerate() <= 0:
                     raise ValueError("expected mono 16-bit PCM WAV")
                 duration = wav.getnframes() / wav.getframerate()
             text = await backend.transcribe(audio, timeout=120)

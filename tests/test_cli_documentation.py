@@ -37,6 +37,10 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--gpu-profile",),
     ]
     assert commands["model_servers"].project_dir == Path("model-server-samples/model-servers")
+    assert [argument.flags for argument in commands["model_servers_nim"].arguments] == [
+        ("--stop",), ("--dry-run",), ("--export-models",), ("--gpu-profile",),
+        ("--models",), ("--allow-anonymous",),
+    ]
     assert commands["model_servers_nim"].project_dir == Path("model-server-samples/model-servers-nim")
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--capture",),

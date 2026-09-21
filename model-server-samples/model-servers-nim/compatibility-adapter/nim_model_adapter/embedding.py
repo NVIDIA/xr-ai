@@ -4,7 +4,6 @@
 """Translate XR AI query and passage prefixes for embedding NIM."""
 from typing import Literal
 
-import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from xr_ai_models import AdapterSpec, EmbeddingSpec, EndpointSpec, ModelsConfig, make_embedding
@@ -64,9 +63,7 @@ def build_app(base_url: str, model_name: str, *, clients=None, config=None) -> F
                 vectors = await backends[kind].embed([text for _, text in group])
                 rows.extend({"object": "embedding", "index": index, "embedding": vector}
                             for (index, _), vector in zip(group, vectors, strict=True))
-        except httpx.HTTPStatusError as exc:
-            raise HTTPException(exc.response.status_code, "embedding NIM rejected the request") from exc
-        except (httpx.RequestError, ValueError) as exc:
+        except ValueError as exc:
             raise HTTPException(502, "embedding NIM request failed") from exc
         return {"object": "list", "model": request.model, "data": sorted(rows, key=lambda row: row["index"])}
 

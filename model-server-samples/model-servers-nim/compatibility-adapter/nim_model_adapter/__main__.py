@@ -14,7 +14,7 @@ import httpx
 import uvicorn
 import yaml
 from xr_ai_logging import setup_logging
-from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
+from xr_ai_vllm import has_xr_ai_ownership_marker, pid_on_port_checked
 
 from .common import identity
 
@@ -42,7 +42,8 @@ async def _reusable_listener(config: dict) -> int | None:
         return None
     if not has_xr_ai_ownership_marker(pid, port):
         raise RuntimeError(f"port {port} belongs to an unmanaged listener; stop it before launching")
-    async with httpx.AsyncClient(trust_env=False, timeout=3) as client:
+    # Two backend probes and an optional HTTP readiness check can take 9 s.
+    async with httpx.AsyncClient(trust_env=False, timeout=12) as client:
         try:
             response = await client.get(f"http://127.0.0.1:{port}/health")
             response.raise_for_status()
@@ -61,14 +62,20 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
         print(f"[nim-model-adapter] reusing managed listener {pid} on port {config['port']}", flush=True)
         if ready_file:
             ready_file.touch()
-        # Keep the wrapper alive for run_stack without owning the reused server.
-        while pid_on_port_checked(int(config["port"])) == (pid, True, True):
+        if os.environ.get("_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT") == "1":
+            return
+        # An inconclusive ownership probe is not evidence that the server died.
+        while True:
+            current, checked, listening = pid_on_port_checked(int(config["port"]))
+            if checked and (not listening or current != pid):
+                break
             await asyncio.sleep(0.25)
         return
 
     app = build_app(config)
     server = uvicorn.Server(uvicorn.Config(
-        app, host=config.get("host", "0.0.0.0"), port=int(config["port"]), log_level="warning",
+        app, timeout_graceful_shutdown=5,
+        host=config.get("host", "0.0.0.0"), port=int(config["port"]), log_level="warning",
     ))
     task = asyncio.create_task(server.serve())
     try:

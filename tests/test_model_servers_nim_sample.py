@@ -18,7 +18,7 @@ from nim_model_adapter.embedding import build_app
 from xr_ai_models import load_models_config, make_embedding, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_vllm._nim import build_nim_run_argv
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[1] / "model-server-samples/model-servers-nim"
 SPEC = importlib.util.spec_from_file_location("nim_sample_main", BASE / "main.py")
 assert SPEC and SPEC.loader
 sample = importlib.util.module_from_spec(SPEC)
@@ -164,6 +164,8 @@ def test_dry_run_never_requests_credentials_or_touches_servers(monkeypatch):
 
 def test_stop_does_not_need_gpu_detection_or_credentials(monkeypatch):
     stopped = []
+    monkeypatch.setattr(sample, "pid_on_port_checked", lambda port: (None, True, False))
+    monkeypatch.setattr(sample, "require_credentials", lambda *args, **kwargs: pytest.fail("unexpected credentials"))
     monkeypatch.setattr(sample, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     monkeypatch.setattr(sample, "detect_gpu_config", lambda: pytest.fail("unexpected GPU detection"))
     monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--stop"])
@@ -235,3 +237,35 @@ def test_embedding_adapter_uses_actual_sdk_and_nim_model_suffixes(monkeypatch):
             {"model": "nvidia/model-passage", "input": ["y"]},
         ]
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("text", ["", "port: bad", "port: 0", "http_port: 65536"])
+def test_invalid_port_is_rejected(tmp_path, text):
+    config = tmp_path / "server.yaml"
+    config.write_text(text)
+    with pytest.raises(ValueError, match="port"):
+        sample._port(config)
+
+
+def test_duplicate_ports_fail_before_launch(monkeypatch):
+    monkeypatch.setattr(sample, "_port", lambda config: 8100)
+    with pytest.raises(ValueError, match="multiple services use port"):
+        sample._build_processes("spark")
+
+
+@pytest.mark.parametrize("marked,label", [(False, "stt"), (True, "stt-adapter")])
+def test_known_ports_selects_stt_cleanup_by_listener_ownership(monkeypatch, marked, label):
+    monkeypatch.setattr(sample, "pid_on_port_checked", lambda port: (123, True, True))
+    monkeypatch.setattr(sample, "has_xr_ai_ownership_marker", lambda pid, port: marked)
+    assert (label, 8103) in sample._known_ports()
+
+
+
+def test_gpu_profile_names_follow_checked_in_directories(tmp_path, monkeypatch):
+    root = tmp_path / "yaml" / "custom"
+    root.mkdir(parents=True)
+    (root / "models.json").write_text("{}")
+    monkeypatch.setattr(sample, "_BASE", tmp_path)
+    assert sample._gpu_profile_name("custom") == "custom"
+    with pytest.raises(sample.argparse.ArgumentTypeError, match="available profiles: custom"):
+        sample._gpu_profile_name("unknown")

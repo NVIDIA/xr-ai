@@ -57,6 +57,7 @@ def create_app(config: dict, backends: list) -> FastAPI:
     async def upstream_connection(_request, _exc):
         return JSONResponse({"detail": "NIM connection failed"}, status_code=502)
 
+    @app.exception_handler(httpx.TimeoutException)
     @app.exception_handler(TimeoutError)
     async def upstream_timeout(_request, _exc):
         return JSONResponse({"detail": "NIM request timed out"}, status_code=504)

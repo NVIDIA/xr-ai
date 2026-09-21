@@ -21,20 +21,8 @@ xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 xr-ai-vllm     = { path = "../../utils/xr-ai-vllm",    editable = true }
 
-xr-ai-models = { path = "../../agent-sdk/xr-ai-models", editable = true }
-nim-model-adapter = { path = "compatibility-adapter", editable = true }
-nim-riva-server = { path = "riva-server", editable = true }
-magpie-nim-tts = { path = "../../services/magpie-nim-tts", editable = true }
-
 [project.scripts]
 model_servers_nim = "main:run"
 
 [tool.hatch.build.targets.wheel]
 only-include = ["main.py"]
-
-[project.optional-dependencies]
-test = ["pytest>=8.0", "xr-ai-models[riva]", "nim-model-adapter", "nim-riva-server", "magpie-nim-tts"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-markers = ["gpu: requires Docker with NVIDIA Container Toolkit and a local Riva image"]

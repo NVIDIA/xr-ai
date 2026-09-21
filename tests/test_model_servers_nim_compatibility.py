@@ -28,8 +28,9 @@ from xr_ai_models import (
     make_tts,
     make_vlm,
 )
+from xr_ai_models._protocols import _TTSChunk
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[1] / "model-server-samples/model-servers-nim"
 PCM = b"\x01\x00" * 160
 
 
@@ -57,9 +58,9 @@ class SpeechBackend:
         self.calls.append(audio)
         return "the model is ready"
 
-    async def stream_pcm(self, text, **kwargs):
+    async def stream(self, text, **kwargs):
         self.calls.append((text, "pcm"))
-        yield PCM
+        yield _TTSChunk(PCM, 44100, 1)
 
     async def synthesize(self, text, *, response_format, **kwargs):
         self.calls.append((text, response_format))
@@ -79,6 +80,8 @@ def network(monkeypatch):
             return httpx.Response(state["status"], json={"status": "ready"})
         body = json.loads(request.content)
         calls.append(body)
+        if state.get("timeout"):
+            raise httpx.ReadTimeout("NIM stalled", request=request)
         if state["status"] != 200:
             return httpx.Response(state["status"], json={"detail": "backend error"})
         if request.url.path == "/v1/embeddings":
@@ -260,3 +263,51 @@ def test_closing_chat_stream_releases_upstream_generator_and_client():
             assert clients[-1].closed and clients[-1].stream_closed
         assert all(client.closed for client in clients)
     asyncio.run(check())
+
+
+async def test_minimal_function_tool_and_streaming_tool_rejection(network):
+    apps, _, calls, _, real_client, router = network
+    async with AsyncExitStack() as stack:
+        for app in apps.values():
+            await stack.enter_async_context(app.router.lifespan_context(app))
+        client = await stack.enter_async_context(real_client(transport=router))
+        body = {"model": "llm", "messages": [{"role": "user", "content": "lookup"}],
+                "tools": [{"type": "function", "function": {"name": "lookup"}}]}
+        response = await client.post("http://localhost:8108/v1/chat/completions", json=body)
+        assert response.status_code == 200
+        function = calls[-1]["tools"][0]["function"]
+        assert function["name"] == "lookup" and function["description"] == ""
+        assert function["parameters"] == {"type": "object", "properties": {}}
+        previous = len(calls)
+        response = await client.post("http://localhost:8108/v1/chat/completions", json=body | {"stream": True})
+        assert response.status_code == 400 and len(calls) == previous
+
+
+async def test_zero_rate_wav_is_rejected_before_transcription(network):
+    _, speech, _, _, real_client, router = network
+    audio = bytearray(wav_bytes())
+    audio[24:28] = b"\0" * 4
+    async with real_client(transport=router) as client:
+        response = await client.post("http://localhost:8103/v1/audio/transcriptions",
+                                     files={"file": ("zero-rate.wav", bytes(audio))})
+        assert response.status_code == 400
+        assert not speech["stt"].calls
+
+
+@pytest.mark.parametrize("kind", ["chat", "streaming-chat", "embedding"])
+async def test_http_timeouts_return_gateway_timeout(network, kind):
+    apps, _, _, state, real_client, router = network
+    state["timeout"] = True
+    async with AsyncExitStack() as stack:
+        for app in apps.values():
+            await stack.enter_async_context(app.router.lifespan_context(app))
+        client = await stack.enter_async_context(real_client(transport=router))
+        if kind == "embedding":
+            url, body = "http://localhost:8109/v1/embeddings", {"input": "query: hello"}
+        else:
+            url = "http://localhost:8108/v1/chat/completions"
+            body = {"model": "llm", "messages": [{"role": "user", "content": "hello"}],
+                    "stream": kind == "streaming-chat"}
+        response = await client.post(url, json=body)
+        assert response.status_code == 504
+        assert response.json() == {"detail": "NIM request timed out"}

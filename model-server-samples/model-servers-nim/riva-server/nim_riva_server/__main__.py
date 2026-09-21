@@ -63,6 +63,8 @@ def _launch_args(cfg: dict, cache: Path, image: dict) -> list[str]:
     )
     # The shared lifecycle owns this container during both compilation and
     # serving, including --stop before a health endpoint is available.
+    if args[-1] != image["Id"]:
+        raise RuntimeError("NIM launch arguments must end with the image before adding the Riva entrypoint")
     return args[:-1] + [
         "--init", "--entrypoint", "python3",
         "--mount", f"type=bind,src={_SCRIPT},dst={_CONTAINER_SCRIPT},readonly",

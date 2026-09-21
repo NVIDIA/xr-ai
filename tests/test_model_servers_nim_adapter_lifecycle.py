@@ -4,7 +4,9 @@
 """Exercise real adapter processes, port ownership, reuse, and --stop without GPUs."""
 from __future__ import annotations
 
+import asyncio
 import importlib.util
+import os
 import shutil
 import signal
 import socket
@@ -18,11 +20,12 @@ from pathlib import Path
 
 import grpc
 import httpx
+import nim_model_adapter.__main__ as launcher
 import pytest
 import yaml
 from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[1] / "model-server-samples/model-servers-nim"
 SPEC = importlib.util.spec_from_file_location("nim_lifecycle_sample", BASE / "main.py")
 assert SPEC and SPEC.loader
 sample = importlib.util.module_from_spec(SPEC)
@@ -59,16 +62,19 @@ def servers(tmp_path, monkeypatch):
               "base_url": f"http://127.0.0.1:{upstream.server_port}"}
     processes = []
 
-    def launch(overrides=None, *, ready=True):
+    def launch(overrides=None, *, ready=True, may_exit=False):
         number = len(processes)
         path = tmp_path / f"config-{number}.yaml"
         path.write_text(yaml.safe_dump(config | (overrides or {})))
         ready_file = tmp_path / f"ready-{number}"
         log = (tmp_path / f"process-{number}.log").open("w+")
         module = "magpie_nim_tts" if config.get("kind") == "tts" else "nim_model_adapter"
+        env = os.environ.copy()
+        if may_exit:
+            env["_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"] = "1"
         process = subprocess.Popen(
             [sys.executable, "-m", module, "--config", str(path),
-             "--ready-file", str(ready_file)], stdout=log, stderr=log, start_new_session=True,
+             "--ready-file", str(ready_file)], stdout=log, stderr=log, start_new_session=True, env=env,
         )
         # Reap independently while --stop waits for /proc/<pid> to disappear.
         reaper = threading.Thread(target=process.wait, daemon=True)
@@ -80,7 +86,8 @@ def servers(tmp_path, monkeypatch):
         if ready:
             log.seek(0)
             assert ready_file.exists(), log.read()
-            assert process.poll() is None
+            if not may_exit:
+                assert process.poll() is None
         else:
             reaper.join(15)
             assert not reaper.is_alive(), "conflicting adapter did not fail promptly"
@@ -193,3 +200,50 @@ def test_unhealthy_backend_does_not_leave_a_listener_after_failed_start(servers)
     _, output = launch(ready=False)
     assert "unhealthy" in output
     assert pid_on_port_checked(config["port"]) == (None, True, False)
+
+
+
+def test_persistent_reuse_exits_wrapper_and_preserves_listener(servers):
+    config, _, launch = servers
+    first, _ = launch()
+    second, output = launch(may_exit=True)
+    assert second.wait(timeout=5) == 0
+    assert "reusing managed listener" in output
+    assert pid_on_port_checked(config["port"]) == (first.pid, True, True)
+
+
+@pytest.mark.parametrize("result", [(None, False, False), (None, True, True)])
+async def test_reuse_fails_closed_when_ownership_cannot_be_inspected(monkeypatch, result):
+    monkeypatch.setattr(launcher, "pid_on_port_checked", lambda port: result)
+    with pytest.raises(RuntimeError, match="cannot inspect ownership"):
+        await launcher._reusable_listener({"port": 8109})
+
+
+async def test_reuse_rechecks_listener_after_health_probe(monkeypatch):
+    config = {"port": 8109}
+    probes = iter([(123, True, True), (456, True, True)])
+    monkeypatch.setattr(launcher, "pid_on_port_checked", lambda port: next(probes))
+    monkeypatch.setattr(launcher, "has_xr_ai_ownership_marker", lambda pid, port: True)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(launcher.httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=launcher.identity(config))), **kwargs))
+    with pytest.raises(RuntimeError, match="changed during inspection"):
+        await launcher._reusable_listener(config)
+
+
+async def test_reuse_monitor_survives_inconclusive_inspection(monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+    monkeypatch.delenv("_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT", raising=False)
+    monkeypatch.setattr(launcher, "_reusable_listener", AsyncMock(return_value=123))
+    probes = iter([(None, False, False), (123, True, True), (None, True, False)])
+    observed = []
+
+    def inspect(port):
+        result = next(probes)
+        observed.append(result)
+        return result
+
+    monkeypatch.setattr(launcher, "pid_on_port_checked", inspect)
+    ready = tmp_path / "ready"
+    await asyncio.wait_for(launcher._serve({"port": 8109}, ready), 2)
+    assert ready.exists() and len(observed) == 3

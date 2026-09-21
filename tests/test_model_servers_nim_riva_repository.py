@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-BASE = Path(__file__).resolve().parents[1]
+BASE = Path(__file__).resolve().parents[1] / "model-server-samples/model-servers-nim"
 SPEC = importlib.util.spec_from_file_location("sample_riva_server", BASE / "riva-server/nim_riva_server/__main__.py")
 assert SPEC and SPEC.loader
 server = importlib.util.module_from_spec(SPEC)
@@ -484,3 +484,28 @@ if not build:
         subprocess.run(['docker', 'run', '--rm', '--user', '0', '--entrypoint', 'chown',
                         '--mount', f'type=bind,src={tmp_path},dst=/validation', image['Id'],
                         '-R', f'{os.getuid()}:{os.getgid()}', '/validation'], check=True)
+
+
+@pytest.mark.parametrize('gpu', ['', '[N/A]'])
+def test_missing_gpu_identity_fails_before_build(runtime, gpu):
+    result = launch(dict(runtime, TEST_GPU=gpu))
+    assert result.returncode != 0
+    assert 'cannot identify the visible GPU' in result.stderr
+    assert not events(runtime)
+
+
+def test_archive_digest_does_not_require_python_311_file_digest(tmp_path, monkeypatch):
+    from nim_riva_server import repository
+    monkeypatch.delattr(hashlib, 'file_digest', raising=False)
+    archive = tmp_path / 'archive'
+    content = b'engine' * 500000
+    archive.write_bytes(content)
+    assert repository._digest(archive) == hashlib.sha256(content).hexdigest()
+
+
+def test_entrypoint_splice_rejects_changed_shared_argument_contract(tmp_path, monkeypatch):
+    cfg = yaml.safe_load((BASE / 'yaml/96G_blackwell/nim_tts_server.yaml').read_text())
+    image = {'Id': 'sha256:one', 'Config': {'Entrypoint': ['start_server']}}
+    monkeypatch.setattr(server, 'build_nim_run_argv', lambda **kwargs: ['docker', 'run', 'sha256:one', 'command'])
+    with pytest.raises(RuntimeError, match='must end with the image'):
+        server._launch_args(cfg, tmp_path, image)

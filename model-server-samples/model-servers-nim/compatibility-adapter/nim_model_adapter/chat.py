@@ -61,10 +61,18 @@ def build_app(config: dict, *, client_factory=None):
     async def complete(request: ChatRequest):
         if request.model not in (config["alias"], config["model"]):
             raise HTTPException(404, "unknown chat model")
+        if request.stream and request.tools:
+            raise HTTPException(400, "streaming function tools are unsupported; use stream: false")
         try:
             messages = [_message(message) for message in request.messages]
-            tools = [TypeAdapter(ToolDef).validate_python(tool["function"]) for tool in request.tools or []]
-        except (KeyError, TypeError, ValidationError) as exc:
+            tools = []
+            for tool in request.tools or []:
+                if tool.get("type") != "function":
+                    raise ValueError("expected a function tool")
+                function = {"description": "", "parameters": {"type": "object", "properties": {}},
+                            **tool["function"]}
+                tools.append(TypeAdapter(ToolDef).validate_python(function))
+        except (KeyError, TypeError, ValueError, ValidationError) as exc:
             raise HTTPException(422, "invalid chat messages or function tools") from exc
         client = factory(request.model_extra or {})
         kwargs = {"tools": tools, "max_tokens": request.max_tokens, "temperature": request.temperature}
