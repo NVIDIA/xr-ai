@@ -8,7 +8,7 @@
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and reuse-only sample configuration, refer to
+deployment profiles, hardware YAML, and consumer model configuration, refer to
 {doc}`/guides/customizing-model-servers`.
 
 Multiple reusable inference and typed capability services are available as
@@ -107,27 +107,12 @@ Application samples reuse those endpoints; they do not own model processes or
 copy server YAML into their own configuration directories. Follow
 {doc}`/guides/customizing-model-servers` to select a deployment profile, tune
 its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample's models JSON with `deployment.ownership` set to `reused`.
+the sample's models JSON. Omit the `deployment` object from copied entries;
+it belongs to the shared model-server profile.
 
-Declare each model dependency in the sample orchestrator as reuse-only so the
-process list records the external dependency without transferring lifecycle
-ownership to the sample:
-
-```python
-Process(
-    "vlm",
-    "../../services/vlm-server",
-    "vlm_server",
-    launch_mode="reuse",
-)
-```
-
-The launcher skips reuse-only entries completely: it does not start, order, or
-readiness-check them. Start `model_servers` separately before the application
-sample. At startup, the sample worker probes endpoints whose models JSON entry
-uses `readiness: health` and keeps waiting until those reused services are
-available. Application capability services such as RAG remain sample-owned and
-keep their configuration with the sample that launches them.
+Declare only application processes in the sample orchestrator. Application
+capability services such as RAG remain sample-owned. For startup ordering and
+readiness, refer to {ref}`consumer-model-readiness`.
 
 ## Calling these from a worker
 
@@ -152,8 +137,7 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-A model profile separates adapter behavior, endpoint connectivity, and
-deployment ownership:
+A consumer model profile specifies adapter behavior and endpoint connectivity:
 
 ```json
 {
@@ -161,8 +145,7 @@ deployment ownership:
     "agent_llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
-      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "omni"}
+      "endpoint": {"base_url": "http://localhost:8108"}
     }
   }
 }
@@ -183,8 +166,8 @@ API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
 Self-hosted speech NIMs are covered below.
 
-A hosted entry uses an environment-variable reference for its credential,
-disables endpoint health probing, and declares external ownership:
+A hosted consumer entry uses an environment-variable reference for its
+credential and omits deployment and health polling metadata:
 
 ```json
 {
@@ -198,10 +181,8 @@ disables endpoint health probing, and declares external ownership:
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY",
-        "readiness": "none"
-      },
-      "deployment": {"ownership": "external"}
+        "api_key_env": "NGC_API_KEY"
+      }
     }
   }
 }
@@ -211,17 +192,15 @@ disables endpoint health probing, and declares external ownership:
   token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
   subprocess (refer to {doc}`/getting_started/credentials`); or export it.
-- **`readiness: none`** is required when the hosted endpoint has no local
-  `/health` route.
-- **`ownership: external`** keeps the launcher from starting or stopping the
-  hosted service.
+- **Omitted `deployment`** defaults to an externally operated endpoint; no
+  model process is started or stopped by the profile.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
 To adapt a sample, copy its active model profile, replace the local model entry
 with the hosted entry, and point `models_config` in the worker YAML at the new
-file. The same wrapped JSON profile is consumed by the worker and orchestrator,
-so the orchestrator omits externally owned services and requests the referenced
-credential automatically.
+file. The worker reads the endpoint credential named in `api_key_env`; export
+it or configure the credential store. Consumer sample launchers do not inspect
+model profiles to choose model processes.
 
 ### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
@@ -235,25 +214,22 @@ generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
 image and ports) or as a local server:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
 - `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
   containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
   these endpoints; they never launch or stop the containers.
 
-To adapt a sample, copy the relevant `llm` and `vlm` entries from
-`models.vlm_llm_nim.json` into the sample's active models JSON and change only
-their deployment ownership from `managed` to `reused`. Samples with an
-`agent_llm` role duplicate the `llm` entry under that name. The adjacent
-`nim_llm_server.yaml` and `nim_vlm_server.yaml` comments repeat this mapping
-beside the container configuration.
+To configure a sample with these endpoints, refer to
+{doc}`/guides/customizing-model-servers`.
 
 The container `image:` is the model, so swapping models is a
 `nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
 per entry, not per profile: each model role independently picks a local
 server, a self-hosted NIM container, or a hosted endpoint through its own
-`adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+`adapter` and `endpoint` sections. The model-server launcher also requires
+`deployment` metadata; consumer profiles omit it. The shipped profiles are
 presets, not a closed set; a mixed setup is a copy of a shipped profile
 with the relevant entries changed, saved under any name and selected with
 `--models` (model-servers) or `models_config` (workers). When mixing, mind
@@ -272,8 +248,9 @@ stt:
 ```
 
 TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). `health_check: true` (the default) runs a gRPC channel-ready
-probe. No shipped model-server profile or sample selects Riva speech.
+(default 44100). An explicit `health()` call with `health_check: true` (the
+default) runs a gRPC channel-ready probe; consumer startup does not call it.
+No shipped model-server profile or sample selects Riva speech.
 
 Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
@@ -286,8 +263,9 @@ target host. Readiness gates on each container's `/v1/health/ready`.
 
 A NIM container serving something the samples don't ship is the same
 mechanism by hand: point an `openai_compat` entry's `base_url` at its port
-(its health route is `/v1/health/ready`, so keep `health_check: false` and
-let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
+or a `riva_grpc` entry at its gRPC port. Consumer workers do not require a
+health route. Operators can still check the container's `/v1/health/ready`
+endpoint directly.
 With `ownership: external` (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry's
 `deployment.service` must name a process row in that orchestrator's service
@@ -352,7 +330,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -406,7 +384,7 @@ When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 docker pull nvcr.io/nvidia/vllm:26.08-py3
 ```
 
@@ -418,10 +396,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.
 
 ### docker mode — prerequisites
 
-- **Docker Engine** with the user in the `docker` group (`docker version`
-  must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
-  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- **Docker Engine** accessible from the launch session (`docker ps` must
+  succeed without `sudo`). Refer to {ref}`docker-host-setup` for group setup.
+- **NVIDIA Container Toolkit** installed, with its `nvidia` runtime registered
+  in Docker. Refer to {ref}`docker-host-setup` for the runtime check,
+  configuration steps, and GPU smoke test.
 - **NGC pull access**, when the configured `vllm_image` is restricted or
   requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
@@ -598,9 +577,9 @@ cleanup.
 - Standalone service YAMLs live beside services for direct single-service
   launches; they are not sample configuration. Shared deployments use the
   hardware-specific YAML under
-  `agent-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
+  `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `agent-samples/model-servers/yaml/<gpu-profile>/`; its
+  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
   `../../../../models/nim` from that location.

@@ -305,6 +305,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -335,6 +336,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -444,7 +446,7 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p id="profile-contract">A profile names logical roles and separates three concerns:</p>
+<p id="profile-contract">A client profile names logical roles and declares adapters and endpoints:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -452,10 +454,8 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reused"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"timeout"</span><span class="p">:</span><span class="w"> </span><span class="mf">60.0</span>
+<span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -464,18 +464,28 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">adapter</span></code> owns the model name, wire quirks, capabilities, default request
 extras, and reasoning-field normalization.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, readiness, timeouts, and environment-variable
-credentials.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">deployment</span></code> tells an orchestrator whether the process is managed, reused, or
-external.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> owns connectivity, timeouts, and environment-variable credentials.
+Optional health settings control explicit SDK <code class="docutils literal notranslate"><span class="pre">health()</span></code> calls; they do not
+cause consumer workers to poll endpoints at startup.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata selects the processes a shared model-server
+orchestrator manages. Consumer profiles omit it: their endpoints are operated
+outside the sample, whether locally or remotely. Existing explicit <code class="docutils literal notranslate"><span class="pre">reused</span></code>
+and <code class="docutils literal notranslate"><span class="pre">external</span></code> entries remain supported for compatibility.</p></li>
 </ul>
 <p id="deployment-profiles">Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code>,
 and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code>. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form. Launcher credentials
-are explicit: endpoint credentials use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed
-by a managed service itself use <code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
+stdlib-only launcher must use the wrapped nested JSON form with <code class="docutils literal notranslate"><span class="pre">adapter</span></code>,
+<code class="docutils literal notranslate"><span class="pre">endpoint</span></code>, and <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects. Only the worker-side loader accepts omitted
+<code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata. Launcher credentials are explicit: endpoint credentials
+use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed by a managed service itself use
+<code class="docutils literal notranslate"><span class="pre">deployment.credentials</span></code>.</p>
+</section>
+<section id="request-failures">
+<h2>Request failures<a class="headerlink" href="#request-failures" title="Link to this heading">#</a></h2>
+<p>Applications handle errors from model requests. For worker startup behavior,
+refer to <a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 </section>
 <section id="built-in-adapters">
 <h2>Built-in adapters<a class="headerlink" href="#built-in-adapters" title="Link to this heading">#</a></h2>
@@ -553,18 +563,17 @@ multi-image methods. All images are placed in one user message in caller order.<
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"external"</span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
+<span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> only when the remote provider has no compatible health
-route. It makes <code class="docutils literal notranslate"><span class="pre">health()</span></code> succeed without a request, preventing an impossible
-local readiness gate.</p>
+<p>For code that calls <code class="docutils literal notranslate"><span class="pre">health()</span></code> explicitly, <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> makes that call
+succeed without a request; <code class="docutils literal notranslate"><span class="pre">health_path</span></code> selects the HTTP route when probing is
+enabled. Tea making’s RAG service requires this configuration for hosted embedding
+endpoints; refer to <a class="reference internal" href="../guides/customizing-model-servers.html#rag-embedding-health"><span class="std std-ref">RAG embedding health</span></a>.</p>
 </section>
 <section id="riva-speech-over-grpc">
 <span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
@@ -580,8 +589,9 @@ local readiness gate.</p>
 </div>
 <p>STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>. A hosted NVCF endpoint uses TLS,
-<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> because it has no
-Riva channel-ready health surface.</p>
+<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, and its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>. If custom code explicitly calls <code class="docutils literal notranslate"><span class="pre">health()</span></code>,
+set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> for a hosted endpoint without a channel-ready health
+surface. Existing gRPC request deadlines and error propagation are unchanged.</p>
 </section>
 <section id="tests">
 <h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
@@ -644,6 +654,7 @@ repository root:</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-a-model-client">Construct a model client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>

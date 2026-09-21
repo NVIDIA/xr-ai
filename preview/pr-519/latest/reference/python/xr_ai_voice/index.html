@@ -305,6 +305,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
@@ -335,6 +336,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -651,6 +653,10 @@ overflow, and shutdown discards queued items that have not been published.</p>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceAgent" title="Link to this definition">#</a></dt>
 <dd><p>Own voice media lifecycle and bridge runtime input and output topics.</p>
+<p>Startup waits only for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>, such as an inference
+warmup or an application capability dependency. STT and TTS health are not
+polled automatically. Readiness reports initialized application transport
+after those explicit probes, not availability of every model endpoint.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAgent.run">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span>
@@ -692,7 +698,7 @@ overflow, and shutdown discards queued items that have not been published.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceOutput.response_id">
 <span class="sig-name descname"><span class="pre">response_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_voice.VoiceOutput.response_id" title="Link to this definition">#</a></dt>
-<dd><p>Stable identifier shared by chunks of an incremental response.</p>
+<dd><p>Identifier shared by incremental chunks; recent reuse is ignored with one warning.</p>
 </dd></dl>
 
 <dl class="py attribute">
