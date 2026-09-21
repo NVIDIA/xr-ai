@@ -314,3 +314,42 @@ async def test_shutdown_signal_after_ready_exits_cleanly(main_runtime, monkeypat
     runtime.hub.close.assert_called_once()
     assert remove_handler.call_count == 2
     assert all(task.done() for task in runtime.tasks)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hung_step", ["disconnect", "web", "token"])
+async def test_hung_client_cleanup_still_stops_docker(livekit_connector, monkeypatch, hung_step):
+    connector = livekit_connector
+    monkeypatch.setattr(connector_module, "_CLIENT_CLEANUP_TIMEOUT_S", 0.02)
+
+    async def hang():
+        await asyncio.Event().wait()
+
+    operation = {
+        "disconnect": connector._room_client.disconnect,
+        "web": connector._web.stop,
+        "token": connector._token.stop,
+    }[hung_step]
+    operation.side_effect = hang
+    await connector.start()
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(connector.stop(), timeout=1)
+    connector._room_client.disconnect.assert_awaited_once()
+    connector._web.stop.assert_awaited_once()
+    connector._token.stop.assert_awaited_once()
+    connector._docker.stop.assert_awaited_once()
+    assert connector._ep._push.closed and connector._ep._sub.closed
+
+
+@pytest.mark.asyncio
+async def test_disconnect_failure_survives_docker_failure(livekit_connector):
+    connector = livekit_connector
+    disconnect_error = RuntimeError("disconnect failed")
+    docker_error = RuntimeError("docker stop failed")
+    connector._room_client.disconnect.side_effect = disconnect_error
+    connector._docker.stop.side_effect = docker_error
+    await connector.start()
+    with pytest.raises(RuntimeError) as caught:
+        await connector.stop()
+    assert caught.value is docker_error
+    assert caught.value.__context__ is disconnect_error

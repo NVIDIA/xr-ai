@@ -57,6 +57,11 @@ ReturnAudioCallback = Callable[[AudioChunk],  Awaitable[None]]
 ReturnDataCallback  = Callable[[DataMessage], Awaitable[None]]
 
 
+# Leave 15 s for Docker stop/reaping and 1 s of margin inside the launcher's
+# 20 s shutdown window. Room, web, and token cleanup share this budget.
+_CLIENT_CLEANUP_TIMEOUT_S = 4.0
+
+
 class LiveKitConnector:
     def __init__(self, cfg: LiveKitConnectorConfig) -> None:
         self._cfg    = cfg
@@ -164,18 +169,25 @@ class LiveKitConnector:
         Cleanup errors propagate after every cleanup step has been attempted.
         """
         logger.info("LiveKitConnector stopping…")
-        async with AsyncExitStack() as cleanup:
+        deadline = asyncio.get_running_loop().time() + _CLIENT_CLEANUP_TIMEOUT_S
+
+        async def stop_client(callback: Callable[[], Awaitable[None]]) -> None:
+            async with asyncio.timeout_at(deadline):
+                await callback()
+
+        async with AsyncExitStack() as server_cleanup, AsyncExitStack() as cleanup:
+            # The outer stack retains client errors as exception context.
             # Registered first, executed last: keep LiveKit available until
             # media cleanup and room disconnection have finished.
-            cleanup.push_async_callback(self._docker.stop)
+            server_cleanup.push_async_callback(self._docker.stop)
             if self._token:
-                cleanup.push_async_callback(self._token.stop)
+                cleanup.push_async_callback(stop_client, self._token.stop)
             if self._web:
-                cleanup.push_async_callback(self._web.stop)
+                cleanup.push_async_callback(stop_client, self._web.stop)
             cleanup.callback(self._ep.close)
             if self._room_connect_started:
                 self._room_connect_started = False
-                cleanup.push_async_callback(self._room_client.disconnect)
+                cleanup.push_async_callback(stop_client, self._room_client.disconnect)
             cleanup.callback(self._room_client.stop)
             cleanup.callback(self._ep.stop)
         logger.info("LiveKitConnector stopped")
