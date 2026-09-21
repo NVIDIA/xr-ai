@@ -5,7 +5,8 @@
 
 # Adding a new sample
 
-Read this when scaffolding a new agent sample. For a working reference, refer to
+Read {doc}`building-your-app` first to build the application. Read this when
+preparing it as a repository sample. For a working sample reference, refer to
 `agent-samples/simple-vlm-example/`. Hard rules and the checklist live in
 `AGENTS.md`; this file holds the boilerplate templates.
 

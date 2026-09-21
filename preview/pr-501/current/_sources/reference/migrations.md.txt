@@ -58,6 +58,13 @@ that require the former behavior can explicitly pass
 
 ## Operator-visible runtime changes
 
+- A `VoiceOutput` sent with both `response_id` and `final=True` now closes that
+  response key even when the response contains only one message. Later output
+  from the same participant and producer with that `response_id` is dropped,
+  and the voice runtime warns once while the key remains among its 1,024 most
+  recent closures. Use a new identifier for each inbound query, such as
+  `ctx.metadata.message_id`, or omit `response_id` for a finite one-message
+  response.
 - DeviceIOHub now waits for the hub to acknowledge shared-memory attachment
   before connecting the LiveKit room or creating its ready file. Missing
   segments trigger bounded recreation; incompatible layouts and acknowledgement
