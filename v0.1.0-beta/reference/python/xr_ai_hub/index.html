@@ -1492,6 +1492,24 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dd><p>Readiness-participating agent attachment or detachment.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.MsgType.IMAGE_CAPTURE_REQUEST">
+<span class="sig-name descname"><span class="pre">IMAGE_CAPTURE_REQUEST</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">15</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_REQUEST" title="Link to this definition">#</a></dt>
+<dd><p>Processor request for one participant’s client to capture an image.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.MsgType.IMAGE_CAPTURE_DATA">
+<span class="sig-name descname"><span class="pre">IMAGE_CAPTURE_DATA</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">16</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_DATA" title="Link to this definition">#</a></dt>
+<dd><p>Encoded image returned by a client for a pending capture request.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.MsgType.IMAGE_CAPTURE_CANCEL">
+<span class="sig-name descname"><span class="pre">IMAGE_CAPTURE_CANCEL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">17</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_CANCEL" title="Link to this definition">#</a></dt>
+<dd><p>Cancellation of a pending participant image capture.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -1787,6 +1805,9 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.ROSTER_REQUEST"><code class="docutils literal notranslate"><span class="pre">ROSTER_REQUEST</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.SUBSCRIPTION_PROBE"><code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.AGENT_PRESENCE"><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_REQUEST"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_REQUEST</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_DATA"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_DATA</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_CANCEL"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_CANCEL</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent"><code class="docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a><ul class="nav section-nav flex-column">
