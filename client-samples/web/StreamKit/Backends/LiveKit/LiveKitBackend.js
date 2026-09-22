@@ -105,7 +105,6 @@ function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdent
     'file MIME type',
     FILE_MAX_FIELD_BYTES,
   );
-  const attributes = {};
   const applicationAttributes = Object.entries(options.attributes ?? {});
   if (applicationAttributes.length > FILE_MAX_ATTRIBUTES) {
     throw new TypeError('file attributes exceed 32 application entries');
@@ -124,11 +123,11 @@ function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdent
     }
     attributeBytes += UTF8_ENCODER.encode(key).byteLength;
     attributeBytes += UTF8_ENCODER.encode(value).byteLength;
-    attributes[key] = value;
   }
   if (attributeBytes > FILE_MAX_ATTRIBUTES_BYTES) {
     throw new TypeError('file attributes exceed 8192 UTF-8 bytes');
   }
+  const attributes = Object.fromEntries(applicationAttributes);
   attributes[FILE_TOPIC_ATTRIBUTE] = topic;
   const liveKitOptions = {
     topic: FILE_STREAM_TOPIC,

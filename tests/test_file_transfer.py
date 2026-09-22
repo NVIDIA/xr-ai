@@ -1194,6 +1194,55 @@ async def test_hub_buffers_file_that_arrives_before_participant_join(
         hub.close()
 
 
+async def test_hub_drops_buffered_file_when_newer_session_is_already_active() -> None:
+    hub = HubEndpoint.__new__(HubEndpoint)
+    hub._file_orderer = FileSessionOrderer(1)
+    hub._file_session_events = asyncio.Queue()
+    hub._participant_sessions = {"alice": "session-b"}
+    hub._file_pub = SimpleNamespace(send_multipart=AsyncMock())
+    message = FileMessage(
+        participant_id="alice",
+        topic="image.response",
+        pts_us=123,
+        transfer_id="stream-session-a",
+        name="capture.png",
+        mime_type="image/png",
+        attributes={},
+        data=b"png",
+        participant_session_id="session-a",
+    )
+    lifecycle = None
+    try:
+        await hub._route_file(message)
+        hub._file_pub.send_multipart.assert_not_awaited()
+
+        session_a_joined = ParticipantEvent(
+            participant_id="alice",
+            joined=True,
+            pts_us=124,
+            connector_id="connector-1",
+            participant_session_id="session-a",
+        )
+        session_a_left = replace(session_a_joined, joined=False, pts_us=125)
+        session_b_joined = replace(
+            session_a_joined,
+            pts_us=126,
+            participant_session_id="session-b",
+        )
+        for event in (session_a_joined, session_a_left, session_b_joined):
+            hub._file_session_events.put_nowait(event)
+
+        lifecycle = asyncio.create_task(hub._file_session_events.get())
+        lifecycle = await hub._drain_file_session_events(lifecycle)
+
+        assert hub._participant_sessions["alice"] == "session-b"
+        hub._file_pub.send_multipart.assert_not_awaited()
+    finally:
+        if lifecycle is not None:
+            lifecycle.cancel()
+            await asyncio.gather(lifecycle, return_exceptions=True)
+
+
 @pytest.mark.parametrize("prior_session", [None, "session-0"])
 async def test_processor_buffers_file_that_arrives_before_participant_join(
     prior_session,

@@ -480,6 +480,12 @@ class HubEndpoint:
 
     async def _publish_file(self, msg: FileMessage) -> None:
         assert self._file_pub is not None
+        if not self._file_session_is_active(msg):
+            logger.debug(
+                "File {} dropped: participant session is no longer active",
+                msg.transfer_id,
+            )
+            return
         topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
         encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
         await self._file_pub.send_multipart([topic, encoded])
@@ -531,6 +537,16 @@ class HubEndpoint:
                     msg.transfer_id,
                 )
         self._log_expired_files()
+
+    def _file_session_is_active(self, msg: FileMessage) -> bool:
+        active_session = self._participant_sessions.get(msg.participant_id)
+        return (
+            msg.participant_id in self._participant_sessions
+            and (
+                not msg.participant_session_id
+                or active_session == msg.participant_session_id
+            )
+        )
 
     def _log_expired_files(self) -> None:
         for msg in self._file_orderer.expire():
