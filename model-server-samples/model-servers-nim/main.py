@@ -110,7 +110,9 @@ def _export_models(profile: Path, destination: Path) -> None:
         # NGC and HF credentials belong to the server process, not its clients.
         deployment.pop("credentials", None)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # This local CLI intentionally writes to its explicit --export-models path;
+    # it does not cross a remote trust or privilege boundary.
+    destination.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")  # NOSONAR
 
 
 def _known_ports() -> list[tuple[str, int]]:
