@@ -36,6 +36,8 @@ The shipped profiles are:
 
 - `default`: local Parakeet STT, Pocket TTS, Nemotron Omni, Cosmos3-Nano
   Reasoner, and Nemotron embedding services.
+- `lightning`: the default supporting services with Nemotron 3.5 Lightning for
+  the `llm` and `agent_llm` roles.
 - `vlm_llm_nim`: local STT, Pocket TTS, and embedding plus self-hosted
   Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
 

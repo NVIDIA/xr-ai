@@ -19,9 +19,13 @@ containers. Shipped profiles (yaml/models.<name>.json):
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
+  lightning
+    Same supporting services as default, with Nemotron-3.5-Lightning-30B-A3B
+    on port 8108 for the llm and agent_llm roles.
+
   vlm_llm_nim
     stt + tts + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano-Omni port 8110, Cosmos3-Nano Reasoner port 8100).
+    (Nemotron-3 Nano Omni port 8110, Cosmos3-Nano Reasoner port 8100).
     Requires docker + NGC_API_KEY. Samples may reuse these endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
@@ -32,6 +36,7 @@ defaults.
 
 How to run:
     uv run --project model-server-samples/model-servers model_servers
+    uv run --project model-server-samples/model-servers model_servers --models lightning
     uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 
 To stop all model servers:
@@ -88,6 +93,11 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "../../services/nemotron3-nano-llm",
         "nemotron3_nano_llm_server",
         "nemotron3_nano_llm_server",
+    ),
+    "lightning": (
+        "../../services/nemotron35-lightning-llm",
+        "nemotron35_lightning_llm_server",
+        "nemotron35_lightning_llm_server",
     ),
     "omni": (
         "../../services/nemotron-omni-llm",

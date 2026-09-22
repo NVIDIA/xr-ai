@@ -542,8 +542,8 @@ GPU-visible memory. The complete original error remains in the reported log file
 
 ### `xr_render_demo` exits but VRAM is still pinned
 
-**By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,
-`vlm_server`, and `nemotron3_nano_llm_server`) survive stack
+**By design.** The vLLM-backed servers (`nemotron35_lightning_llm_server`,
+`nemotron_omni_llm_server`, `vlm_server`, and `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. Refer to {doc}`/components/ai-services` → *vLLM model
 persistence*.

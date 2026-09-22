@@ -20,6 +20,7 @@ _REQUIRED_SERVICES = {
     "llama-nemotron-llm",
     "magpie-tts",
     "nemotron-omni-llm",
+    "nemotron35-lightning-llm",
     "nemotron3-nano-llm",
     "openxr-service",
     "pocket-tts",
@@ -40,6 +41,11 @@ _MODEL_SERVICES = {
     "nemotron-omni-llm": (
         "nemotron-omni-llm-server",
         "nemotron_omni_llm_server",
+        8108,
+    ),
+    "nemotron35-lightning-llm": (
+        "nemotron35-lightning-llm-server",
+        "nemotron35_lightning_llm_server",
         8108,
     ),
     "nemotron3-nano-llm": (
