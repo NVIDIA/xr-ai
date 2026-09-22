@@ -25,7 +25,7 @@ from ._trace import current_participant_id, current_trace_id
 
 IMAGE_QUERY_SYSTEM_PROMPT = (
     'Reply with exactly "VISIBLE r g b", where r, g, b are numbers between 0 '
-    "and 1 for the color you actually see, or exactly \"UNKNOWN\" when the "
+    'and 1 for the color you actually see, or exactly "UNKNOWN" when the '
     "asked-about thing is not clearly visible. Reply with nothing else; never "
     "answer with a typical or assumed color."
 )
@@ -90,19 +90,19 @@ def make_physical_color_tool(
             if (cached := cache.get(key)) is not None:
                 return ResolvedColor(r=cached[0], g=cached[1], b=cached[2])
         try:
-            frame = await current_frame.execute(
-                CurrentFrameRequest(participant_id=current_participant_id.get())
-            )
+            frame = await current_frame.execute(CurrentFrameRequest(participant_id=current_participant_id.get()))
         except Exception as error:
             reraise_unavailable(error, "the current camera view")
         try:
-            result = await image_query.execute(ImageQueryRequest(
-                image=frame.image,
-                query=(
-                    f'What color is "{source}"? Reply with exactly "VISIBLE r g b" '
-                    '(each number between 0 and 1) or exactly "UNKNOWN".'
-                ),
-            ))
+            result = await image_query.execute(
+                ImageQueryRequest(
+                    image=frame.image,
+                    query=(
+                        f'What color is "{source}"? Reply with exactly "VISIBLE r g b" '
+                        '(each number between 0 and 1) or exactly "UNKNOWN".'
+                    ),
+                )
+            )
         except Exception as error:
             reraise_unavailable(error, "the vision model")
         if not result.available:
@@ -111,9 +111,7 @@ def make_physical_color_tool(
         resolved = parse_color_answer(result.text)
         if resolved is None:
             logger.debug("physical color {!r} not observed: {!r}", source, result.text[:120])
-            raise ValueError(
-                f"the camera view did not yield an observation of {source!r}: {result.text[:120]}"
-            )
+            raise ValueError(f"the camera view did not yield an observation of {source!r}: {result.text[:120]}")
         logger.debug("physical color {!r} -> {}", source, resolved)
         if trace:
             cache[key] = resolved

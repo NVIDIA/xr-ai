@@ -9,6 +9,7 @@ required fields and that ``ChatResponse`` fields are correctly extracted.
 
 GPU verification skipped — stub-server tests only.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,10 +27,7 @@ from xr_render_demo_worker.config import load_config
 from xr_render_demo_worker.models import SceneReply, SceneRequest, SubagentResult, SubagentTask
 
 # Add the worker directory to sys.path so we can import its modules.
-_WORKER_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "agent-samples" / "xr-render-demo" / "worker"
-)
+_WORKER_DIR = Path(__file__).resolve().parent.parent / "agent-samples" / "xr-render-demo" / "worker"
 sys.path.insert(0, str(_WORKER_DIR))
 
 from _stub_openai import StubOpenAI  # noqa: E402
@@ -39,15 +37,12 @@ _PACKAGE = _WORKER_DIR / "xr_render_demo_worker"
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-_MODELS_CONFIG = (
-    Path(__file__).resolve().parent.parent
-    / "agent-samples" / "xr-render-demo" / "yaml" / "models.json"
-)
+_MODELS_CONFIG = Path(__file__).resolve().parent.parent / "agent-samples" / "xr-render-demo" / "yaml" / "models.json"
 
 
-def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
-              reasoning_field: str | None = None,
-              default_extras: dict | None = None) -> OpenAICompatLLM:
+def _make_llm(
+    stub: StubOpenAI, *, model_name: str = "llm", reasoning_field: str | None = None, default_extras: dict | None = None
+) -> OpenAICompatLLM:
     """Build an LLM client wired to a StubOpenAI transport."""
     return OpenAICompatLLM(
         "http://stub",
@@ -91,11 +86,12 @@ def test_prompt_files_exist_and_are_nonempty() -> None:
 def test_models_round_trip() -> None:
     request = SceneRequest(transcript="hi", participant_id="p", timestamp_us=1)
     assert SceneRequest.model_validate(request.model_dump()) == request
-    task = SubagentTask(instruction="do")
+    task = SubagentTask(
+        instruction="do",
+    )
     assert SubagentTask.model_validate(task.model_dump()) == task
     assert SceneReply(response="ok").response == "ok"
     assert SubagentResult(result="ok").result == "ok"
-
 
 
 def test_prompt_audit_is_clean() -> None:
@@ -123,9 +119,7 @@ def test_eval_utterances_alias_selects_the_complete_battery() -> None:
     from xr_render_demo_eval import harness
 
     assert len(harness.UTTERANCES) == 40
-    assert harness._resolve_case_names(["utterances"]) == {
-        case.name for case in harness.UTTERANCES
-    }
+    assert harness._resolve_case_names(["utterances"]) == {case.name for case in harness.UTTERANCES}
 
 
 @pytest.mark.parametrize("entry", ["xr_render_demo_worker.__main__"])
@@ -139,17 +133,17 @@ def test_entry_module_imports(entry: str) -> None:
 def test_models_config_loads() -> None:
     """The bundled model config parses and exposes the expected names."""
     cfg = load_models_config(_MODELS_CONFIG)
-    llm_spec      = cfg.llm("llm")
+    llm_spec = cfg.llm("llm")
     agent_llm_spec = cfg.llm("agent_llm")
-    stt_spec      = cfg.stt("stt")
-    tts_spec      = cfg.tts("tts")
-    vlm_spec      = cfg.vlm("vlm")
+    stt_spec = cfg.stt("stt")
+    tts_spec = cfg.tts("tts")
+    vlm_spec = cfg.vlm("vlm")
 
-    assert llm_spec.base_url       == "http://localhost:8108"
+    assert llm_spec.base_url == "http://localhost:8108"
     assert agent_llm_spec.base_url == "http://localhost:8108"
-    assert stt_spec.base_url       == "http://localhost:8103"
-    assert tts_spec.base_url       == "http://localhost:8105"
-    assert vlm_spec.base_url       == "http://localhost:8100"
+    assert stt_spec.base_url == "http://localhost:8103"
+    assert tts_spec.base_url == "http://localhost:8105"
+    assert vlm_spec.base_url == "http://localhost:8100"
 
     # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
     # is populated from vLLM's "reasoning_content" field.
@@ -173,7 +167,10 @@ def test_worker_config_idle_timeout_disabled_by_default() -> None:
 
     worker_yaml = (
         Path(__file__).resolve().parent.parent
-        / "agent-samples" / "xr-render-demo" / "yaml" / "xr_render_demo_worker.yaml"
+        / "agent-samples"
+        / "xr-render-demo"
+        / "yaml"
+        / "xr_render_demo_worker.yaml"
     )
     cfg = load_config(worker_yaml)
     assert cfg.idle_timeout_secs is None
@@ -229,15 +226,15 @@ async def test_untooled_chat_wire_golden() -> None:
 
     messages = [
         ChatMessage(role="system", content="Reply in one short sentence."),
-        ChatMessage(role="user",   content="Add a red sphere in front of me"),
+        ChatMessage(role="user", content="Add a red sphere in front of me"),
     ]
     resp = await llm.chat(messages, max_tokens=40, temperature=0.0)
 
     body = stub.last_json()
 
-    assert body["model"]        == "llm"
-    assert body["max_tokens"]   == 40
-    assert body["temperature"]  == 0.0
+    assert body["model"] == "llm"
+    assert body["max_tokens"] == 40
+    assert body["temperature"] == 0.0
     assert "tools" not in body
     assert body["chat_template_kwargs"] == {"enable_thinking": False}
     assert len(body["messages"]) == 2
@@ -266,10 +263,10 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
             parameters={
                 "type": "object",
                 "properties": {
-                    "type":  {"type": "string"},
-                    "x":     {"type": "number"},
-                    "y":     {"type": "number"},
-                    "z":     {"type": "number"},
+                    "type": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "z": {"type": "number"},
                     "color": {"type": "string"},
                 },
             },
@@ -301,8 +298,8 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
     body = stub.last_json()
 
     # Model name from the nemotron_omni preset.
-    assert body["model"]       == "llm"
-    assert body["max_tokens"]  == 2048
+    assert body["model"] == "llm"
+    assert body["max_tokens"] == 2048
     assert body["temperature"] == 0.0
 
     # Tools must be present in OpenAI wire format.
@@ -332,7 +329,7 @@ async def test_agentic_loop_wire_golden_thinking_off() -> None:
 
     messages = [
         ChatMessage(role="system", content="You are a spatial AI assistant."),
-        ChatMessage(role="user",   content="[Pre-fetched context]\n\n[Request]\nAdd sphere"),
+        ChatMessage(role="user", content="[Pre-fetched context]\n\n[Request]\nAdd sphere"),
     ]
     await agent_llm.chat(
         messages,
@@ -365,10 +362,8 @@ async def test_agentic_loop_reasoning_field_normalized() -> None:
         [ChatMessage(role="user", content="Add a sphere in front")],
     )
 
-    assert resp.reasoning == (
-        "RESOLVE: user said 'in front' → forward direction. COMPUTE: pos = head + fwd × 1.5"
-    )
-    assert resp.content   == "I placed the sphere ahead of you."
+    assert resp.reasoning == ("RESOLVE: user said 'in front' → forward direction. COMPUTE: pos = head + fwd × 1.5")
+    assert resp.content == "I placed the sphere ahead of you."
     assert resp.tool_calls is None
 
 
@@ -377,14 +372,16 @@ async def test_agentic_loop_tool_calls_parsed() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(
         content="",
-        tool_calls=[{
-            "id":       "call_abc123",
-            "type":     "function",
-            "function": {
-                "name":      "add_primitive",
-                "arguments": '{"type": "sphere", "x": 0.0, "y": 1.6, "z": -1.5}',
-            },
-        }],
+        tool_calls=[
+            {
+                "id": "call_abc123",
+                "type": "function",
+                "function": {
+                    "name": "add_primitive",
+                    "arguments": '{"type": "sphere", "x": 0.0, "y": 1.6, "z": -1.5}',
+                },
+            }
+        ],
         finish_reason="tool_calls",
     )
 
@@ -397,11 +394,11 @@ async def test_agentic_loop_tool_calls_parsed() -> None:
     assert resp.tool_calls is not None
     assert len(resp.tool_calls) == 1
     tc = resp.tool_calls[0]
-    assert tc.id        == "call_abc123"
-    assert tc.name      == "add_primitive"
+    assert tc.id == "call_abc123"
+    assert tc.name == "add_primitive"
     args = json.loads(tc.arguments)
     assert args["type"] == "sphere"
-    assert args["x"]    == 0.0
+    assert args["x"] == 0.0
 
 
 # ── ToolDef.to_openai() round-trip ────────────────────────────────────────────
@@ -420,7 +417,7 @@ def test_tool_def_to_openai_wire_shape() -> None:
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
-                "x":  {"type": "number"},
+                "x": {"type": "number"},
             },
         },
     )
@@ -428,13 +425,13 @@ def test_tool_def_to_openai_wire_shape() -> None:
     assert wire == {
         "type": "function",
         "function": {
-            "name":        "update_primitive",
+            "name": "update_primitive",
             "description": "Update an existing object.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
-                    "x":  {"type": "number"},
+                    "x": {"type": "number"},
                 },
             },
         },
@@ -448,12 +445,10 @@ def test_vision_description_matches_video_capability() -> None:
 
     assert vision._SHARED_RULES in vision.DESCRIPTION
     assert vision._SHARED_RULES in vision._LIVE_ONLY_DESCRIPTION
-    assert "recorded video when the question is about a past moment" in vision.DESCRIPTION
-    assert "Recorded video is not available" in vision._LIVE_ONLY_DESCRIPTION
+    assert "recorded video for a past moment" in vision.DESCRIPTION
+    assert "Recorded video is unavailable" in vision._LIVE_ONLY_DESCRIPTION
 
-    with_video = vision.make_vision_agent(
-        llm=None, current_frame=None, image_query=None, video=object())
-    without_video = vision.make_vision_agent(
-        llm=None, current_frame=None, image_query=None, video=None)
+    with_video = vision.make_vision_agent(llm=None, current_frame=None, image_query=None, video=object())
+    without_video = vision.make_vision_agent(llm=None, current_frame=None, image_query=None, video=None)
     assert with_video.description == vision.DESCRIPTION
     assert without_video.description == vision._LIVE_ONLY_DESCRIPTION

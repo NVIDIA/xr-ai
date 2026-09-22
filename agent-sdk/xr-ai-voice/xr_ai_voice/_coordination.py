@@ -97,6 +97,10 @@ class VoiceTurnController:
                     _ProgressUpdate,
                     _CoordinationResult,
                     self._report_progress,
+                    examples=(
+                        "After one independent part is complete and more requested work remains, "
+                        "briefly report that completed part.",
+                    ),
                 ),
             )
         )
