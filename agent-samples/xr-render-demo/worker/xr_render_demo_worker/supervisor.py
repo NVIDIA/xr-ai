@@ -21,6 +21,7 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
 from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_voice import VoiceTurnController
 from xr_render_scene import SceneTools
 
 from ._physical_color import IMAGE_QUERY_SYSTEM_PROMPT, make_physical_color_tool
@@ -43,18 +44,6 @@ from .scene import SceneContext
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
 
-# Shared punctuation strip set, unicode ellipsis and quotes included.
-_EDGE_PUNCT = ".,!?;:\"'…“”‘’"
-
-_WH_WORDS = frozenset("what what's whats which where when why who whom whose how".split())
-
-_ACTION_VERBS = frozenset(
-    "put place move make create add remove delete drop turn rotate resize double halve shrink "
-    "grow recolor paint swap bring push pull raise lower undo change set scoot flip clear "
-    "copy duplicate stack tint".split()
-)
-
-
 _MUTATING_AGENTS = frozenset({"placement_agent", "appearance_agent", "object_agent"})
 
 # Seconds to let a scene RPC propagate before diffing snapshots.
@@ -64,20 +53,6 @@ _SCENE_SETTLE_S = 0.15
 # persists across sessions, and older turns read as answers to new
 # questions. History beyond the window is memory_agent's to recall.
 _RECENT_WINDOW_US = 10 * 60 * 1_000_000
-
-# Leading words that mark a status question about past work ("Did you move
-# the cube?"); unlike can/could/will, they cannot open a polite command.
-_STATUS_OPENERS = frozenset("did have has had was were".split())
-
-def _wants_mutation(transcript: str) -> bool:
-    words = [w.strip(_EDGE_PUNCT) for w in transcript.lower().split()]
-    words = [w for w in words if w]
-    # A wh- or status question is a query even when it contains an action
-    # word ("What color was the first thing I created?", "Did you move it?").
-    if not words or words[0] in _WH_WORDS or words[0] in _STATUS_OPENERS:
-        return False
-    return any(word in _ACTION_VERBS for word in words)
-
 
 _COMPLETION_CLAIMS = re.compile(
     r"\b(recolou?red|changed|updated|created|added|removed|resized|moved|swapped|"
@@ -94,20 +69,7 @@ def _is_question(text: str) -> bool:
     return text.rstrip().rstrip("\"'”’)").rstrip().endswith("?")
 
 
-def _prompt_with_tool_examples(prompt: str, toolset: ToolSet) -> str:
-    sections = [
-        f"{name}:\n" + "\n".join(f"- {example}" for example in tool.examples)
-        for name, tool in toolset.items()
-        if tool.examples
-    ]
-    if not sections:
-        return prompt
-    examples = "\n\n".join(sections)
-    return f"{prompt}\n\n<tool_examples>\n{examples}\n</tool_examples>"
-
-
 class SceneSupervisor:
-
     def __init__(
         self,
         llm: LLMService,
@@ -124,9 +86,7 @@ class SceneSupervisor:
         context = SceneContext(scene, tracking)
         if subagent_tools is None:
             if vlm is None or images is None or current_frame is None:
-                raise ValueError(
-                    "vlm, images, and current_frame are required when subagent_tools is not provided"
-                )
+                raise ValueError("vlm, images, and current_frame are required when subagent_tools is not provided")
             image_query = ImageQueryTool(
                 images=images,
                 vlm=vlm,
@@ -164,9 +124,7 @@ class SceneSupervisor:
             del self._left_at_us[p]
         self._left_at_us[participant_id] = now_us
 
-    async def _recent_conversation(
-        self, participant_id: str, reference_us: int
-    ) -> str:
+    async def _recent_conversation(self, participant_id: str, reference_us: int) -> str:
         recalled = await self._text_memory.recall_conversation.execute(
             RecallConversationRequest(participant_id=participant_id)
         )
@@ -182,10 +140,7 @@ class SceneSupervisor:
         if not entries:
             return ""
         lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
-        block = (
-            "[Recent conversation] (already handled; never a source of new work)\n"
-            + "\n".join(lines) + "\n\n"
-        )
+        block = "[Recent conversation] (already handled; never a source of new work)\n" + "\n".join(lines) + "\n\n"
         return block
 
     async def _persist_turn(self, request: SceneRequest, user_text: str, reply_text: str) -> None:
@@ -217,19 +172,17 @@ class SceneSupervisor:
     async def _handle(self, request: SceneRequest) -> SceneReply:
         logger.debug(
             "supervisor turn participant={} trace={} transcript={!r}",
-            request.participant_id, request.trace_id, request.transcript[:80],
+            request.participant_id,
+            request.trace_id,
+            request.transcript[:80],
         )
-        conversation = await self._recent_conversation(
-            request.participant_id, request.timestamp_us
-        )
+        conversation = await self._recent_conversation(request.participant_id, request.timestamp_us)
         transcript = request.transcript
 
         async with self._scene_lock:
             return await self._handle_scene(request, transcript, conversation)
 
-    async def _handle_scene(
-        self, request: SceneRequest, transcript: str, conversation: str
-    ) -> SceneReply:
+    async def _handle_scene(self, request: SceneRequest, transcript: str, conversation: str) -> SceneReply:
         evidence = MutationEvidence()
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
@@ -240,11 +193,18 @@ class SceneSupervisor:
             f"{conversation}"
             f"User request: {transcript}"
         )
-        toolset = self._toolset
+        controller = VoiceTurnController.current()
+        if controller is None:
+            controller = VoiceTurnController(
+                turn_id=request.trace_id or f"{request.participant_id}:{request.timestamp_us}",
+                timestamp_us=request.timestamp_us,
+                publish=None,
+            )
+        toolset = controller.extend(self._toolset)
         messages = [
             ChatMessage(
                 role="system",
-                content=_prompt_with_tool_examples(self._prompt, toolset),
+                content=self._prompt,
             ),
             ChatMessage(role="user", content=user_message),
         ]
@@ -255,10 +215,18 @@ class SceneSupervisor:
                 tools=list(definitions) or None,
                 max_tokens=2048,
                 temperature=0.0,
+                enable_thinking=True,
+                thinking_budget=1024,
             )
 
         try:
-            result = await run_tool_loop(messages, toolset, _call_model, max_iterations=12)
+            with controller.activate():
+                result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=12,
+                )
         except ToolLoopError as exc:
             logger.warning("supervisor loop failed ({})", exc)
             reply = "I'm sorry — something went wrong. Please try again."
@@ -266,37 +234,34 @@ class SceneSupervisor:
             return SceneReply(response=reply)
         output = result.content
 
-        # Verify only turns with actual mutation intent: a mutating subagent
-        # was delegated, or the utterance itself requests a change (which
-        # also catches mixed requests where only vision or memory ran).
+        # Verification follows actual mutating delegation. Surface verbs cannot
+        # distinguish a request from capability, quotation, or reported speech.
         delegated = {record.call.name for record in result.tool_calls}
-        needs_verification = bool(delegated & _MUTATING_AGENTS) or _wants_mutation(transcript)
+        needs_verification = bool(delegated & _MUTATING_AGENTS)
 
         await asyncio.sleep(_SCENE_SETTLE_S)
-        if needs_verification and not SceneContext.changes(before, await self._context.snapshot()):
-            if delegated & _MUTATING_AGENTS:
-                nudge = (
-                    "Verified scene changes this turn: none. If the request needed a"
-                    " scene change, delegate the remaining work now; if it needed"
-                    " none, repeat your final answer."
-                )
-            else:
-                # No scene-changing subagent ran, so a repeat-answer offer
-                # would invite an unsupported completion claim.
-                nudge = (
-                    "Verified scene changes this turn: none, and no scene-changing"
-                    " subagent was used. The request asks for a change: delegate the"
-                    " remaining work to the right subagent now. If the change cannot"
-                    " be done, say plainly that nothing was changed and why; never"
-                    " reply that a change was made."
-                )
+        if (
+            needs_verification
+            and evidence.applied == 0
+            and evidence.satisfied == 0
+            and not SceneContext.changes(before, await self._context.snapshot())
+        ):
+            nudge = (
+                "Verified scene changes this turn: none. If the request needed a"
+                " scene change, delegate the remaining work now; if it needed"
+                " none, repeat your final answer."
+            )
             verification_messages = list(result.messages) + [
                 ChatMessage(role="user", content=nudge),
             ]
             try:
-                result2 = await run_tool_loop(
-                    verification_messages, toolset, _call_model, max_iterations=6
-                )
+                with controller.activate():
+                    result2 = await run_tool_loop(
+                        verification_messages,
+                        toolset,
+                        _call_model,
+                        max_iterations=6,
+                    )
             except ToolLoopError as exc:
                 logger.warning("supervisor verification failed ({})", exc)
             else:
