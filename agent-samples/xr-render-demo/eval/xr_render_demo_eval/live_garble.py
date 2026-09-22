@@ -21,9 +21,15 @@ from xr_render_scene import AddPrimitiveRequest, EmptyRequest, SceneClient
 
 from ._live_endpoint import LiveEvalEndpoint, live_participant
 
-CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
-             "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
-             "yaw_deg": 0.0, "pitch_deg": 0.0, "ts": 1}
+CANONICAL = {
+    "position": {"x": 0, "y": 1.6, "z": 0},
+    "forward": {"x": 0, "y": 0, "z": -1},
+    "right": {"x": 1, "y": 0, "z": 0},
+    "up": {"x": 0, "y": 1, "z": 0},
+    "yaw_deg": 0.0,
+    "pitch_deg": 0.0,
+    "ts": 1,
+}
 
 GREEN_SPHERE = ("sphere", -1.0, 1.6, -1.5, 0, 0.8, 0, 0.1)
 BLUE_SPHERE = ("sphere", 1.0, 1.6, -1.5, 0, 0, 1, 0.1)
@@ -41,55 +47,80 @@ CASES = [
         "name": "homophone_anchor_spear",
         "fixtures": [GREEN_SPHERE, BLUE_SPHERE],
         "turns": [
-            {"prompt": "Add a red box above the green spear.", "kind": "change",
-             "check": lambda ids, before, after: any(
-                 item.type == "box" and abs(item.position.x + 1.0) < 0.25 and item.position.y > 1.65
-                 for item in _new(before, after).values())},
+            {
+                "prompt": "Add a red box above the green spear.",
+                "kind": "change",
+                "check": lambda ids, before, after: any(
+                    item.type == "box" and abs(item.position.x + 1.0) < 0.25 and item.position.y > 1.65
+                    for item in _new(before, after).values()
+                ),
+            },
         ],
     },
     {
         "name": "homophone_color_blew",
         "fixtures": [],
         "turns": [
-            {"prompt": "Make a blew sphere.", "kind": "change",
-             "check": lambda ids, before, after: any(
-                 item.type == "sphere" and item.color.b > 0.5
-                 for item in _new(before, after).values())},
+            {
+                "prompt": "Make a blew sphere.",
+                "kind": "change",
+                "check": lambda ids, before, after: any(
+                    item.type == "sphere" and item.color.b > 0.5 for item in _new(before, after).values()
+                ),
+            },
         ],
     },
     {
         "name": "homophone_shape_spear",
         "fixtures": [BLUE_SPHERE],
         "turns": [
-            {"prompt": "Make a blue spear.", "kind": "change",
-             "check": lambda ids, before, after: (
-                 len(_new(before, after)) == 1
-                 and all(item.type == "sphere" and item.color.b > 0.5 and item.position.z < -0.5
-                         for item in _new(before, after).values()))},
+            {
+                "prompt": "Make a blue spear.",
+                "kind": "change",
+                "check": lambda ids, before, after: (
+                    len(_new(before, after)) == 1
+                    and all(
+                        item.type == "sphere" and item.color.b > 0.5 and item.position.z < -0.5
+                        for item in _new(before, after).values()
+                    )
+                ),
+            },
         ],
     },
     {
         "name": "bare_create_after_work_stays_bare",
         "fixtures": [GREEN_SPHERE],
         "turns": [
-            {"prompt": "Add a teal cube.", "kind": "change",
-             "check": lambda ids, before, after: any(
-                 item.type == "box" for item in _new(before, after).values())},
-            {"prompt": "Make a red cube.", "kind": "change",
-             "check": lambda ids, before, after: (
-                 len(_new(before, after)) == 1
-                 and all(item.type == "box" and item.color.r > 0.5
-                         and abs(item.position.x) < 0.3 and item.position.y > 1.3
-                         for item in _new(before, after).values()))},
+            {
+                "prompt": "Add a teal cube.",
+                "kind": "change",
+                "check": lambda ids, before, after: any(item.type == "box" for item in _new(before, after).values()),
+            },
+            {
+                "prompt": "Make a red cube.",
+                "kind": "change",
+                "check": lambda ids, before, after: (
+                    len(_new(before, after)) == 1
+                    and all(
+                        item.type == "box"
+                        and item.color.r > 0.5
+                        and abs(item.position.x) < 0.3
+                        and item.position.y > 1.3
+                        for item in _new(before, after).values()
+                    )
+                ),
+            },
         ],
     },
     {
         "name": "correction_never_creates",
         "fixtures": [GREEN_SPHERE, BLUE_SPHERE],
         "turns": [
-            {"prompt": "Add a red box above the blue sphere.", "kind": "change",
-             "check": lambda ids, before, after: any(
-                 item.type == "box" for item in _new(before, after).values())},
+            {
+                "prompt": "Add a red box above the blue sphere.",
+                "kind": "change",
+                "check": lambda ids, before, after: any(item.type == "box" for item in _new(before, after).values()),
+            },
             {"prompt": "That's the wrong sphere.", "kind": "no_new_object"},
         ],
     },
@@ -112,32 +143,45 @@ CASES = [
         "fixtures": [("box", 0.5, 1.3, -1.2, 0, 0.8, 0.8, 0.15), BLUE_SPHERE],
         "turns": [
             {"prompt": "Put the sphere on the", "kind": "no_change"},
-            {"prompt": "On the box.", "kind": "change",
-             "check": lambda ids, before, after: (
-                 not _new(before, after)
-                 and abs(after[ids[1]].position.x - 0.5) < 0.3
-                 and after[ids[1]].position.y > 1.3)},
+            {
+                "prompt": "On the box.",
+                "kind": "change",
+                "check": lambda ids, before, after: (
+                    not _new(before, after)
+                    and abs(after[ids[1]].position.x - 0.5) < 0.3
+                    and after[ids[1]].position.y > 1.3
+                ),
+            },
         ],
     },
     {
         "name": "self_correction_single_create",
         "fixtures": [],
         "turns": [
-            {"prompt": "Make a red, no, a green cube.", "kind": "change",
-             "check": lambda ids, before, after: (
-                 len(_new(before, after)) == 1
-                 and all(item.type == "box" and item.color.g > 0.5 and item.color.r < 0.3
-                         for item in _new(before, after).values()))},
+            {
+                "prompt": "Make a red, no, a green cube.",
+                "kind": "change",
+                "check": lambda ids, before, after: (
+                    len(_new(before, after)) == 1
+                    and all(
+                        item.type == "box" and item.color.g > 0.5 and item.color.r < 0.3
+                        for item in _new(before, after).values()
+                    )
+                ),
+            },
         ],
     },
     {
         "name": "stutter_single_create",
         "fixtures": [],
         "turns": [
-            {"prompt": "Add a a small cube cube.", "kind": "change",
-             "check": lambda ids, before, after: (
-                 len(_new(before, after)) == 1
-                 and all(item.type == "box" for item in _new(before, after).values()))},
+            {
+                "prompt": "Add a a small cube cube.",
+                "kind": "change",
+                "check": lambda ids, before, after: (
+                    len(_new(before, after)) == 1 and all(item.type == "box" for item in _new(before, after).values())
+                ),
+            },
         ],
     },
 ]
@@ -145,6 +189,7 @@ CASES = [
 
 async def clear_scene(scene):
     from xr_render_scene import RemovePrimitiveRequest
+
     state = await scene.get_scene_state(EmptyRequest())
     for item in state.objects:
         await scene.remove_primitive(RemovePrimitiveRequest(obj_id=item.id))
@@ -156,9 +201,9 @@ async def snapshot(scene):
 
 async def run_turn(scene, endpoint, participant, turn, ids):
     before = await snapshot(scene)
-    await endpoint.inject_data(DataMessage(
-        participant_id=participant, topic="",
-        pts_us=time.time_ns() // 1_000, data=turn["prompt"].encode()))
+    await endpoint.inject_data(
+        DataMessage(participant_id=participant, topic="", pts_us=time.time_ns() // 1_000, data=turn["prompt"].encode())
+    )
     if turn["kind"] == "change":
         deadline = asyncio.get_running_loop().time() + 75
         while asyncio.get_running_loop().time() < deadline:
@@ -184,8 +229,7 @@ async def run_turn(scene, endpoint, participant, turn, ids):
 def _describe(before, after):
     parts = [f"NEW {k}:{v.model_dump()}" for k, v in _new(before, after).items()]
     parts += [f"GONE {k}" for k in before if k not in after]
-    parts += [f"MOVED {k}" for k in before
-              if k in after and after[k].model_dump() != before[k].model_dump()]
+    parts += [f"MOVED {k}" for k in before if k in after and after[k].model_dump() != before[k].model_dump()]
     return "; ".join(parts)[:400] or "unchanged"
 
 
@@ -198,8 +242,10 @@ async def main() -> None:
     try:
         await tracking.call("set_sim_pose", CANONICAL)
     except Exception as error:
-        print(f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
-              "../yaml/openxr_service.yaml and restart the stack")
+        print(
+            f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
+            "../yaml/openxr_service.yaml and restart the stack"
+        )
         await scene.close()
         await tracking.close()
         await endpoint.close()
@@ -216,8 +262,9 @@ async def main() -> None:
                 await clear_scene(scene)
                 ids = []
                 for prim_type, x, y, z, r, g, b, size in case["fixtures"]:
-                    result = await scene.add_primitive(AddPrimitiveRequest(
-                        prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
+                    result = await scene.add_primitive(
+                        AddPrimitiveRequest(prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size)
+                    )
                     ids.append(result.id)
                 ok, detail = True, ""
                 for number, turn in enumerate(case["turns"], start=1):

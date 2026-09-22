@@ -49,11 +49,13 @@ class LiveEvalEndpoint:
 @asynccontextmanager
 async def live_participant(endpoint: LiveEvalEndpoint, participant_id: str):
     """Join a synthetic participant for one case and always emit its leave."""
-    await endpoint.inject_participant_event(ParticipantEvent(
-        participant_id=participant_id, joined=True, pts_us=time.time_ns() // 1_000))
+    await endpoint.inject_participant_event(
+        ParticipantEvent(participant_id=participant_id, joined=True, pts_us=time.time_ns() // 1_000)
+    )
     await asyncio.sleep(1.0)
     try:
         yield participant_id
     finally:
-        await endpoint.inject_participant_event(ParticipantEvent(
-            participant_id=participant_id, joined=False, pts_us=time.time_ns() // 1_000))
+        await endpoint.inject_participant_event(
+            ParticipantEvent(participant_id=participant_id, joined=False, pts_us=time.time_ns() // 1_000)
+        )

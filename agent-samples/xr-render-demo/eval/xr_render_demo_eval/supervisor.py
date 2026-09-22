@@ -14,14 +14,35 @@ localises in seconds instead of a full nested rollout.
 import argparse
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from xr_ai_models import load_models_config, make_llm
-from xr_ai_tools import Tool
-from xr_render_demo_worker.agents.appearance.agent import DESCRIPTION as appearance_description
+from xr_ai_models import ChatMessage, ToolCall, load_models_config, make_llm
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.tool_calling import run_tool_loop
+from xr_ai_voice import VoiceOutput, VoiceTurnController
+from xr_render_demo_worker._trace import current_mutation_evidence
+from xr_render_demo_worker.agents.appearance.agent import (
+    _EXAMPLES as appearance_examples,
+)
+from xr_render_demo_worker.agents.appearance.agent import (
+    DESCRIPTION as appearance_description,
+)
+from xr_render_demo_worker.agents.memory.agent import _EXAMPLES as memory_examples
 from xr_render_demo_worker.agents.memory.agent import DESCRIPTION as memory_description
-from xr_render_demo_worker.agents.object.agent import DESCRIPTION as object_description
-from xr_render_demo_worker.agents.placement.agent import DESCRIPTION as placement_description
+from xr_render_demo_worker.agents.object.agent import (
+    _EXAMPLES as object_examples,
+)
+from xr_render_demo_worker.agents.object.agent import (
+    DESCRIPTION as object_description,
+)
+from xr_render_demo_worker.agents.placement.agent import (
+    _EXAMPLES as placement_examples,
+)
+from xr_render_demo_worker.agents.placement.agent import (
+    DESCRIPTION as placement_description,
+)
+from xr_render_demo_worker.agents.vision.agent import _EXAMPLES as vision_examples
 from xr_render_demo_worker.agents.vision.agent import DESCRIPTION as vision_description
 from xr_render_demo_worker.models import SceneRequest, SubagentResult, SubagentTask
 from xr_render_demo_worker.supervisor import SceneSupervisor
@@ -35,14 +56,36 @@ _DESCRIPTIONS = {
     "vision_agent": vision_description,
     "memory_agent": memory_description,
 }
+_EXAMPLES = {
+    "appearance_agent": appearance_examples,
+    "memory_agent": memory_examples,
+    "object_agent": object_examples,
+    "placement_agent": placement_examples,
+    "vision_agent": vision_examples,
+}
+_REFUSAL_CASE = "misrouted_subagent_refusal_recovers"
+_SUPERVISOR_PROMPT = (
+    (Path(__file__).resolve().parents[2] / "worker" / "xr_render_demo_worker" / "supervisor_prompt.txt")
+    .read_text(encoding="utf-8")
+    .strip()
+)
 
 
-def _make_fake_agent(name: str, description: str, calls: list) -> Tool:
+def _make_fake_agent(name: str, description: str, calls: list, llm) -> Tool:
     async def act(request: SubagentTask) -> SubagentResult:
-        calls.append((name, request.instruction))
+        calls.append((name, request.instruction, True))
+        if name in {"placement_agent", "appearance_agent", "object_agent"}:
+            current_mutation_evidence.get().applied += 1
         return SubagentResult(result="Done.")
 
-    return Tool(name, description, SubagentTask, SubagentResult, act)
+    return Tool(
+        name,
+        description,
+        SubagentTask,
+        SubagentResult,
+        act,
+        examples=_EXAMPLES[name],
+    )
 
 
 @dataclass(frozen=True)
@@ -66,18 +109,14 @@ CASES = (
             {"id": "sphere-1", "type": "sphere", "pos": [0.4, 1.5, -1.2], "color": [1, 1, 0], "size": 0.1},
             {"id": "box-0", "type": "box", "pos": [-0.6, 1.3, -1.6], "color": [0, 0.4, 1], "size": 0.15},
         ),
-        history=(
-            ("Make a yellow sphere.", "Added a yellow sphere (sphere-1)."),
-        ),
+        history=(("Make a yellow sphere.", "Added a yellow sphere (sphere-1)."),),
         expect_agent="object_agent",
         instruction_contains=("sphere-1",),
     ),
     RoutingCase(
         name="pronoun_shrink_after_move",
         request="Make it half the size.",
-        scene=(
-            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.2},
-        ),
+        scene=({"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.2},),
         history=(
             ("Make a blue cube.", "Added a blue cube (box-0)."),
             ("Move it left.", "Moved the cube (box-0) to your left."),
@@ -88,17 +127,13 @@ CASES = (
     RoutingCase(
         name="recolor_routes_to_appearance",
         request="Paint the sphere yellow.",
-        scene=(
-            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},
-        ),
+        scene=({"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},),
         expect_agent="appearance_agent",
     ),
     RoutingCase(
         name="move_routes_to_placement",
         request="Move the cube to the left.",
-        scene=(
-            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},
-        ),
+        scene=({"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},),
         expect_agent="placement_agent",
     ),
     RoutingCase(
@@ -109,9 +144,7 @@ CASES = (
     RoutingCase(
         name="remove_routes_to_object",
         request="Remove the blue cube.",
-        scene=(
-            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},
-        ),
+        scene=({"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},),
         expect_agent="object_agent",
     ),
     RoutingCase(
@@ -122,26 +155,20 @@ CASES = (
     RoutingCase(
         name="physical_color_stays_with_mutating_agent",
         request="Turn the box the color of my carpet.",
-        scene=(
-            {"id": "box-0", "type": "box", "pos": [0.0, 1.5, -1.3], "color": [1, 1, 1], "size": 0.1},
-        ),
+        scene=({"id": "box-0", "type": "box", "pos": [0.0, 1.5, -1.3], "color": [1, 1, 1], "size": 0.1},),
         expect_agent="appearance_agent",
         instruction_contains=("carpet",),
     ),
     RoutingCase(
         name="memory_question_routes_to_memory",
         request="What did I ask you to make earlier?",
-        history=(
-            ("Add a red sphere.", "Added a red sphere."),
-        ),
+        history=(("Add a red sphere.", "Added a red sphere."),),
         expect_agent="memory_agent",
     ),
     RoutingCase(
         name="resize_routes_to_object_not_placement",
         request="Make it twice as big.",
-        scene=(
-            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
-        ),
+        scene=({"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},),
         expect_agent="object_agent",
         forbid_agents=("placement_agent",),
     ),
@@ -157,12 +184,8 @@ CASES = (
     RoutingCase(
         name="recolor_after_move_resolved_id",
         request="Make it green.",
-        scene=(
-            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
-        ),
-        history=(
-            ("Move the sphere left.", "Moved sphere-0 to your left."),
-        ),
+        scene=({"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},),
+        history=(("Move the sphere left.", "Moved sphere-0 to your left."),),
         expect_agent="appearance_agent",
         instruction_contains=("sphere-0",),
     ),
@@ -174,9 +197,7 @@ CASES = (
     RoutingCase(
         name="nudge_routes_to_placement",
         request="Move the sphere forward a little.",
-        scene=(
-            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
-        ),
+        scene=({"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},),
         expect_agent="placement_agent",
     ),
     RoutingCase(
@@ -202,9 +223,7 @@ CASES = (
     RoutingCase(
         name="bare_create_after_work_no_extra_move",
         request="Make a red cube.",
-        scene=(
-            {"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
-        ),
+        scene=({"id": "sphere-0", "type": "sphere", "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},),
         expect_agent="object_agent",
         forbid_agents=("placement_agent",),
     ),
@@ -215,17 +234,13 @@ CASES = (
             {"id": "sphere-0", "type": "sphere", "pos": [-0.5, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
             {"id": "sphere-1", "type": "sphere", "pos": [0.5, 1.6, -1.5], "color": [0, 0, 1], "size": 0.1},
         ),
-        history=(
-            ("Add a red sphere above the blue sphere.", "Added a red box above the blue sphere."),
-        ),
+        history=(("Add a red sphere above the blue sphere.", "Added a red box above the blue sphere."),),
         forbid_agents=("object_agent", "appearance_agent", "placement_agent"),
     ),
     RoutingCase(
         name="put_new_object_is_creation_not_move",
         request="Put a blue square above the yellow square.",
-        scene=(
-            {"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [1, 1, 0], "size": 0.1},
-        ),
+        scene=({"id": "box-0", "type": "box", "pos": [0.0, 1.6, -1.5], "color": [1, 1, 0], "size": 0.1},),
         expect_agent="object_agent",
         forbid_agents=("placement_agent",),
     ),
@@ -242,9 +257,7 @@ CASES = (
     RoutingCase(
         name="new_object_above_xr_object_no_vision",
         request="Put a blue sphere above the red capsule.",
-        scene=(
-            {"id": "capsule-0", "type": "capsule", "pos": [0.0, 1.5, -1.3], "color": [1, 0, 0], "size": 0.1},
-        ),
+        scene=({"id": "capsule-0", "type": "capsule", "pos": [0.0, 1.5, -1.3], "color": [1, 0, 0], "size": 0.1},),
         expect_agent="object_agent",
         forbid_agents=("vision_agent", "placement_agent"),
     ),
@@ -347,17 +360,13 @@ CASES = (
     RoutingCase(
         name="holdout_duplicate_routes_to_object",
         request="Duplicate the teal cone.",
-        scene=(
-            {"id": "cone-3", "type": "cone", "pos": [-0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.1},
-        ),
+        scene=({"id": "cone-3", "type": "cone", "pos": [-0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.1},),
         expect_agent="object_agent",
     ),
     RoutingCase(
         name="holdout_reshape_routes_to_object",
         request="Turn the white ring into a capsule.",
-        scene=(
-            {"id": "ring-2", "type": "ring", "pos": [0.1, 1.3, -1.4], "color": [1, 1, 1], "size": 0.1},
-        ),
+        scene=({"id": "ring-2", "type": "ring", "pos": [0.1, 1.3, -1.4], "color": [1, 1, 1], "size": 0.1},),
         expect_agent="object_agent",
         forbid_agents=("appearance_agent", "placement_agent"),
     ),
@@ -374,18 +383,14 @@ CASES = (
     RoutingCase(
         name="holdout_new_containment_routes_to_object",
         request="Place a cyan ring inside the gray capsule.",
-        scene=(
-            {"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},
-        ),
+        scene=({"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},),
         expect_agent="object_agent",
         forbid_agents=("placement_agent",),
     ),
     RoutingCase(
         name="holdout_physical_recolor_routes_to_appearance",
         request="Match the ring to the color of the mug beside me.",
-        scene=(
-            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},
-        ),
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},),
         expect_agent="appearance_agent",
         instruction_contains=("mug",),
         forbid_agents=("vision_agent",),
@@ -412,9 +417,7 @@ CASES = (
     RoutingCase(
         name="holdout_original_scene_state_routes_to_memory",
         request="What shape was ring-5 before I changed it?",
-        scene=(
-            {"id": "ring-5", "type": "capsule", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},
-        ),
+        scene=({"id": "ring-5", "type": "capsule", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},),
         history=(("Change the ring into a capsule.", "Changed ring-5 into a capsule."),),
         expect_agent="memory_agent",
         forbid_agents=("vision_agent",),
@@ -422,9 +425,7 @@ CASES = (
     RoutingCase(
         name="holdout_current_scene_state_answered_directly",
         request="Where is ring-5 now?",
-        scene=(
-            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},
-        ),
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},),
         forbid_agents=tuple(_DESCRIPTIONS),
     ),
     RoutingCase(
@@ -435,9 +436,7 @@ CASES = (
     RoutingCase(
         name="holdout_negated_removal_does_not_mutate",
         request="Do not remove the capsule.",
-        scene=(
-            {"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},
-        ),
+        scene=({"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},),
         forbid_agents=("object_agent", "placement_agent", "appearance_agent"),
     ),
     RoutingCase(
@@ -452,9 +451,7 @@ CASES = (
     RoutingCase(
         name="holdout_compound_vision_and_placement",
         request="Tell me whether the doorway is open, then move the ring left.",
-        scene=(
-            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},
-        ),
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},),
         expect_agents=("vision_agent", "placement_agent"),
     ),
     RoutingCase(
@@ -477,11 +474,17 @@ async def run_case(case: RoutingCase) -> bool:
     scene = harness.FakeScene.from_corpus_case(
         {"name": case.name, "scene": list(case.scene), "history": list(case.history), "user": case.request}
     )
-    calls: list[tuple[str, str]] = []
-    fake_tools = [
-        _make_fake_agent(name, desc, calls) for name, desc in _DESCRIPTIONS.items()
-    ]
+    calls: list[tuple[str, str, bool]] = []
     llm = make_llm(load_models_config(harness.models_config_path()), "agent_llm")
+    fake_tools = [
+        _make_fake_agent(name, desc, calls, llm)
+        for name, desc in _DESCRIPTIONS.items()
+    ]
+    voice_outputs: list[VoiceOutput] = []
+
+    async def publish_voice(output: VoiceOutput) -> None:
+        voice_outputs.append(output)
+
     try:
         fake_scene, fake_tracking, fake_text_memory, _, _ = scene.make_tools()
         supervisor = SceneSupervisor(
@@ -492,21 +495,27 @@ async def run_case(case: RoutingCase) -> bool:
             subagent_tools=fake_tools,
         )
         errored = False
+        controller = VoiceTurnController(
+            turn_id=f"eval:{case.name}",
+            timestamp_us=harness.EVAL_REFERENCE_US,
+            publish=publish_voice,
+        )
         try:
-            reply = await supervisor.handle(
-                SceneRequest(
-                    transcript=case.request,
-                    participant_id="eval-user",
-                    timestamp_us=harness.EVAL_REFERENCE_US,
+            with controller.activate():
+                reply = await supervisor.handle(
+                    SceneRequest(
+                        transcript=case.request,
+                        participant_id="eval-user",
+                        timestamp_us=harness.EVAL_REFERENCE_US,
+                    )
                 )
-            )
         except Exception as exc:
             reply = type("R", (), {"response": f"<workflow error: {exc}>"})()
             errored = True
     finally:
         await llm.close()
 
-    called = [name for name, _instruction in calls]
+    called = [name for name, _instruction, _reasoning in calls]
     ok, why = True, "ok"
     if errored:
         ok, why = False, f"workflow error: {reply.response[:160]}"
@@ -517,19 +526,96 @@ async def run_case(case: RoutingCase) -> bool:
     for forbidden in case.forbid_agents:
         if forbidden in called:
             ok, why = False, f"{forbidden} called; called={called}"
+    acknowledgements = [output for output in voice_outputs if output.kind == "acknowledgement"]
     if ok and case.instruction_forbids:
-        instructions = " | ".join(i for name, i in calls if name == case.expect_agent)
+        instructions = " | ".join(i for name, i, _reasoning in calls if name == case.expect_agent)
         for needle in case.instruction_forbids:
             if needle.lower() in instructions.lower():
                 ok, why = False, f"instruction contains forbidden {needle!r}: {instructions[:160]!r}"
     if ok and case.instruction_contains:
-        instructions = " | ".join(i for name, i in calls if name == case.expect_agent)
+        instructions = " | ".join(i for name, i, _reasoning in calls if name == case.expect_agent)
         for needle in case.instruction_contains:
             if needle.lower() not in instructions.lower():
                 ok, why = False, f"instruction missing {needle!r}: {instructions[:160]!r}"
     status = "PASS" if ok else f"FAIL {why}"
-    detail = "; ".join(f"{name}({instruction[:80]})" for name, instruction in calls)
+    detail = "; ".join(f"{name}(reasoning={reasoning}, {instruction[:80]})" for name, instruction, reasoning in calls)
+    if acknowledgements:
+        detail = f"ack={acknowledgements[0].text!r}; {detail}"
     print(f"{status:32} {case.name}: {detail or reply.response}", flush=True)
+    return ok
+
+
+async def run_refusal_case() -> bool:
+    """Verify that a structured leaf refusal causes a fresh delegation."""
+
+    calls: list[tuple[str, str, bool]] = []
+    llm = make_llm(load_models_config(harness.models_config_path()), "agent_llm")
+    tools = ToolSet(
+        _make_fake_agent(name, description, calls, llm)
+        for name, description in _DESCRIPTIONS.items()
+    )
+    prior_call_id = "misrouted-placement"
+    messages = (
+        ChatMessage(role="system", content=_SUPERVISOR_PROMPT),
+        ChatMessage(
+            role="user",
+            content=(
+                "Active participant: eval-user\n"
+                f"Utterance timestamp: {harness.EVAL_REFERENCE_US}\n\n"
+                "SCENE OBJECTS: none\n\n"
+                "User request: Add a red sphere in front of me."
+            ),
+        ),
+        ChatMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id=prior_call_id,
+                    name="placement_agent",
+                    arguments=(
+                        '{"instruction":"Add a red sphere in front of me."}'
+                    ),
+                )
+            ],
+        ),
+        ChatMessage(
+            role="tool",
+            content=SubagentResult(
+                result="This is creation of a new object, not movement of an existing object.",
+                handled=False,
+                suggested_owner="object_agent",
+            ).model_dump_json(),
+            tool_call_id=prior_call_id,
+        ),
+    )
+    async def call_model(transcript, definitions):
+        return await llm.chat(
+            transcript,
+            tools=list(definitions) or None,
+            max_tokens=2048,
+            temperature=0.0,
+            enable_thinking=False,
+        )
+
+    try:
+        try:
+            result = await run_tool_loop(
+                messages,
+                tools,
+                call_model,
+                max_iterations=4,
+            )
+        except Exception as exc:
+            print(f"FAIL workflow error: {exc!r:23} {_REFUSAL_CASE}", flush=True)
+            return False
+    finally:
+        await llm.close()
+
+    called = [name for name, _instruction, _reasoning in calls]
+    ok = called == ["object_agent"]
+    status = "PASS" if ok else f"FAIL called={called}"
+    print(f"{status:32} {_REFUSAL_CASE}: {result.content}", flush=True)
     return ok
 
 
@@ -540,9 +626,14 @@ async def main() -> None:
     args = parser.parse_args()
     wanted = set(args.cases)
     selected = [case for case in CASES if not wanted or case.name in wanted]
-    if not selected:
+    run_refusal = _REFUSAL_CASE in wanted
+    known = {case.name for case in CASES} | {_REFUSAL_CASE}
+    unknown = sorted(wanted - known)
+    if unknown:
         raise SystemExit(f"unknown cases: {args.cases}")
     results = [await run_case(case) for case in selected]
+    if run_refusal:
+        results.append(await run_refusal_case())
     print(f"\ndelegation: {sum(results)}/{len(results)} passed")
     if not all(results):
         raise SystemExit(1)

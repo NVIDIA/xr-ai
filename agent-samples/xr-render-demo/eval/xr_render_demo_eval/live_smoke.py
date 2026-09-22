@@ -24,12 +24,14 @@ async def main() -> None:
     changed = False
     try:
         async with live_participant(endpoint, participant):
-            await endpoint.inject_data(DataMessage(
-                participant_id=participant,
-                topic="",
-                pts_us=time.time_ns() // 1_000,
-                data=prompt.encode(),
-            ))
+            await endpoint.inject_data(
+                DataMessage(
+                    participant_id=participant,
+                    topic="",
+                    pts_us=time.time_ns() // 1_000,
+                    data=prompt.encode(),
+                )
+            )
             print(f"sent: {prompt!r}")
 
             deadline = asyncio.get_running_loop().time() + 60
