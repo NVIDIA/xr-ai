@@ -1791,6 +1791,12 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
 
     foreground = object.__new__(ForegroundAgent)
 
+    class Llm:
+        async def chat(self, *_args, **_kwargs):
+            return ChatResponse("", None, None, "stop", {})
+
+    foreground._llm = Llm()
+
     async def answer(*_args, **_kwargs):
         return "Device1 is reading 12 volts.", ["lab_instruments__read"], False
 
@@ -1803,8 +1809,9 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
     assert published[0][1] == VoiceOutput(
         text="Device1 is reading 12 volts.",
-        interrupt=True,
         timestamp_us=7,
+        kind="result",
+        turn_id="query-1",
     )
 
 
@@ -1872,9 +1879,11 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
     class Llm:
         def __init__(self) -> None:
             self.tool_names: set[str] = set()
+            self.generation: dict[str, object] = {}
 
-        async def chat(self, _messages, *, tools, **_kwargs):
+        async def chat(self, _messages, *, tools, **kwargs):
             self.tool_names = {tool.name for tool in tools}
+            self.generation.update(kwargs)
             return ChatResponse("I heard you.", None, None, "stop", {})
 
     llm = Llm()
@@ -1895,7 +1904,13 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
     assert response == "I heard you."
     assert used == []
     assert spoken is False
-    assert llm.tool_names == {tool.name for tool in FOREGROUND_TOOL_DEFS}
+    assert llm.tool_names == {
+        *(tool.name for tool in FOREGROUND_TOOL_DEFS),
+        "turn__report_progress",
+    }
+    assert llm.generation["enable_thinking"] is True
+    assert llm.generation["thinking_budget"] == 1024
+    assert llm.generation["max_tokens"] == 1536
 
 
 @pytest.mark.asyncio
