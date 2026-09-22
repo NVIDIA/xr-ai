@@ -9,13 +9,16 @@ before the deferred import in ``_riva_grpc.py`` runs.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import sys
+import threading
 import types
 import wave
+from contextlib import aclosing
 
 import pytest
-from xr_ai_models import STTService, TTSService, load_models_config, make_stt, make_tts
+from xr_ai_models import RivaTTS, STTService, TTSService, load_models_config, make_stt, make_tts
 
 # ── riva.client stub ──────────────────────────────────────────────────────
 
@@ -74,8 +77,7 @@ class _FakeSynthesisService:
             "sample_rate_hz": sample_rate_hz,
         })
         half = len(self.pcm) // 2
-        yield types.SimpleNamespace(audio=self.pcm[:half])
-        yield types.SimpleNamespace(audio=self.pcm[half:])
+        return _ControlledAudio([self.pcm[:half], self.pcm[half:]])
 
 
 @pytest.fixture
@@ -356,3 +358,184 @@ async def test_cleartext_key_to_loopback_does_not_warn(
     finally:
         logger.remove(handler_id)
     assert not any("cleartext" in m for m in messages)
+
+
+class _ControlledAudio:
+    def __init__(self, parts, *, block=False):
+        self.parts = iter(parts)
+        self.block = block
+        self.read_started = threading.Event()
+        self.cancelled = threading.Event()
+        self.read_finished = threading.Event()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.block:
+            self.read_started.set()
+            assert self.cancelled.wait(5), "RPC read was not cancelled"
+            self.read_finished.set()
+            raise RuntimeError("RPC cancelled")
+        return types.SimpleNamespace(audio=next(self.parts))
+
+    def cancel(self):
+        self.cancelled.set()
+
+
+async def test_riva_pcm_stream_preserves_split_samples_and_closes(tmp_path, riva_stub):
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as tts:
+        call = _ControlledAudio([b"", b"\x01", b"\x02\x03", b"\x04"])
+        tts._tts.synthesize_online = lambda *a, **kw: call
+        chunks = [chunk async for chunk in tts.stream("hello")]
+        assert [chunk.data for chunk in chunks] == [b"\x01\x02", b"\x03\x04"]
+        assert all(chunk.sample_rate == tts._sample_rate and chunk.channels == 1 for chunk in chunks)
+        from xr_ai_models._protocols import _StreamingTTSService
+        assert isinstance(tts, _StreamingTTSService)
+        assert call.cancelled.is_set()
+
+
+async def test_riva_pcm_stream_rejects_incomplete_final_sample(tmp_path, riva_stub):
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as tts:
+        call = _ControlledAudio([b"\x01"])
+        tts._tts.synthesize_online = lambda *a, **kw: call
+        with pytest.raises(ValueError, match="incomplete PCM"):
+            await anext(tts.stream("hello"))
+        assert call.cancelled.is_set()
+
+
+@pytest.mark.parametrize("action", ["timeout", "cancel", "close"])
+async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, action):
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as tts:
+        call = _ControlledAudio([b"\x01\x02"], block=action != "close")
+        tts._tts.synthesize_online = lambda *a, **kw: call
+        stream = tts.stream("hello", timeout=0.1 if action == "timeout" else 5)
+        if action == "close":
+            assert (await anext(stream)).data == b"\x01\x02"
+            await stream.aclose()
+        elif action == "timeout":
+            with pytest.raises(TimeoutError):
+                await anext(stream)
+        else:
+            task = asyncio.create_task(anext(stream))
+            assert await asyncio.to_thread(call.read_started.wait, 2)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert call.cancelled.is_set()
+        if action != "close":
+            assert call.read_finished.is_set()
+
+
+@pytest.mark.parametrize("client_mode", ["stream", "buffered", "direct"])
+@pytest.mark.parametrize("initial_exit", ["timeout", "cancel"])
+async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit, client_mode):
+    """A disconnect during RPC unwinding must not release the synthesis lock."""
+    class SlowCancelledAudio(_ControlledAudio):
+        def __init__(self):
+            super().__init__([], block=True)
+            self.release = threading.Event()
+
+        def __next__(self):
+            self.read_started.set()
+            try:
+                assert self.cancelled.wait(5), "RPC was not cancelled"
+                assert self.release.wait(5), "test did not release the blocking read"
+                raise RuntimeError("RPC cancelled")
+            finally:
+                self.read_finished.set()
+
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    client = RivaTTS("localhost:50052") if client_mode == "direct" else make_tts(cfg, "tts")
+    async with client as tts:
+        call = SlowCancelledAudio()
+        tts._tts.synthesize_online = lambda *a, **kw: call
+        lock = asyncio.Lock()
+        following_entered = asyncio.Event()
+
+        async def synthesize():
+            async with lock:
+                if client_mode != "stream":
+                    return await tts.synthesize("hello", timeout=0.1 if initial_exit == "timeout" else 5)
+                async with aclosing(tts.stream("hello", timeout=0.1 if initial_exit == "timeout" else 5)) as stream:
+                    return await anext(stream)
+
+        async def following_request():
+            async with lock:
+                assert call.read_finished.is_set()
+                following_entered.set()
+
+        pending = asyncio.create_task(synthesize())
+        following = None
+        try:
+            assert await asyncio.to_thread(call.read_started.wait, 2)
+            if initial_exit == "cancel":
+                pending.cancel()
+            # Wait until timeout/cancellation has cancelled the RPC, but keep
+            # the blocking read alive while more disconnect cancellations arrive.
+            assert await asyncio.to_thread(call.cancelled.wait, 2)
+            following = asyncio.create_task(following_request())
+            for _ in range(2):
+                pending.cancel()
+                done, _ = await asyncio.wait({pending}, timeout=0.02)
+                assert not done
+                assert lock.locked() and not call.read_finished.is_set()
+                assert not following_entered.is_set()
+            call.release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(pending, 2)
+            await asyncio.wait_for(following, 2)
+            assert call.read_finished.is_set() and following_entered.is_set()
+        finally:
+            call.release.set()
+            await asyncio.gather(pending, *([following] if following else []), return_exceptions=True)
+
+
+async def test_factory_streaming_does_not_expand_public_sdk_contract(tmp_path, riva_stub):
+    import xr_ai_vllm
+    from xr_ai_models._protocols import _StreamingTTSService, _TTSChunk
+
+    assert not hasattr(sys.modules["xr_ai_models"], "TTSChunk")
+    assert not hasattr(xr_ai_vllm, "has_xr_ai_ownership_marker")
+    assert not hasattr(xr_ai_vllm, "pid_on_port_checked")
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as streaming, RivaTTS("localhost:50052") as buffered:
+        assert isinstance(streaming, _StreamingTTSService)
+        assert isinstance(buffered, TTSService)
+        assert not hasattr(buffered, "stream")
+        chunks = [chunk async for chunk in streaming.stream("hello")]
+        assert chunks and all(isinstance(chunk, _TTSChunk) for chunk in chunks)
+        assert b"".join(chunk.data for chunk in chunks) == await buffered.synthesize("hello", response_format="pcm")
+
+
+@pytest.mark.parametrize("buffered", [False, True])
+async def test_disconnect_at_completed_rpc_read_is_not_swallowed(tmp_path, riva_stub, monkeypatch, buffered):
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as tts:
+        call = _ControlledAudio([b"\x01\x02"])
+        tts._tts.synthesize_online = lambda *args, **kwargs: call
+        real_shield = asyncio.shield
+        first_read = True
+
+        def disconnect_after_read(task):
+            nonlocal first_read
+            protected = real_shield(task)
+            if first_read:
+                first_read = False
+                # Cancel after shield receives the audio but before the consumer
+                # resumes. wait_for can swallow this cancellation on Python 3.11.
+                task.add_done_callback(lambda _task: pending.cancel())
+            return protected
+
+        monkeypatch.setattr(asyncio, "shield", disconnect_after_read)
+        stream = tts.stream("hello")
+        pending = asyncio.create_task(tts.synthesize("hello") if buffered else anext(stream))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            assert call.cancelled.is_set()
+        finally:
+            await stream.aclose()

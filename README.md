@@ -45,6 +45,7 @@ through scaffolding, startup, and hardware-free verification.
 | Sample | Purpose |
 |---|---|
 | [`model-servers`](model-server-samples/model-servers/README.md) | Start and persist the shared model stack |
+| [`model-servers-nim`](model-server-samples/model-servers-nim/README.md) | Start the shared model stack using NVIDIA NIM |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
 | [`tea-making-sample`](agent-samples/tea-making-sample/README.md) | Guided workflow with visual evidence and background observations |

@@ -19,6 +19,9 @@ dependencies = [
     "xr-ai-voice",
     "xr-ai-web-events",
     "device-io-hub",
+    "magpie-nim-tts",
+    "nim-model-adapter",
+    "nim-riva-server",
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-vad",
@@ -40,6 +43,9 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+nim-model-adapter = { path = "../model-server-samples/model-servers-nim/compatibility-adapter", editable = true }
+nim-riva-server = { path = "../model-server-samples/model-servers-nim/riva-server", editable = true }
+magpie-nim-tts = { path = "../services/magpie-nim-tts", editable = true }
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }

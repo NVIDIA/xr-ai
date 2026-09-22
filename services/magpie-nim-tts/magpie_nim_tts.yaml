@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The Pocket-compatible HTTP endpoint synthesizes Magpie audio through Riva.
+alias: magpie
+base_url: localhost:50052
+health_url: http://localhost:9011/v1/health/ready
+language: en-US
+voice: Magpie-Multilingual.EN-US.Aria
+sample_rate: 44100
+# Added silence after each nonempty synthesis, including streamed audio (0 disables).
+post_synthesis_pause_ms: 300
+host: "0.0.0.0"
+port: 8105
