@@ -886,7 +886,8 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
 <span class="w">      </span><span class="no">Steep duration in seconds, converted from the explicit source unit;</span>
-<span class="w">      </span><span class="no">for example, five minutes is 300 seconds, never 5.</span>
+<span class="w">      </span><span class="no">for example, five minutes is 300 seconds, never 5. For an explicit</span>
+<span class="w">      </span><span class="no">duration range, use its lower bound; three to five minutes is 180 seconds.</span>
 <span class="w">  </span><span class="nt">guidance_source</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Package or retrieved source.</span>
@@ -903,7 +904,7 @@ workflow.</p></li>
 <span class="w">    </span><span class="nt">initial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">steeping_started_at_us</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start time returned by clock__now.</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Authoritative start time recorded when steeping begins.</span>
 <span class="w">  </span><span class="nt">steeping_started</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">boolean</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Whether tea is immersed and its start time is recorded.</span>
@@ -933,24 +934,23 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Identify tea only from the current caption, never state or RAG.</span>
-<span class="w">        </span><span class="no">If the tea name is unreadable, commit empty updates; do not retrieve or</span>
-<span class="w">        </span><span class="no">write placeholder values. Prefer</span>
-<span class="w">        </span><span class="no">visible values. If temperature/time is missing,</span>
-<span class="w">        </span><span class="no">call rag_lookup once with "&lt;exact name&gt; water temperature steep time",</span>
-<span class="w">        </span><span class="no">top_k 2; accept only a section naming the exact blend or an unambiguous</span>
-<span class="w">        </span><span class="no">tea type contained in its name. Never supply temperature or duration</span>
-<span class="w">        </span><span class="no">from memory. Convert an explicit minute duration to seconds before</span>
-<span class="w">        </span><span class="no">committing; use the lower bound of an explicit range. If every writable</span>
-<span class="w">        </span><span class="no">field is supported, commit all with tea_ready true. Otherwise commit</span>
-<span class="w">        </span><span class="no">nothing; never write tea_ready false.</span>
+<span class="w">        </span><span class="no">Take the tea name only from the fresh caption. If no exact name is</span>
+<span class="w">        </span><span class="no">readable, commit an empty patch and do not retrieve. Once an exact name</span>
+<span class="w">        </span><span class="no">is visible, use visible brewing values first. If either temperature or</span>
+<span class="w">        </span><span class="no">duration is missing, call rag_lookup once for that exact name before</span>
+<span class="w">        </span><span class="no">committing; never fill a missing value from memory. Accept retrieval</span>
+<span class="w">        </span><span class="no">only for the exact blend or an unambiguous tea type in its name. Convert</span>
+<span class="w">        </span><span class="no">explicit minutes to seconds and use the lower bound of an explicit</span>
+<span class="w">        </span><span class="no">range. Commit all writable fields with tea_ready true only when every</span>
+<span class="w">        </span><span class="no">field is supported. Otherwise commit an empty patch; never write</span>
+<span class="w">        </span><span class="no">placeholders or tea_ready false.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">rag_lookup</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Tea identity comes only from state tea_name or current_view, never RAG.</span>
-<span class="w">        </span><span class="no">tea_ready means the tea instructions were identified, not that the</span>
+<span class="w">        </span><span class="no">Tea identity comes only from workflow state or fresh package evidence,</span>
+<span class="w">        </span><span class="no">never retrieved guidance. tea_ready means the tea instructions were identified, not that the</span>
 <span class="w">        </span><span class="no">drink has been prepared.</span>
-<span class="w">        </span><span class="no">If the exact name is unknown, inspect the current frame. Retrieve only</span>
+<span class="w">        </span><span class="no">If the exact name is unknown, obtain fresh visual evidence. Retrieve only</span>
 <span class="w">        </span><span class="no">missing temperature or duration after the exact name is known. Never</span>
 <span class="w">        </span><span class="no">replace package values. Answer only what was asked.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">rag_lookup</span><span class="p p-Indicator">]</span>
@@ -991,9 +991,9 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Give instructions or verify with current_view. A user report is not</span>
+<span class="w">        </span><span class="no">Give instructions or obtain fresh visual evidence to verify. A user report is not</span>
 <span class="w">        </span><span class="no">visual confirmation. Confirm filled only from state water_filled or a</span>
-<span class="w">        </span><span class="no">current view showing the vessel interior and concrete water cues;</span>
+<span class="w">        </span><span class="no">fresh observation showing the vessel interior and concrete water cues;</span>
 <span class="w">        </span><span class="no">otherwise say it is not yet visually confirmed.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">water_filled</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
@@ -1035,11 +1035,11 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">temperature__threshold</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Explain target from state. For a reading, call current_view and</span>
+<span class="w">        </span><span class="no">Explain target from state. For a reading, obtain fresh visual evidence and</span>
 <span class="w">        </span><span class="no">repeat the visible number and unit; do not verify. For hot-enough</span>
-<span class="w">        </span><span class="no">checks, call current_view, then temperature__verify only with an exact</span>
-<span class="w">        </span><span class="no">number and Celsius or Fahrenheit unit. Report result. If missing,</span>
-<span class="w">        </span><span class="no">say the reading is unavailable.</span>
+<span class="w">        </span><span class="no">checks, compare only an exact fresh number with a Celsius or Fahrenheit</span>
+<span class="w">        </span><span class="no">unit against the target. Report the comparison result. If evidence is</span>
+<span class="w">        </span><span class="no">missing, say the reading is unavailable.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">temperature__verify</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">heating_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_steeping</span>
@@ -1068,23 +1068,20 @@ workflow.</p></li>
 <span class="w">      </span><span class="nt">consecutive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Judge when steeping starts, not when it finishes. Treat unconfirmed,</span>
-<span class="w">        </span><span class="no">unknown, unclear, or missing visual evidence as a hard stop: do not call</span>
-<span class="w">        </span><span class="no">clock__now, and commit empty updates and message with unknown evidence.</span>
-<span class="w">        </span><span class="no">Only when the fresh caption explicitly confirms both visible liquid and</span>
-<span class="w">        </span><span class="no">tea visibly contacting that liquid inside the same vessel, first call</span>
-<span class="w">        </span><span class="no">clock__now. Nearby, above, or outside the liquid does not count. Then</span>
-<span class="w">        </span><span class="no">commit exactly its epoch_us as steeping_started_at_us with</span>
-<span class="w">        </span><span class="no">steeping_started true. For any other caption, do not infer contact from</span>
-<span class="w">        </span><span class="no">context or prior state; commit empty updates and message. Never commit a</span>
-<span class="w">        </span><span class="no">timestamp before receiving clock__now, and never invent or replace one.</span>
+<span class="w">        </span><span class="no">Detect the instant steeping starts. If the fresh caption positively</span>
+<span class="w">        </span><span class="no">shows both liquid and tea contacting that liquid in the same vessel,</span>
+<span class="w">        </span><span class="no">call clock__now first, ignoring any timestamp written in the scene.</span>
+<span class="w">        </span><span class="no">Then commit exactly the returned epoch_us as steeping_started_at_us and</span>
+<span class="w">        </span><span class="no">set steeping_started true. Nearby, dry, above-liquid, unclear, or</span>
+<span class="w">        </span><span class="no">missing contact does not count: do not call the clock and commit an</span>
+<span class="w">        </span><span class="no">empty patch. Never infer contact or invent, copy, or replace a timestamp.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__now</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Give instructions or verify with current_view. A report or tea item in</span>
-<span class="w">        </span><span class="no">a vessel is not confirmation. Require both visible water and visible</span>
-<span class="w">        </span><span class="no">tea-water contact. The observation loop, not this answer, starts the</span>
-<span class="w">        </span><span class="no">timer.</span>
+<span class="w">        </span><span class="no">Give instructions or obtain fresh visual evidence to verify. A report</span>
+<span class="w">        </span><span class="no">or tea item in a vessel is not confirmation. Require both visible water</span>
+<span class="w">        </span><span class="no">and visible tea-water contact. The observation loop, not this answer,</span>
+<span class="w">        </span><span class="no">starts the timer.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">current_view</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_started</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">steep_timer</span>
@@ -1108,15 +1105,16 @@ workflow.</p></li>
 <span class="w">        </span><span class="nt">duration_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$state.steep_duration_s</span>
 <span class="w">    </span><span class="nt">agent</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Copy the fresh clock__timer expired boolean: set steeping_complete true</span>
-<span class="w">        </span><span class="no">only when expired is true. While false, commit empty updates/message.</span>
-<span class="w">        </span><span class="no">Never infer from elapsed text, wall time, or prior state.</span>
+<span class="w">        </span><span class="no">Read only the fresh clock__timer result. If expired is true, commit</span>
+<span class="w">        </span><span class="no">steeping_complete true. If expired is false, commit an empty patch; do</span>
+<span class="w">        </span><span class="no">not copy false into state. Never infer expiry from text, wall time, or</span>
+<span class="w">        </span><span class="no">prior state.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="w">    </span><span class="nt">voice</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
-<span class="w">        </span><span class="no">Call clock__timer for every timer or completion question. Report only</span>
-<span class="w">        </span><span class="no">its fresh remaining time or completion; never calculate from state,</span>
-<span class="w">        </span><span class="no">prior answers, or wall-clock time.</span>
+<span class="w">        </span><span class="no">Every timer or completion answer requires a fresh authoritative timer</span>
+<span class="w">        </span><span class="no">result. Report only its remaining time or completion; never calculate</span>
+<span class="w">        </span><span class="no">from workflow state, prior answers, or wall-clock time.</span>
 <span class="w">      </span><span class="nt">tools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">clock__timer</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">complete_when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">steeping_complete</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>

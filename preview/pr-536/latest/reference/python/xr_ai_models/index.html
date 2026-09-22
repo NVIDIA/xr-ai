@@ -1156,7 +1156,8 @@ injected HTTP client remains owned by the caller and is not closed here.</p>
 <dd><p>Generate and return one normalized chat response.</p>
 <p>Per-call generation values override endpoint defaults. <code class="docutils literal notranslate"><span class="pre">headers</span></code> may
 supply request context but cannot override the configured authorization
-header.</p>
+header. <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
+<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1178,7 +1179,9 @@ header.</p>
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM.stream" title="Link to this definition">#</a></dt>
 <dd><p>Stream user-visible text deltas from a chat completion.</p>
 <p>Malformed server-sent event lines and deltas without content are
-skipped. Tool-call and reasoning deltas are not yielded.</p>
+skipped. Tool-call and reasoning deltas are not yielded.
+<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
+<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
 </dd></dl>
 
 <dl class="py method">

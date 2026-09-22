@@ -37,6 +37,8 @@ Classes
 .. autoapisummary::
 
    xr_ai_voice.VoiceAggregationAgent
+   xr_ai_voice.VoicePublisher
+   xr_ai_voice.VoiceTurnController
    xr_ai_voice.VadConfig
    xr_ai_voice.UserQuery
    xr_ai_voice.VoiceAgent
@@ -88,11 +90,62 @@ Package Contents
 
 
 
+   .. py:method:: release_all() -> None
+      :async:
+
+
+      Cancel and release every participant without stopping future input.
+
+
+
    .. py:method:: release(participant_id: str) -> None
       :async:
 
 
       Cancel and release one departed participant's aggregation state.
+
+
+
+.. py:class:: VoicePublisher
+
+
+
+   Publish one contribution to a participant's coordinated voice turn.
+
+
+.. py:class:: VoiceTurnController(*, turn_id: str, timestamp_us: int | None, publish: VoicePublisher | None)
+
+   Deliver model-owned acknowledgements and progress updates for one turn.
+
+   The controller carries separately generated acknowledgements and
+   model-selected progress updates safely to the participant's voice stream.
+
+
+   .. py:method:: current() -> VoiceTurnController | None
+      :classmethod:
+
+
+      Return the controller active in the current asynchronous turn.
+
+
+
+   .. py:method:: activate() -> Iterator[VoiceTurnController]
+
+      Make this controller available to nested in-process agents.
+
+
+
+   .. py:method:: extend(tools: xr_ai_tools.ToolSet) -> xr_ai_tools.ToolSet
+
+      Return the domain tools plus this turn's private coordination tools.
+
+
+
+   .. py:method:: acknowledge(message: str) -> bool
+      :async:
+
+
+      Publish one model-written acknowledgement before delegated work starts.
 
 
 
@@ -261,6 +314,22 @@ Package Contents
       :type:  int | None
 
       Optional originating input timestamp propagated to TTS.
+
+
+
+   .. py:attribute:: kind
+      :type:  Literal['response', 'acknowledgement', 'progress', 'result', 'alert']
+      :value: 'response'
+
+
+      Semantic role used by optional multi-producer aggregation.
+
+
+
+   .. py:attribute:: turn_id
+      :type:  str | None
+
+      Logical user turn shared by its acknowledgement, progress, and result.
 
 
 

@@ -483,6 +483,12 @@ audio framing, and pipeline processors are implementation details.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceAggregationAgent" title="xr_ai_voice.VoiceAggregationAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a></p></td>
 <td><p>Serialize and coalesce candidate speech independently per participant.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VoicePublisher" title="xr_ai_voice.VoicePublisher"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoicePublisher</span></code></a></p></td>
+<td><p>Publish one contribution to a participant's coordinated voice turn.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_voice.VoiceTurnController" title="xr_ai_voice.VoiceTurnController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VoiceTurnController</span></code></a></p></td>
+<td><p>Deliver model-owned acknowledgements and progress updates for one turn.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VadConfig</span></code></a></p></td>
 <td><p>Tuning knobs for the Silero-VAD utterance detector.</p></td>
 </tr>
@@ -572,9 +578,62 @@ interrupts the active output.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.release_all">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release_all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.release_all" title="Link to this definition">#</a></dt>
+<dd><p>Cancel and release every participant without stopping future input.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAggregationAgent.release">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAggregationAgent.release" title="Link to this definition">#</a></dt>
 <dd><p>Cancel and release one departed participant’s aggregation state.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_voice.VoicePublisher">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VoicePublisher</span></span><a class="headerlink" href="#xr_ai_voice.VoicePublisher" title="Link to this definition">#</a></dt>
+<dd><p>Publish one contribution to a participant’s coordinated voice turn.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceTurnController">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_voice.</span></span><span class="sig-name descname"><span class="pre">VoiceTurnController</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">turn_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timestamp_us</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">publish</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.VoicePublisher" title="xr_ai_voice.VoicePublisher"><span class="pre">VoicePublisher</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceTurnController" title="Link to this definition">#</a></dt>
+<dd><p>Deliver model-owned acknowledgements and progress updates for one turn.</p>
+<p>The controller carries separately generated acknowledgements and
+model-selected progress updates safely to the participant’s voice stream.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceTurnController.current">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">current</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voice.VoiceTurnController" title="xr_ai_voice.VoiceTurnController"><span class="pre">VoiceTurnController</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceTurnController.current" title="Link to this definition">#</a></dt>
+<dd><p>Return the controller active in the current asynchronous turn.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceTurnController.activate">
+<span class="sig-name descname"><span class="pre">activate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceTurnController" title="xr_ai_voice.VoiceTurnController"><span class="pre">VoiceTurnController</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceTurnController.activate" title="Link to this definition">#</a></dt>
+<dd><p>Make this controller available to nested in-process agents.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceTurnController.extend">
+<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_tools/index.html#xr_ai_tools.ToolSet" title="xr_ai_tools.ToolSet"><span class="pre">xr_ai_tools.ToolSet</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../xr_ai_tools/index.html#xr_ai_tools.ToolSet" title="xr_ai_tools.ToolSet"><span class="pre">xr_ai_tools.ToolSet</span></a></span></span><a class="headerlink" href="#xr_ai_voice.VoiceTurnController.extend" title="Link to this definition">#</a></dt>
+<dd><p>Return the domain tools plus this turn’s private coordination tools.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceTurnController.acknowledge">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">acknowledge</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceTurnController.acknowledge" title="Link to this definition">#</a></dt>
+<dd><p>Publish one model-written acknowledgement before delegated work starts.</p>
 </dd></dl>
 
 </dd></dl>
@@ -742,6 +801,18 @@ after those explicit probes, not availability of every model endpoint.</p>
 <dd><p>Optional originating input timestamp propagated to TTS.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceOutput.kind">
+<span class="sig-name descname"><span class="pre">kind</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'response'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'acknowledgement'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'progress'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'result'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'alert'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'response'</span></em><a class="headerlink" href="#xr_ai_voice.VoiceOutput.kind" title="Link to this definition">#</a></dt>
+<dd><p>Semantic role used by optional multi-producer aggregation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceOutput.turn_id">
+<span class="sig-name descname"><span class="pre">turn_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_voice.VoiceOutput.turn_id" title="Link to this definition">#</a></dt>
+<dd><p>Logical user turn shared by its acknowledgement, progress, and result.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceOutput.validate_boundary">
 <span class="sig-name descname"><span class="pre">validate_boundary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voice.VoiceOutput" title="xr_ai_voice.VoiceOutput"><span class="pre">VoiceOutput</span></a></span></span><a class="headerlink" href="#xr_ai_voice.VoiceOutput.validate_boundary" title="Link to this definition">#</a></dt>
@@ -901,7 +972,16 @@ after those explicit probes, not availability of every model endpoint.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent"><code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.contribute"><code class="docutils literal notranslate"><span class="pre">contribute()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.stop"><code class="docutils literal notranslate"><span class="pre">stop()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.release_all"><code class="docutils literal notranslate"><span class="pre">release_all()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAggregationAgent.release"><code class="docutils literal notranslate"><span class="pre">release()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoicePublisher"><code class="docutils literal notranslate"><span class="pre">VoicePublisher</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTurnController"><code class="docutils literal notranslate"><span class="pre">VoiceTurnController</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTurnController.current"><code class="docutils literal notranslate"><span class="pre">current()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTurnController.activate"><code class="docutils literal notranslate"><span class="pre">activate()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTurnController.extend"><code class="docutils literal notranslate"><span class="pre">extend()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceTurnController.acknowledge"><code class="docutils literal notranslate"><span class="pre">acknowledge()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VadConfig"><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code></a><ul class="nav section-nav flex-column">
@@ -930,6 +1010,8 @@ after those explicit probes, not availability of every model endpoint.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.final"><code class="docutils literal notranslate"><span class="pre">final</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.interrupt"><code class="docutils literal notranslate"><span class="pre">interrupt</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.timestamp_us"><code class="docutils literal notranslate"><span class="pre">timestamp_us</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.kind"><code class="docutils literal notranslate"><span class="pre">kind</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.turn_id"><code class="docutils literal notranslate"><span class="pre">turn_id</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceOutput.validate_boundary"><code class="docutils literal notranslate"><span class="pre">validate_boundary()</span></code></a></li>
 </ul>
 </li>
