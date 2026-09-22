@@ -48,7 +48,11 @@ The first-launch default is **Off**. The selection is not reset by disconnect,
 reconnect, or app relaunch, so reconnecting restores the selected behavior
 without silently changing the user's authorization choice. In on-demand mode,
 the handler briefly opens the selected camera when necessary and stops it after
-the still is encoded.
+the still is encoded. Mode changes gate new requests: a request accepted while
+**On-demand images** is selected finishes normally and releases its resources,
+even if the user selects **Off** before it completes. **Off** prevents the next
+request; it is not a retroactive cancellation signal. Disconnect and the
+request protocol's cancellation message still cancel pending work.
 
 The native StreamKit API exposes the same callback for the host application's
 camera pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or

@@ -324,7 +324,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -493,7 +495,11 @@ The first-launch default is <strong>Off</strong>. The selection is not reset by 
 reconnect, or app relaunch, so reconnecting restores the selected behavior
 without silently changing the user’s authorization choice. In on-demand mode,
 the handler briefly opens the selected camera when necessary and stops it after
-the still is encoded.</p>
+the still is encoded. Mode changes gate new requests: a request accepted while
+<strong>On-demand images</strong> is selected finishes normally and releases its resources,
+even if the user selects <strong>Off</strong> before it completes. <strong>Off</strong> prevents the next
+request; it is not a retroactive cancellation signal. Disconnect and the
+request protocol’s cancellation message still cancel pending work.</p>
 <p>The native StreamKit API exposes the same callback for the host application’s
 camera pipeline. The native LiveKit backend requires client-sdk-cpp v1.10.2 or
 newer. Capture streams are targeted to the configured hub identity and are
