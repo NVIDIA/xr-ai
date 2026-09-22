@@ -10,21 +10,22 @@ from collections.abc import Callable
 
 import nemo_relay
 from loguru import logger
+from xr_ai_models import LLMService
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceTurnController,
 )
+from xr_ai_voice._coordination import _acknowledge_if_needed
 
 from .models import SceneRequest
 
 USER_QUERY_TOPIC: Topic[UserQuery] = Topic("xr-render.user-query", UserQuery)
-PARTICIPANT_LEFT_TOPIC: Topic[VoiceParticipantLeft] = Topic(
-    "xr-render.participant-left", VoiceParticipantLeft
-)
+PARTICIPANT_LEFT_TOPIC: Topic[VoiceParticipantLeft] = Topic("xr-render.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC: Topic[VoiceInterrupted] = Topic("xr-render.interrupted", VoiceInterrupted)
 
 
@@ -35,10 +36,12 @@ class RenderAgent(Agent):
         self,
         supervisor,
         *,
+        llm: LLMService | None = None,
         on_participant_left: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__()
         self._supervisor = supervisor
+        self._llm = llm
         self._on_participant_left = on_participant_left
         self._tasks: dict[str, asyncio.Task] = {}
         self._stopped = False
@@ -63,9 +66,7 @@ class RenderAgent(Agent):
         task.add_done_callback(lambda t, pid=participant_id: self._discard(pid, t))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
-    async def participant_left(
-        self, _event: VoiceParticipantLeft, ctx: RuntimeContext
-    ) -> None:
+    async def participant_left(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             return
@@ -89,29 +90,59 @@ class RenderAgent(Agent):
 
     async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
-        response_id = ctx.metadata.message_id
-        try:
-            reply = await self._supervisor.handle(
-                SceneRequest(
-                    transcript=query.text,
-                    participant_id=participant_id,
-                    timestamp_us=query.timestamp_us,
-                    trace_id=response_id or "",
-                )
+        turn_id = getattr(
+            ctx.metadata,
+            "correlation_id",
+            ctx.metadata.message_id,
+        )
+
+        async def publish_voice(output: VoiceOutput) -> None:
+            await ctx.publish(VOICE_CONTRIBUTION_TOPIC, output)
+
+        controller = VoiceTurnController(
+            turn_id=turn_id,
+            timestamp_us=query.timestamp_us,
+            publish=publish_voice,
+        )
+        acknowledgement = asyncio.create_task(
+            _acknowledge_if_needed(
+                controller,
+                self._llm,
+                query.text,
+                context="XR scene",
             )
+            if self._llm is not None
+            else asyncio.sleep(0),
+            name=f"xr-render-ack:{participant_id}",
+        )
+        try:
+            with controller.activate():
+                reply = await self._supervisor.handle(
+                    SceneRequest(
+                        transcript=query.text,
+                        participant_id=participant_id,
+                        timestamp_us=query.timestamp_us,
+                        trace_id=turn_id,
+                    )
+                )
             text = reply.response
         except asyncio.CancelledError:
             raise
         except Exception as error:
             logger.exception("xr-render turn failed for {}: {!r}", participant_id, error)
             text = "Something went wrong. Please try again."
+        finally:
+            if not acknowledgement.done():
+                acknowledgement.cancel()
+            await asyncio.gather(acknowledgement, return_exceptions=True)
         try:
             await ctx.publish(
-                VOICE_OUTPUT_TOPIC,
+                VOICE_CONTRIBUTION_TOPIC,
                 VoiceOutput(
                     text=text,
-                    response_id=response_id,
                     timestamp_us=query.timestamp_us,
+                    kind="result",
+                    turn_id=turn_id,
                 ),
             )
         except asyncio.CancelledError:
