@@ -1,0 +1,179 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: xr_create_object
+  context: XR scene
+  query: Add a sphere in front of me.
+  acknowledge: true
+  any_of: [sphere]
+  none_of: [monitor, watch]
+- name: xr_move_object
+  context: XR scene
+  query: Move the virtual chair two feet to the left.
+  acknowledge: true
+  any_of: [chair]
+  none_of: [monitor, watch]
+- name: xr_multiple_changes
+  context: XR scene
+  query: Add a red cube and put a label above it.
+  acknowledge: true
+  any_of: [cube, label]
+  none_of: [monitor, watch]
+- name: xr_ambiguous_consent
+  context: XR scene
+  query: Sure, please do that.
+  acknowledge: false
+- name: xr_ambiguous_deictic
+  context: XR scene
+  query: Do that one.
+  acknowledge: false
+- name: xr_bare_confirmation
+  context: XR scene
+  query: Yes.
+  acknowledge: false
+- name: xr_capability_question
+  context: XR scene
+  query: Can you add objects to the virtual scene?
+  acknowledge: false
+- name: xr_scene_fact
+  context: XR scene
+  query: How many cubes are in the scene?
+  acknowledge: false
+- name: xr_general_question
+  context: XR scene
+  query: What is the capital of France?
+  acknowledge: false
+- name: xr_quoted_action
+  context: XR scene
+  query: The card says "add a sphere". What does that mean?
+  acknowledge: false
+- name: xr_negated_action
+  context: XR scene
+  query: Do not add another sphere.
+  acknowledge: false
+- name: xr_hypothetical
+  context: XR scene
+  query: What would happen if I added a sphere?
+  acknowledge: false
+- name: tea_start_guide
+  context: tea-assistant
+  query: Walk me through making green tea.
+  acknowledge: true
+  any_of: [tea]
+  none_of: [monitor, watch]
+- name: tea_start_watch
+  context: tea-assistant
+  query: Watch the kettle and tell me when it boils.
+  acknowledge: true
+  any_of: [kettle]
+- name: tea_check_step
+  context: tea-assistant
+  query: What step am I on?
+  acknowledge: false
+- name: tea_general_question
+  context: tea-assistant
+  query: What is the boiling point of water in Celsius?
+  acknowledge: false
+- name: tea_ambiguous_consent
+  context: tea-assistant
+  query: Okay, go ahead.
+  acknowledge: false
+- name: tea_quoted_watch
+  context: tea-assistant
+  query: My friend said "watch the kettle". Was that directed at you?
+  acknowledge: false
+- name: tea_hypothetical
+  context: tea-assistant
+  query: Could you watch the kettle if I asked?
+  acknowledge: false
+- name: lab_read_instrument
+  context: lab-assistant
+  query: Read the pressure gauge in front of me.
+  acknowledge: true
+  any_of: [gauge, pressure]
+  none_of: [monitor, watch]
+- name: lab_start_monitor
+  context: lab-assistant
+  query: Monitor the pressure gauge for the next few minutes.
+  acknowledge: true
+  any_of: [pressure, gauge]
+- name: lab_compare_readings
+  context: lab-assistant
+  query: Compare the current meter reading with the last recorded one.
+  acknowledge: true
+  any_of: [meter, reading]
+- name: lab_current_status
+  context: lab-assistant
+  query: Are you already monitoring the gauge?
+  acknowledge: false
+- name: lab_ambiguous_consent
+  context: lab-assistant
+  query: Sure, do it.
+  acknowledge: false
+- name: lab_general_question
+  context: lab-assistant
+  query: What unit is pressure measured in?
+  acknowledge: false
+- name: lab_negated_monitor
+  context: lab-assistant
+  query: Do not monitor the gauge yet.
+  acknowledge: false
+- name: xr_rotate_object
+  context: XR scene
+  query: Rotate the virtual desk ninety degrees.
+  acknowledge: true
+  any_of: [desk]
+  none_of: [monitor, watch]
+- name: xr_remove_object
+  context: XR scene
+  query: Remove the blue virtual lamp from my scene.
+  acknowledge: true
+  any_of: [lamp]
+  none_of: [monitor, watch]
+- name: xr_explicit_followup_action
+  context: XR scene
+  query: Yes, go ahead and add the sphere.
+  acknowledge: true
+  any_of: [sphere]
+  none_of: [monitor, watch]
+- name: xr_ungrounded_followup
+  context: XR scene
+  query: Okay, do it now.
+  acknowledge: false
+- name: xr_current_scene_question
+  context: XR scene
+  query: Where is the virtual chair right now?
+  acknowledge: false
+- name: tea_explicit_followup
+  context: tea-assistant
+  query: Yes, start the five-minute steep timer.
+  acknowledge: true
+  any_of: [timer, steep]
+  none_of: [monitor, watch]
+- name: tea_capability_monitor_question
+  context: tea-assistant
+  query: Can you monitor my kettle?
+  acknowledge: false
+- name: tea_unspecified_followup
+  context: tea-assistant
+  query: Please do what we discussed.
+  acknowledge: false
+- name: lab_begin_continuous_readings
+  context: lab-assistant
+  query: Start continuous readings of the pressure gauge.
+  acknowledge: true
+  any_of: [pressure, gauge]
+- name: lab_explicit_followup
+  context: lab-assistant
+  query: Yes, start monitoring the pressure gauge.
+  acknowledge: true
+  any_of: [pressure, gauge]
+- name: lab_multi_instrument_comparison
+  context: lab-assistant
+  query: Read the pressure gauge and compare it with the flow meter.
+  acknowledge: true
+  any_of: [gauge, meter, pressure, flow]
+- name: lab_unspecified_followup
+  context: lab-assistant
+  query: Okay, take care of that.
+  acknowledge: false

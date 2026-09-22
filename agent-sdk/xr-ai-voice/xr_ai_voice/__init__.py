@@ -9,6 +9,7 @@ audio framing, and pipeline processors are implementation details.
 """
 
 from ._aggregation import VOICE_CONTRIBUTION_TOPIC, VoiceAggregationAgent
+from ._coordination import VoicePublisher, VoiceTurnController
 from ._processors import VadConfig
 from ._runtime import (
     VOICE_OUTPUT_TOPIC,
@@ -37,6 +38,8 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantJoined",
     "VoiceParticipantLeft",
+    "VoicePublisher",
     "VoiceStreamClosedError",
     "VoiceTranscript",
+    "VoiceTurnController",
 ]
