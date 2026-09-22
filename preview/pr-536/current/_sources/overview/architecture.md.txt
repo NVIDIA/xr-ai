@@ -28,7 +28,13 @@ contain configuration, protocol, and operational details.
 +---------------+   media and data   +----------------+   IPC events   +----------------+
 | Clients       | <----------------> | DeviceIOHub    | <------------> | agent workers  |
 | (web/mobile/XR)|                   | + transport    |                | + agent SDK     |
-+---------------+                    +----------------+                +-------+--------+
++---------------+                    +-------+--------+                +-------+--------+
+                                                |
+                                     normalized | media and return data
+                                                v
+                                       +-----------------+
+                                       | optional capture |
+                                       +-----------------+
                                                                             |
                                                typed model and tool calls   |
                                                 +---------------------------+--------+
@@ -43,7 +49,8 @@ contain configuration, protocol, and operational details.
 The architecture has four cooperating planes:
 
 - **Media plane:** DeviceIOHub receives client audio, video, and data through
-  a transport connector, then fans participant-tagged events out to workers.
+  a transport connector, then fans participant-tagged events out to workers
+  and optional passive processors such as session capture.
 - **Application plane:** agent workers own application behavior, participant
   state, model and tool orchestration, concurrency, and cancellation.
 - **Service plane:** typed model clients and tools isolate workers from model
@@ -62,6 +69,7 @@ services or externally hosted APIs.
 | XR clients | Device capture, presentation, and user interaction | Agent execution or service orchestration |
 | Transport connector | Transport-specific sessions and conversion to hub events | Agent-facing APIs or application policy |
 | DeviceIOHub | Media fan-out, participant identity, return routing, and shared-media access | Agent state, model calls, or tools |
+| Session capture | Timestamped raw media/events and pluggable demo or workflow projections | Transport sessions, agent policy, model inference, or live-path flow control |
 | Agent SDK | Lightweight hub IPC, typed runtime events, model protocols, voice composition, and tool primitives | Application lifecycle and decision policy |
 | Agent worker | Application state, tasks, prompts, model and tool loops, concurrency, and cleanup | Transport internals or model-server lifecycle |
 | AI model services | Inference and model-specific serving behavior | Participant routing or application policy |
@@ -86,6 +94,13 @@ model dependencies out of the minimal agent-to-hub IPC package.
 4. A worker requests video pixels only when its application needs a frame.
 5. Return audio and data name the originating participant. The hub validates
    the target and the connector delivers the response only to that participant.
+
+An optional capture process can observe both sides after hub normalization. It
+uses the same on-demand video path as other passive processors and never joins
+the transport session, so encoder load remains outside the hub's
+latency-sensitive path. Its shared session writer can follow participant
+lifetime or accept private start/stop commands from an agent adapter; demo and
+raw workflow projections reuse the same timestamped media and metadata core.
 
 The resulting portable contract is:
 
@@ -166,6 +181,14 @@ The following constraints define the supported system boundary:
   one participant's data to another.
 - **Transport details stop at the hub.** Workers use `xr_ai_hub`; transport
   SDKs and server packages do not enter agent APIs.
+- **Capture is transport-independent and policy-separated.** Session capture
+  consumes normalized hub IPC and routed return traffic in a separate process.
+  Participant-lifetime or agent-controlled boundaries select what the shared
+  writer retains; demo rendering and raw workflow packets are projections over
+  that writer. Agent wrappers own the capture namespace and fixed metadata;
+  model-facing start and stop actions do not accept filesystem paths. Bounded
+  capture queues may drop recording frames but must not
+  apply backpressure to the hub, clients, or agents.
 - **Raw media stays on the media path.** Video pixels remain in shared memory
   until explicitly requested, and raw media is not embedded in runtime events
   or tool results.
