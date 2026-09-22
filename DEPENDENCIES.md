@@ -327,6 +327,24 @@ drift:
 - Commands:
   - `llama_nemotron_llm_server` → `llama_nemotron_llm_server.__main__:run`
 
+#### `magpie-nim-tts` — [`services/magpie-nim-tts/`](services/magpie-nim-tts/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `fastapi>=0.115`
+  - `uvicorn>=0.30`
+  - `pyyaml>=6.0`
+  - `httpx>=0.27`
+  - `grpcio>=1.67`
+- Optional dependency groups: none
+- Commands:
+  - `magpie_nim_tts` → `magpie_nim_tts.__main__:run`
+
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
 - Python: `>=3.11,<3.13`
@@ -697,6 +715,7 @@ drift:
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
+  - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)

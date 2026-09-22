@@ -147,8 +147,8 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
             health_path=endpoint.health_path,
         )
     if adapter.kind == KIND_RIVA_GRPC:
-        from ._riva_grpc import RivaTTS
-        return RivaTTS(
+        from ._riva_grpc import _StreamingRivaTTS
+        return _StreamingRivaTTS(
             base_url=endpoint.base_url,
             api_key_env=endpoint.api_key_env,
             function_id=adapter.function_id,

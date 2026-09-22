@@ -19,6 +19,7 @@ dependencies = [
     "xr-ai-voice",
     "xr-ai-web-events",
     "device-io-hub",
+    "magpie-nim-tts",
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-vad",
@@ -40,6 +41,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+magpie-nim-tts = { path = "../services/magpie-nim-tts", editable = true }
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
