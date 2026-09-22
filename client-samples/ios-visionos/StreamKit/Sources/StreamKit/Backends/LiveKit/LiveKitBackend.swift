@@ -502,6 +502,25 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
     }
 
+    private func makeByteStreamWireOptions(
+        topic: String,
+        attributes: [String: String],
+        mimeType: String?,
+        name: String?,
+        totalSize: Int
+    ) -> ByteStreamWireOptions {
+        ByteStreamWireOptions(
+            topic: topic,
+            attributes: attributes,
+            destinationIdentities: config.hubIdentity.map {
+                [Participant.Identity(from: $0)]
+            } ?? [],
+            mimeType: mimeType,
+            name: name,
+            totalSize: totalSize
+        )
+    }
+
     private func makeFileOptions(
         _ options: FileSendOptions,
         size: Int,
@@ -551,16 +570,14 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             throw StreamError.invalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
         }
         attributes[Self.fileTopicAttribute] = topic
-        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
         return EffectiveFileOptions(
             topic: topic,
             name: name,
             mimeType: mimeType,
             size: size,
-            wire: ByteStreamWireOptions(
+            wire: makeByteStreamWireOptions(
                 topic: Self.fileStreamTopic,
                 attributes: attributes,
-                destinationIdentities: destinations,
                 mimeType: mimeType,
                 name: name,
                 totalSize: size
@@ -931,30 +948,19 @@ extension LiveKitBackend {
         mimeType: String?,
         name: String?
     ) async throws -> String {
-        guard let room, room.connectionState == .connected else {
-            throw StreamError.notConnected
-        }
-        let connection = ByteStreamConnection(
-            room: room,
-            generation: connectionGeneration
-        )
-        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        let connection = try activeByteStreamConnection()
         return try await LiveKitByteStreamWriter.sendBytes(
             data,
-            options: ByteStreamWireOptions(
+            options: makeByteStreamWireOptions(
                 topic: topic,
                 attributes: attributes,
-                destinationIdentities: destinations,
                 mimeType: mimeType,
                 name: name,
                 totalSize: data.count
             ),
             connection: connection,
             isConnectionActive: { [weak self] candidate in
-                guard let self else { return false }
-                return self.room === candidate.room
-                    && candidate.room.connectionState == .connected
-                    && self.connectionGeneration == candidate.generation
+                self?.isByteStreamConnectionActive(candidate) ?? false
             }
         )
     }

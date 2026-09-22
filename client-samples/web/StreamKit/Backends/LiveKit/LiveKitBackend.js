@@ -87,6 +87,12 @@ function validateFileField(value, name, maxBytes, { required = true } = {}) {
   return value;
 }
 
+function targetedByteStreamOptions(options, hubIdentity) {
+  const targeted = { ...options };
+  if (hubIdentity) targeted.destinationIdentities = [hubIdentity];
+  return targeted;
+}
+
 function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdentity) {
   if (!options || typeof options !== 'object') {
     throw new TypeError('file options are required');
@@ -129,14 +135,13 @@ function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdent
   }
   const attributes = Object.fromEntries(applicationAttributes);
   attributes[FILE_TOPIC_ATTRIBUTE] = topic;
-  const liveKitOptions = {
+  const liveKitOptions = targetedByteStreamOptions({
     topic: FILE_STREAM_TOPIC,
     name,
     mimeType,
     attributes,
     totalSize: size,
-  };
-  if (hubIdentity) liveKitOptions.destinationIdentities = [hubIdentity];
+  }, hubIdentity);
   return { topic, name, mimeType, liveKitOptions };
 }
 
@@ -568,16 +573,13 @@ export class LiveKitBackend {
       throw StreamError.notConnected();
     }
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-    const options = {
+    const options = targetedByteStreamOptions({
       topic: request.topic,
       attributes: request.attributes,
       mimeType: request.mimeType,
       name: request.name,
       totalSize: bytes.byteLength,
-    };
-    if (this.#config.hubIdentity) {
-      options.destinationIdentities = [this.#config.hubIdentity];
-    }
+    }, this.#config.hubIdentity);
     return this.#byteStreamWriter.sendBytes(bytes, options);
   }
 

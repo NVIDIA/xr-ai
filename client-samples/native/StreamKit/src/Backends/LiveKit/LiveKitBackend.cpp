@@ -132,19 +132,35 @@ EffectiveFileOptions MakeFileOptions(const FileSendOptions& options,
 }
 
 detail::ByteStreamWireOptions MakeByteStreamWireOptions(
-    const EffectiveFileOptions& options,
+    std::string_view topic,
+    const std::map<std::string, std::string>& attributes,
+    std::string_view mime_type,
+    std::string_view name,
+    std::size_t total_size,
     const std::optional<std::string>& hub_identity) {
     const auto destinations = hub_identity.has_value() && !hub_identity->empty()
         ? std::vector<std::string>{*hub_identity}
         : std::vector<std::string>{};
     return {
-        .topic = std::string(kFileStreamTopic),
-        .attributes = options.attributes,
+        .topic = std::string(topic),
+        .attributes = attributes,
         .destination_identities = destinations,
-        .mime_type = options.mime_type,
-        .name = options.name,
-        .total_size = options.size,
+        .mime_type = std::string(mime_type),
+        .name = std::string(name),
+        .total_size = total_size,
     };
+}
+
+detail::ByteStreamWireOptions MakeByteStreamWireOptions(
+    const EffectiveFileOptions& options,
+    const std::optional<std::string>& hub_identity) {
+    return MakeByteStreamWireOptions(
+        kFileStreamTopic,
+        options.attributes,
+        options.mime_type,
+        options.name,
+        options.size,
+        hub_identity);
 }
 
 FileTransferInfo MakeFileTransferInfo(
@@ -661,27 +677,16 @@ std::string LiveKitBackend::SendByteStream(
     const std::map<std::string, std::string>& attributes,
     std::string_view mime_type,
     std::string_view name) {
-    if (!is_connected_.load()) throw NotConnectedError{};
-    std::vector<std::string> destinations;
-    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
-    const auto generation = connect_generation_.load();
     return detail::LiveKitByteStreamWriter::SendBytes(
         std::as_bytes(data),
-        detail::ByteStreamWireOptions{
-            .topic = std::string(topic),
-            .attributes = attributes,
-            .destination_identities = std::move(destinations),
-            .mime_type = std::string(mime_type),
-            .name = std::string(name),
-            .total_size = data.size(),
-        },
-        detail::ByteStreamConnection{
-            .room = room_,
-            .is_active = [this, generation]() {
-                return is_connected_.load() &&
-                    connect_generation_.load() == generation;
-            },
-        });
+        MakeByteStreamWireOptions(
+            topic,
+            attributes,
+            mime_type,
+            name,
+            data.size(),
+            config_.hub_identity),
+        ActiveByteStreamConnection());
 }
 
 FileTransferInfo LiveKitBackend::SendBytes(

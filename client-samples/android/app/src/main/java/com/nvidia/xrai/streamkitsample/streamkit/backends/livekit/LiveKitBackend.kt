@@ -356,19 +356,34 @@ internal class LiveKitBackend(
         name: String,
     ): String {
         if (!isConnected) throw StreamError.NotConnected
-        val destinations = config.hubIdentity?.let { listOf(Participant.Identity(it)) }.orEmpty()
         return byteStreamWriter.sendBytes(
             data,
-            ByteStreamWireOptions(
+            makeByteStreamWireOptions(
                 topic = topic,
                 attributes = attributes,
-                destinationIdentities = destinations,
                 mimeType = mimeType,
                 name = name,
                 totalSize = data.size.toLong(),
             ),
         )
     }
+
+    private fun makeByteStreamWireOptions(
+        topic: String,
+        attributes: Map<String, String>,
+        mimeType: String,
+        name: String,
+        totalSize: Long,
+    ) = ByteStreamWireOptions(
+        topic = topic,
+        attributes = attributes,
+        destinationIdentities = config.hubIdentity
+            ?.let { listOf(Participant.Identity(it)) }
+            .orEmpty(),
+        mimeType = mimeType,
+        name = name,
+        totalSize = totalSize,
+    )
 
     override suspend fun sendBytes(
         data: ByteArray,
@@ -455,18 +470,14 @@ internal class LiveKitBackend(
             throw StreamError.InvalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
         }
         attributes[FILE_TOPIC_ATTRIBUTE] = topic
-        val destinations = config.hubIdentity
-            ?.let { listOf(Participant.Identity(it)) }
-            ?: emptyList()
         return EffectiveFileOptions(
             topic = topic,
             name = name,
             mimeType = mimeType,
             size = size,
-            wire = ByteStreamWireOptions(
+            wire = makeByteStreamWireOptions(
                 topic = FILE_STREAM_TOPIC,
                 attributes = attributes,
-                destinationIdentities = destinations,
                 mimeType = mimeType,
                 name = name,
                 totalSize = size,
