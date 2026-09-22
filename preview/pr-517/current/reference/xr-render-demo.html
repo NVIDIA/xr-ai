@@ -469,10 +469,10 @@ shared model services.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 </tr>
-<tr class="row-even"><td><p>lightning</p></td>
+<tr class="row-even"><td><p>omni</p></td>
 <td><p>reused</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron35-lightning-llm/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nemotron35_lightning_llm_server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108 (LLM)</p></td>
 </tr>
 <tr class="row-odd"><td><p>vlm</p></td>
@@ -567,7 +567,7 @@ LOVR inherits the pin; <code class="docutils literal notranslate"><span class="p
 <p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.</p>
-<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/</span></code>. Set them
+<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/</span></code>. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.</p>
 </section>
@@ -627,8 +627,8 @@ fields, checked-in values, and adjacent YAML comments.</p>
 </section>
 <section id="the-llm-server">
 <h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
-<section id="nemotron-3-5-lightning-30b-a3b-port-8108">
-<h3>Nemotron 3.5 Lightning 30B-A3B — port 8108<a class="headerlink" href="#nemotron-3-5-lightning-30b-a3b-port-8108" title="Link to this heading">#</a></h3>
+<section id="nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">
+<h3>Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108<a class="headerlink" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108" title="Link to this heading">#</a></h3>
 <p>A small Python wrapper reads YAML configuration, sets the model environment,
 and starts vLLM through the selected <code class="docutils literal notranslate"><span class="pre">pip</span></code> or Docker backend. The vLLM process
 or container runs in a separate session so the shared model remains available
@@ -636,8 +636,8 @@ across stack restarts; the wrapper monitors its health and reports readiness.
 The shared model-server stack reuses a healthy instance and replaces one whose
 launch configuration changed.</p>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The NVFP4 checkpoint uses native FP4 kernels
-on Blackwell and W4A16 kernels on earlier supported GPUs.</p>
+<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
+FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
 <p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
 supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
 untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
@@ -726,7 +726,7 @@ as context so the model understands references like “fix that” or “undo”
 The block is session-scoped: only the last eight turns since the
 participant last departed, and within ten minutes of the request, are
 injected; older history is memory_agent’s to recall.</p></li>
-<li><p><strong>Supervisor loop</strong> (<code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, up to 12 iterations) — Nemotron 3.5 Lightning
+<li><p><strong>Supervisor loop</strong> (<code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code>, up to 12 iterations) — Nemotron-Omni
 :8108 routes the request to one or more subagent tools. Each subagent
 runs its own inner <code class="docutils literal notranslate"><span class="pre">run_tool_loop</span></code> (up to 4 iterations) against the
 scene, XR-tracking, and vision services.</p></li>
@@ -1112,7 +1112,7 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-5-lightning-30b-a3b-port-8108">Nemotron 3.5 Lightning 30B-A3B — port 8108</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>

@@ -46,12 +46,14 @@ files beside a direct capability subproject, then renders them verbatim.
 Narrative docs cover only
 workflows, operational decisions, credentials, and process relationships.
 
-After a `pyproject.toml` change, run
+Application-owned projects under `apps/` are outside the repository sample and
+contribution tooling described below. After a `pyproject.toml` change elsewhere,
+run
 `uv run --script .github/scripts/generate_dependency_map.py`. The pre-commit hook
 normally regenerates the Python inventory in `DEPENDENCIES.md` automatically,
 and CI rejects drift. Do not edit that generated section by hand. Regenerate the
-affected project's gitignored `uv.lock` locally. New source files require an
-SPDX header; refer to {doc}`SPDX headers <spdx-headers>`.
+affected project's gitignored `uv.lock` locally. New source files outside
+`apps/` require an SPDX header; refer to {doc}`SPDX headers <spdx-headers>`.
 
 The root `uv.toml` records the repository's dependency qualification cutoff.
 Repository CI passes it explicitly to uv, so fresh resolutions ignore

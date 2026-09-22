@@ -145,7 +145,7 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron35_lightning"},
+      "adapter": {"preset": "nemotron_omni"},
       "endpoint": {"base_url": "http://localhost:8108"}
     }
   }
@@ -215,10 +215,10 @@ generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
 image and ports) or as a local server:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-- `vlm_llm_nim`: Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner as NIM
+- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
   containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
   these endpoints; they never launch or stop the containers.
 
@@ -332,7 +332,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -387,7 +387,7 @@ When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 docker pull nvcr.io/nvidia/vllm:26.08-py3
 ```
 
@@ -399,10 +399,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.
 
 ### docker mode — prerequisites
 
-- **Docker Engine** with the user in the `docker` group (`docker version`
-  must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
-  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- **Docker Engine** accessible from the launch session (`docker ps` must
+  succeed without `sudo`). Refer to {ref}`docker-host-setup` for group setup.
+- **NVIDIA Container Toolkit** installed, with its `nvidia` runtime registered
+  in Docker. Refer to {ref}`docker-host-setup` for the runtime check,
+  configuration steps, and GPU smoke test.
 - **NGC pull access**, when the configured `vllm_image` is restricted or
   requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
@@ -525,8 +526,8 @@ cleanup.
   [NVIDIA Nemotron Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/).
 - **nemotron35-lightning-llm** serves the text-only
   `NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` checkpoint at port 8108. The
-  shared profiles use it for both LLM roles and keep visual inference on
-  Cosmos3. The checkpoint uses native NVFP4 on Blackwell and W4A16 kernels on
+  service can be selected for either LLM role while visual inference remains
+  on a separate VLM. The checkpoint uses native NVFP4 on Blackwell and W4A16 kernels on
   earlier supported GPUs. vLLM extracts reasoning with `nemotron_v3` and
   parses tool calls with `qwen3_coder`; the client preset disables thinking by
   default. The checked-in runtime follows the model card's vLLM 0.27.1 recipe
@@ -590,9 +591,9 @@ cleanup.
 - Standalone service YAMLs live beside services for direct single-service
   launches; they are not sample configuration. Shared deployments use the
   hardware-specific YAML under
-  `agent-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
+  `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `agent-samples/model-servers/yaml/<gpu-profile>/`; its
+  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
   `../../../../models/nim` from that location.

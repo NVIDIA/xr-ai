@@ -559,7 +559,7 @@ Package Contents
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
-   Used directly for plain LLMs (Llama-Nemotron, Nemotron 3 and 3.5,
+   Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
    Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
@@ -585,8 +585,7 @@ Package Contents
 
       Per-call generation values override endpoint defaults. ``headers`` may
       supply request context but cannot override the configured authorization
-      header. ``thinking_budget`` limits reasoning tokens within the total
-      ``max_tokens`` output limit.
+      header.
 
 
 
@@ -598,8 +597,6 @@ Package Contents
 
       Malformed server-sent event lines and deltas without content are
       skipped. Tool-call and reasoning deltas are not yielded.
-      ``thinking_budget`` limits reasoning tokens within the total
-      ``max_tokens`` output limit.
 
 
 

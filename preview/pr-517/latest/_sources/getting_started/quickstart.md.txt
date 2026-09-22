@@ -33,6 +33,10 @@ conversational introduction rather than an exhaustive capability reference.
 
 ## Model servers (shared AI services)
 
+Before the first launch, complete {ref}`docker-host-setup`, including on DGX
+Spark. Docker must be accessible without `sudo` from the launch session, and
+the `nvidia` runtime must be registered.
+
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `simple-vlm-example`,
@@ -42,7 +46,7 @@ whenever you want to pre-warm models:
 From the repository root, enter the model-server sample directory:
 
 ```bash
-cd agent-samples/model-servers
+cd model-server-samples/model-servers
 ```
 
 :::{important}
@@ -54,7 +58,7 @@ uv run model_servers --stop
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
 models and images even though the checked-in configuration now selects
-Nemotron 3.5 Lightning and Cosmos3 Nano Reasoner.
+Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
 :::
 
 ```bash
@@ -73,10 +77,10 @@ On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 Which servers start is a deployment profile selected with
-`--models <name|path>`. The default starts Nemotron 3.5 Lightning (8108,
+`--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
 serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
 (8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
-self-hosted NIM containers (Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner;
+self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
 requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
 outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.
 
@@ -113,7 +117,7 @@ repository defaults first:
 
 ```bash
 cd agent-samples/simple-vlm-example
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 The command may download model weights on its first run. Refer to the
@@ -209,7 +213,7 @@ Start the shared `model-servers` stack, which includes Pocket TTS:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then start the
@@ -248,17 +252,16 @@ Inspect the JSONL artifacts while trying additional interactions.
 ## Tea-making guidance (voice + visual workflow)
 
 This sample combines an interactive tea guide with optional background change,
-transcript, and video observation. Nemotron 3.5 Lightning supplies language
-inference, while Cosmos3 Nano Reasoner supplies visual inference. Records are
-written as JSON Lines under the sample's `artifacts/` directory. A separate
-live event viewer presents selected runtime events without replacing those
-durable records.
+transcript, and video observation. Nemotron-3 Nano Omni supplies both language
+and visual inference. Records are written as JSON Lines under the sample's
+`artifacts/` directory. A separate live event viewer presents selected runtime
+events without replacing those durable records.
 
 Start the shared model services, including Pocket TTS:
 
 ```bash
 cd agent-samples/tea-making-sample
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then launch the
@@ -313,7 +316,7 @@ dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
 worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-3.5-Lightning-30B-A3B agentic
+runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
 tool-calling loop over scene, tracking, spatial math, vision, and video-memory
 tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
@@ -326,7 +329,7 @@ own model services.
 
 ```bash
 cd agent-samples/xr-render-demo
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 This exits immediately once all configured services are ready. Weights stay
@@ -405,7 +408,7 @@ The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 To stop the model servers when done:
 
 ```bash
-uv run --project ../model-servers model_servers --stop
+uv run --project ../../model-server-samples/model-servers model_servers --stop
 ```
 
 XR Render uses the configured shared endpoints in `yaml/models.json`; it does

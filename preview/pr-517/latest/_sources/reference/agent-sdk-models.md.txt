@@ -38,7 +38,7 @@ A client profile names logical roles and declares adapters and endpoints:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron35_lightning"},
+      "adapter": {"preset": "nemotron_omni"},
       "endpoint": {
         "base_url": "http://localhost:8108",
         "timeout": 60.0

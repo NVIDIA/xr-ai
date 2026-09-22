@@ -1116,7 +1116,7 @@ OpenAI-compatible endpoints.</p>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM" title="Link to this definition">#</a></dt>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> client.</p>
-<p>Used directly for plain LLMs (Llama-Nemotron, Nemotron 3 and 3.5,
+<p>Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
 Nemotron-Omni) and indirectly via <a class="reference internal" href="#xr_ai_models.OpenAICompatVLM" title="xr_ai_models.OpenAICompatVLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code></a> for VLMs.
 The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
@@ -1152,8 +1152,7 @@ injected HTTP client remains owned by the caller and is not closed here.</p>
 <dd><p>Generate and return one normalized chat response.</p>
 <p>Per-call generation values override endpoint defaults. <code class="docutils literal notranslate"><span class="pre">headers</span></code> may
 supply request context but cannot override the configured authorization
-header. <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
-<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
+header.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1175,9 +1174,7 @@ header. <code class="docutils literal notranslate"><span class="pre">thinking_bu
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM.stream" title="Link to this definition">#</a></dt>
 <dd><p>Stream user-visible text deltas from a chat completion.</p>
 <p>Malformed server-sent event lines and deltas without content are
-skipped. Tool-call and reasoning deltas are not yielded.
-<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
-<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
+skipped. Tool-call and reasoning deltas are not yielded.</p>
 </dd></dl>
 
 <dl class="py method">

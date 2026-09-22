@@ -629,7 +629,7 @@ never branch on backend.</p>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron35_lightning"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
@@ -693,11 +693,11 @@ like the local vLLM servers. Its deployment profiles pick the mix: every
 <code class="docutils literal notranslate"><span class="pre">managed</span></code> entry launches as a <code class="docutils literal notranslate"><span class="pre">nim_server</span></code> process (<code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code>, a
 generic wrapper; the per-GPU-profile <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> picks the
 image and ports) or as a local server:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
 </pre></div>
 </div>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron 3.5 Lightning and Cosmos3-Nano Reasoner as NIM
+<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
 containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
 these endpoints; they never launch or stop the containers.</p></li>
 </ul>
@@ -800,7 +800,7 @@ launcher-controlled Docker contract. This prevents a failed container created
 by one sample profile—or by older launcher behavior—from being restarted later
 with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 <p><strong>Stopping the persisted servers</strong>, from the repo root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
@@ -869,7 +869,7 @@ another tag, an internal mirror, or a custom build.</p>
 <p class="admonition-title">Important</p>
 <p>When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.08-py3
 </pre></div>
 </div>
@@ -881,10 +881,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.</
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
-<li><p><strong>Docker Engine</strong> with the user in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">version</span></code>
-must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
-<li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
-<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
+<li><p><strong>Docker Engine</strong> accessible from the launch session (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> must
+succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>). Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for group setup.</p></li>
+<li><p><strong>NVIDIA Container Toolkit</strong> installed, with its <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime registered
+in Docker. Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for the runtime check,
+configuration steps, and GPU smoke test.</p></li>
 <li><p><strong>NGC pull access</strong>, when the configured <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code> is restricted or
 requires authentication on <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
@@ -1019,8 +1020,8 @@ as ready for commercial use under the
 <a class="reference external" href="https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/">NVIDIA Nemotron Open Model License</a>.</p></li>
 <li><p><strong>nemotron35-lightning-llm</strong> serves the text-only
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4</span></code> checkpoint at port 8108. The
-shared profiles use it for both LLM roles and keep visual inference on
-Cosmos3. The checkpoint uses native NVFP4 on Blackwell and W4A16 kernels on
+service can be selected for either LLM role while visual inference remains
+on a separate VLM. The checkpoint uses native NVFP4 on Blackwell and W4A16 kernels on
 earlier supported GPUs. vLLM extracts reasoning with <code class="docutils literal notranslate"><span class="pre">nemotron_v3</span></code> and
 parses tool calls with <code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code>; the client preset disables thinking by
 default. The checked-in runtime follows the model card’s vLLM 0.27.1 recipe
@@ -1084,10 +1085,10 @@ and recorded-media operations return <code class="docutils literal notranslate">
 <li><p>Standalone service YAMLs live beside services for direct single-service
 launches; they are not sample configuration. Shared deployments use the
 hardware-specific YAML under
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
 resulting endpoints through their models JSON.</p></li>
 <li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
-under <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
+under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
 <code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>

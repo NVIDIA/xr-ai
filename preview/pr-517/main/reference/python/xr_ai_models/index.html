@@ -329,6 +329,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
@@ -347,7 +348,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -1140,7 +1143,7 @@ OpenAI-compatible endpoints.</p>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM" title="Link to this definition">#</a></dt>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> client.</p>
-<p>Used directly for plain LLMs (Llama-Nemotron, Nemotron 3 and 3.5,
+<p>Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
 Nemotron-Omni) and indirectly via <a class="reference internal" href="#xr_ai_models.OpenAICompatVLM" title="xr_ai_models.OpenAICompatVLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenAICompatVLM</span></code></a> for VLMs.
 The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
@@ -1176,8 +1179,7 @@ injected HTTP client remains owned by the caller and is not closed here.</p>
 <dd><p>Generate and return one normalized chat response.</p>
 <p>Per-call generation values override endpoint defaults. <code class="docutils literal notranslate"><span class="pre">headers</span></code> may
 supply request context but cannot override the configured authorization
-header. <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
-<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
+header.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1199,9 +1201,7 @@ header. <code class="docutils literal notranslate"><span class="pre">thinking_bu
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AsyncIterator</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatLLM.stream" title="Link to this definition">#</a></dt>
 <dd><p>Stream user-visible text deltas from a chat completion.</p>
 <p>Malformed server-sent event lines and deltas without content are
-skipped. Tool-call and reasoning deltas are not yielded.
-<code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> limits reasoning tokens within the total
-<code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> output limit.</p>
+skipped. Tool-call and reasoning deltas are not yielded.</p>
 </dd></dl>
 
 <dl class="py method">

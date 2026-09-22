@@ -325,6 +325,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -343,7 +344,9 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -462,10 +465,14 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <h2>simple_vlm_example<a class="headerlink" href="#simple-vlm-example" title="Link to this heading">#</a></h2>
 <p>simple-vlm-example orchestrator — vision Q&amp;A over voice or text.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example<span class="w"> </span><span class="o">[</span>--capture<span class="o">]</span>
 </pre></div>
 </div>
-<p>This command has no sample-specific options.</p>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--capture</span></code></dt><dd><p>record participant video, bidirectional audio, and data-channel traffic</p>
+</dd>
+</dl>
 </section>
 <section id="tea-making-sample">
 <h2>tea_making_sample<a class="headerlink" href="#tea-making-sample" title="Link to this heading">#</a></h2>
@@ -484,10 +491,56 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <h2>xr_render_demo<a class="headerlink" href="#xr-render-demo" title="Link to this heading">#</a></h2>
 <p>xr-render-demo orchestrator. Runs the process stack for this sample.</p>
 <p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/</span></code>:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span><span class="o">[</span>--capture<span class="o">]</span>
 </pre></div>
 </div>
-<p>This command has no sample-specific options.</p>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--capture</span></code></dt><dd><p>record participant video, bidirectional audio, and data-channel traffic</p>
+</dd>
+</dl>
+</section>
+<section id="model-servers">
+<h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
+<p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>NAME_OR_PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop every persisted model-server stack and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">NAME_OR_PATH</span></code></dt><dd><p>Deployment profile to start: a shipped name (default, vlm_llm_nim) or a path to a profile JSON.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Use a named YAML GPU profile instead of automatic detection. Intended for explicitly reviewed custom hardware profiles.</p>
+</dd>
+</dl>
+</section>
+<section id="model-servers-nim">
+<h2>model_servers_nim<a class="headerlink" href="#model-servers-nim" title="Link to this heading">#</a></h2>
+<p>Start a persistent NIM model stack, with hardware-specific local fallbacks.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers-nim/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span><span class="w"> </span><span class="o">[</span>--export-models<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop this stack’s model ports.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></dt><dd><p>Validate and print the launch plan without credentials, Docker, or model downloads.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--export-models</span> <span class="pre">PATH</span></code></dt><dd><p>Write a reusable client models JSON and exit without launching servers.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Select a hardware profile; otherwise detect Blackwell, dual Ada, or Spark.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code></dt><dd><p>Custom deployment JSON; defaults to yaml/&lt;gpu-profile&gt;/models.json.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Allow Hugging Face downloads without HF_TOKEN for local fallback services.</p>
+</dd>
+</dl>
 </section>
 </div>
 </section>

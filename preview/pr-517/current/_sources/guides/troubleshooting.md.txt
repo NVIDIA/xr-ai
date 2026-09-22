@@ -10,6 +10,46 @@ issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
 ## Setup-time issues
 
+(dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
+### Docker socket permission denied during model-server cleanup
+
+**Symptom:** launching `model_servers` prints a line like this for each port
+whose ownership cannot be inspected:
+
+```text
+[<service>] cannot inspect :<port> ownership — not stopping
+```
+
+It can then print `No persistent servers found running` before failing with:
+
+```text
+RuntimeError: could not stop persistent servers outside the profile
+```
+
+Running `uv run model_servers --stop` encounters the same inspection failure
+but ends with:
+
+```text
+model-servers: failed to stop persistent servers: one or more persistent servers are still running
+```
+
+**Cause:** the login session lacks Docker socket access. This can affect DGX
+Spark and other Linux model-server hosts. Startup checks for persistent servers
+outside the selected profile before launching new ones. When Docker inspection
+fails, the empty-result message does not establish that no servers are running,
+and cleanup aborts because ownership could not be verified.
+
+**Diagnosis:** run `docker ps` without `sudo` from the same login session. If
+it reports permission denied for `/var/run/docker.sock`, the launcher cannot
+inspect persistent containers. Its internal Docker check suppresses stderr,
+so running the command directly exposes the underlying error. These cleanup
+errors can have other causes; use the Docker output to confirm socket access
+is the problem.
+
+**Fix:** complete the Docker group setup and refresh the launch session as
+described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
+`sudo`, then retry the model-server command.
+
 ### DGX Spark — `uv sync` fails to build a wheel
 
 **Symptom:** `uv sync` fails on a DGX Spark system while building NeMo or
@@ -24,7 +64,7 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `agent-samples/model-servers/yaml/spark/` profile.
+This applies to the `model-server-samples/model-servers/yaml/spark/` profile.
 
 ### DGX Spark — CUDA allocation fails during a vLLM cold start
 
@@ -97,8 +137,8 @@ utilization or KV cache.
 
 ### DGX Spark — vLLM reports insufficient KV cache only on a cold start
 
-**Symptom:** Nemotron 3.5 Lightning or the Cosmos VLM reports a negative or
-smaller KV-cache capacity on its first start than on a later start with the same
+**Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
 configuration. The first start can reject the configured context even while
 Linux reports substantial available memory.
 
@@ -112,12 +152,12 @@ The model-server launcher starts these services sequentially, so concurrent
 startup is not required to trigger the page-cache accounting error.
 
 **Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
-for both Nemotron 3.5 Lightning and Cosmos instead of using the fractional
-profiler to size their caches. Keep the fixed allocations when copying or
-modifying the profile. The values are 2 GiB for Lightning's 32,768-token hybrid
-Mamba and attention cache and 1.5 GiB for Cosmos's 8,192-token cache. The
-Cosmos budget supports one maximum-length request while `max_num_seqs: 4`
-retains concurrency for shorter requests. Concurrent requests near the context limit can queue,
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos's 8,192-token cache. The Cosmos budget supports
+one maximum-length request while `max_num_seqs: 4` retains concurrency for
+shorter requests. Concurrent requests near the context limit can queue,
 preempt, or recompute when their aggregate token demand exceeds the fixed
 cache. Increase the fixed cache when a custom Spark deployment needs parallel
 full-context requests.
@@ -180,14 +220,12 @@ becomes healthy on a Blackwell-class system.
 vLLM image does not contain compatible kernels. Any first-use kernel
 compilation occurs inside the container; host NVCC is not required.
 
-**Fix:** install the NVIDIA Container Toolkit, restart Docker as its installation
-guide requires, and retain the vLLM image pinned by the reviewed hardware
-profile:
-
-[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+**Fix:** follow {ref}`docker-host-setup` to verify Docker access, register the
+NVIDIA runtime if needed, and check GPU access from a container. Retain the
+vLLM image pinned by the reviewed hardware profile.
 
 This applies to the
-`agent-samples/model-servers/yaml/96G_blackwell/` profile.
+`model-server-samples/model-servers/yaml/96G_blackwell/` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 
@@ -271,7 +309,7 @@ contains only wrapper messages — nothing from inside the container.
 **Health probe** — confirm vLLM never reached the `/health` endpoint:
 
 ```bash
-curl -fsS http://127.0.0.1:8108/health   # nemotron35_lightning (default LLM)
+curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM)
 curl -fsS http://127.0.0.1:8100/health   # vlm_server (default Cosmos VLM)
 curl -fsS http://127.0.0.1:8107/health   # superseded nemotron3_nano
 ```
@@ -299,18 +337,25 @@ managed cleanup removes them.
 (vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver)=
 ### `vllm_backend: docker` — the NVIDIA runtime is unavailable
 
-**Symptom:** `docker run` exits with a message that the `nvidia` runtime is
-unknown or unavailable, or with an `nvidia-container-cli` initialization error.
+**Symptom:** Docker is reachable, but container startup fails with:
 
-**Cause:** the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted and configured after install), so Docker cannot use
-`--runtime=nvidia`.
+```text
+docker: Error response from daemon: unknown or invalid runtime name: nvidia
+```
 
-**Fix:** install the toolkit and restart docker:
-https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+**Cause:** the Docker daemon has no registered `nvidia` runtime. This can happen
+on DGX Spark even when the NVIDIA Container Toolkit is already installed.
+The model-server wrappers request `--runtime=nvidia` explicitly.
 
-Switch back to `vllm_backend: pip` in the service YAML if you only need the
-local install.
+**Fix:** follow {ref}`docker-host-setup` to install the toolkit if needed,
+register the runtime with `nvidia-ctk`, and restart Docker. Verify that
+`docker info --format '{{json .Runtimes}}'` lists `nvidia`, then run the GPU
+smoke test there before retrying the model servers.
+
+If `nvidia` is listed but startup instead reports an `nvidia-container-cli`
+initialization error, inspect that error for a driver or GPU-access problem.
+Refer to the
+[NVIDIA Container Toolkit troubleshooting guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html).
 
 (hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so)=
 
@@ -477,7 +522,7 @@ but the server then sits silent for several minutes before becoming healthy.
 **Cause:** CUDA graph capture and, for FP4 MoE models, FlashInfer autotuning
 happen on first run after weight load. They are silent.
 
-**Fix:** the default Lightning profiles set `enforce_eager: false` to enable CUDA
+**Fix:** the default Omni profiles set `enforce_eager: false` to enable CUDA
 graph capture and maximize steady-state throughput, so this startup delay is
 expected. For development, set `enforce_eager: true` in the active model YAML
 to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
@@ -507,7 +552,7 @@ persistence*.
 
 ```bash
 cd xr-ai
-uv run --project agent-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers --stop
 ```
 
 For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
@@ -521,7 +566,7 @@ success if server ownership cannot be verified or any target remains running.
 
 ### First run downloads models silently
 
-**Symptom:** `uv run --project agent-samples/model-servers model_servers`
+**Symptom:** `uv run --project model-server-samples/model-servers model_servers`
 appears to hang at startup the first time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at

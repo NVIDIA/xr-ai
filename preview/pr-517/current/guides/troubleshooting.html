@@ -427,6 +427,37 @@
 issue on the <a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
 <section id="setup-time-issues">
 <h2>Setup-time issues<a class="headerlink" href="#setup-time-issues" title="Link to this heading">#</a></h2>
+<section id="docker-socket-permission-denied-during-model-server-cleanup">
+<span id="dgx-spark-docker-socket-permission-denied-during-model-server-cleanup"></span><h3>Docker socket permission denied during model-server cleanup<a class="headerlink" href="#docker-socket-permission-denied-during-model-server-cleanup" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> launching <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> prints a line like this for each port
+whose ownership cannot be inspected:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[&lt;service&gt;] cannot inspect :&lt;port&gt; ownership — not stopping
+</pre></div>
+</div>
+<p>It can then print <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">persistent</span> <span class="pre">servers</span> <span class="pre">found</span> <span class="pre">running</span></code> before failing with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>RuntimeError: could not stop persistent servers outside the profile
+</pre></div>
+</div>
+<p>Running <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code> encounters the same inspection failure
+but ends with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>model-servers: failed to stop persistent servers: one or more persistent servers are still running
+</pre></div>
+</div>
+<p><strong>Cause:</strong> the login session lacks Docker socket access. This can affect DGX
+Spark and other Linux model-server hosts. Startup checks for persistent servers
+outside the selected profile before launching new ones. When Docker inspection
+fails, the empty-result message does not establish that no servers are running,
+and cleanup aborts because ownership could not be verified.</p>
+<p><strong>Diagnosis:</strong> run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the same login session. If
+it reports permission denied for <code class="docutils literal notranslate"><span class="pre">/var/run/docker.sock</span></code>, the launcher cannot
+inspect persistent containers. Its internal Docker check suppresses stderr,
+so running the command directly exposes the underlying error. These cleanup
+errors can have other causes; use the Docker output to confirm socket access
+is the problem.</p>
+<p><strong>Fix:</strong> complete the Docker group setup and refresh the launch session as
+described in <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>. Verify that <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> succeeds without
+<code class="docutils literal notranslate"><span class="pre">sudo</span></code>, then retry the model-server command.</p>
+</section>
 <section id="dgx-spark-uv-sync-fails-to-build-a-wheel">
 <h3>DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel<a class="headerlink" href="#dgx-spark-uv-sync-fails-to-build-a-wheel" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails on a DGX Spark system while building NeMo or
@@ -437,7 +468,7 @@ headers.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>python3-dev
 </pre></div>
 </div>
-<p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/spark/</span></code> profile.</p>
+<p>This applies to the <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code> profile.</p>
 </section>
 <section id="dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">
 <h3>DGX Spark — CUDA allocation fails during a vLLM cold start<a class="headerlink" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start" title="Link to this heading">#</a></h3>
@@ -499,8 +530,8 @@ utilization or KV cache.</p>
 </section>
 <section id="dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">
 <h3>DGX Spark — vLLM reports insufficient KV cache only on a cold start<a class="headerlink" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> Nemotron 3.5 Lightning or the Cosmos VLM reports a negative or
-smaller KV-cache capacity on its first start than on a later start with the same
+<p><strong>Symptom:</strong> Nemotron Omni or the Cosmos VLM reports a negative or smaller
+KV-cache capacity on its first start than on a later start with the same
 configuration. The first start can reject the configured context even while
 Linux reports substantial available memory.</p>
 <p><strong>Cause:</strong> vLLM derives non-Torch usage from changes in globally available
@@ -512,12 +543,12 @@ automatically sized KV cache. The behavior is tracked in <a class="reference ext
 The model-server launcher starts these services sequentially, so concurrent
 startup is not required to trigger the page-cache accounting error.</p>
 <p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile sets <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> explicitly
-for both Nemotron 3.5 Lightning and Cosmos instead of using the fractional
-profiler to size their caches. Keep the fixed allocations when copying or
-modifying the profile. The values are 2 GiB for Lightning’s 32,768-token hybrid
-Mamba and attention cache and 1.5 GiB for Cosmos’s 8,192-token cache. The
-Cosmos budget supports one maximum-length request while <code class="docutils literal notranslate"><span class="pre">max_num_seqs:</span> <span class="pre">4</span></code>
-retains concurrency for shorter requests. Concurrent requests near the context limit can queue,
+for both Nemotron Omni and Cosmos instead of using the fractional profiler to
+size their caches. Keep the fixed allocations when copying or modifying the
+profile. The values are 2 GiB for Omni’s 32,768-token hybrid Mamba/attention
+cache and 1.5 GiB for Cosmos’s 8,192-token cache. The Cosmos budget supports
+one maximum-length request while <code class="docutils literal notranslate"><span class="pre">max_num_seqs:</span> <span class="pre">4</span></code> retains concurrency for
+shorter requests. Concurrent requests near the context limit can queue,
 preempt, or recompute when their aggregate token demand exceeds the fixed
 cache. Increase the fixed cache when a custom Spark deployment needs parallel
 full-context requests.</p>
@@ -570,12 +601,11 @@ becomes healthy on a Blackwell-class system.</p>
 <p><strong>Cause:</strong> The Docker backend cannot expose the Blackwell GPU, or the selected
 vLLM image does not contain compatible kernels. Any first-use kernel
 compilation occurs inside the container; host NVCC is not required.</p>
-<p><strong>Fix:</strong> install the NVIDIA Container Toolkit, restart Docker as its installation
-guide requires, and retain the vLLM image pinned by the reviewed hardware
-profile:</p>
-<p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit installation guide</a></p>
+<p><strong>Fix:</strong> follow <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> to verify Docker access, register the
+NVIDIA runtime if needed, and check GPU access from a container. Retain the
+vLLM image pinned by the reviewed hardware profile.</p>
 <p>This applies to the
-<code class="docutils literal notranslate"><span class="pre">agent-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
 </section>
 <section id="gpu-service-aborts-with-cudnn-version-incompatibility">
 <h3>GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code><a class="headerlink" href="#gpu-service-aborts-with-cudnn-version-incompatibility" title="Link to this heading">#</a></h3>
@@ -645,7 +675,7 @@ environment before each wrapper runs; the docker backend uses it to run
 <p>and the per-run log file under <code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;sample&gt;_&lt;timestamp&gt;/&lt;service&gt;.log</span></code>
 contains only wrapper messages — nothing from inside the container.</p>
 <p><strong>Health probe</strong> — confirm vLLM never reached the <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8108/health<span class="w">   </span><span class="c1"># nemotron35_lightning (default LLM)</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8108/health<span class="w">   </span><span class="c1"># nemotron_omni (default LLM)</span>
 curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8100/health<span class="w">   </span><span class="c1"># vlm_server (default Cosmos VLM)</span>
 curl<span class="w"> </span>-fsS<span class="w"> </span>http://127.0.0.1:8107/health<span class="w">   </span><span class="c1"># superseded nemotron3_nano</span>
 </pre></div>
@@ -669,15 +699,21 @@ managed cleanup removes them.</p>
 </section>
 <section id="vllm-backend-docker-the-nvidia-runtime-is-unavailable">
 <span id="vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver"></span><h3><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — the NVIDIA runtime is unavailable<a class="headerlink" href="#vllm-backend-docker-the-nvidia-runtime-is-unavailable" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> exits with a message that the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime is
-unknown or unavailable, or with an <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code> initialization error.</p>
-<p><strong>Cause:</strong> the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted and configured after install), so Docker cannot use
-<code class="docutils literal notranslate"><span class="pre">--runtime=nvidia</span></code>.</p>
-<p><strong>Fix:</strong> install the toolkit and restart docker:
-<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
-<p>Switch back to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code> in the service YAML if you only need the
-local install.</p>
+<p><strong>Symptom:</strong> Docker is reachable, but container startup fails with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>docker: Error response from daemon: unknown or invalid runtime name: nvidia
+</pre></div>
+</div>
+<p><strong>Cause:</strong> the Docker daemon has no registered <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime. This can happen
+on DGX Spark even when the NVIDIA Container Toolkit is already installed.
+The model-server wrappers request <code class="docutils literal notranslate"><span class="pre">--runtime=nvidia</span></code> explicitly.</p>
+<p><strong>Fix:</strong> follow <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> to install the toolkit if needed,
+register the runtime with <code class="docutils literal notranslate"><span class="pre">nvidia-ctk</span></code>, and restart Docker. Verify that
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">info</span> <span class="pre">--format</span> <span class="pre">'{{json</span> <span class="pre">.Runtimes}}'</span></code> lists <code class="docutils literal notranslate"><span class="pre">nvidia</span></code>, then run the GPU
+smoke test there before retrying the model servers.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> is listed but startup instead reports an <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code>
+initialization error, inspect that error for a driver or GPU-access problem.
+Refer to the
+<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html">NVIDIA Container Toolkit troubleshooting guide</a>.</p>
 </section>
 <section id="hub-fails-immediately-because-nvidia-codec-libraries-are-missing">
 <span id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so"></span><h3>Hub fails immediately because NVIDIA codec libraries are missing<a class="headerlink" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing" title="Link to this heading">#</a></h3>
@@ -826,7 +862,7 @@ the IWER emulator built into the web client itself for desktop dev.</p>
 but the server then sits silent for several minutes before becoming healthy.</p>
 <p><strong>Cause:</strong> CUDA graph capture and, for FP4 MoE models, FlashInfer autotuning
 happen on first run after weight load. They are silent.</p>
-<p><strong>Fix:</strong> the default Lightning profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
+<p><strong>Fix:</strong> the default Omni profiles set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">false</span></code> to enable CUDA
 graph capture and maximize steady-state throughput, so this startup delay is
 expected. For development, set <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> in the active model YAML
 to skip CUDA graph capture. Eager mode starts faster but can reduce per-token
@@ -852,7 +888,7 @@ restarts. Refer to <a class="reference internal" href="../components/ai-services
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>For Pocket TTS this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its verified launcher-owned process
@@ -866,7 +902,7 @@ success if server ownership cannot be verified or any target remains running.</p
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/model-servers</span> <span class="pre">model_servers</span></code>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">model-server-samples/model-servers</span> <span class="pre">model_servers</span></code>
 appears to hang at startup the first time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
@@ -929,6 +965,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-socket-permission-denied-during-model-server-cleanup">Docker socket permission denied during model-server cleanup</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">DGX Spark — CUDA allocation fails during a vLLM cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — vLLM reports insufficient KV cache only on a cold start</a></li>
