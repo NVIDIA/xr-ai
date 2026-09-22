@@ -5,6 +5,14 @@
 
 # Release migration
 
+## StreamKit image-capture dependencies
+
+Request-driven image capture uses LiveKit byte streams. Builds that previously
+used older client SDKs must upgrade Android to `client-sdk-android` 2.28.2,
+Apple platforms to `client-sdk-swift` 2.16.0, and native C++ to
+`client-sdk-cpp` 1.10.2 or newer. The native SDK root now uses the upstream
+`include/` and `lib/` directory layout.
+
 ## DeviceIOHub rename
 
 Update `services/xr-media-hub/` to `services/device-io-hub/`, the

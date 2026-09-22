@@ -326,6 +326,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -536,13 +537,17 @@ model dependencies out of the minimal agent-to-hub IPC package.</p>
 <h3>Client media and participant events<a class="headerlink" href="#client-media-and-participant-events" title="Link to this heading">#</a></h3>
 <ol class="arabic simple">
 <li><p>A client joins through the configured transport and publishes audio, video,
-and data.</p></li>
+and data. It may instead keep video off and expose an opt-in still-image
+capture handler.</p></li>
 <li><p>The transport connector converts that input into participant-tagged hub
 events. Audio, data, and participant events travel inline; video pixels stay
 in shared memory and frame notifications remain lightweight.</p></li>
 <li><p>DeviceIOHub fans subscribed events out to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> consumers.
 Multiple agents or passive processors can subscribe to the same input.</p></li>
-<li><p>A worker requests video pixels only when its application needs a frame.</p></li>
+<li><p>A worker requests video pixels only when its application needs a frame. If
+no fresh video exists, a participant-bound tool can request one encoded
+still from the originating client; the client returns it in a targeted,
+correlated byte stream.</p></li>
 <li><p>Return audio and data name the originating participant. The hub validates
 the target and the connector delivers the response only to that participant.</p></li>
 </ol>

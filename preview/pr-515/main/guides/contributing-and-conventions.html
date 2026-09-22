@@ -346,6 +346,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -501,6 +502,13 @@ the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
 locks under <code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code>; the pre-commit hook does the Python one when
 <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is staged.</p>
+<p>For a targeted security refresh, add an <code class="docutils literal notranslate"><span class="pre">exclude-newer-package</span></code> timestamp in
+<code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> for each fixed package and add its minimum safe version to the
+affected service dependencies. This qualifies the fix without advancing the
+global cutoff. Resolve each affected project with the root config explicitly
+supplied, validate the affected behavior, and regenerate the dependency
+manifest with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_manifest.py</span></code>.
+Commit the generated manifest changes alongside the dependency declarations.</p>
 </section>
 
 

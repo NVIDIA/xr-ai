@@ -326,6 +326,7 @@
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -568,6 +569,13 @@ are estimates interpolated from chunk metadata.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> is a live-frame-or-still selector. Every invocation first
+uses a fresh frame already observed by DeviceIOHub. If none is available, it
+requests one still from the participant instead; this includes invocations by
+periodic monitoring tasks, which may therefore activate the camera briefly
+when video is off. Installing the StreamKit image-capture handler is the
+client-side opt-in boundary. Applications that must never initiate capture
+should not install that handler and should use <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> directly.</p>
 </section>
 <section id="marker-tracking">
 <h2>Marker tracking<a class="headerlink" href="#marker-tracking" title="Link to this heading">#</a></h2>

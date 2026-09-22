@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple VLM example" href="simple-vlm-example.html" />
+    <link rel="next" title="Shared model servers with NVIDIA NIM" href="model-servers-nim.html" />
     <link rel="prev" title="Magpie NIM HTTP speech service" href="magpie-nim-tts.html" />
 
 
@@ -326,6 +326,7 @@
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -426,6 +427,14 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="streamkit-image-capture-dependencies">
+<h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
+<p>Request-driven image capture uses LiveKit byte streams. Builds that previously
+used older client SDKs must upgrade Android to <code class="docutils literal notranslate"><span class="pre">client-sdk-android</span></code> 2.28.2,
+Apple platforms to <code class="docutils literal notranslate"><span class="pre">client-sdk-swift</span></code> 2.16.0, and native C++ to
+<code class="docutils literal notranslate"><span class="pre">client-sdk-cpp</span></code> 1.10.2 or newer. The native SDK root now uses the upstream
+<code class="docutils literal notranslate"><span class="pre">include/</span></code> and <code class="docutils literal notranslate"><span class="pre">lib/</span></code> directory layout.</p>
+</section>
 <section id="deviceiohub-rename">
 <h2>DeviceIOHub rename<a class="headerlink" href="#deviceiohub-rename" title="Link to this heading">#</a></h2>
 <p>Update <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> to <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>, the
@@ -631,11 +640,11 @@ reuse the ignored caches rather than downloading them again.</p>
       </div>
     </a>
     <a class="right-next"
-       href="simple-vlm-example.html"
+       href="model-servers-nim.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Simple VLM example</p>
+        <p class="prev-next-title">Shared model servers with NVIDIA NIM</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -660,6 +669,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#consumer-model-readiness">Consumer model readiness</a></li>

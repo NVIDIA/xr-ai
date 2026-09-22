@@ -187,24 +187,38 @@ setups:
 ## Running on other GPUs
 
 A profile (`model-server-samples/model-servers/yaml/<profile>/`) is a convenience preset
-that pins two knobs per model server so the stack fits a known configuration:
+that pins the memory policy for each model server so the stack fits a known
+configuration:
 
 - `cuda_visible_devices` — which physical GPU each server runs on (for example,
   the `dual_48G_ada` profile places some servers on GPU `0` and others on GPU `1`).
-- `gpu_memory_utilization` — the fraction of that GPU's VRAM the server may use.
-  Several servers share one GPU, so each takes a slice (for example, `0.43`), and
-  the slices on a given GPU must sum to less than `1.0`.
+- `gpu_memory_utilization` — the fraction used to size the KV cache automatically
+  when `kv_cache_memory_bytes` is absent. When explicit cache bytes are present,
+  vLLM still uses the fraction for its initial free-memory admission check, but
+  it does not size or cap the cache with that fraction.
+- `kv_cache_memory_bytes` — an optional fixed KV-cache allocation. The bundled
+  profiles set it for Cosmos and Nemotron Omni to make resident cache capacity
+  deterministic. This intentionally bounds capacity; it is not a cap on the
+  model server's total GPU memory use.
 
 To run on a GPU that is not one of the presets, copy the closest profile directory
 and adjust those knobs to your hardware:
 
 1. Set `cuda_visible_devices` in each server's YAML to your GPU index, or spread
    the servers across the GPUs you have.
-2. Tune `gpu_memory_utilization` per server so the slices on each GPU fit its VRAM.
-   Lower the values if a server fails to start with an out-of-memory error; raise
-   them if you have spare VRAM.
-3. On lower-VRAM GPUs, run fewer models concurrently, or lower `max_model_len` on
-   the LLM and VLM servers to reduce the KV-cache footprint.
+2. For a server without explicit cache bytes, tune `gpu_memory_utilization` so
+   the automatically sized allocations fit alongside the colocated services.
+   For a server with explicit cache bytes, tune `kv_cache_memory_bytes` to the
+   required resident token capacity and keep `gpu_memory_utilization` as an
+   admission threshold appropriate for the target GPU.
+3. Check vLLM's startup log for the resulting GPU KV-cache token capacity and
+   maximum concurrency. `max_num_seqs` is a scheduling limit, not a guarantee
+   that every admitted sequence can simultaneously occupy `max_model_len`
+   tokens; requests beyond resident capacity can queue, preempt, or recompute.
+4. If you change `max_model_len`, recalculate the fixed cache so at least one
+   maximum-length request fits, increase it for the desired resident
+   concurrency, and cold-start the full profile on the target hardware. On
+   lower-memory GPUs, running fewer models concurrently may also be necessary.
 
 Then select the reviewed profile explicitly:
 
