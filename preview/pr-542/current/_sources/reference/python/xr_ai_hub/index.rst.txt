@@ -1062,6 +1062,30 @@ Package Contents
 
 
 
+   .. py:attribute:: IMAGE_CAPTURE_REQUEST
+      :value: 15
+
+
+      Processor request for one participant's client to capture an image.
+
+
+
+   .. py:attribute:: IMAGE_CAPTURE_DATA
+      :value: 16
+
+
+      Encoded image returned by a client for a pending capture request.
+
+
+
+   .. py:attribute:: IMAGE_CAPTURE_CANCEL
+      :value: 17
+
+
+      Cancellation of a pending participant image capture.
+
+
+
 .. py:class:: ParticipantEvent
 
    A LiveKit participant has joined or left the room.
