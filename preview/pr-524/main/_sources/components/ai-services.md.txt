@@ -23,6 +23,7 @@ recorded video, and document retrieval.
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
@@ -250,7 +251,9 @@ stt:
 TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
 (default 44100). An explicit `health()` call with `health_check: true` (the
 default) runs a gRPC channel-ready probe; consumer startup does not call it.
-No shipped model-server profile or sample selects Riva speech.
+The standalone {doc}`/reference/magpie-nim-tts` service exposes a Magpie Riva
+NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
+the optional SDK dependency; HTTP consumers do not.
 
 Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
@@ -396,10 +399,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.
 
 ### docker mode — prerequisites
 
-- **Docker Engine** with the user in the `docker` group (`docker version`
-  must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
-  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- **Docker Engine** accessible from the launch session (`docker ps` must
+  succeed without `sudo`). Refer to {ref}`docker-host-setup` for group setup.
+- **NVIDIA Container Toolkit** installed, with its `nvidia` runtime registered
+  in Docker. Refer to {ref}`docker-host-setup` for the runtime check,
+  configuration steps, and GPU smoke test.
 - **NGC pull access**, when the configured `vllm_image` is restricted or
   requires authentication on `nvcr.io`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by

@@ -322,6 +322,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/documentation-style.html">Documentation style</a></li>
@@ -340,7 +341,9 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -352,6 +355,7 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -576,6 +580,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.VLMService.capabilities">(xr_ai_models.VLMService attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_tools/capture/index.html#xr_ai_tools.capture.CaptureTools">CaptureTools (class in xr_ai_tools.capture)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Category">Category (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AudioChunk.channels">channels (xr_ai_hub.AudioChunk attribute)</a>
@@ -1216,10 +1222,10 @@
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.ModelDeployment">ModelDeployment (class in xr_ai_launcher)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelKind">ModelKind (in module xr_ai_models)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelsConfig">ModelsConfig (class in xr_ai_models)</a>
 </li>
       <li>
@@ -1241,6 +1247,8 @@
         <li><a href="reference/python/xr_ai_tools/index.html#module-xr_ai_tools">xr_ai_tools</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/async_tools/index.html#module-xr_ai_tools.async_tools">xr_ai_tools.async_tools</a>
+</li>
+        <li><a href="reference/python/xr_ai_tools/capture/index.html#module-xr_ai_tools.capture">xr_ai_tools.capture</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/current_frame/index.html#module-xr_ai_tools.current_frame">xr_ai_tools.current_frame</a>
 </li>
@@ -1421,16 +1429,18 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.participant_joined">participant_joined() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+      <li><a href="reference/python/xr_ai_tools/capture/index.html#xr_ai_tools.capture.CaptureTools.participant_tools">participant_tools() (xr_ai_tools.capture.CaptureTools method)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ParticipantEvent">ParticipantEvent (class in xr_ai_hub)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.ListRecordedParticipantsResult.participants">participants (xr_ai_tools.video_memory.ListRecordedParticipantsResult attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.participants">participants() (xr_ai_hub.LiveFrameSource method)</a>
 </li>
-      <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ControlMessage.payload">payload (xr_ai_hub.ControlMessage attribute)</a>
 
       <ul>
@@ -2293,6 +2303,13 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_tools/async_tools/index.html#module-xr_ai_tools.async_tools">module</a>
+</li>
+      </ul></li>
+      <li>
+    xr_ai_tools.capture
+
+      <ul>
+        <li><a href="reference/python/xr_ai_tools/capture/index.html#module-xr_ai_tools.capture">module</a>
 </li>
       </ul></li>
       <li>

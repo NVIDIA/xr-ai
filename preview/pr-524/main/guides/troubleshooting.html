@@ -329,6 +329,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Guides</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
@@ -347,7 +348,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -359,6 +362,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -451,6 +455,37 @@
 issue on the <a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
 <section id="setup-time-issues">
 <h2>Setup-time issues<a class="headerlink" href="#setup-time-issues" title="Link to this heading">#</a></h2>
+<section id="docker-socket-permission-denied-during-model-server-cleanup">
+<span id="dgx-spark-docker-socket-permission-denied-during-model-server-cleanup"></span><h3>Docker socket permission denied during model-server cleanup<a class="headerlink" href="#docker-socket-permission-denied-during-model-server-cleanup" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> launching <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> prints a line like this for each port
+whose ownership cannot be inspected:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[&lt;service&gt;] cannot inspect :&lt;port&gt; ownership — not stopping
+</pre></div>
+</div>
+<p>It can then print <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">persistent</span> <span class="pre">servers</span> <span class="pre">found</span> <span class="pre">running</span></code> before failing with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>RuntimeError: could not stop persistent servers outside the profile
+</pre></div>
+</div>
+<p>Running <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code> encounters the same inspection failure
+but ends with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>model-servers: failed to stop persistent servers: one or more persistent servers are still running
+</pre></div>
+</div>
+<p><strong>Cause:</strong> the login session lacks Docker socket access. This can affect DGX
+Spark and other Linux model-server hosts. Startup checks for persistent servers
+outside the selected profile before launching new ones. When Docker inspection
+fails, the empty-result message does not establish that no servers are running,
+and cleanup aborts because ownership could not be verified.</p>
+<p><strong>Diagnosis:</strong> run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the same login session. If
+it reports permission denied for <code class="docutils literal notranslate"><span class="pre">/var/run/docker.sock</span></code>, the launcher cannot
+inspect persistent containers. Its internal Docker check suppresses stderr,
+so running the command directly exposes the underlying error. These cleanup
+errors can have other causes; use the Docker output to confirm socket access
+is the problem.</p>
+<p><strong>Fix:</strong> complete the Docker group setup and refresh the launch session as
+described in <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>. Verify that <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> succeeds without
+<code class="docutils literal notranslate"><span class="pre">sudo</span></code>, then retry the model-server command.</p>
+</section>
 <section id="dgx-spark-uv-sync-fails-to-build-a-wheel">
 <h3>DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel<a class="headerlink" href="#dgx-spark-uv-sync-fails-to-build-a-wheel" title="Link to this heading">#</a></h3>
 <p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails on a DGX Spark system while building NeMo or
@@ -594,10 +629,9 @@ becomes healthy on a Blackwell-class system.</p>
 <p><strong>Cause:</strong> The Docker backend cannot expose the Blackwell GPU, or the selected
 vLLM image does not contain compatible kernels. Any first-use kernel
 compilation occurs inside the container; host NVCC is not required.</p>
-<p><strong>Fix:</strong> install the NVIDIA Container Toolkit, restart Docker as its installation
-guide requires, and retain the vLLM image pinned by the reviewed hardware
-profile:</p>
-<p><a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit installation guide</a></p>
+<p><strong>Fix:</strong> follow <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> to verify Docker access, register the
+NVIDIA runtime if needed, and check GPU access from a container. Retain the
+vLLM image pinned by the reviewed hardware profile.</p>
 <p>This applies to the
 <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
 </section>
@@ -693,15 +727,21 @@ managed cleanup removes them.</p>
 </section>
 <section id="vllm-backend-docker-the-nvidia-runtime-is-unavailable">
 <span id="vllm-backend-docker-docker-run-fails-with-could-not-select-device-driver"></span><h3><code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code> — the NVIDIA runtime is unavailable<a class="headerlink" href="#vllm-backend-docker-the-nvidia-runtime-is-unavailable" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> exits with a message that the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime is
-unknown or unavailable, or with an <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code> initialization error.</p>
-<p><strong>Cause:</strong> the NVIDIA Container Toolkit is not installed (or the daemon was
-not restarted and configured after install), so Docker cannot use
-<code class="docutils literal notranslate"><span class="pre">--runtime=nvidia</span></code>.</p>
-<p><strong>Fix:</strong> install the toolkit and restart docker:
-<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p>
-<p>Switch back to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code> in the service YAML if you only need the
-local install.</p>
+<p><strong>Symptom:</strong> Docker is reachable, but container startup fails with:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>docker: Error response from daemon: unknown or invalid runtime name: nvidia
+</pre></div>
+</div>
+<p><strong>Cause:</strong> the Docker daemon has no registered <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime. This can happen
+on DGX Spark even when the NVIDIA Container Toolkit is already installed.
+The model-server wrappers request <code class="docutils literal notranslate"><span class="pre">--runtime=nvidia</span></code> explicitly.</p>
+<p><strong>Fix:</strong> follow <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> to install the toolkit if needed,
+register the runtime with <code class="docutils literal notranslate"><span class="pre">nvidia-ctk</span></code>, and restart Docker. Verify that
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">info</span> <span class="pre">--format</span> <span class="pre">'{{json</span> <span class="pre">.Runtimes}}'</span></code> lists <code class="docutils literal notranslate"><span class="pre">nvidia</span></code>, then run the GPU
+smoke test there before retrying the model servers.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> is listed but startup instead reports an <code class="docutils literal notranslate"><span class="pre">nvidia-container-cli</span></code>
+initialization error, inspect that error for a driver or GPU-access problem.
+Refer to the
+<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html">NVIDIA Container Toolkit troubleshooting guide</a>.</p>
 </section>
 <section id="hub-fails-immediately-because-nvidia-codec-libraries-are-missing">
 <span id="hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so"></span><h3>Hub fails immediately because NVIDIA codec libraries are missing<a class="headerlink" href="#hub-fails-immediately-because-nvidia-codec-libraries-are-missing" title="Link to this heading">#</a></h3>
@@ -953,6 +993,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-socket-permission-denied-during-model-server-cleanup">Docker socket permission denied during model-server cleanup</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">DGX Spark — CUDA allocation fails during a vLLM cold start</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-vllm-reports-insufficient-kv-cache-only-on-a-cold-start">DGX Spark — vLLM reports insufficient KV cache only on a cold start</a></li>

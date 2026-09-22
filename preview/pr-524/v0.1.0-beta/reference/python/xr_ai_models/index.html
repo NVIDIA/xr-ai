@@ -347,6 +347,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -561,7 +562,7 @@ OpenAI-compatible endpoints.</p>
 <td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
-<td><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one</p></td>
+<td><p>Riva TTS client with buffered WAV or PCM synthesis.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2087,8 +2088,7 @@ adapter kind.</p>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.RivaTTS" title="Link to this definition">#</a></dt>
-<dd><p>Riva TTS client: streaming synthesis over gRPC, concatenated to one
-WAV (or raw PCM) result.</p>
+<dd><p>Riva TTS client with buffered WAV or PCM synthesis.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.RivaTTS.synthesize">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">synthesize</span></span><span class="sig-paren">(</span>

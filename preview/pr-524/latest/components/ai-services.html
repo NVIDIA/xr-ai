@@ -305,6 +305,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -323,7 +324,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -335,6 +338,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -462,49 +466,55 @@ recorded video, and document retrieval.</p>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code></p></td>
+<td><p>8105</p></td>
+<td><p>Magpie speech NIM</p></td>
+<td><p>HTTP adapter over Riva gRPC</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 <td><p>kyutai/pocket-tts</p></td>
 <td><p>Pocket TTS in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
 <td><p>8106</p></td>
 <td><p>Llama-3.1-Nemotron-Nano-8B-v1</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 <td><p>NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108</p></td>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nim_server</span></code></p></td>
 <td><p>configured per YAML</p></td>
 <td><p>selected NVIDIA NIM</p></td>
 <td><p>persistent Docker container</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
 <td><p>8340</p></td>
 <td><p>—</p></td>
@@ -720,7 +730,9 @@ Workers reach them through the optional <code class="docutils literal notranslat
 <p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
 (default 44100). An explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> call with <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the
 default) runs a gRPC channel-ready probe; consumer startup does not call it.
-No shipped model-server profile or sample selects Riva speech.</p>
+The standalone <a class="reference internal" href="../reference/magpie-nim-tts.html"><span class="doc">Magpie NIM HTTP speech service</span></a> service exposes a Magpie Riva
+NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
+the optional SDK dependency; HTTP consumers do not.</p>
 <p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
 <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
@@ -873,10 +885,11 @@ the 26.08 stack reuses compatible weights and downloads any missing artifacts.</
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
-<li><p><strong>Docker Engine</strong> with the user in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">version</span></code>
-must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
-<li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
-<a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
+<li><p><strong>Docker Engine</strong> accessible from the launch session (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> must
+succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>). Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for group setup.</p></li>
+<li><p><strong>NVIDIA Container Toolkit</strong> installed, with its <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime registered
+in Docker. Refer to <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> for the runtime check,
+configuration steps, and GPU smoke test.</p></li>
 <li><p><strong>NGC pull access</strong>, when the configured <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code> is restricted or
 requires authentication on <code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
