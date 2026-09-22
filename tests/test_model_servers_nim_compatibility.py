@@ -177,7 +177,8 @@ def test_existing_configs_work_unchanged(relative, network):
                 assert upstream["messages"][0]["content"] is None
                 assert upstream["messages"][1]["tool_call_id"] == "prev"
                 assert upstream["max_tokens"] == 128 and upstream["temperature"] == 0.1
-                assert upstream["chat_template_kwargs"] == {"enable_thinking": True, "thinking_budget": 64}
+                assert upstream["chat_template_kwargs"] == {"enable_thinking": True}
+                assert upstream["thinking_token_budget"] == 64
                 assert "".join([text async for text in clients[name].stream([ChatMessage("user", "hi")])]) == "ready"
             if "embedding" in clients:
                 assert await clients["embedding"].embed(["passage: abcd", "query: hi"]) == [[4.0], [2.0]]

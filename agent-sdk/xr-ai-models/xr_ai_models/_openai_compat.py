@@ -5,8 +5,8 @@
 
 Per-model quirks (reasoning field name, mandatory ``chat_template_kwargs``)
 are absorbed by ``reasoning_field`` and ``default_extras`` on the
-constructor; per-call quirks (``enable_thinking``, ``thinking_budget``)
-fold into ``chat_template_kwargs`` on the wire.
+constructor. Per-call thinking mode is a chat-template option, while vLLM's
+reasoning-token limit is a sampling parameter.
 """
 from __future__ import annotations
 
@@ -146,6 +146,13 @@ def _parse_chat_response(data: dict[str, Any], reasoning_field: str | None) -> C
 
     if reasoning_field:
         reasoning = msg.get(reasoning_field)
+        if reasoning is None:
+            reasoning = msg.get("reasoning") or msg.get("reasoning_content")
+        # A reasoning-parser miss can leave the hidden prefix in content even
+        # when the endpoint has a dedicated reasoning field. Never expose that
+        # prefix to downstream voice output.
+        if "</think>" in content:
+            content = content.rsplit("</think>", 1)[1].lstrip()
     else:
         reasoning = msg.get("reasoning") or msg.get("reasoning_content")
 
@@ -328,9 +335,9 @@ class OpenAICompatLLM:
             tpl: dict[str, Any] = {}
             if enable_thinking:
                 tpl["enable_thinking"] = True
-            if thinking_budget is not None:
-                tpl["thinking_budget"] = thinking_budget
             per_call["chat_template_kwargs"] = tpl
+        if thinking_budget is not None:
+            per_call["thinking_token_budget"] = thinking_budget
         for k, v in merge_dicts(self._default_extras, per_call).items():
             payload[k] = v
         return payload
@@ -351,7 +358,8 @@ class OpenAICompatLLM:
 
         Per-call generation values override endpoint defaults. ``headers`` may
         supply request context but cannot override the configured authorization
-        header.
+        header. ``thinking_budget`` limits reasoning tokens within the total
+        ``max_tokens`` output limit.
         """
 
         payload = self._build_payload(
@@ -385,6 +393,8 @@ class OpenAICompatLLM:
 
         Malformed server-sent event lines and deltas without content are
         skipped. Tool-call and reasoning deltas are not yielded.
+        ``thinking_budget`` limits reasoning tokens within the total
+        ``max_tokens`` output limit.
         """
 
         payload = self._build_payload(

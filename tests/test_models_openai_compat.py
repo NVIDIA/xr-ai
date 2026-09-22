@@ -149,7 +149,7 @@ async def test_llm_chat_passes_through_max_tokens_temperature() -> None:
     assert body["temperature"] == 0.7
 
 
-async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> None:
+async def test_llm_chat_sends_thinking_mode_and_budget() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
         "http://stub", "llm", client=stub.client(),
@@ -159,10 +159,8 @@ async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> Non
             enable_thinking=True, thinking_budget=1024,
         )
     body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": True,
-        "thinking_budget": 1024,
-    }
+    assert body["chat_template_kwargs"] == {"enable_thinking": True}
+    assert body["thinking_token_budget"] == 1024
 
 
 async def test_llm_chat_default_extras_merged_with_per_call() -> None:
@@ -177,10 +175,8 @@ async def test_llm_chat_default_extras_merged_with_per_call() -> None:
             thinking_budget=256,
         )
     body = stub.last_json()
-    assert body["chat_template_kwargs"] == {
-        "enable_thinking": False,
-        "thinking_budget": 256,
-    }
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert body["thinking_token_budget"] == 256
 
 
 async def test_llm_chat_reasoning_field_aliasing() -> None:
@@ -197,6 +193,38 @@ async def test_llm_chat_reasoning_field_aliasing() -> None:
     ) as llm:
         resp = await llm.chat([ChatMessage(role="user", content="x")])
     assert resp.reasoning == "thinking…"
+
+
+async def test_llm_chat_reasoning_field_falls_back_across_server_versions() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(
+        content="answer",
+        reasoning="thinking…",
+        reasoning_field="reasoning",
+    )
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        reasoning_field="reasoning_content",
+        client=stub.client(),
+    ) as llm:
+        resp = await llm.chat([ChatMessage(role="user", content="x")])
+    assert resp.reasoning == "thinking…"
+
+
+async def test_llm_chat_strips_reasoning_markup_leaked_into_content() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(
+        content="private reasoning</think>Final answer.",
+        reasoning=None,
+        reasoning_field="reasoning",
+    )
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        reasoning_field="reasoning",
+        client=stub.client(),
+    ) as llm:
+        resp = await llm.chat([ChatMessage(role="user", content="x")])
+    assert resp.content == "Final answer."
 
 
 async def test_llm_chat_reasoning_default_checks_both_field_names() -> None:
