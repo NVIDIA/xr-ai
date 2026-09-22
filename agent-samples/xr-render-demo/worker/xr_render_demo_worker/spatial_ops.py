@@ -40,22 +40,45 @@ def _record(field: str) -> None:
         setattr(evidence, field, getattr(evidence, field) + 1)
 
 
-_UserDirection = Literal["front", "back", "left", "right", "above", "below"]
+_UserDirection = Literal["at", "front", "back", "left", "right", "above", "below"]
 _AnchorRelation = Literal["toward_user", "away_from_user", "left_of", "right_of", "above", "below"]
 
 _DEFAULT_COLOR = (0.2, 0.9, 1.0)
 
 _COLOR_WORDS = {
-    "red": (1, 0, 0), "green": (0, 0.8, 0), "blue": (0, 0.4, 1), "yellow": (1, 1, 0),
-    "cyan": (0, 1, 1), "magenta": (1, 0, 1), "orange": (1, 0.5, 0), "purple": (0.6, 0, 1),
-    "white": (1, 1, 1), "black": (0, 0, 0), "teal": (0, 0.8, 0.8), "turquoise": (0.2, 0.9, 1),
-    "lavender": (0.6, 0.4, 1), "pink": (1, 0.5, 0.8), "gray": (0.5, 0.5, 0.5), "grey": (0.5, 0.5, 0.5),
+    "red": (1, 0, 0),
+    "green": (0, 0.8, 0),
+    "blue": (0, 0.4, 1),
+    "yellow": (1, 1, 0),
+    "cyan": (0, 1, 1),
+    "magenta": (1, 0, 1),
+    "orange": (1, 0.5, 0),
+    "brown": (0.5, 0.25, 0.1),
+    "purple": (0.6, 0, 1),
+    "white": (1, 1, 1),
+    "black": (0, 0, 0),
+    "teal": (0, 0.8, 0.8),
+    "turquoise": (0.2, 0.9, 1),
+    "lavender": (0.6, 0.4, 1),
+    "pink": (1, 0.5, 0.8),
+    "gray": (0.5, 0.5, 0.5),
+    "grey": (0.5, 0.5, 0.5),
 }
 _SHAPE_WORDS = {
-    "box": "box", "cube": "box", "block": "box", "crate": "box",
-    "sphere": "sphere", "ball": "sphere", "orb": "sphere",
-    "cone": "cone", "cylinder": "cylinder", "capsule": "capsule",
-    "ring": "ring", "pyramid": "pyramid", "torus": "torus", "donut": "torus",
+    "box": "box",
+    "cube": "box",
+    "block": "box",
+    "crate": "box",
+    "sphere": "sphere",
+    "ball": "sphere",
+    "orb": "sphere",
+    "cone": "cone",
+    "cylinder": "cylinder",
+    "capsule": "capsule",
+    "ring": "ring",
+    "pyramid": "pyramid",
+    "torus": "torus",
+    "donut": "torus",
 }
 
 # A discriminated color source: the subagent LLM picks the kind through the
@@ -94,6 +117,10 @@ class CreatedObject(BaseModel):
     y: float
     z: float
     created_this_turn: int = Field(default=1, description="Objects created so far in this turn, including this one.")
+
+
+class CreatedObjects(BaseModel):
+    objects: list[CreatedObject]
 
 
 class RecoloredObject(BaseModel):
@@ -183,8 +210,7 @@ class _Leaves:
         return await self._tracking.get_user_frame.execute(EmptyRequest())
 
     async def find(self, object_ref: str) -> SceneObject:
-        wanted = "".join("-" if c in "‐‑‒–—−" else c
-                         for c in object_ref).strip().lower()
+        wanted = "".join("-" if c in "‐‑‒–—−" else c for c in object_ref).strip().lower()
         wanted = re.sub(r"[\s_]+", "-", wanted) if re.fullmatch(r"[A-Za-z]+[\s_-]+\d+", wanted) else wanted
         state = await self._scene.get_scene_state.execute(EmptyRequest())
         for item in state.objects:
@@ -208,9 +234,10 @@ class _Leaves:
             pool = [item for item in state.objects if shape is None or item.type == shape]
             if color is None or not pool:
                 return pool if shape is not None or color is not None else []
+
             def color_distance(item: SceneObject) -> float:
-                return ((item.color.r - color[0]) ** 2 + (item.color.g - color[1]) ** 2
-                        + (item.color.b - color[2]) ** 2)
+                return (item.color.r - color[0]) ** 2 + (item.color.g - color[1]) ** 2 + (item.color.b - color[2]) ** 2
+
             best = min(color_distance(item) for item in pool)
             if best > 0.4:
                 return []
@@ -269,9 +296,7 @@ class _Leaves:
                 return (numbers[0], numbers[1], numbers[2])
             words = re.findall(r"[a-z]+", value.lower())
             if len(numbers) == 3 and not words:
-                raise ValueError(
-                    f"numeric color {value!r} is out of range; r, g, b must each be between 0 and 1"
-                )
+                raise ValueError(f"numeric color {value!r} is out of range; r, g, b must each be between 0 and 1")
             if not words:
                 return _DEFAULT_COLOR
             for word in words:
@@ -284,8 +309,7 @@ class _Leaves:
                     return _COLOR_WORDS[close[0]]
             known = ", ".join(sorted(_COLOR_WORDS))
             raise ValueError(
-                f"Unknown color {value!r}; use one of {known}, copy a scene object, "
-                "or observe a physical source"
+                f"Unknown color {value!r}; use one of {known}, copy a scene object, or observe a physical source"
             )
         if not value.strip():
             raise ValueError(f"color_value is required for color_kind {kind!r}")
@@ -298,20 +322,26 @@ class _Leaves:
             raise ValueError(f"unknown color kind {kind!r}")
         if self.physical_color is None:
             raise ValueError(f"no camera is available to observe {value!r}")
-        resolved = await self.physical_color.execute(
-            self.physical_color.request_model(source_words=value)
-        )
+        resolved = await self.physical_color.execute(self.physical_color.request_model(source_words=value))
         return (resolved.r, resolved.g, resolved.b)
 
     async def spot(self, operation: str, arguments: dict) -> tuple[float, float, float]:
         if operation == "compute_user_relative_position":
             frame = _SpatialFrame.model_validate(arguments["user_frame"])
-            result = _spatial.user_relative(frame, arguments["direction_from_user"], arguments["distance_meters"])
+            if arguments["direction_from_user"] == "at":
+                result = frame.origin
+            else:
+                result = _spatial.user_relative(
+                    frame,
+                    arguments["direction_from_user"],
+                    arguments["distance_meters"],
+                )
         elif operation == "offset_position_in_user_frame":
             frame = _SpatialFrame.model_validate(arguments["user_frame"])
             start = _Vector3.model_validate(arguments["start_position"])
             result = _spatial.offset_user_frame(
-                frame, start,
+                frame,
+                start,
                 forward=arguments.get("forward_meters", 0.0),
                 right=arguments.get("right_meters", 0.0),
                 up=arguments.get("up_meters", 0.0),
@@ -340,9 +370,7 @@ class _Leaves:
         self.check_writable()
         x, y, z = position
         self._confirm(
-            await self._scene.update_primitive.execute(
-                UpdatePrimitiveRequest(obj_id=object_id, x=x, y=y, z=z)
-            )
+            await self._scene.update_primitive.execute(UpdatePrimitiveRequest(obj_id=object_id, x=x, y=y, z=z))
         )
         return MovedObject(obj_id=object_id, x=x, y=y, z=z)
 
@@ -391,10 +419,11 @@ class _Leaves:
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class _ObjRequest(BaseModel):
     object_words: str = Field(
         description="The instruction's exact words for this object, copied verbatim (mangled nouns fine); "
-                    "an id only when the instruction itself states that id."
+        "an id only when the instruction itself states that id."
     )
 
 
@@ -409,6 +438,10 @@ class _NudgeRequest(_ObjRequest):
     forward: float = Field(default=0.0, description="Signed user-forward shift in metres.")
     right: float = Field(default=0.0, description="Signed user-right shift in metres.")
     up: float = Field(default=0.0, description="Signed world-up shift in metres.")
+
+
+class _RepeatNudgeRequest(_NudgeRequest):
+    repetitions: int = Field(ge=1, le=20, description="Number of complete out-and-back cycles.")
 
 
 class _MoveObjectRelativeRequest(BaseModel):
@@ -458,14 +491,44 @@ class _RecolorRequest(_ObjRequest):
 
 
 class _CreateUserRelativeRequest(BaseModel):
-    prim_type: str = Field(description="The instruction's exact shape word, copied verbatim.")
-    direction: _UserDirection
+    prim_type: str = Field(
+        description="Only the instruction's shape noun, copied verbatim; never put a color word here."
+    )
+    direction: _UserDirection = Field(
+        description=(
+            "Requested direction from the user. Use front when no position is stated, below for "
+            "the user's feet or floor, and at only for the user's exact current location."
+        )
+    )
     color_kind: _ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
     color_value: str = Field(
-        default="",
-        description=_COLOR_VALUE_GUIDE + " Leave empty when the instruction states no color."
+        default="", description=_COLOR_VALUE_GUIDE + " Leave empty when the instruction states no color."
     )
-    distance: float = Field(default=1.5, description="Distance from the user in metres.")
+    distance_from_user_meters: float = Field(
+        description="Position offset from the user; copy an explicitly stated spatial distance, otherwise 1.5."
+    )
+    object_radius_or_half_edge_meters: float = Field(
+        default=0.1,
+        description="Object dimension only; keep 0.1 unless dimensions are explicitly requested.",
+    )
+
+
+class _CreateLinearArrangementRequest(BaseModel):
+    prim_type: str = Field(
+        description="Only the instruction's shape noun, copied verbatim; never put a color word here."
+    )
+    count: int = Field(ge=2, le=20, description="Number of new objects in the arrangement.")
+    layout: Literal["horizontal_row", "vertical_stack"]
+    color_kind: _ColorKind = Field(default="literal", description=_COLOR_KIND_GUIDE)
+    color_value: str = Field(
+        default="", description=_COLOR_VALUE_GUIDE + " Leave empty when the instruction states no color."
+    )
+    distance: float = Field(default=1.5, description="Distance in front of the user to the stack base.")
+    spacing: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Requested center-to-center spacing in metres; zero uses touching objects.",
+    )
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
 
 
@@ -484,7 +547,7 @@ class _CreateObjectRelativeRequest(BaseModel):
     color_value: str = Field(
         default="",
         description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
-                    "color source; leave empty only when truly unstated."
+        "color source; leave empty only when truly unstated.",
     )
     distance: float = Field(default=0.3, description="Distance from the anchor in metres.")
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
@@ -499,10 +562,9 @@ class _CreateAtRequest(BaseModel):
     color_value: str = Field(
         default="",
         description=_COLOR_VALUE_GUIDE + " Include whenever the instruction names a "
-                    "color source; leave empty only when truly unstated."
+        "color source; leave empty only when truly unstated.",
     )
     size: float = Field(default=0.1, description="Sphere radius or box half-edge in metres.")
-
 
 
 class _ChangeShapeRequest(_ObjRequest):
@@ -514,6 +576,7 @@ class _ResizeRequest(_ObjRequest):
 
 
 # ── Placement tools ───────────────────────────────────────────────────────────
+
 
 def make_placement_tools(
     scene: SceneTools,
@@ -527,22 +590,64 @@ def make_placement_tools(
     async def move_user_relative(req: _MoveUserRelativeRequest) -> MovedObject:
         target = await leaves.find(req.object_words)
         frame = await leaves.user_frame()
-        spot = await leaves.spot("compute_user_relative_position",
-            {"user_frame": frame.model_dump(), "direction_from_user": req.direction, "distance_meters": req.distance})
+        spot = await leaves.spot(
+            "compute_user_relative_position",
+            {"user_frame": frame.model_dump(), "direction_from_user": req.direction, "distance_meters": req.distance},
+        )
         return await leaves.write(target.id, spot)
 
     async def nudge(req: _NudgeRequest) -> MovedObject:
         current = await leaves.find(req.object_words)
         frame = await leaves.user_frame()
-        spot = await leaves.spot("offset_position_in_user_frame", {
-            "user_frame": frame.model_dump(), "start_position": current.position.model_dump(),
-            "forward_meters": req.forward, "right_meters": req.right, "up_meters": req.up,
-        })
+        spot = await leaves.spot(
+            "offset_position_in_user_frame",
+            {
+                "user_frame": frame.model_dump(),
+                "start_position": current.position.model_dump(),
+                "forward_meters": req.forward,
+                "right_meters": req.right,
+                "up_meters": req.up,
+            },
+        )
         return await leaves.write(current.id, spot)
 
+    async def repeat_nudge(req: _RepeatNudgeRequest) -> MovedObject:
+        current = await leaves.find(req.object_words)
+        frame = await leaves.user_frame()
+        position = current.position
+        result: MovedObject | None = None
+        for _ in range(req.repetitions):
+            outward = await leaves.spot(
+                "offset_position_in_user_frame",
+                {
+                    "user_frame": frame.model_dump(),
+                    "start_position": position.model_dump(),
+                    "forward_meters": req.forward,
+                    "right_meters": req.right,
+                    "up_meters": req.up,
+                },
+            )
+            result = await leaves.write(current.id, outward)
+            position = _Vector3(x=result.x, y=result.y, z=result.z)
+            returned = await leaves.spot(
+                "offset_position_in_user_frame",
+                {
+                    "user_frame": frame.model_dump(),
+                    "start_position": position.model_dump(),
+                    "forward_meters": -req.forward,
+                    "right_meters": -req.right,
+                    "up_meters": -req.up,
+                },
+            )
+            result = await leaves.write(current.id, returned)
+            position = _Vector3(x=result.x, y=result.y, z=result.z)
+        assert result is not None
+        return result
+
     async def move_object_relative(req: _MoveObjectRelativeRequest) -> MovedObject:
-        logger.debug("move_object_relative movee={!r} anchor={!r} relation={}",
-                     req.movee_words, req.anchor_words, req.relation)
+        logger.debug(
+            "move_object_relative movee={!r} anchor={!r} relation={}", req.movee_words, req.anchor_words, req.relation
+        )
         movee = await leaves.find(req.movee_words)
         anchor = await leaves.find(req.anchor_words)
         if movee.id == anchor.id:
@@ -551,10 +656,15 @@ def make_placement_tools(
                 "an object cannot be placed relative to itself."
             )
         frame = await leaves.user_frame()
-        spot = await leaves.spot("compute_position_relative_to_anchor", {
-            "user_frame": frame.model_dump(), "anchor_position": anchor.position.model_dump(),
-            "relation_to_anchor": req.relation, "distance_meters": req.distance,
-        })
+        spot = await leaves.spot(
+            "compute_position_relative_to_anchor",
+            {
+                "user_frame": frame.model_dump(),
+                "anchor_position": anchor.position.model_dump(),
+                "relation_to_anchor": req.relation,
+                "distance_meters": req.distance,
+            },
+        )
         return await leaves.write(movee.id, spot)
 
     async def move_inside(req: _MoveInsideRequest) -> MovedObject:
@@ -566,30 +676,41 @@ def make_placement_tools(
         movee = await leaves.find(req.movee_words)
         anchor_a = await leaves.find(req.first_anchor_words)
         anchor_b = await leaves.find(req.second_anchor_words)
-        spot = await leaves.spot("compute_midpoint", {
-            "first_position": anchor_a.position.model_dump(),
-            "second_position": anchor_b.position.model_dump(),
-        })
+        spot = await leaves.spot(
+            "compute_midpoint",
+            {
+                "first_position": anchor_a.position.model_dump(),
+                "second_position": anchor_b.position.model_dump(),
+            },
+        )
         return await leaves.write(movee.id, spot)
 
     async def move_toward(req: _MoveTowardRequest) -> MovedObject:
         movee = await leaves.find(req.movee_words)
         target = await leaves.find(req.target_words)
-        spot = await leaves.spot("compute_position_toward_or_away_from_reference", {
-            "start_position": movee.position.model_dump(),
-            "reference_position": target.position.model_dump(),
-            "movement_direction": req.direction, "distance_meters": req.distance,
-        })
+        spot = await leaves.spot(
+            "compute_position_toward_or_away_from_reference",
+            {
+                "start_position": movee.position.model_dump(),
+                "reference_position": target.position.model_dump(),
+                "movement_direction": req.direction,
+                "distance_meters": req.distance,
+            },
+        )
         return await leaves.write(movee.id, spot)
 
     async def move_toward_user(req: _MoveTowardUserRequest) -> MovedObject:
         movee = await leaves.find(req.object_words)
         frame = await leaves.user_frame()
-        spot = await leaves.spot("compute_position_toward_or_away_from_reference", {
-            "start_position": movee.position.model_dump(),
-            "reference_position": frame.origin.model_dump(),
-            "movement_direction": req.direction, "distance_meters": req.distance,
-        })
+        spot = await leaves.spot(
+            "compute_position_toward_or_away_from_reference",
+            {
+                "start_position": movee.position.model_dump(),
+                "reference_position": frame.origin.model_dump(),
+                "movement_direction": req.direction,
+                "distance_meters": req.distance,
+            },
+        )
         return await leaves.write(movee.id, spot)
 
     async def swap_positions(req: _SwapRequest) -> SwappedObjects:
@@ -607,30 +728,101 @@ def make_placement_tools(
         return await leaves.write(target.id, (req.x, req.y, req.z))
 
     return [
-        Tool("move_user_relative", "Move an existing object to a point in a named direction from the user. "
-             "Not for stated shifts like 'one metre to my left'; nudge does those.",
-             _MoveUserRelativeRequest, MovedObject, move_user_relative),
-        Tool("nudge", "Shift an existing object from its current position by signed user-frame offsets.",
-             _NudgeRequest, MovedObject, nudge),
-        Tool("move_object_relative", "Move an existing object to a point in a named relation to an anchor object.",
-             _MoveObjectRelativeRequest, MovedObject, move_object_relative),
-        Tool("move_inside", "Move an existing object into the center of a container object.",
-             _MoveInsideRequest, MovedObject, move_inside),
-        Tool("move_between", "Move an existing object to the midpoint between two anchor objects.",
-             _MoveBetweenRequest, MovedObject, move_between),
-        Tool("move_toward", "Move an existing object toward or away from another object.",
-             _MoveTowardRequest, MovedObject, move_toward),
-        Tool("move_toward_user", "Move an existing object toward or away from the user.",
-             _MoveTowardUserRequest, MovedObject, move_toward_user),
-        Tool("swap_positions", "Exchange the positions of two existing objects.",
-             _SwapRequest, SwappedObjects, swap_positions),
-        Tool("move_to", "Move an existing object to explicit world coordinates taken from the request, "
-             "SCENE OBJECTS, or [Recent moves]; never invent coordinates.",
-             _MoveToRequest, MovedObject, move_to),
+        Tool(
+            "move_user_relative",
+            "Move an existing object to a point in a named direction from the user. "
+            "Use direction at for the user's current location. Not for stated shifts like "
+            "'one metre to my left'; nudge does those.",
+            _MoveUserRelativeRequest,
+            MovedObject,
+            move_user_relative,
+        ),
+        Tool(
+            "nudge",
+            "Shift an existing object from its current position by signed user-frame offsets. "
+            "Moving 'further away' along viewing depth is a positive forward offset, preserving "
+            "the object's lateral and vertical coordinates. Use only for one shift, never for "
+            "repeated, cyclic, or back-and-forth motion.",
+            _NudgeRequest,
+            MovedObject,
+            nudge,
+        ),
+        Tool(
+            "repeat_nudge",
+            "Perform complete repeated out-and-back motion of one existing object. For N "
+            "repetitions of two opposing phases, set the first-phase signed offset and "
+            "repetitions=N; the tool performs both phases of every cycle.",
+            _RepeatNudgeRequest,
+            MovedObject,
+            repeat_nudge,
+            return_direct=True,
+            render_result=lambda result: (
+                f"Completed the requested repeated out-and-back motion for {result.obj_id}."
+            ),
+            examples=(
+                "For two left-and-right cycles, set a negative right offset and repetitions=2.",
+            ),
+        ),
+        Tool(
+            "move_object_relative",
+            "Move an existing object to a point in a named relation to an anchor object.",
+            _MoveObjectRelativeRequest,
+            MovedObject,
+            move_object_relative,
+        ),
+        Tool(
+            "move_inside",
+            "Move an existing object into the center of a container object.",
+            _MoveInsideRequest,
+            MovedObject,
+            move_inside,
+        ),
+        Tool(
+            "move_between",
+            "Move an existing object to the midpoint between two anchor objects.",
+            _MoveBetweenRequest,
+            MovedObject,
+            move_between,
+        ),
+        Tool(
+            "move_toward",
+            "Move an existing object toward or away from another object.",
+            _MoveTowardRequest,
+            MovedObject,
+            move_toward,
+        ),
+        Tool(
+            "move_toward_user",
+            "Move an existing object radially toward or away from the user's position. Use only "
+            "for explicit 'toward me' or 'away from me', not 'further away' along viewing depth.",
+            _MoveTowardUserRequest,
+            MovedObject,
+            move_toward_user,
+        ),
+        Tool(
+            "swap_positions",
+            "Exchange the positions of two existing objects.",
+            _SwapRequest,
+            SwappedObjects,
+            swap_positions,
+        ),
+        Tool(
+            "move_to",
+            "Move an existing object to explicit world coordinates taken from the request, "
+            "SCENE OBJECTS, or [Recent moves]; never invent coordinates.",
+            _MoveToRequest,
+            MovedObject,
+            move_to,
+            examples=(
+                "To restore an object where it was before, copy its previous coordinates from "
+                "[Recent moves] into one move_to call.",
+            ),
+        ),
     ]
 
 
 # ── Appearance tools ──────────────────────────────────────────────────────────
+
 
 def make_appearance_tools(
     scene: SceneTools,
@@ -654,12 +846,24 @@ def make_appearance_tools(
         return RecoloredObject(obj_id=target.id, r=r, g=g, b=b)
 
     return [
-        Tool("recolor", "Change an existing object's color, keeping position, type, and size.",
-             _RecolorRequest, RecoloredObject, recolor),
+        Tool(
+            "recolor",
+            "Change an existing object's color, keeping position, type, and size. A held, worn, "
+            "or room object is a physical color source even when an XR object has the same shape; "
+            "preserve that complete physical phrase in color_value.",
+            _RecolorRequest,
+            RecoloredObject,
+            recolor,
+            examples=(
+                "To match an existing ring to a worn scarf, use color_kind physical and preserve "
+                "the complete scarf phrase in color_value.",
+            ),
+        ),
     ]
 
 
 # ── Object tools ──────────────────────────────────────────────────────────────
+
 
 def make_object_tools(
     scene: SceneTools,
@@ -675,9 +879,41 @@ def make_object_tools(
         prim = leaves.shape(req.prim_type)
         color = await leaves.resolve_color(req.color_kind, req.color_value)
         frame = await leaves.user_frame()
-        spot = await leaves.spot("compute_user_relative_position",
-            {"user_frame": frame.model_dump(), "direction_from_user": req.direction, "distance_meters": req.distance})
-        return await leaves.add(prim, spot, color, req.size)
+        spot = await leaves.spot(
+            "compute_user_relative_position",
+            {
+                "user_frame": frame.model_dump(),
+                "direction_from_user": req.direction,
+                "distance_meters": req.distance_from_user_meters,
+            },
+        )
+        return await leaves.add(prim, spot, color, req.object_radius_or_half_edge_meters)
+
+    async def create_linear_arrangement(req: _CreateLinearArrangementRequest) -> CreatedObjects:
+        prim = leaves.shape(req.prim_type)
+        color = await leaves.resolve_color(req.color_kind, req.color_value)
+        frame = await leaves.user_frame()
+        base = await leaves.spot(
+            "compute_user_relative_position",
+            {"user_frame": frame.model_dump(), "direction_from_user": "front", "distance_meters": req.distance},
+        )
+        gap = req.spacing or max(0.05, req.size * 2)
+        center = (req.count - 1) / 2
+        positions = []
+        for index in range(req.count):
+            offset = (index - center) * gap
+            if req.layout == "vertical_stack":
+                positions.append((base[0], base[1] + index * gap, base[2]))
+            else:
+                positions.append(
+                    (
+                        base[0] + frame.right.x * offset,
+                        base[1] + frame.right.y * offset,
+                        base[2] + frame.right.z * offset,
+                    )
+                )
+        created = [await leaves.add(prim, position, color, req.size) for position in positions]
+        return CreatedObjects(objects=created)
 
     async def create_object_relative(req: _CreateObjectRelativeRequest) -> CreatedObject:
         prim = leaves.shape(req.prim_type)
@@ -692,18 +928,30 @@ def make_object_tools(
         if req.second_anchor_words:
             logger.debug("create_object_relative between={!r} and={!r}", req.anchor_words, req.second_anchor_words)
             anchor_b = await leaves.find(req.second_anchor_words)
-            spot = await leaves.spot("compute_midpoint", {
-                "first_position": anchor.position.model_dump(),
-                "second_position": anchor_b.position.model_dump(),
-            })
+            spot = await leaves.spot(
+                "compute_midpoint",
+                {
+                    "first_position": anchor.position.model_dump(),
+                    "second_position": anchor_b.position.model_dump(),
+                },
+            )
         else:
-            logger.debug("create_object_relative anchor={!r} relation={} distance={}",
-                         req.anchor_words, req.relation, req.distance)
+            logger.debug(
+                "create_object_relative anchor={!r} relation={} distance={}",
+                req.anchor_words,
+                req.relation,
+                req.distance,
+            )
             frame = await leaves.user_frame()
-            spot = await leaves.spot("compute_position_relative_to_anchor", {
-                "user_frame": frame.model_dump(), "anchor_position": anchor.position.model_dump(),
-                "relation_to_anchor": req.relation, "distance_meters": req.distance,
-            })
+            spot = await leaves.spot(
+                "compute_position_relative_to_anchor",
+                {
+                    "user_frame": frame.model_dump(),
+                    "anchor_position": anchor.position.model_dump(),
+                    "relation_to_anchor": req.relation,
+                    "distance_meters": req.distance,
+                },
+            )
         return await leaves.add(prim, spot, color, req.size)
 
     async def create_at(req: _CreateAtRequest) -> CreatedObject:
@@ -718,8 +966,9 @@ def make_object_tools(
         current = await leaves.find(req.object_words)
         result = await leaves.update({"obj_id": current.id, "prim_type": prim})
         # A shape change replaces the object; the scene returns its new id.
-        return MovedObject(obj_id=result.new_id or current.id,
-                           x=current.position.x, y=current.position.y, z=current.position.z)
+        return MovedObject(
+            obj_id=result.new_id or current.id, x=current.position.x, y=current.position.y, z=current.position.z
+        )
 
     async def resize_object(req: _ResizeRequest) -> MovedObject:
         current = await leaves.find(req.object_words)
@@ -732,30 +981,128 @@ def make_object_tools(
         return RemovedObject(obj_id=target.id)
 
     return [
-        Tool("create_user_relative",
-             "Create a new object at a point in a named direction from the user. The shape may be "
-             "a speech-to-text-mangled word; pass it verbatim because this tool repairs it.",
-             _CreateUserRelativeRequest, CreatedObject, create_user_relative),
-        Tool("create_object_relative",
-             "Create a new object relative to one anchor object, or at the midpoint between two anchor objects "
-             "(set second_anchor_words for 'between X and Y').",
-             _CreateObjectRelativeRequest, CreatedObject, create_object_relative),
-        Tool("create_at", "Create a new object at explicit world coordinates.",
-             _CreateAtRequest, CreatedObject, create_at),
-        Tool("change_shape",
-             "Change an existing object into another primitive type, keeping position, color, and size.",
-             _ChangeShapeRequest, MovedObject, change_shape),
-        Tool("resize_object",
-             "Required for every size change to an existing object. Multiply its size by factor 2 "
-             "for twice/double or 0.5 for half, keeping everything else unchanged.",
-             _ResizeRequest, MovedObject, resize_object),
-        Tool("remove_object", "Remove an existing object from the scene.",
-             _ObjRequest, RemovedObject, remove_object),
+        Tool(
+            "create_linear_arrangement",
+            "Create a requested horizontal row or vertical stack of new identical objects directly "
+            "in its final aligned layout. Preserve a stated spacing; otherwise use touching objects. "
+            "Use one call instead of separate default creations and later moves.",
+            _CreateLinearArrangementRequest,
+            CreatedObjects,
+            create_linear_arrangement,
+            return_direct=True,
+            render_result=lambda result: (
+                f"Created the requested arrangement of {len(result.objects)} new objects."
+            ),
+            examples=(
+                "For a vertical stack of four new objects, use layout vertical_stack and count=4.",
+                "For a row with a stated separation, use layout horizontal_row and copy that "
+                "center-to-center spacing exactly.",
+            ),
+        ),
+        Tool(
+            "create_user_relative",
+            "Default creation tool when the instruction names no anchor object or world coordinates, "
+            "even if unrelated scene objects already exist. Create a new object at a point in a "
+            "named direction from the user. The shape may be "
+            "a speech-to-text-mangled word; pass it verbatim because this tool repairs it. One call "
+            "creates exactly one object, so a requested count requires one call per object. With "
+            "no stated position use direction front and distance 1.5, regardless of other scene "
+            "objects. Use direction at only for the user's current location; use direction below "
+            "and distance about 1.5 for the floor or the user's feet.",
+            _CreateUserRelativeRequest,
+            CreatedObject,
+            create_user_relative,
+            examples=(
+                "When a possibly misspelled color adjective precedes a clear shape noun, put only "
+                "the noun in prim_type and use color_kind literal with the adjective in color_value.",
+                "A named color such as amber is literal, not a physical source.",
+                "A stated user-relative distance belongs only in distance_from_user_meters; keep "
+                "object_radius_or_half_edge_meters at its default unless dimensions are separately specified.",
+                "For an ordinary object requested two metres forward, set distance_from_user_meters=2 "
+                "and object_radius_or_half_edge_meters=0.1; direction or eye-height wording does not "
+                "change its dimensions.",
+                "For an object at the user's feet, set direction=below and "
+                "distance_from_user_meters=1.5; never use direction=at.",
+                "For an object one metre to the user's left, set direction=left and "
+                "distance_from_user_meters=1; do not keep the default distance.",
+                "With no position words, use the default front position even when another object "
+                "already occupies it; do not invent a relation to that object.",
+                "For a new object matching a held or worn item, use color_kind physical and keep "
+                "the complete source phrase in color_value.",
+            ),
+        ),
+        Tool(
+            "create_object_relative",
+            "Use only when the instruction explicitly names an existing anchor object in a spatial "
+            "relationship. Create a new object relative to one anchor object, or at the midpoint "
+            "between two anchor objects "
+            "(set second_anchor_words for 'between X and Y'). Copy anchor wording and call the tool "
+            "even when the scene uses a different spelling; its fuzzy resolver decides the match. "
+            "In 'create NEW-TARGET above ANCHOR', prim_type and color describe the new target and "
+            "anchor_words is everything after the relation; this is creation, never recoloring the anchor.",
+            _CreateObjectRelativeRequest,
+            CreatedObject,
+            create_object_relative,
+            examples=(
+                "For creation above a possibly mangled anchor, call this tool and copy the anchor "
+                "phrase unchanged; never decline based on its spelling or apparent absence.",
+                "For a new maroon block above a cyan bawl, pass cyan bawl unchanged as anchor_words "
+                "so the tool can resolve the spoken shape.",
+            ),
+        ),
+        Tool(
+            "create_at",
+            "Create a new object at explicit world coordinates.",
+            _CreateAtRequest,
+            CreatedObject,
+            create_at,
+        ),
+        Tool(
+            "change_shape",
+            "Change an existing object into another primitive type, keeping position, color, and "
+            "size. This cannot apply a color named in the same instruction; after the call, report "
+            "that color as a remaining separate operation.",
+            _ChangeShapeRequest,
+            MovedObject,
+            change_shape,
+            return_direct=True,
+            render_result=lambda result: (
+                f"Changed the shape of {result.obj_id}; its color was not changed."
+            ),
+        ),
+        Tool(
+            "resize_object",
+            "Required for every size change to an existing object. Multiply its size by factor 2 "
+            "for twice/double or 0.5 for half, keeping everything else unchanged. Invoke the tool; "
+            "never print a hypothetical call as ordinary text.",
+            _ResizeRequest,
+            MovedObject,
+            resize_object,
+            examples=(
+                "For an unquantified request to enlarge an existing object, call once with "
+                "factor=1.5.",
+            ),
+        ),
+        Tool(
+            "remove_object",
+            "Required exactly once for every focused remove, delete, or erase instruction about an "
+            "existing object; execute it before replying.",
+            _ObjRequest,
+            RemovedObject,
+            remove_object,
+        ),
     ]
 
 
 __all__ = [
-    "CreatedObject", "CreationLedger", "MovedObject", "RecoloredObject", "RemovedObject",
-    "SwappedObjects", "TurnGuard",
-    "make_appearance_tools", "make_object_tools", "make_placement_tools",
+    "CreatedObject",
+    "CreationLedger",
+    "MovedObject",
+    "RecoloredObject",
+    "RemovedObject",
+    "SwappedObjects",
+    "TurnGuard",
+    "make_appearance_tools",
+    "make_object_tools",
+    "make_placement_tools",
 ]
