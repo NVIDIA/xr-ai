@@ -1243,6 +1243,43 @@ async def test_hub_drops_buffered_file_when_newer_session_is_already_active() ->
             await asyncio.gather(lifecycle, return_exceptions=True)
 
 
+async def test_hub_drops_file_when_session_changes_during_encoding(monkeypatch) -> None:
+    hub = HubEndpoint.__new__(HubEndpoint)
+    hub._participant_sessions = {"alice": "session-a"}
+    hub._file_pub = SimpleNamespace(send_multipart=AsyncMock())
+    message = FileMessage(
+        participant_id="alice",
+        topic="image.response",
+        pts_us=123,
+        transfer_id="stream-session-a",
+        name="capture.png",
+        mime_type="image/png",
+        attributes={},
+        data=b"png",
+        participant_session_id="session-a",
+    )
+    encoding_started = asyncio.Event()
+    resume_encoding = asyncio.Event()
+
+    async def paused_to_thread(function, *args):
+        encoding_started.set()
+        await resume_encoding.wait()
+        return function(*args)
+
+    monkeypatch.setattr("device_io_hub.ipc._hub.asyncio.to_thread", paused_to_thread)
+    publish = asyncio.create_task(hub._publish_file(message))
+    try:
+        await asyncio.wait_for(encoding_started.wait(), 1)
+        hub._participant_sessions["alice"] = "session-b"
+        resume_encoding.set()
+        await asyncio.wait_for(publish, 1)
+
+        hub._file_pub.send_multipart.assert_not_awaited()
+    finally:
+        resume_encoding.set()
+        await asyncio.gather(publish, return_exceptions=True)
+
+
 @pytest.mark.parametrize("prior_session", [None, "session-0"])
 async def test_processor_buffers_file_that_arrives_before_participant_join(
     prior_session,

@@ -488,6 +488,13 @@ class HubEndpoint:
             return
         topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
         encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
+        # The active session can change while encoding runs in a worker thread.
+        if not self._file_session_is_active(msg):
+            logger.debug(
+                "File {} dropped: participant session is no longer active",
+                msg.transfer_id,
+            )
+            return
         await self._file_pub.send_multipart([topic, encoded])
 
     async def _route_file(self, msg: FileMessage) -> None:
