@@ -285,7 +285,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert config.instrument_state_interval_s == 10.0
     assert config.instrument_lost_after_s == 30.0
     assert "Previous caption" not in config.monitor_prompt
-    assert "current_view" in config.foreground_prompt
+    assert "tool's description as the authoritative statement" in config.foreground_prompt
     monitor_prompt = config.monitor_prompt.lower()
     current_view_prompt = (
         (_WORKER / "lab_instrument_monitoring_worker" / "prompts" / "current_view_prompt.txt").read_text().lower()
@@ -1791,6 +1791,12 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
 
     foreground = object.__new__(ForegroundAgent)
 
+    class Llm:
+        async def chat(self, *_args, **_kwargs):
+            return ChatResponse("", None, None, "stop", {})
+
+    foreground._llm = Llm()
+
     async def answer(*_args, **_kwargs):
         return "Device1 is reading 12 volts.", ["lab_instruments__read"], False
 
@@ -1803,8 +1809,9 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
     assert [topic for topic, _message in published] == [VOICE_CONTRIBUTION_TOPIC]
     assert published[0][1] == VoiceOutput(
         text="Device1 is reading 12 volts.",
-        interrupt=True,
         timestamp_us=7,
+        kind="result",
+        turn_id="query-1",
     )
 
 
@@ -1872,9 +1879,11 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
     class Llm:
         def __init__(self) -> None:
             self.tool_names: set[str] = set()
+            self.generation: dict[str, object] = {}
 
-        async def chat(self, _messages, *, tools, **_kwargs):
+        async def chat(self, _messages, *, tools, **kwargs):
             self.tool_names = {tool.name for tool in tools}
+            self.generation.update(kwargs)
             return ChatResponse("I heard you.", None, None, "stop", {})
 
     llm = Llm()
@@ -1895,7 +1904,13 @@ async def test_foreground_uses_one_unfiltered_tool_catalog(
     assert response == "I heard you."
     assert used == []
     assert spoken is False
-    assert llm.tool_names == {tool.name for tool in FOREGROUND_TOOL_DEFS}
+    assert llm.tool_names == {
+        *(tool.name for tool in FOREGROUND_TOOL_DEFS),
+        "turn__report_progress",
+    }
+    assert llm.generation["enable_thinking"] is True
+    assert llm.generation["thinking_budget"] == 1024
+    assert llm.generation["max_tokens"] == 1536
 
 
 @pytest.mark.asyncio
@@ -1974,6 +1989,7 @@ def test_foreground_prompt_has_non_overlapping_routing_eval_cases() -> None:
         LAB_INSTRUMENTS_STATUS_TOOL,
     }
     assert all(case["query"].lower() not in prompt for case in cases)
+    assert all(tool.name.lower() not in prompt for tool in FOREGROUND_TOOL_DEFS)
 
 
 def test_visual_eval_covers_prompt_driven_monitor_and_instrument_rules() -> None:

@@ -51,6 +51,12 @@ _NO_CHANGE_RESPONSES = frozenset(
 class VideoLogControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    subject: str = Field(
+        default="",
+        max_length=160,
+        description="Optional visual-log subject copied from the request; ignored by lifecycle controls.",
+    )
+
 
 class VideoLogState(BaseModel):
     active: bool
@@ -142,7 +148,7 @@ class VideoLogAgent(Agent):
             (
                 Tool(
                     "video_log__start",
-                    "Start broad visual activity logging in the background.",
+                    "USE WHEN: a direct present request to start broad visual activity logging.",
                     VideoLogControlRequest,
                     VideoLogState,
                     start,
@@ -151,7 +157,7 @@ class VideoLogAgent(Agent):
                 ),
                 Tool(
                     "video_log__stop",
-                    "Stop broad visual activity logging.",
+                    "USE WHEN: a direct present request to stop broad visual activity logging.",
                     VideoLogControlRequest,
                     VideoLogState,
                     stop,
@@ -160,7 +166,7 @@ class VideoLogAgent(Agent):
                 ),
                 Tool(
                     "video_log__status",
-                    "Report whether broad visual activity logging is running.",
+                    "USE WHEN: a question asks for the actual current visual-activity-log state.",
                     VideoLogControlRequest,
                     VideoLogState,
                     status,

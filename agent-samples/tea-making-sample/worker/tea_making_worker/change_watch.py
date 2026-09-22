@@ -48,6 +48,12 @@ class ChangeWatchStartRequest(BaseModel):
 class ChangeWatchControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    instruction: str = Field(
+        default="",
+        max_length=240,
+        description="Optional watch subject copied from the request; ignored by stop and status.",
+    )
+
 
 class ChangeWatchState(BaseModel):
     active: bool
@@ -143,30 +149,40 @@ class ChangeWatchAgent(Agent):
             (
                 Tool(
                     "change_watch__start",
-                    "Start visual change monitoring in the background.",
+                    "USE WHEN: a direct present request to start watching for a specified visual "
+                    "change in the background. DO NOT USE WHEN: negated, hypothetical, quoted, "
+                    "reported, or capability wording.",
                     ChangeWatchStartRequest,
                     ChangeWatchState,
                     start,
                     return_direct=True,
                     render_result=render,
+                    examples=(
+                        "'Watch for someone entering the room' starts a change watch.",
+                        "'The checklist says to watch the room' is quoted instruction and does not start one.",
+                    ),
                 ),
                 Tool(
                     "change_watch__stop",
-                    "Stop visual change monitoring.",
+                    "USE WHEN: a direct present request to stop the background visual change "
+                    "watch. DO NOT USE WHEN: a negated request to start watching.",
                     ChangeWatchControlRequest,
                     ChangeWatchState,
                     stop,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Stop watching for changes' stops the change watch.",),
                 ),
                 Tool(
                     "change_watch__status",
-                    "Report whether visual change monitoring is running.",
+                    "USE WHEN: a question asks for the actual current running state of the "
+                    "background visual change watch.",
                     ChangeWatchControlRequest,
                     ChangeWatchState,
                     status,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Are you still watching for changes?' uses change_watch__status.",),
                 ),
             )
         )
