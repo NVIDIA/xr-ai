@@ -94,9 +94,7 @@ CASES = (
         instruction="Move cone-0 one metre to my left.",
         scene=(_CONE,),
         # A stated distance shifts from the current position (x = 0.5 - 1.0).
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "x": (-0.65, -0.35)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "x": (-0.65, -0.35)}},),
     ),
     SubagentCase(
         name="move_next_to_object",
@@ -155,9 +153,7 @@ CASES = (
         vision_answer="The scarf is blue.",
         physical_expect_source="scarf",
         required_tools=("resolve_physical_color",),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},),
     ),
     SubagentCase(
         name="physical_color_numeric_answer",
@@ -168,8 +164,10 @@ CASES = (
         physical_expect_source="headband",
         required_tools=("resolve_physical_color",),
         expect=(
-            {"tool": "update_primitive",
-             "args": {"obj_id": "ring-1", "r": (0.05, 0.15), "g": (0.55, 0.65), "b": (0.35, 0.45)}},
+            {
+                "tool": "update_primitive",
+                "args": {"obj_id": "ring-1", "r": (0.05, 0.15), "g": (0.55, 0.65), "b": (0.35, 0.45)},
+            },
         ),
     ),
     SubagentCase(
@@ -190,9 +188,7 @@ CASES = (
         scene=(_RING, _CONE),
         vision_answer="The cone in the user's hand is blue.",
         required_tools=("resolve_physical_color",),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "b": (0.95, 1.05), "g": (0.35, 0.45)}},),
     ),
     SubagentCase(
         name="misspelled_color_recolor",
@@ -201,8 +197,10 @@ CASES = (
         scene=(_CONE,),
         forbid_tools=("resolve_physical_color",),
         expect=(
-            {"tool": "update_primitive",
-             "args": {"obj_id": "cone-0", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+            {
+                "tool": "update_primitive",
+                "args": {"obj_id": "cone-0", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)},
+            },
         ),
     ),
     SubagentCase(
@@ -211,8 +209,10 @@ CASES = (
         instruction="Create a teel capsule, no position stated.",
         forbid_tools=("resolve_physical_color",),
         expect=(
-            {"tool": "add_primitive",
-             "args": {"prim_type": "capsule", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)}},
+            {
+                "tool": "add_primitive",
+                "args": {"prim_type": "capsule", "r": (0.0, 0.1), "g": (0.75, 0.85), "b": (0.75, 0.85)},
+            },
         ),
     ),
     SubagentCase(
@@ -221,18 +221,14 @@ CASES = (
         instruction="Create a small sphere the color of the user's scarf, no position stated.",
         vision_answer="The scarf is blue.",
         required_tools=("resolve_physical_color", "add_primitive"),
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "sphere", "b": (0.95, 1.05), "g": (0.35, 0.45)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "sphere", "b": (0.95, 1.05), "g": (0.35, 0.45)}},),
     ),
     SubagentCase(
         name="move_toward_object",
         agent="placement",
         instruction="Move ring-1 closer to cone-0.",
         scene=(_CONE, _RING),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "x": (-0.95, 0.45)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "x": (-0.95, 0.45)}},),
     ),
     SubagentCase(
         name="put_object_back",
@@ -240,9 +236,7 @@ CASES = (
         instruction="Put cone-0 back where it was before.",
         scene=(dict(_CONE, position={"x": 0.5, "y": 1.4, "z": -0.5}),),
         recent_moves=("cone-0: previously at (0.5, 1.4, -1.6), now at (0.5, 1.4, -0.5)",),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "z": (-1.7, -1.5)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "z": (-1.7, -1.5)}},),
     ),
     SubagentCase(
         name="unresolvable_referent_reports_back",
@@ -260,14 +254,14 @@ CASES = (
         agent="placement",
         instruction="Move the yellow cube down one meter.",
         scene=(
-            dict(_CONE, id="box-0", type="box", color={"r": 1, "g": 0, "b": 0},
-                 position={"x": 0.1, "y": 1.3, "z": -1.0}),
-            dict(_RING, id="box-1", type="box", color={"r": 1, "g": 1, "b": 0},
-                 position={"x": -0.9, "y": 2.8, "z": -0.3}),
+            dict(
+                _CONE, id="box-0", type="box", color={"r": 1, "g": 0, "b": 0}, position={"x": 0.1, "y": 1.3, "z": -1.0}
+            ),
+            dict(
+                _RING, id="box-1", type="box", color={"r": 1, "g": 1, "b": 0}, position={"x": -0.9, "y": 2.8, "z": -0.3}
+            ),
         ),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "box-1", "y": (1.7, 1.9)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "box-1", "y": (1.7, 1.9)}},),
     ),
     SubagentCase(
         name="swap_two_objects",
@@ -300,9 +294,7 @@ CASES = (
         agent="object",
         instruction="Double the size of ring-1.",
         scene=(_CONE, _RING),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "size": (0.19, 0.21)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "size": (0.19, 0.21)}},),
     ),
     SubagentCase(
         name="shrink_named_object",
@@ -317,9 +309,7 @@ CASES = (
                 "size": 0.2,
             },
         ),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "box-0", "size": (0.09, 0.11)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "box-0", "size": (0.09, 0.11)}},),
     ),
     SubagentCase(
         name="row_of_three",
@@ -336,25 +326,19 @@ CASES = (
         agent="placement",
         instruction="Move ring-1 thirty centimetres above cone-0.",
         scene=(_CONE, _RING),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "y": (1.65, 1.75)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "y": (1.65, 1.75)}},),
     ),
     SubagentCase(
         name="create_stated_distance_left",
         agent="object",
         instruction="Create a white sphere one metre to the user's left at eye height.",
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "sphere", "x": (-1.05, -0.95)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "sphere", "x": (-1.05, -0.95)}},),
     ),
     SubagentCase(
         name="create_at_feet",
         agent="object",
         instruction="Create a red sphere on the floor at the user's feet.",
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "sphere", "r": (0.7, 1.0), "y": (-0.05, 0.5)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "sphere", "r": (0.7, 1.0), "y": (-0.05, 0.5)}},),
     ),
     SubagentCase(
         name="create_bare",
@@ -423,14 +407,22 @@ CASES = (
         agent="object",
         instruction="Create a red box above the blue sphere.",
         scene=(
-            {"id": "sphere-0", "type": "sphere", "position": {"x": -1.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0, "b": 1}, "size": 0.1},
-            {"id": "sphere-1", "type": "sphere", "position": {"x": 1.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "position": {"x": -1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0, "b": 1},
+                "size": 0.1,
+            },
+            {
+                "id": "sphere-1",
+                "type": "sphere",
+                "position": {"x": 1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.8, "b": 0},
+                "size": 0.1,
+            },
         ),
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "box", "x": (-1.1, -0.9), "y": (1.65, 2.0)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "box", "x": (-1.1, -0.9), "y": (1.65, 2.0)}},),
     ),
     SubagentCase(
         name="create_garbled_shape_noun",
@@ -439,8 +431,10 @@ CASES = (
         # "spear" with no anchor stated. Must stay a bare user-front create.
         instruction="Create one blue spear",
         expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "sphere", "r": (0, 0.05), "b": (0.9, 1.0),
-                                               "x": (-0.2, 0.2), "z": (-1.7, -1.3)}},
+            {
+                "tool": "add_primitive",
+                "args": {"prim_type": "sphere", "r": (0, 0.05), "b": (0.9, 1.0), "x": (-0.2, 0.2), "z": (-1.7, -1.3)},
+            },
         ),
     ),
     SubagentCase(
@@ -449,14 +443,22 @@ CASES = (
         # STT corruption: "sphere" heard as "spear". Nearest scene match wins.
         instruction="Create a red cube above the green spear.",
         scene=(
-            {"id": "sphere-0", "type": "sphere", "position": {"x": -1.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
-            {"id": "sphere-1", "type": "sphere", "position": {"x": 1.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0, "b": 1}, "size": 0.1},
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "position": {"x": -1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.8, "b": 0},
+                "size": 0.1,
+            },
+            {
+                "id": "sphere-1",
+                "type": "sphere",
+                "position": {"x": 1.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0, "b": 1},
+                "size": 0.1,
+            },
         ),
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "box", "x": (-1.1, -0.9), "y": (1.65, 2.0)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "box", "x": (-1.1, -0.9), "y": (1.65, 2.0)}},),
     ),
     SubagentCase(
         name="remove_object",
@@ -470,27 +472,21 @@ CASES = (
         agent="object",
         instruction="Make cone-0 twice as big.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "size": (0.19, 0.21)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "size": (0.19, 0.21)}},),
     ),
     SubagentCase(
         name="duplicate_object",
         agent="object",
         instruction="Create an identical copy of cone-0 beside it.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "add_primitive", "args": {"prim_type": "cone", "size": (0.05, 0.15)}},
-        ),
+        expect=({"tool": "add_primitive", "args": {"prim_type": "cone", "size": (0.05, 0.15)}},),
     ),
     SubagentCase(
         name="change_shape",
         agent="object",
         instruction="Change cone-0 into a box.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "prim_type": "box"}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "prim_type": "box"}},),
     ),
     SubagentCase(
         name="recolor_reports_back",
@@ -595,8 +591,7 @@ CASES = (
         name="vision_dead_camera_degrades",
         agent="vision",
         instruction=(
-            "What physical objects or surfaces are directly in front of the user for placing a sphere "
-            "two meters ahead?"
+            "What physical objects or surfaces are directly in front of the user for placing a sphere two meters ahead?"
         ),
         vision_error="No camera frame available.",
         required_tools=("look_at_current_frame",),
@@ -647,9 +642,7 @@ CASES = (
         agent="placement",
         instruction="Move cone-0 down forty centimeters.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "y": (0.95, 1.05)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "y": (0.95, 1.05)}},),
     ),
     SubagentCase(
         name="move_toward_user",
@@ -682,7 +675,7 @@ CASES = (
         instruction="Delete cone-0.",
         scene=(_CONE,),
         forbid_tools=tuple(sorted(_MUTATING)),
-        answer_contains="remov",
+        answer_contains="delet",
     ),
     SubagentCase(
         name="appearance_copies_scene_object_color",
@@ -716,9 +709,7 @@ CASES = (
         agent="object",
         instruction="Make cone-0 bigger.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "size": (0.145, 0.155)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "size": (0.145, 0.155)}},),
     ),
     SubagentCase(
         name="object_agent_rejects_movement",
@@ -752,9 +743,7 @@ CASES = (
         agent="placement",
         instruction="Shift cone-0 twenty-five centimeters to my right.",
         scene=(_CONE,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "cone-0", "x": (0.70, 0.80)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "cone-0", "x": (0.70, 0.80)}},),
     ),
     SubagentCase(
         name="holdout_missing_target_stops",
@@ -777,8 +766,8 @@ CASES = (
         agent="appearance",
         instruction="Match ring-1 to the physical mug beside the user.",
         scene=(_RING,),
-        physical_answer="0.2, 0.7, 0.4",
-        physical_expect_source="physical mug beside the user",
+        physical_answer="VISIBLE 0.2 0.7 0.4",
+        physical_expect_source="mug beside the user",
         required_tools=("resolve_physical_color",),
         expect=(
             {
@@ -800,27 +789,21 @@ CASES = (
         agent="object",
         instruction="Erase capsule-2.",
         scene=(_CAPSULE,),
-        expect=(
-            {"tool": "remove_primitive", "args": {"obj_id": "capsule-2"}},
-        ),
+        expect=({"tool": "remove_primitive", "args": {"obj_id": "capsule-2"}},),
     ),
     SubagentCase(
         name="holdout_qualitative_smaller",
         agent="object",
         instruction="Make ring-1 smaller.",
         scene=(_RING,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "size": (0.045, 0.055)}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "size": (0.045, 0.055)}},),
     ),
     SubagentCase(
         name="holdout_reshape_synonym",
         agent="object",
         instruction="Turn ring-1 into a capsule.",
         scene=(_RING,),
-        expect=(
-            {"tool": "update_primitive", "args": {"obj_id": "ring-1", "prim_type": "capsule"}},
-        ),
+        expect=({"tool": "update_primitive", "args": {"obj_id": "ring-1", "prim_type": "capsule"}},),
     ),
     SubagentCase(
         name="holdout_object_rejects_recolor",
@@ -873,8 +856,16 @@ CASES = (
 
 
 def _make_agent(
-    case_agent, llm, fake_scene, fake_tracking, fake_text_memory,
-    fake_current_frame, fake_image_query, context, video=None, physical_color=None,
+    case_agent,
+    llm,
+    fake_scene,
+    fake_tracking,
+    fake_text_memory,
+    fake_current_frame,
+    fake_image_query,
+    context,
+    video=None,
+    physical_color=None,
 ):
     if case_agent == "placement":
         return make_placement_agent(llm, fake_scene, fake_tracking, context)
@@ -963,8 +954,14 @@ async def run_case(case: SubagentCase) -> bool:
         context = SceneContext(fake_scene, fake_tracking)
         context._recent_moves[_PARTICIPANT] = list(case.recent_moves)
         agent = _make_agent(
-            case.agent, llm, fake_scene, fake_tracking, fake_text_memory,
-            fake_current_frame, fake_image_query, context,
+            case.agent,
+            llm,
+            fake_scene,
+            fake_tracking,
+            fake_text_memory,
+            fake_current_frame,
+            fake_image_query,
+            context,
             video=make_fake_video(scene, case.video_error),
             physical_color=make_fake_physical_color(scene),
         )
@@ -972,7 +969,11 @@ async def run_case(case: SubagentCase) -> bool:
         current_reference_time_us.set(harness.EVAL_REFERENCE_US)
         errored = False
         try:
-            reply = await agent.execute(SubagentTask(instruction=case.instruction))
+            reply = await agent.execute(
+                SubagentTask(
+                    instruction=case.instruction,
+                )
+            )
         except Exception as exc:
             reply = SubagentResult(result=f"<workflow error: {exc}>")
             errored = True

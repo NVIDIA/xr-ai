@@ -29,9 +29,15 @@ from xr_render_scene import AddPrimitiveRequest, EmptyRequest, SceneClient
 
 from ._live_endpoint import LiveEvalEndpoint, live_participant
 
-CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
-             "right": {"x": 1, "y": 0, "z": 0}, "up": {"x": 0, "y": 1, "z": 0},
-             "yaw_deg": 0.0, "pitch_deg": 0.0, "ts": 1}
+CANONICAL = {
+    "position": {"x": 0, "y": 1.6, "z": 0},
+    "forward": {"x": 0, "y": 0, "z": -1},
+    "right": {"x": 1, "y": 0, "z": 0},
+    "up": {"x": 0, "y": 1, "z": 0},
+    "yaw_deg": 0.0,
+    "pitch_deg": 0.0,
+    "ts": 1,
+}
 
 # One shared starting scene: a couple of referents so pronouns and vague
 # references have something to bite on.
@@ -68,6 +74,7 @@ PROBES = [
 
 async def clear_scene(scene):
     from xr_render_scene import RemovePrimitiveRequest
+
     state = await scene.get_scene_state(EmptyRequest())
     for item in state.objects:
         await scene.remove_primitive(RemovePrimitiveRequest(obj_id=item.id))
@@ -101,8 +108,10 @@ async def main() -> None:
     try:
         await tracking.call("set_sim_pose", CANONICAL)
     except Exception as error:
-        print(f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
-              "../yaml/openxr_service.yaml and restart the stack")
+        print(
+            f"openxr service refused set_sim_pose ({error}); set allow_sim_pose: true in "
+            "../yaml/openxr_service.yaml and restart the stack"
+        )
         await scene.close()
         await tracking.close()
         await endpoint.close()
@@ -118,12 +127,15 @@ async def main() -> None:
             async with live_participant(endpoint, participant):
                 await clear_scene(scene)
                 for prim_type, x, y, z, r, g, b, size in FIXTURES:
-                    await scene.add_primitive(AddPrimitiveRequest(
-                        prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size))
+                    await scene.add_primitive(
+                        AddPrimitiveRequest(prim_type=prim_type, x=x, y=y, z=z, r=r, g=g, b=b, size=size)
+                    )
                 before = await snapshot(scene)
-                await endpoint.inject_data(DataMessage(
-                    participant_id=participant, topic="",
-                    pts_us=time.time_ns() // 1_000, data=utterance.encode()))
+                await endpoint.inject_data(
+                    DataMessage(
+                        participant_id=participant, topic="", pts_us=time.time_ns() // 1_000, data=utterance.encode()
+                    )
+                )
                 # Expected-change intents may finish early; restraint intents must
                 # wait out the window.
                 deadline = asyncio.get_running_loop().time() + (30 if intent == "none" else 75)
