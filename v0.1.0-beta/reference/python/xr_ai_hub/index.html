@@ -501,31 +501,34 @@ its LiveKit, FastAPI, and uvicorn dependencies are not included.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.DataMessage" title="xr_ai_hub.DataMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataMessage</span></code></a></p></td>
 <td><p>Arbitrary binary/text payload from a LiveKit data channel.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FileMessage" title="xr_ai_hub.FileMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FileMessage</span></code></a></p></td>
+<td><p>A completed client-to-agent file or byte transfer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameData" title="xr_ai_hub.FrameData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameData</span></code></a></p></td>
 <td><p>Pixel data for the latest frame, published by the hub on <cite>video_data.&lt;pid&gt;.&lt;track&gt;</cite>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameRequest" title="xr_ai_hub.FrameRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameRequest</span></code></a></p></td>
 <td><p>Sent by a processor to request a copy of the current latest frame.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.FrameSignal" title="xr_ai_hub.FrameSignal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSignal</span></code></a></p></td>
 <td><p>Signals that a decoded frame has been written into the shared-memory ring buffer.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.MsgType" title="xr_ai_hub.MsgType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MsgType</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.MsgType" title="xr_ai_hub.MsgType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MsgType</span></code></a></p></td>
 <td><p>Wire-level message identifiers used by the hub IPC protocol.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ParticipantEvent" title="xr_ai_hub.ParticipantEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ParticipantEvent" title="xr_ai_hub.ParticipantEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a></p></td>
 <td><p>A LiveKit participant has joined or left the room.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.PixelFormat" title="xr_ai_hub.PixelFormat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PixelFormat</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.PixelFormat" title="xr_ai_hub.PixelFormat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PixelFormat</span></code></a></p></td>
 <td><p>Pixel layouts supported by shared-memory video frames.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.ReturnAudioFlush" title="xr_ai_hub.ReturnAudioFlush"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.ReturnAudioFlush" title="xr_ai_hub.ReturnAudioFlush"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code></a></p></td>
 <td><p>Drop any audio queued for <em>participant_id</em>'s return track.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.RosterRequest" title="xr_ai_hub.RosterRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RosterRequest</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.RosterRequest" title="xr_ai_hub.RosterRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RosterRequest</span></code></a></p></td>
 <td><p>Ask the hub to re-publish <code class="docutils literal notranslate"><span class="pre">PARTICIPANT_EVENT(joined=True)</span></code> on the</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_hub.SubscriptionProbe" title="xr_ai_hub.SubscriptionProbe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SubscriptionProbe</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_hub.SubscriptionProbe" title="xr_ai_hub.SubscriptionProbe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SubscriptionProbe</span></code></a></p></td>
 <td><p>Round-trip token echoed by the hub on <code class="docutils literal notranslate"><span class="pre">_probe.&lt;token&gt;</span></code>.</p></td>
 </tr>
 </tbody>
@@ -685,7 +688,9 @@ hub cannot supply pixels for the selected frame.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">push_addr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">auto_subscribe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.Subscribe" title="xr_ai_hub.Subscribe"><span class="pre">Subscribe</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">Subscribe.ALL</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_hub.Subscribe" title="xr_ai_hub.Subscribe"><span class="pre">Subscribe</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">Subscribe.DEFAULT</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">file_sub_addr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">file_hwm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">agent_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">announces_readiness</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
 </dl>
@@ -718,6 +723,16 @@ hub cannot supply pixels for the selected frame.</p>
 <dt>sub_addr :</dt><dd><p>ZMQ address of the hub publisher that supplies inbound messages.</p>
 </dd>
 <dt>push_addr :</dt><dd><p>ZMQ address of the hub receiver for outbound messages.</p>
+</dd>
+<dt>file_sub_addr :</dt><dd><p>ZMQ address of the bounded file publisher. Required only when the
+constructor filter or a later per-participant filter includes
+<code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code>.</p>
+</dd>
+<dt>file_hwm :</dt><dd><p>Maximum complete-file messages queued in each file-subscriber and
+callback-worker buffer. Must be a positive integer; defaults to 2.
+When auto-subscription and the initial filter include files, the file
+lane subscribes eagerly and gates callbacks by session and filter.
+Other modes use participant-scoped ZMQ filters.</p>
 </dd>
 <dt>auto_subscribe :</dt><dd><p>Whether participant join and leave events automatically manage
 subscriptions. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
@@ -822,6 +837,12 @@ an older build that does not answer probes.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.on_data">
 <span class="sig-name descname"><span class="pre">on_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataCallback</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">CallbackUnsubscribe</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.on_data" title="Link to this definition">#</a></dt>
 <dd><p>Register an async data callback and return an idempotent unsubscriber.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.on_file">
+<span class="sig-name descname"><span class="pre">on_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">FileCallback</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">CallbackUnsubscribe</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.on_file" title="Link to this definition">#</a></dt>
+<dd><p>Register an async completed-file callback and return an unsubscriber.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -930,8 +951,9 @@ only one FRAME_REQUEST is sent and all callers receive the same response.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.ProcessorEndpoint.run">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_hub.ProcessorEndpoint.run" title="Link to this definition">#</a></dt>
 <dd><p>Receive and dispatch messages until <a class="reference internal" href="#xr_ai_hub.ProcessorEndpoint.stop" title="xr_ai_hub.ProcessorEndpoint.stop"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code></a> is called.</p>
-<p>Registered callbacks run in independent tasks. An unhandled callback
-exception is fatal to the processor process.</p>
+<p>Real-time callbacks run in independent tasks. File callbacks run
+serially on a bounded worker. An unhandled callback exception is fatal
+to the processor process in either case.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -959,9 +981,9 @@ exception is fatal to the processor process.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.Subscribe">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">Subscribe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_hub.Subscribe" title="Link to this definition">#</a></dt>
 <dd><p>Per-participant message-category filter.</p>
-<p>Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
-PUB socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> (the default) gets every category for
-each subscribed participant; combine flags with <code class="docutils literal notranslate"><span class="pre">|</span></code> to scope down.</p>
+<p>The real-time flags correspond to pid-scoped topics on the hub’s main PUB
+socket. <code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code> is opt-in and uses the bounded file publisher.
+<code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> is a deprecated alias for <code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code>.</p>
 <section id="example">
 <h3>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Audio-only processor; ignores data + video on every pid.</span>
@@ -990,9 +1012,27 @@ each subscribed participant; combine flags with <code class="docutils literal no
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.Subscribe.FILE">
+<span class="sig-name descname"><span class="pre">FILE</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.FILE" title="Link to this definition">#</a></dt>
+<dd><p>Completed file transfers for a participant.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.Subscribe.REALTIME">
+<span class="sig-name descname"><span class="pre">REALTIME</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.REALTIME" title="Link to this definition">#</a></dt>
+<dd><p>All real-time message categories, excluding completed files.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.Subscribe.DEFAULT">
+<span class="sig-name descname"><span class="pre">DEFAULT</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.DEFAULT" title="Link to this definition">#</a></dt>
+<dd><p>Real-time categories selected by default.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_hub.Subscribe.ALL">
 <span class="sig-name descname"><span class="pre">ALL</span></span><a class="headerlink" href="#xr_ai_hub.Subscribe.ALL" title="Link to this definition">#</a></dt>
-<dd><p>All participant-scoped message categories.</p>
+<dd><p>Deprecated compatibility alias; use <a class="reference internal" href="#xr_ai_hub.Subscribe.REALTIME" title="xr_ai_hub.Subscribe.REALTIME"><code class="xref py py-attr docutils literal notranslate"><span class="pre">REALTIME</span></code></a>.</p>
 </dd></dl>
 
 </section>
@@ -1269,6 +1309,66 @@ there is no track SID for data.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">FileMessage</span></span><a class="headerlink" href="#xr_ai_hub.FileMessage" title="Link to this definition">#</a></dt>
+<dd><p>A completed client-to-agent file or byte transfer.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.participant_id">
+<span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.participant_id" title="Link to this definition">#</a></dt>
+<dd><p>Identity of the participant that sent the transfer.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.topic">
+<span class="sig-name descname"><span class="pre">topic</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.topic" title="Link to this definition">#</a></dt>
+<dd><p>Application-defined file route.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.pts_us">
+<span class="sig-name descname"><span class="pre">pts_us</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.pts_us" title="Link to this definition">#</a></dt>
+<dd><p>Hub receipt timestamp in microseconds.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.transfer_id">
+<span class="sig-name descname"><span class="pre">transfer_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.transfer_id" title="Link to this definition">#</a></dt>
+<dd><p>Opaque identifier assigned by the active client transport.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.name" title="Link to this definition">#</a></dt>
+<dd><p>Display name or filename supplied by the client.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.mime_type">
+<span class="sig-name descname"><span class="pre">mime_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.mime_type" title="Link to this definition">#</a></dt>
+<dd><p>Payload MIME type.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.attributes">
+<span class="sig-name descname"><span class="pre">attributes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.attributes" title="Link to this definition">#</a></dt>
+<dd><p>Application metadata with StreamKit’s internal attributes removed.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.data">
+<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bytes</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.data" title="Link to this definition">#</a></dt>
+<dd><p>Complete file contents.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.FileMessage.participant_session_id">
+<span class="sig-name descname"><span class="pre">participant_session_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.FileMessage.participant_session_id" title="Link to this definition">#</a></dt>
+<dd><p>Opaque participant-session identifier used to reject stale delivery.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="xr_ai_hub.FrameData">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_hub.</span></span><span class="sig-name descname"><span class="pre">FrameData</span></span><a class="headerlink" href="#xr_ai_hub.FrameData" title="Link to this definition">#</a></dt>
 <dd><p>Pixel data for the latest frame, published by the hub on <cite>video_data.&lt;pid&gt;.&lt;track&gt;</cite>.</p>
@@ -1510,6 +1610,12 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dd><p>Cancellation of a pending participant image capture.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.MsgType.FILE_MESSAGE">
+<span class="sig-name descname"><span class="pre">FILE_MESSAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">18</span></em><a class="headerlink" href="#xr_ai_hub.MsgType.FILE_MESSAGE" title="Link to this definition">#</a></dt>
+<dd><p>Completed inbound file or byte transfer from a connector.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -1538,6 +1644,12 @@ sampling rate. The hub only copies pixels when a request arrives.</p>
 <dt class="sig sig-object py" id="xr_ai_hub.ParticipantEvent.connector_id">
 <span class="sig-name descname"><span class="pre">connector_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.ParticipantEvent.connector_id" title="Link to this definition">#</a></dt>
 <dd><p>Identity of the connector that reported the participant.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_hub.ParticipantEvent.participant_session_id">
+<span class="sig-name descname"><span class="pre">participant_session_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_hub.ParticipantEvent.participant_session_id" title="Link to this definition">#</a></dt>
+<dd><p>Opaque identity for this particular participant connection.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1694,6 +1806,7 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_frame_data"><code class="docutils literal notranslate"><span class="pre">on_frame_data()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_audio"><code class="docutils literal notranslate"><span class="pre">on_audio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_data"><code class="docutils literal notranslate"><span class="pre">on_data()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_file"><code class="docutils literal notranslate"><span class="pre">on_file()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.on_participant"><code class="docutils literal notranslate"><span class="pre">on_participant()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_data"><code class="docutils literal notranslate"><span class="pre">send_return_data()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ProcessorEndpoint.send_return_audio"><code class="docutils literal notranslate"><span class="pre">send_return_audio()</span></code></a></li>
@@ -1713,6 +1826,9 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.DATA"><code class="docutils literal notranslate"><span class="pre">DATA</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.AUDIO"><code class="docutils literal notranslate"><span class="pre">AUDIO</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.VIDEO"><code class="docutils literal notranslate"><span class="pre">VIDEO</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.FILE"><code class="docutils literal notranslate"><span class="pre">FILE</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.REALTIME"><code class="docutils literal notranslate"><span class="pre">REALTIME</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.DEFAULT"><code class="docutils literal notranslate"><span class="pre">DEFAULT</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.Subscribe.ALL"><code class="docutils literal notranslate"><span class="pre">ALL</span></code></a></li>
 </ul>
 </li>
@@ -1762,6 +1878,18 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.DataMessage.data"><code class="docutils literal notranslate"><span class="pre">data</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage"><code class="docutils literal notranslate"><span class="pre">FileMessage</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.topic"><code class="docutils literal notranslate"><span class="pre">topic</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.pts_us"><code class="docutils literal notranslate"><span class="pre">pts_us</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.transfer_id"><code class="docutils literal notranslate"><span class="pre">transfer_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.name"><code class="docutils literal notranslate"><span class="pre">name</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.mime_type"><code class="docutils literal notranslate"><span class="pre">mime_type</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.attributes"><code class="docutils literal notranslate"><span class="pre">attributes</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.data"><code class="docutils literal notranslate"><span class="pre">data</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FileMessage.participant_session_id"><code class="docutils literal notranslate"><span class="pre">participant_session_id</span></code></a></li>
+</ul>
+</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameData"><code class="docutils literal notranslate"><span class="pre">FrameData</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameData.seq"><code class="docutils literal notranslate"><span class="pre">seq</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.FrameData.pts_us"><code class="docutils literal notranslate"><span class="pre">pts_us</span></code></a></li>
@@ -1808,6 +1936,7 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_REQUEST"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_REQUEST</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_DATA"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_DATA</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.IMAGE_CAPTURE_CANCEL"><code class="docutils literal notranslate"><span class="pre">IMAGE_CAPTURE_CANCEL</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.MsgType.FILE_MESSAGE"><code class="docutils literal notranslate"><span class="pre">FILE_MESSAGE</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent"><code class="docutils literal notranslate"><span class="pre">ParticipantEvent</span></code></a><ul class="nav section-nav flex-column">
@@ -1815,6 +1944,7 @@ proves every subscription issued before the probe is live on the hub.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent.joined"><code class="docutils literal notranslate"><span class="pre">joined</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent.pts_us"><code class="docutils literal notranslate"><span class="pre">pts_us</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent.connector_id"><code class="docutils literal notranslate"><span class="pre">connector_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.ParticipantEvent.participant_session_id"><code class="docutils literal notranslate"><span class="pre">participant_session_id</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_hub.PixelFormat"><code class="docutils literal notranslate"><span class="pre">PixelFormat</span></code></a><ul class="nav section-nav flex-column">

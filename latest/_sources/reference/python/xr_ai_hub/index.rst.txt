@@ -53,6 +53,7 @@ Classes
    xr_ai_hub.ConnectorRegistration
    xr_ai_hub.ControlMessage
    xr_ai_hub.DataMessage
+   xr_ai_hub.FileMessage
    xr_ai_hub.FrameData
    xr_ai_hub.FrameRequest
    xr_ai_hub.FrameSignal
@@ -179,7 +180,7 @@ Package Contents
    Reserved return-data topic used for aggregated agent readiness status.
 
 
-.. py:class:: ProcessorEndpoint(sub_addr: str, push_addr: str, *, auto_subscribe: bool = True, filter: Subscribe = Subscribe.ALL, agent_id: str | None = None, announces_readiness: bool = False)
+.. py:class:: ProcessorEndpoint(sub_addr: str, push_addr: str, *, auto_subscribe: bool = True, filter: Subscribe = Subscribe.DEFAULT, file_sub_addr: str | None = None, file_hwm: int = 2, agent_id: str | None = None, announces_readiness: bool = False)
 
    Downstream IPC endpoint for data processors.
 
@@ -211,6 +212,16 @@ Package Contents
        ZMQ address of the hub publisher that supplies inbound messages.
    push_addr :
        ZMQ address of the hub receiver for outbound messages.
+   file_sub_addr :
+       ZMQ address of the bounded file publisher. Required only when the
+       constructor filter or a later per-participant filter includes
+       ``Subscribe.FILE``.
+   file_hwm :
+       Maximum complete-file messages queued in each file-subscriber and
+       callback-worker buffer. Must be a positive integer; defaults to 2.
+       When auto-subscription and the initial filter include files, the file
+       lane subscribes eagerly and gates callbacks by session and filter.
+       Other modes use participant-scoped ZMQ filters.
    auto_subscribe :
        Whether participant join and leave events automatically manage
        subscriptions. Defaults to ``True``.
@@ -316,6 +327,12 @@ Package Contents
    .. py:method:: on_data(cb: DataCallback) -> CallbackUnsubscribe
 
       Register an async data callback and return an idempotent unsubscriber.
+
+
+
+   .. py:method:: on_file(cb: FileCallback) -> CallbackUnsubscribe
+
+      Register an async completed-file callback and return an unsubscriber.
 
 
 
@@ -443,8 +460,9 @@ Package Contents
 
       Receive and dispatch messages until :meth:`stop` is called.
 
-      Registered callbacks run in independent tasks. An unhandled callback
-      exception is fatal to the processor process.
+      Real-time callbacks run in independent tasks. File callbacks run
+      serially on a bounded worker. An unhandled callback exception is fatal
+      to the processor process in either case.
 
 
 
@@ -474,9 +492,9 @@ Package Contents
 
    Per-participant message-category filter.
 
-   Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
-   PUB socket. ``Subscribe.ALL`` (the default) gets every category for
-   each subscribed participant; combine flags with ``|`` to scope down.
+   The real-time flags correspond to pid-scoped topics on the hub's main PUB
+   socket. ``Subscribe.FILE`` is opt-in and uses the bounded file publisher.
+   ``Subscribe.ALL`` is a deprecated alias for ``Subscribe.REALTIME``.
 
    Example
    -------
@@ -507,9 +525,27 @@ Package Contents
 
 
 
+   .. py:attribute:: FILE
+
+      Completed file transfers for a participant.
+
+
+
+   .. py:attribute:: REALTIME
+
+      All real-time message categories, excluding completed files.
+
+
+
+   .. py:attribute:: DEFAULT
+
+      Real-time categories selected by default.
+
+
+
    .. py:attribute:: ALL
 
-      All participant-scoped message categories.
+      Deprecated compatibility alias; use :attr:`REALTIME`.
 
 
 
@@ -779,6 +815,76 @@ Package Contents
       :type:  bytes
 
       Opaque message payload.
+
+
+
+.. py:class:: FileMessage
+
+   A completed client-to-agent file or byte transfer.
+
+
+   .. py:attribute:: participant_id
+      :type:  str
+
+      Identity of the participant that sent the transfer.
+
+
+
+   .. py:attribute:: topic
+      :type:  str
+
+      Application-defined file route.
+
+
+
+   .. py:attribute:: pts_us
+      :type:  int
+
+      Hub receipt timestamp in microseconds.
+
+
+
+   .. py:attribute:: transfer_id
+      :type:  str
+
+      Opaque identifier assigned by the active client transport.
+
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      Display name or filename supplied by the client.
+
+
+
+   .. py:attribute:: mime_type
+      :type:  str
+
+      Payload MIME type.
+
+
+
+   .. py:attribute:: attributes
+      :type:  dict[str, str]
+
+      Application metadata with StreamKit's internal attributes removed.
+
+
+
+   .. py:attribute:: data
+      :type:  bytes
+
+      Complete file contents.
+
+
+
+   .. py:attribute:: participant_session_id
+      :type:  str
+      :value: ''
+
+
+      Opaque participant-session identifier used to reject stale delivery.
 
 
 
@@ -1086,6 +1192,14 @@ Package Contents
 
 
 
+   .. py:attribute:: FILE_MESSAGE
+      :value: 18
+
+
+      Completed inbound file or byte transfer from a connector.
+
+
+
 .. py:class:: ParticipantEvent
 
    A LiveKit participant has joined or left the room.
@@ -1118,6 +1232,15 @@ Package Contents
 
 
       Identity of the connector that reported the participant.
+
+
+
+   .. py:attribute:: participant_session_id
+      :type:  str
+      :value: ''
+
+
+      Opaque identity for this particular participant connection.
 
 
 

@@ -575,12 +575,31 @@ three endpoints:</p>
 </tbody>
 </table>
 </div>
-<p>The hub binds two sockets (defaults shown):</p>
+<p>The hub binds two real-time sockets (defaults shown):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">PULL</span></code> on <code class="docutils literal notranslate"><span class="pre">ipc:///tmp/xr_hub_in</span></code> — connectors <code class="docutils literal notranslate"><span class="pre">PUSH</span></code> inbound media here.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">PUB</span></code> on <code class="docutils literal notranslate"><span class="pre">ipc:///tmp/xr_hub_pub</span></code> — consumers <code class="docutils literal notranslate"><span class="pre">SUB</span></code> here for the fanned-out
 stream.</p></li>
 </ul>
+<p>Completed files use a separate bounded pair in each direction: connector <code class="docutils literal notranslate"><span class="pre">PUSH</span></code>
+to hub <code class="docutils literal notranslate"><span class="pre">PULL</span></code> on <code class="docutils literal notranslate"><span class="pre">ipc:///tmp/xr_hub_file_in</span></code>, then hub <code class="docutils literal notranslate"><span class="pre">PUB</span></code> to processor <code class="docutils literal notranslate"><span class="pre">SUB</span></code>
+on <code class="docutils literal notranslate"><span class="pre">ipc:///tmp/xr_hub_file_pub</span></code>. Each processor has its own bounded subscriber
+queue and drops its own excess files. The processor receives subscription probes
+independently while a bounded serial worker runs file callbacks. Bulk file
+serialization runs outside the real-time event loop.</p>
+<p>The file path is controlled by <code class="docutils literal notranslate"><span class="pre">incoming_file_max_bytes</span></code> (16 MiB),
+<code class="docutils literal notranslate"><span class="pre">incoming_file_max_concurrent</span></code> (8 globally),
+<code class="docutils literal notranslate"><span class="pre">incoming_file_max_concurrent_per_participant</span></code> (2),
+<code class="docutils literal notranslate"><span class="pre">incoming_file_idle_timeout_s</span></code> (10 seconds),
+<code class="docutils literal notranslate"><span class="pre">incoming_file_total_timeout_s</span></code> (60 seconds), and <code class="docutils literal notranslate"><span class="pre">incoming_file_ipc_hwm</span></code>
+(2 complete messages per file socket). The IPC high-water mark also bounds the
+short pre-join buffer. Files wait up to five seconds for a corresponding
+participant lifecycle event. Transfers that exceed admission, size, time, or
+queue limits are dropped without producing an agent <code class="docutils literal notranslate"><span class="pre">FileMessage</span></code>.</p>
+<p>Participant lifecycle events and completed files carry the same opaque connection
+identifier. The hub and processor discard a file if that connection has departed
+or the identity has since reconnected, preventing queued data from an old session
+from entering new participant state.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>connector_A ──PUSH──┐
 connector_B ──PUSH──┤─► PULL   HubEndpoint   PUB ──SUB──► consumers (agents)
 connector_N ──PUSH──┘    ↓ dispatch
