@@ -73,6 +73,14 @@ participant; `interrupt=True` flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
 independent agents cannot merge accidentally.
 
+Each running `VoiceAgent` remembers its 1,024 most recently closed stream keys.
+Output that reuses one of those keys is ignored, and the runtime logs one
+warning for that participant, producer, and `response_id`. Streams close by
+finalization, cancellation, or eviction; waiting does not reopen a retained
+key. Use one identifier per inbound query, such as
+`ctx.metadata.message_id`, or omit `response_id` when publishing a finite
+response in one `VoiceOutput`.
+
 `text_topic` controls the completed-response data echo and defaults to
 `agent.response`. Set it to an empty string when the application owns its own
 caption channel. The echo describes intended completed text, not client playback
