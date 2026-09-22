@@ -67,7 +67,6 @@ struct MockBackend : streamkit::StreamingBackend {
         sent_topics.emplace_back(topic);
         sent_payloads.emplace_back(BytesToString(data));
     }
-
     // Helpers for tests to drive the event hooks the backend would normally
     // fire from its event loop.
     void fire_data(std::string_view topic, std::string_view payload) const {
@@ -84,6 +83,19 @@ struct MockBackend : streamkit::StreamingBackend {
 };
 
 }  // namespace
+
+namespace streamkit {
+
+struct StreamSessionTestAccess {
+    static void SetCaptureResponseSender(
+        StreamSession& session,
+        std::function<void(
+            const CapturedImage&, std::string_view, std::string_view)> sender) {
+        session.capture_response_sender_ = std::move(sender);
+    }
+};
+
+} // namespace streamkit
 
 int main() {
     using streamkit::test::Expect;
@@ -176,6 +188,56 @@ int main() {
     ExpectEq(data_calls, 1);
     ExpectEq(last_topic, std::string("incoming.topic"));
     ExpectEq(last_payload, std::string("world"));
+
+    streamkit::CapturedImage sent_capture;
+    std::string sent_capture_topic;
+    std::string sent_capture_request_id;
+    streamkit::StreamSessionTestAccess::SetCaptureResponseSender(
+        session,
+        [&sent_capture, &sent_capture_topic, &sent_capture_request_id](
+            const streamkit::CapturedImage& image,
+            std::string_view topic,
+            std::string_view request_id) {
+            sent_capture = image;
+            sent_capture_topic = topic;
+            sent_capture_request_id = request_id;
+        });
+
+    int capture_calls = 0;
+    session.on_image_capture_requested = [&capture_calls](const auto& request) {
+        ++capture_calls;
+        ExpectEq(request.request_id, std::string("capture-1"));
+        ExpectEq(request.timeout_ms, std::int64_t{5000});
+        return streamkit::CapturedImage{.data = {1, 2, 3}};
+    };
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":1,"request_id":"capture-1","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
+    ExpectEq(data_calls, 1);
+    ExpectEq(sent_capture_topic, std::string("camera.capture.response"));
+    ExpectEq(sent_capture_request_id, std::string("capture-1"));
+    ExpectEq(sent_capture.mime_type, std::string("image/jpeg"));
+    ExpectEq(sent_capture.data, std::vector<std::uint8_t>({1, 2, 3}));
+
+    session.on_image_capture_requested = {};
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":1,"request_id":"capture-2","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
+    ExpectEq(sent_capture_topic, std::string("camera.capture.response"));
+    ExpectEq(sent_capture_request_id, std::string("capture-2"));
+    ExpectEq(
+        sent_capture.mime_type,
+        std::string("application/vnd.xr-ai.capture-rejection+json"));
+    ExpectEq(
+        std::string(sent_capture.data.begin(), sent_capture.data.end()),
+        std::string(R"({"version":1,"status":"rejected"})"));
+
+    raw->fire_data(
+        "camera.capture.request",
+        R"({"version":2,"request_id":"capture-3","timeout_ms":5000})");
+    ExpectEq(capture_calls, 1);
 
     raw->fire_agent_status("processing");
     ExpectEq(agent_calls, 1);

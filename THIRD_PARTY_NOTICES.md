@@ -140,10 +140,10 @@ Used by `client-samples/ios-visionos/`. Resolved via Swift Package Manager.
 
 | Package | Version | License | Upstream |
 |---|---|---|---|
-| `LiveKitClient` (`livekit/client-sdk-swift`)            | 2.13.0       | Apache-2.0   | https://github.com/livekit/client-sdk-swift |
-| `livekit/webrtc-xcframework`                            | 144.7559.01  | MIT          | https://github.com/livekit/webrtc-xcframework |
+| `LiveKitClient` (`livekit/client-sdk-swift`)            | 2.16.0       | Apache-2.0   | https://github.com/livekit/client-sdk-swift |
+| `livekit/webrtc-xcframework`                            | 144.7559.3   | MIT          | https://github.com/livekit/webrtc-xcframework |
 | `livekit/livekit-uniffi-xcframework`                    | 0.0.5        | Apache-2.0   | https://github.com/livekit/livekit-uniffi-xcframework |
-| `swift-protobuf` (`apple/swift-protobuf`)               | 1.36.1       | Apache-2.0   | https://github.com/apple/swift-protobuf |
+| `swift-protobuf` (`apple/swift-protobuf`)               | 1.37.0       | Apache-2.0   | https://github.com/apple/swift-protobuf |
 
 ## Android build toolchain (`client-samples/android/`)
 

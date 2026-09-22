@@ -13,7 +13,11 @@ cuda_visible_devices: "1"
 max_num_seqs: 8
 tensor_parallel_size: 1
 max_model_len: 32768
+# The fraction is the startup admission threshold. The explicit bytes
+# independently bound the resident cache; vLLM reports its token capacity and
+# maximum concurrency at startup.
 gpu_memory_utilization: 0.78
+kv_cache_memory_bytes: 2147483648
 enforce_eager: false
 
 video_pruning_rate: 0.5

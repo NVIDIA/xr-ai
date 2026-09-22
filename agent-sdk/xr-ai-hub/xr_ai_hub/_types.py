@@ -84,6 +84,15 @@ class MsgType(IntEnum):
     AGENT_PRESENCE = 14
     """Readiness-participating agent attachment or detachment."""
 
+    IMAGE_CAPTURE_REQUEST = 15
+    """Processor request for one participant's client to capture an image."""
+
+    IMAGE_CAPTURE_DATA = 16
+    """Encoded image returned by a client for a pending capture request."""
+
+    IMAGE_CAPTURE_CANCEL = 17
+    """Cancellation of a pending participant image capture."""
+
     # Add new types here; existing code is unaffected.
 
 
@@ -296,3 +305,48 @@ class AgentPresence:
 
     scope:    list[str] | None = None
     """Participant IDs served by the agent, or ``None`` for every participant."""
+
+
+@dataclass(slots=True)
+class ImageCaptureRequest:
+    """Ask one participant's client to capture and return an image."""
+
+    participant_id: str
+    """Participant whose camera capability should be invoked."""
+
+    request_id: str
+    """Opaque identifier correlating the request with its byte stream."""
+
+    timeout_ms: int
+    """Client-visible deadline in milliseconds."""
+
+
+@dataclass(slots=True)
+class ImageCaptureData:
+    """One complete encoded image returned for a capture request."""
+
+    participant_id: str
+    """Participant that produced the image."""
+
+    request_id: str
+    """Capture request completed by this image."""
+
+    pts_us: int
+    """Server receive time in Unix microseconds."""
+
+    mime_type: str
+    """Declared image media type."""
+
+    data: bytes
+    """Complete encoded image bytes."""
+
+
+@dataclass(slots=True)
+class ImageCaptureCancel:
+    """Cancel one pending participant image capture."""
+
+    participant_id: str
+    """Participant whose client should stop the capture."""
+
+    request_id: str
+    """Capture request to cancel."""

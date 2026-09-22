@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+// Internal capability used by StreamSession without adding a public backend API.
+export const INTERNAL_SEND_BYTE_STREAM = Symbol('StreamKit.internalSendByteStream');
+
 export class ByteStreamConnectionChanged extends Error {
   constructor() {
     super('The byte stream is no longer on the active connection');

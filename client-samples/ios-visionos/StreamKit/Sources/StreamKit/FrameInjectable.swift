@@ -13,9 +13,16 @@
  * // 1. Connect to the session.
  * try await session.connect()
  *
- * // 2. In your wearables SDK frame callback, inject each buffer:
+ * // 2. Route frames according to the user's saved camera mode:
  * metaSDK.onFrame = { sampleBuffer in
- *     try? await session.injectVideoFrame(sampleBuffer)
+ *     switch cameraMode {
+ *     case .live:
+ *         try? await session.injectVideoFrame(sampleBuffer)
+ *     case .onDemand:
+ *         latestCameraFrame = sampleBuffer // encode from the request handler
+ *     case .off:
+ *         break
+ *     }
  * }
  * ```
  *
@@ -31,6 +38,10 @@
  * `LocalVideoTrack` and publishes it to the LiveKit room. The track is published
  * after the first frame (not before) because LiveKit requires at least one captured
  * frame to resolve the stream's dimensions before it can complete the publish handshake.
+ * Applications with a camera-authorization selector should therefore call this API only
+ * in their live-video mode. For on-demand images, retain or request a frame in the
+ * external-camera adapter and return its encoded bytes from `onImageCaptureRequested`;
+ * leaving the handler unset disables that path.
  */
 
 import CoreMedia
@@ -48,6 +59,8 @@ public protocol FrameInjectable: AnyObject, Sendable {
     ///
     /// A `BufferCapturer`-backed LiveKit track is created on the first call and
     /// published to the room automatically once the frame dimensions are known.
+    /// Call this only after the user has selected live video; the method always
+    /// represents a publishing path, not an unpublished still-frame cache.
     ///
     /// - Parameter sampleBuffer: A `CMSampleBuffer` containing a `CVPixelBuffer`.
     ///   The pixel format must be one of LiveKit's supported formats

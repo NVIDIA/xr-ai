@@ -59,9 +59,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,6 +87,11 @@ import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectR
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ── Color tokens (match web client's CSS variables) ───────────────────────────
@@ -127,6 +131,15 @@ private fun StreamKitTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
+    val requestCameraPermission = rememberCameraPermissionRequester()
+    DisposableEffect(vm, requestCameraPermission) {
+        vm.requestCameraPermission = requestCameraPermission
+        onDispose {
+            if (vm.requestCameraPermission === requestCameraPermission) {
+                vm.requestCameraPermission = null
+            }
+        }
+    }
     Scaffold(
         containerColor = ColorPageBg,
         topBar = {
@@ -172,6 +185,42 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
             )
         }
     }
+}
+
+@Composable
+private fun rememberCameraPermissionRequester(): suspend () -> Boolean {
+    val context = LocalContext.current
+    var pendingRequest by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        pendingRequest?.complete(granted)
+        pendingRequest = null
+    }
+    val request = remember(context, launcher) {
+        suspend {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                true
+            } else {
+                val result = withContext(Dispatchers.Main.immediate) {
+                    pendingRequest ?: CompletableDeferred<Boolean>().also {
+                        pendingRequest = it
+                        launcher.launch(Manifest.permission.CAMERA)
+                    }
+                }
+                result.await()
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingRequest?.cancel()
+            pendingRequest = null
+        }
+    }
+    return request
 }
 
 @Composable
@@ -510,12 +559,6 @@ private fun MediaSection(vm: AppViewModel) {
     ) { granted ->
         if (granted) vm.startAudio()
     }
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) vm.startCamera()
-    }
-
     SectionCard(title = "Media") {
         // Microphone toggle
         CardRow {
@@ -565,33 +608,10 @@ private fun MediaSection(vm: AppViewModel) {
             )
         }
 
-        // Camera toggle
-        CardRow {
-            val camLabel = if (vm.isCameraActive) "Stop Camera" else "Start Camera"
-            val camColor = if (vm.isCameraActive) ColorRed else ColorSecondary
-            Button(
-                onClick = {
-                    if (vm.isCameraActive) {
-                        vm.stopCamera()
-                    } else if (vm.selectedCameraId == VIRTUAL_CAMERA_ID) {
-                        // Synthetic frames — no physical camera, no CAMERA permission.
-                        vm.startCamera()
-                    } else {
-                        val hasPerm = ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.CAMERA
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasPerm) vm.startCamera()
-                        else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isConnected,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isConnected) camColor else ColorSecondary,
-                ),
-                shape = RoundedCornerShape(8.dp),
-            ) { Text(camLabel) }
-        }
+        CameraModeSelectorRow(
+            selected = vm.cameraMode,
+            onSelect = vm::setCameraMode,
+        )
 
         // Camera status
         CardRow(showDivider = false) {
@@ -599,10 +619,56 @@ private fun MediaSection(vm: AppViewModel) {
             Spacer(Modifier.weight(1f))
             val (statusText, statusColor) = when {
                 vm.isCameraActive -> "Streaming" to ColorGreen
-                isConnected       -> "Idle" to ColorSecondary
-                else              -> "Not connected" to ColorSecondary
+                vm.cameraMode == CameraMode.ON_DEMAND && isConnected -> "On demand" to ColorGreen
+                vm.cameraMode == CameraMode.LIVE && isConnected -> "Starting…" to ColorOrange
+                vm.cameraMode == CameraMode.OFF -> "Off" to ColorSecondary
+                else -> "Not connected" to ColorSecondary
             }
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CameraModeSelectorRow(
+    selected: CameraMode,
+    onSelect: (CameraMode) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    CardRow {
+        Text(
+            "Camera Mode",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.width(110.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            ) {
+                Text(selected.displayName, style = MaterialTheme.typography.bodyMedium)
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            }
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                CameraMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode.displayName) },
+                        onClick = {
+                            onSelect(mode)
+                            expanded = false
+                        },
+                    )
+                }
+            }
         }
     }
 }

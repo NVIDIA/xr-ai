@@ -242,38 +242,30 @@ struct ContentView: View {
             Task { await model.switchCamera(to: newValue) }
         }
 
-        LabeledContent("Camera") {
-            HStack {
-                Text(cameraStatusLabel)
-                    .foregroundStyle(model.isCameraActive ? .green : .secondary)
-                if model.isCameraActive {
-                    Button("Stop", role: .destructive) {
-                        Task { await model.stopCamera() }
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    #if os(visionOS)
-                    Button("Start") {
-                        Task { await model.startCamera() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!isConnected || !model.immersiveSpaceIsOpen)
-                    .help(model.immersiveSpaceIsOpen ? "" : "Open the immersive space first.")
-                    #else
-                    Button("Start") {
-                        Task { await model.startCamera() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!isConnected)
-                    #endif
-                }
+        Picker("Camera Mode", selection: $m.cameraMode) {
+            ForEach(CameraMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
             }
+        }
+        .onChange(of: model.cameraMode) { _, newValue in
+            Task { await model.applyCameraMode(newValue) }
+        }
+
+        LabeledContent("Camera") {
+            Text(cameraStatusLabel)
+                .foregroundStyle(
+                    model.isCameraActive || (isConnected && model.cameraMode == .onDemand)
+                        ? .green
+                        : .secondary
+                )
         }
     }
 
     private var cameraStatusLabel: String {
         if model.isCameraActive { return "Streaming" }
-        return model.connectionState == .connected ? "Idle" : "Not connected"
+        if model.cameraMode == .off { return "Off" }
+        guard model.connectionState == .connected else { return "Not connected" }
+        return model.cameraMode == .onDemand ? "On demand" : "Starting…"
     }
 
     #if os(visionOS)

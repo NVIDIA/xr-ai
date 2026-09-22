@@ -25,7 +25,10 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
-import { LiveKitByteStreamWriter } from './ByteStreamTransport.js';
+import {
+  INTERNAL_SEND_BYTE_STREAM,
+  LiveKitByteStreamWriter,
+} from './ByteStreamTransport.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -482,6 +485,25 @@ export class LiveKitBackend {
       opts.destinationIdentities = [this.#config.hubIdentity];
     }
     await room.localParticipant.publishData(bytes, opts);
+  }
+
+  async [INTERNAL_SEND_BYTE_STREAM](data, request) {
+    const room = this.#room;
+    if (!room || room.state !== 'connected') {
+      throw StreamError.notConnected();
+    }
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const options = {
+      topic: request.topic,
+      attributes: request.attributes,
+      mimeType: request.mimeType,
+      name: request.name,
+      totalSize: bytes.byteLength,
+    };
+    if (this.#config.hubIdentity) {
+      options.destinationIdentities = [this.#config.hubIdentity];
+    }
+    return this.#byteStreamWriter.sendBytes(bytes, options);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

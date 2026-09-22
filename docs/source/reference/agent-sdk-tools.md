@@ -164,6 +164,14 @@ answer = await vision.execute(
 )
 ```
 
+`CurrentFrameTool` is a live-frame-or-still selector. Every invocation first
+uses a fresh frame already observed by DeviceIOHub. If none is available, it
+requests one still from the participant instead; this includes invocations by
+periodic monitoring tasks, which may therefore activate the camera briefly
+when video is off. Installing the StreamKit image-capture handler is the
+client-side opt-in boundary. Applications that must never initiate capture
+should not install that handler and should use `LiveFrameSource` directly.
+
 ## Marker tracking
 
 The `marker-tracking` extra detects QR and ArUco markers in a current frame or a

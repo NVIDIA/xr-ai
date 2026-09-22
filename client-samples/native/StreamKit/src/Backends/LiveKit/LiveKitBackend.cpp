@@ -18,6 +18,7 @@
 #include "streamkit/StreamError.h"
 
 #include "AgentStatusParser.h"
+#include "ByteStreamTransport.h"
 
 #include <algorithm>
 #include <chrono>
@@ -169,7 +170,9 @@ public:
         // -Wc++11-narrowing.
         std::span<const std::byte> bytes(
             reinterpret_cast<const std::byte*>(e.data.data()), e.data.size());
-        owner_->HandleDataReceived(e.topic, bytes);
+        const auto sender_identity =
+            e.participant ? e.participant->identity() : std::string{};
+        owner_->HandleDataReceived(e.topic, bytes, sender_identity);
     }
 
     void onConnectionQualityChanged(
@@ -526,12 +529,43 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 #if STREAMKIT_HAVE_LIVEKIT
     std::vector<std::uint8_t> payload(data.size());
     std::memcpy(payload.data(), data.data(), data.size());
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
     RequireLocalParticipant(room_)->publishData(
-        payload, reliable, {}, std::string(topic));
+        payload, reliable, destinations, std::string(topic));
 #else
     (void)data;
     (void)reliable;
 #endif
+}
+
+std::string LiveKitBackend::SendByteStream(
+    std::span<const std::uint8_t> data,
+    std::string_view topic,
+    const std::map<std::string, std::string>& attributes,
+    std::string_view mime_type,
+    std::string_view name) {
+    if (!is_connected_.load()) throw NotConnectedError{};
+    std::vector<std::string> destinations;
+    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
+    const auto generation = connect_generation_.load();
+    return detail::LiveKitByteStreamWriter::SendBytes(
+        std::as_bytes(data),
+        detail::ByteStreamWireOptions{
+            .topic = std::string(topic),
+            .attributes = attributes,
+            .destination_identities = std::move(destinations),
+            .mime_type = std::string(mime_type),
+            .name = std::string(name),
+            .total_size = data.size(),
+        },
+        detail::ByteStreamConnection{
+            .room = room_,
+            .is_active = [this, generation]() {
+                return is_connected_.load() &&
+                    connect_generation_.load() == generation;
+            },
+        });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -600,13 +634,17 @@ void LiveKitBackend::FireStateChanged(ConnectionState state) {
 }
 
 void LiveKitBackend::HandleDataReceived(std::string_view topic,
-                                        std::span<const std::byte> payload) const {
+                                        std::span<const std::byte> payload,
+                                        std::string_view sender_identity) const {
     if (topic == kAgentStatusTopic) {
         if (auto status = internal::ExtractAgentStatus(payload)) {
             if (!status->empty() && on_agent_status) {
                 on_agent_status(*status);
             }
         }
+        return;
+    }
+    if (config_.hub_identity && sender_identity != *config_.hub_identity) {
         return;
     }
     if (on_data_received) {
