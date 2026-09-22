@@ -18,23 +18,41 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import CreationLedger, TurnGuard, make_object_tools
+from .._adaptive import (
+    adaptive_result,
+    reasoning_messages,
+    refusal_needs_retry,
+    refusal_toolset,
+)
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
     "Use whenever the requested target is new or absent from SCENE OBJECTS, even with verbs such "
     "as put or place. Also owns object existence, shape, and size: create any new XR object at "
     "its requested initial position; remove or delete one; duplicate or copy one; reshape one; "
-    "or resize one. Examples: "
-    "'put a new ring inside the capsule', 'erase the left cone', and 'make ring-alpha smaller'. A "
-    "creation remains new even if an identical object exists, and its initial position stays in "
-    "the same instruction. This agent reads a physical color source for a new object itself, so "
-    "route that creation directly here without vision_agent. Preserve the user's shape, color, "
-    "count, source, and spatial words; include resolved ids for existing targets. Never use for "
-    "moving or recoloring an existing object."
+    "or resize one. It owns complete arrangements made only of new objects, including rows and "
+    "stacks; do not split their creation from their initial arrangement. A creation remains new "
+    "even if an identical object exists, and its initial position stays in the same instruction. "
+    "This agent reads a physical color source for a new "
+    "object itself. Preserve the user's shape, color, count, source, and spatial words; include "
+    "resolved ids for existing targets. Never use for moving or recoloring an existing object."
+)
+_EXAMPLES = (
+    "'Place a new ring inside the capsule' creates and positions the ring here.",
+    "'Make the existing ring smaller' resizes it here.",
+    "'Create a pyramid using the color of my shirt' belongs here as one complete creation; do "
+    "not inspect the shirt first.",
+    "'Build four new rings in a vertical stack' belongs here as one complete creation arrangement; "
+    "do not create them first and delegate their initial layout separately. Conventional rows "
+    "and stacks are routine tool operations and stay fast.",
+    "'Change the existing capsule into a gold cone' changes shape here, while the color facet "
+    "remains a separate color operation owned elsewhere.",
+    "Preserve interacting spatial constraints as one complete creation instruction.",
 )
 
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
+
 
 def make_object_agent(
     llm: LLMService,
@@ -50,38 +68,86 @@ def make_object_agent(
         async with delegation_lock:
             guard = TurnGuard()
             ledger = CreationLedger()
-            tools = make_object_tools(scene, tracking, ledger=ledger, guard=guard,
-                                      physical_color=physical_color)
-            tools.append(Tool(
-                "get_scene_state",
-                "Return every current XR object with its ID, type, world position, color, and size.",
-                EmptyRequest,
-                SceneState,
-                lambda _: scene.get_scene_state.execute(EmptyRequest()),
-            ))
+            tools = make_object_tools(scene, tracking, ledger=ledger, guard=guard, physical_color=physical_color)
+            tools.append(
+                Tool(
+                    "get_scene_state",
+                    "Return every current XR object with its ID, type, world position, color, and size.",
+                    EmptyRequest,
+                    SceneState,
+                    lambda _: scene.get_scene_state.execute(EmptyRequest()),
+                )
+            )
             toolset = tolerant_toolset(tools)
-            prompt = _prompt_text
+            toolset = refusal_toolset(
+                toolset,
+                examples=(
+                    "For movement of an existing object, decline with operation placement and "
+                    "suggest the placement owner.",
+                    "For a color-only change to an existing object, decline with operation recolor "
+                    "and suggest the appearance owner.",
+                ),
+            )
             messages = [
-                ChatMessage(role="system", content=prompt),
-                ChatMessage(role="user", content=(
-                    f"Active participant: {current_participant_id.get()}\n"
-                    f"Utterance timestamp: {current_reference_time_us.get()}\n"
-                    f"{await context.describe(current_participant_id.get(), bearings=True)}\n\n"
-                    f"Focused instruction: {request.instruction}"
-                )),
+                ChatMessage(role="system", content=_prompt_text),
+                ChatMessage(
+                    role="user",
+                    content=(
+                        f"Active participant: {current_participant_id.get()}\n"
+                        f"Utterance timestamp: {current_reference_time_us.get()}\n"
+                        f"{await context.describe(current_participant_id.get(), bearings=True)}\n\n"
+                        f"Focused instruction: {request.instruction}"
+                    ),
+                ),
             ]
+
             async def _call_model(transcript, definitions):
                 return await llm.chat(
-                    transcript,
+                    reasoning_messages(transcript, enabled=True),
                     tools=list(definitions) or None,
                     max_tokens=2048,
                     temperature=0.0,
+                    enable_thinking=True,
+                    thinking_budget=1024,
                 )
+
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
+                if await refusal_needs_retry(
+                    llm,
+                    instruction=request.instruction,
+                    responsibility=DESCRIPTION,
+                    result=loop_result,
+                ):
+                    async def _retry_model(transcript, definitions):
+                        return await llm.chat(
+                            reasoning_messages(transcript, enabled=True),
+                            tools=list(definitions) or None,
+                            max_tokens=2048,
+                            temperature=0.0,
+                            enable_thinking=True,
+                            thinking_budget=1024,
+                        )
+
+                    loop_result = await run_tool_loop(
+                        messages,
+                        toolset,
+                        _retry_model,
+                        max_iterations=6,
+                    )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=DESCRIPTION,
+                result=loop_result,
+            )
 
     return Tool(
         name="object_agent",
@@ -89,12 +155,7 @@ def make_object_agent(
         request_model=SubagentTask,
         result_model=SubagentResult,
         handler=handle,
-        examples=(
-            "For 'Move X, make Y orange, and create Z', receive the focused instruction "
-            "'Create Z'.",
-            "If a cone already exists, 'Make a cone beside the capsule' still means create a "
-            "new cone beside the existing capsule.",
-        ),
+        examples=_EXAMPLES,
     )
 
 
