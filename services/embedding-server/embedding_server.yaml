@@ -23,6 +23,8 @@ model_cache: ../../models
 max_num_seqs:           32
 tensor_parallel_size:   1
 max_model_len:          8192
+# Pooling models do not allocate a generation KV cache, so their deployment
+# budget remains a total-memory fraction rather than an explicit cache size.
 # Low utilization by default — the 1B model is small and leaves headroom for
 # the other vLLM servers (VLM, LLM) sharing the same GPU.  Raise to 0.30–0.40
 # if this server runs on a dedicated GPU.

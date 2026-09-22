@@ -258,23 +258,32 @@ def test_dual_ada_configs_follow_profile_gpu_layout(
 )
 def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -> None:
     config = yaml.safe_load(profile_path.read_text())
+    expected_utilization = {
+        "96G_blackwell": 0.35,
+        "dual_48G_ada": 0.78,
+        "spark": 0.25,
+    }
 
     assert config["vllm_backend"] == "docker"
     assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
     assert "extra_pip" not in config
+    assert config["gpu_memory_utilization"] == expected_utilization[
+        profile_path.parent.name
+    ]
+    assert config["kv_cache_memory_bytes"] == 2147483648
+    assert config["max_model_len"] == 32768
     if profile_path.parent.name == "spark":
         assert config["max_num_seqs"] == 4
         assert "moe_backend" not in config
-        assert config["gpu_memory_utilization"] == 0.25
-        assert config["kv_cache_memory_bytes"] == 2147483648
         assert config["spark_uma"] is True
+    elif profile_path.parent.name == "dual_48G_ada":
+        assert "moe_backend" not in config
+        assert "spark_uma" not in config
     elif profile_path.parent.name == "96G_blackwell":
         assert "moe_backend" not in config
-        assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
     else:
         assert "moe_backend" not in config
-        assert "kv_cache_memory_bytes" not in config
         assert "spark_uma" not in config
 
 
@@ -623,6 +632,8 @@ def test_omni_applies_spark_sequence_default(
 
     args = captured["extra_serve_args"]
     assert args[args.index("--max-num-seqs") + 1] == expected_seqs
+    assert args[args.index("--gpu-memory-utilization") + 1] == "0.85"
+    assert "--kv-cache-memory-bytes" not in args
     assert captured["extra_pip"] == []
 
 
@@ -666,13 +677,29 @@ def test_nano_standalone_applies_spark_sequence_default(
     assert args[args.index("--max-num-seqs") + 1] == expected_seqs
 
 
-def test_spark_omni_uses_explicit_kv_cache(
+@pytest.mark.parametrize(
+    ("profile", "compute_major", "expected_utilization", "expected_spark_uma"),
+    [
+        ("96G_blackwell", 10, "0.35", False),
+        ("dual_48G_ada", 8, "0.78", False),
+        ("spark", 12, "0.25", True),
+    ],
+)
+def test_omni_profiles_forward_admission_and_explicit_kv_cache(
     monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    compute_major: int,
+    expected_utilization: str,
+    expected_spark_uma: bool,
 ) -> None:
     captured: dict[str, object] = {}
     config_path = (
         _REPO_ROOT
-        / "model-server-samples/model-servers/yaml/spark/nemotron_omni_llm_server.yaml"
+        / "model-server-samples"
+        / "model-servers"
+        / "yaml"
+        / profile
+        / "nemotron_omni_llm_server.yaml"
     )
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
@@ -683,17 +710,18 @@ def test_spark_omni_uses_explicit_kv_cache(
     )
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
-    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: 12)
+    monkeypatch.setattr(_omni, "gpu_compute_major", lambda: compute_major)
+    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: False)
     monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
 
     _omni.run()
 
     args = captured["extra_serve_args"]
     cache_index = args.index("--kv-cache-memory-bytes")
-    memory_index = args.index("--gpu-memory-utilization")
     assert args[cache_index + 1] == "2147483648"
-    assert args[memory_index + 1] == "0.25"
-    assert captured["spark_uma"] is True
+    memory_index = args.index("--gpu-memory-utilization")
+    assert args[memory_index + 1] == expected_utilization
+    assert captured["spark_uma"] is expected_spark_uma
 
 
 @pytest.mark.parametrize("value", [True, 0, -1, "invalid"])
@@ -774,6 +802,21 @@ def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
         )
         config = yaml.safe_load(config_path.read_text())
         assert "spark_uma" not in config
+
+
+def test_embedding_profiles_retain_fractional_memory_budget() -> None:
+    for profile in ("spark", "96G_blackwell", "dual_48G_ada"):
+        config_path = (
+            _REPO_ROOT
+            / "model-server-samples"
+            / "model-servers"
+            / "yaml"
+            / profile
+            / "embedding_server.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text())
+        assert config["gpu_memory_utilization"] == 0.08
+        assert "kv_cache_memory_bytes" not in config
 
 
 def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:

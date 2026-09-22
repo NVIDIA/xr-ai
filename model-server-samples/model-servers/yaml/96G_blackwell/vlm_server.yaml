@@ -3,10 +3,9 @@
 
 # VLM server — single Blackwell 96 GB.
 #
-# vlm is THIRD in load order: STT → Omni → vlm.
-# free_at_startup ≈ 96 − 34 (Omni) − 2 (STT) ≈ 60 GiB.
-# 0.23 × 96 = 22.1 GiB cap: 16.8 GiB measured Reasoner weights plus
-# multimodal encoder profiling, runtime overhead, and KV cache.
+# vlm is THIRD in load order: STT → Omni → vlm. The Reasoner weights were
+# measured at 16.8 GiB. The 0.23 fraction is the startup admission threshold;
+# the explicit 1.5 GiB allocation bounds the KV cache independently.
 # hf_overrides selects the Reasoner runtime; details are documented in
 # docs/source/components/ai-services.md#per-server-notes.
 
@@ -19,12 +18,15 @@ port: 8100
 host: "0.0.0.0"
 model_cache: ../../../../models
 gpu_memory_utilization: 0.23
+kv_cache_memory_bytes: 1610612736
+max_model_len: 8192
 max_num_seqs: 4
 enforce_eager: true
 async_scheduling: true
 mm_encoder_tp_mode: data
 max_videos_per_prompt: 0
-# Raise max_model_len too if multi-image turns outgrow the context window.
+# Increasing max_model_len also requires recalculating the fixed KV cache and
+# cold-start validation on the target profile.
 max_images_per_prompt: 4
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).

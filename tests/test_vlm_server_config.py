@@ -70,17 +70,31 @@ def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) 
     assert "--kv-cache-memory-bytes" not in args
 
 
-def test_spark_profile_uses_explicit_kv_cache(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("profile", "expected_utilization", "expected_spark_uma"),
+    [
+        ("96G_blackwell", "0.23", False),
+        ("dual_48G_ada", "0.47", False),
+        ("spark", "0.2", True),
+    ],
+)
+def test_hardware_profiles_forward_admission_and_explicit_kv_cache(
+    monkeypatch,
+    tmp_path,
+    profile: str,
+    expected_utilization: str,
+    expected_spark_uma: bool,
+) -> None:
     server = _load_server_module()
-    spark_config = _MODEL_PROFILES / "spark" / "vlm_server.yaml"
-    cfg = yaml.safe_load(spark_config.read_text())
+    profile_config = _MODEL_PROFILES / profile / "vlm_server.yaml"
+    cfg = yaml.safe_load(profile_config.read_text())
     captured = {}
 
     monkeypatch.setattr(server, "setup_logging", lambda _name: None)
     monkeypatch.setattr(
         server,
         "load_config",
-        lambda: (cfg, spark_config.parent, None),
+        lambda: (cfg, profile_config.parent, None),
     )
     monkeypatch.setattr(
         server,
@@ -96,8 +110,8 @@ def test_spark_profile_uses_explicit_kv_cache(monkeypatch, tmp_path) -> None:
     cache_index = args.index("--kv-cache-memory-bytes")
     assert args[cache_index + 1] == "1610612736"
     memory_index = args.index("--gpu-memory-utilization")
-    assert args[memory_index + 1] == "0.2"
-    assert captured["spark_uma"] is True
+    assert args[memory_index + 1] == expected_utilization
+    assert captured["spark_uma"] is expected_spark_uma
 
 
 def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
@@ -112,7 +126,7 @@ def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
         assert cfg["mm_encoder_tp_mode"] == "data", config_path
 
 
-def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
+def test_hardware_profiles_pin_reasoner_cache_with_admission_limits() -> None:
     blackwell = yaml.safe_load(
         (_MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml").read_text()
     )
@@ -123,16 +137,18 @@ def test_hardware_profiles_reserve_measured_reasoner_memory() -> None:
         (_MODEL_PROFILES / "spark" / "vlm_server.yaml").read_text()
     )
 
-    assert blackwell["gpu_memory_utilization"] == 0.23
-    assert dual_ada["gpu_memory_utilization"] == 0.47
-    assert "kv_cache_memory_bytes" not in blackwell
-    assert "kv_cache_memory_bytes" not in dual_ada
+    for config, expected_utilization in (
+        (blackwell, 0.23),
+        (dual_ada, 0.47),
+        (spark, 0.20),
+    ):
+        assert config["gpu_memory_utilization"] == expected_utilization
+        assert config["kv_cache_memory_bytes"] == 1610612736
+        assert config["max_model_len"] == 8192
     assert "spark_uma" not in blackwell
     assert "spark_uma" not in dual_ada
     assert blackwell["max_num_seqs"] == 4
     assert "max_num_seqs" not in dual_ada
-    assert spark["kv_cache_memory_bytes"] == 1610612736
-    assert spark["gpu_memory_utilization"] == 0.20
     assert spark["max_num_seqs"] == 4
     assert spark["spark_uma"] is True
 

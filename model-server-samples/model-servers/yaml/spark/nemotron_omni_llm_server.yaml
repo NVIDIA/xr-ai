@@ -9,6 +9,7 @@
 # four concurrent sequences.
 # gpu_memory_utilization remains the vLLM startup admission threshold; it does
 # not size the cache when the byte value is set.
+# vLLM reports the resulting token capacity and maximum concurrency at startup.
 
 host: "0.0.0.0"
 port: 8108
