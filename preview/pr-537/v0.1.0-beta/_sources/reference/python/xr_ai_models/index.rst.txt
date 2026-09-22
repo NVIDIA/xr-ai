@@ -1322,8 +1322,7 @@ Package Contents
 
 .. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
 
-   Riva TTS client: streaming synthesis over gRPC, concatenated to one
-   WAV (or raw PCM) result.
+   Riva TTS client with buffered WAV or PCM synthesis.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes
