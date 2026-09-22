@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Keep the original model-servers HTTP contract; NIM uses a separate backend port.
+kind: chat
+alias: llm
+model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+base_url: http://localhost:8118
+health_path: /v1/health/ready
+reasoning_field: reasoning
+host: "0.0.0.0"
+port: 8108
+default_extras:
+  chat_template_kwargs:
+    enable_thinking: false
