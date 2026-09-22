@@ -301,6 +301,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -317,6 +318,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -351,6 +353,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
   - `soundfile>=0.12`
@@ -371,6 +374,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -387,6 +391,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -465,6 +470,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
   - `fastapi>=0.111`
@@ -500,6 +506,7 @@ drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
@@ -807,8 +814,12 @@ drift:
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
+    - `model-servers-nim` → [`model-servers-nim`](model-server-samples/model-servers-nim/) (local, editable)
+    - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
+    - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
+    - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
     - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
     - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)

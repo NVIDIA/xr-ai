@@ -10,6 +10,8 @@ name = "stt-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    # CVE-2026-80047: check remote-code consent before caching custom generation code.
+    "transformers>=5.17.0",
     # >=2.5 keeps us out of NeMo 2.0.0 (under-declared deps, no
     # MagpieTTS).  NeMo's [asr] extra requires `lightning>2.2.1,<=2.4.0`
     # (the umbrella package); see [tool.uv.sources] below.
