@@ -42,10 +42,7 @@ def as_unavailable(error: BaseException, what: str) -> ValueError | None:
     node: BaseException | None = error
     while node is not None and id(node) not in seen:
         seen.add(id(node))
-        if (
-            isinstance(node, (TimeoutError, ConnectionError))
-            or type(node).__name__ in _TRANSPORT_TYPE_NAMES
-        ):
+        if isinstance(node, (TimeoutError, ConnectionError)) or type(node).__name__ in _TRANSPORT_TYPE_NAMES:
             return ValueError(f"{what} is unavailable ({type(node).__name__}: {node})")
         node = node.__cause__ or node.__context__
     if _TRANSPORT_TOKENS.search(str(error)):
@@ -95,13 +92,21 @@ class _TolerantTool(Tool):
 
 
 def tolerant_toolset(tools: Iterable[Tool]) -> ToolSet:
-    return ToolSet([
-        _TolerantTool(
-            tool.name, tool.description, tool.request_model, tool.result_model,
-            tool.handler, return_direct=tool.return_direct,
-        )
-        for tool in tools
-    ])
+    return ToolSet(
+        [
+            _TolerantTool(
+                tool.name,
+                tool.description,
+                tool.request_model,
+                tool.result_model,
+                tool.handler,
+                return_direct=tool.return_direct,
+                render_result=tool._render_result,
+                examples=tool.examples,
+            )
+            for tool in tools
+        ]
+    )
 
 
 __all__ = ["as_unavailable", "reraise_unavailable", "tolerant_toolset"]

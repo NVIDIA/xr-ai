@@ -34,6 +34,11 @@ class SubagentResult(BaseModel):
     """Focused result returned to the supervisor for further planning."""
 
     result: str
+    handled: bool = True
+    """Whether this subagent accepted the delegated task as its responsibility."""
+
+    suggested_owner: str | None = None
+    """Optional domain or agent hint when the task was outside this agent's scope."""
 
 
 __all__ = ["SceneReply", "SceneRequest", "SubagentResult", "SubagentTask"]

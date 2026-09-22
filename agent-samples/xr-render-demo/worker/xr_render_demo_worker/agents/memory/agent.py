@@ -19,16 +19,19 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from ..._tolerant import tolerant_toolset
 from ..._trace import current_participant_id, current_reference_time_us, current_trace_id
 from ...models import SubagentResult, SubagentTask
+from .._adaptive import adaptive_result, refusal_toolset
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
 DESCRIPTION = (
-    "Recall what was said, asked, or done in earlier conversation turns, including objects and "
-    "colors mentioned there. Every history question (\"which shape did I request first?\", "
-    "\"what did I ask you to build?\") routes here, even when [Recent conversation] seems to "
-    "contain the answer; that block only resolves references, and guessing a history answer is "
-    "always wrong. Never a source for present-day or physical-world facts, and what the camera "
-    "saw earlier belongs to vision_agent, not memory: only the conversation's own turns live "
-    "in the transcript."
+    "Recall what was said, asked, or done in earlier conversation turns. Every history question "
+    "routes here even when current scene state or [Recent conversation] seems to contain the "
+    "answer; that block only resolves references. Never use for current or physical-world facts. "
+    "What the camera saw earlier is recorded vision, not conversation memory."
+)
+_EXAMPLES = (
+    "'Which object did I request at the beginning?'",
+    "'What shade did the original shape have?'",
+    "'What was the cone before I transformed it?'",
 )
 
 _MAX_END_US = RecallConversationRequest.model_fields["end_us"].default
@@ -42,6 +45,7 @@ class _RecallWindow(BaseModel):
 
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
+
 
 def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
     async def recall(req: _RecallWindow) -> RecallConversationResult:
@@ -64,25 +68,53 @@ def make_memory_agent(llm: LLMService, text_memory: TextMemoryTools) -> Tool:
     async def handle(request: SubagentTask) -> SubagentResult:
         logger.debug("memory agent instruction={!r} trace={}", request.instruction[:200], current_trace_id.get())
         toolset = tolerant_toolset([recall_tool])
-        prompt = _prompt_text
+        toolset = refusal_toolset(toolset)
         messages = [
-            ChatMessage(role="system", content=prompt),
-            ChatMessage(role="user", content=(
-                f"Active participant: {current_participant_id.get()}\n"
-                f"Utterance timestamp: {current_reference_time_us.get()}\n\n"
-                f"Focused instruction: {request.instruction}"
-            )),
+            ChatMessage(role="system", content=_prompt_text),
+            ChatMessage(
+                role="user",
+                content=(
+                    f"Active participant: {current_participant_id.get()}\n"
+                    f"Utterance timestamp: {current_reference_time_us.get()}\n\n"
+                    f"Focused instruction: {request.instruction}"
+                ),
+            ),
         ]
+
         async def _call_model(transcript, definitions):
-            return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+            return await llm.chat(
+                transcript,
+                tools=list(definitions) or None,
+                max_tokens=2048,
+                temperature=0.0,
+                enable_thinking=False,
+            )
+
         try:
-            loop_result = await run_tool_loop(messages, toolset, _call_model)
+            loop_result = await run_tool_loop(
+                messages,
+                toolset,
+                _call_model,
+                max_iterations=6,
+            )
         except ToolLoopError:
             return SubagentResult(result="I couldn't complete that. Please try again.")
-        return SubagentResult(result=loop_result.content or "Done.")
+        return await adaptive_result(
+            llm,
+            instruction=request.instruction,
+            responsibility=DESCRIPTION,
+            result=loop_result,
+            always_classify=True,
+        )
 
-    return Tool(name="memory_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="memory_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=_EXAMPLES,
+    )
 
 
 __all__ = ["make_memory_agent"]

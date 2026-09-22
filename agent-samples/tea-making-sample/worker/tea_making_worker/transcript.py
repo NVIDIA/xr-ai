@@ -38,6 +38,12 @@ from .events import (
 class TranscriptControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    subject: str = Field(
+        default="",
+        max_length=160,
+        description="Optional transcript subject copied from the request; ignored by lifecycle controls.",
+    )
+
 
 class TranscriptState(BaseModel):
     active: bool
@@ -113,30 +119,36 @@ class TranscriptAgent(Agent):
             (
                 Tool(
                     "transcript__start",
-                    "Start recording final speech transcripts in the background.",
+                    "USE WHEN: a direct present request to start transcript recording.",
                     TranscriptControlRequest,
                     TranscriptState,
                     start,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Start recording this conversation' starts transcript recording.",),
                 ),
                 Tool(
                     "transcript__stop",
-                    "Stop background transcript recording.",
+                    "USE WHEN: a direct present request to stop transcript recording.",
                     TranscriptControlRequest,
                     TranscriptState,
                     stop,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Stop recording the transcript' stops transcript recording.",),
                 ),
                 Tool(
                     "transcript__status",
-                    "Report whether transcript recording is running.",
+                    "USE WHEN: a question asks for the actual current transcript-recording state; "
+                    "never answer from model identity or memory.",
                     TranscriptControlRequest,
                     TranscriptState,
                     status,
                     return_direct=True,
                     render_result=render,
+                    examples=(
+                        "'Are you recording our conversation?' uses transcript__status.",
+                    ),
                 ),
             )
         )

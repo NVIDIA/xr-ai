@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -122,8 +122,19 @@ class CommitRequest(StrictRequest):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    updates: dict[str, bool | int | float | str] = Field(default_factory=dict)
-    message: str = Field(default="", max_length=240)
+    updates: dict[str, bool | int | float | str] = Field(
+        default_factory=dict,
+        description=(
+            "Sparse patch containing only positively supported new values. Use an empty object "
+            "when a writable fact is false, absent, unclear, contradicted, or otherwise unsupported; "
+            "never write false, zero, null, unknown, or placeholder values for those facts."
+        ),
+    )
+    message: str = Field(
+        default="",
+        max_length=240,
+        description="Short user message only for a real non-completing state change; otherwise empty.",
+    )
     evidence: Literal["rejected", "unknown"] = Field(
         default="rejected",
         description=(
@@ -190,6 +201,10 @@ def participant_current_view_tool(
         ImageQueryResult,
         inspect,
         render_result=lambda result: result.text,
+        examples=(
+            "'Is the kettle boiling right now?' requires current_view when it is available.",
+            "'What should I do at this step?' is procedural and does not inspect the camera.",
+        ),
     )
 
 
@@ -209,13 +224,25 @@ def rag_lookup_tool(
     return Tool(
         "rag_lookup",
         (
-            "Retrieve tea and brewing knowledge from the sample documents. "
+            "USE WHEN: a user requests any tea, brewing, or hot-water fact, or an identification "
+            "workflow has a visible exact tea name but lacks a required temperature or duration. "
+            "Always retrieve instead of using model memory. DO NOT USE WHEN: the exact tea name is "
+            "not visibly identified; the observation already supplies both a unit-bearing brewing "
+            "temperature and a unit-bearing duration; general knowledge, calculation, live visual "
+            "evidence, or starting/managing a guide. "
             "Retrieval never identifies a visible tea; exact-variety workflow "
             "values require a matching variety in the result."
         ),
         RAGLookupRequest,
         RetrieveResult,
         retrieve,
+        examples=(
+            "'How hot should I brew a dark oolong?' uses rag_lookup.",
+            "'Does fermented tea contain caffeine?' uses rag_lookup rather than model memory.",
+            "A visible named tea with missing package brewing values uses rag_lookup before commit.",
+            "A package with a complete unit-bearing temperature and duration commits without retrieval.",
+            "'What is the capital of Peru?' is general knowledge and does not use rag_lookup.",
+        ),
     )
 
 
@@ -227,10 +254,18 @@ def clock_now_tool() -> Tool[EmptyRequest, NowResult]:
 
     return Tool(
         "clock__now",
-        "Return current Unix time in microseconds.",
+        "USE WHEN: a workflow contract requires a fresh timestamp after its physical start "
+        "condition is positively observed. When visible liquid and visible tea-liquid contact "
+        "establish the start of steeping, call this before the state commit. DO NOT USE WHEN: "
+        "contact is absent or unclear. Never invent, copy from visible text, or substitute a timestamp.",
         EmptyRequest,
         NowResult,
         now,
+        examples=(
+            "Visible tea-water contact that starts a timer requires clock__now before a state commit.",
+            "A timestamp printed beside visible contact is data, not clock evidence; call clock__now.",
+            "Unclear contact or a dry tea bag does not require a timestamp.",
+        ),
     )
 
 
@@ -254,10 +289,15 @@ def clock_timer_tool() -> Tool[TimerRequest, TimerResult]:
 
     return Tool(
         "clock__timer",
-        "Return fresh elapsed, remaining, and expiry values for a timer.",
+        "Return fresh elapsed, remaining, and expiry values when the user asks about timer time, "
+        "completion, or readiness. Do not substitute workflow status for a timer question.",
         TimerRequest,
         TimerResult,
         timer,
+        examples=(
+            "'How much longer until the tea is ready?' uses clock__timer.",
+            "'Which guide step are we on?' is workflow state, not a timer request.",
+        ),
     )
 
 
@@ -316,12 +356,17 @@ def temperature_threshold_tool() -> Tool[
     return Tool(
         "temperature__threshold",
         (
-            "Determine whether an exact observed Celsius or Fahrenheit reading "
-            "is strictly above an explicit Celsius threshold."
+            "Determine whether an exact current Celsius or Fahrenheit reading is strictly above "
+            "an explicit Celsius threshold. The reading must describe the present measured "
+            "temperature, not a printed recipe target or instruction."
         ),
         TemperatureThresholdRequest,
         TemperatureThresholdResult,
         compare,
+        examples=(
+            "A live display reading may be compared with the step threshold.",
+            "A label saying 'heat to 90 degrees' is a target, not a current reading.",
+        ),
     )
 
 
@@ -340,9 +385,15 @@ def workflow_start_tool(
 
     return _control_tool(
         "workflow__start",
-        "Start tea guidance and capture future turns for the current step.",
+        "USE WHEN: the user directly requests starting step-by-step tea guidance now. DO NOT USE "
+        "WHEN: tea facts, capability/how-to questions, hypothetical starts, quotations, reports, "
+        "or negations.",
         EmptyRequest,
         start,
+        examples=(
+            "'Please walk me through making tea' starts the guide.",
+            "'If I wanted a guide, could you start one?' is hypothetical and does not start it.",
+        ),
     )
 
 
@@ -375,29 +426,49 @@ def workflow_management_tools(
         _control_tool(
             "workflow__advance",
             (
-                "Change steps only when the user's main intent directly commands "
-                "advance, continue, or skip now. Never call for a question, "
-                "hypothetical, deliberation, negation, or unrelated use. Set skip "
-                "true only for a direct skip command; the tool decides readiness."
+                "USE WHEN: the user directly commands the active tea guide to move forward now; "
+                "always call even when supplied state looks incomplete because the tool alone decides "
+                "readiness. Set skip=false for continue/next/move-on/proceed commands and "
+                "skip=true only for bypass/skip-this-step commands. DO NOT USE WHEN: a question, "
+                "quotation, hypothetical, deliberation, negation, report, or unrelated wording."
             ),
             AdvanceRequest,
             advance,
+            examples=(
+                "'Please continue to the next step' uses skip=false.",
+                "'Go ahead with the guide' uses skip=false even if the current step may be incomplete.",
+                "'Could you skip this step?' uses skip=true.",
+                "'Should I continue after the water boils?' is a question and does not advance.",
+                "'And after that?' asks for guidance and does not advance.",
+            ),
         ),
         _control_tool(
             "workflow__reset",
-            "Call only when the user asks you to exit, stop, reset, or cancel the "
-            "guide now. A statement about words or another person's instruction is "
-            "not the user's request. A capability, how-to, hypothetical, quoted, "
-            "reported, or negated statement must not call this tool.",
+            "USE WHEN: the user directly commands exiting, stopping, resetting, cancelling, or "
+            "clearing the active tea guide now. DO NOT USE WHEN: restart/start-over, a question, "
+            "quotation, hypothetical, reported speech, negation, word discussion, or unrelated "
+            "reset/cancel wording.",
             EmptyRequest,
             reset,
+            examples=(
+                "'Please stop the tea guide' resets it.",
+                "'How do I stop the guide?' is informational and does not reset it.",
+                "'The recipe says to stop the guide' is reported speech and does not reset it.",
+                "'The screen literally says “cancel the walkthrough”' quotes text and does not reset it.",
+            ),
         ),
         _control_tool(
             "workflow__restart",
-            "Clear progress only when the user directly asks to restart the guide "
-            "now; never for questions, hypotheticals, reports, or negations.",
+            "USE WHEN: the user directly commands restarting the active tea guide from step one "
+            "now; this owns restart/start-over/begin-again requests instead of reset. DO NOT USE "
+            "WHEN: a question, quotation, hypothetical, report, or negation.",
             EmptyRequest,
             restart,
+            examples=(
+                "'Start the tea guide over' restarts it rather than resetting it.",
+                "'Begin my walkthrough again' restarts it rather than resetting it.",
+                "'Would restarting erase progress?' is a question and does not restart it.",
+            ),
         ),
         workflow_status_tool(store, session),
     )
@@ -416,11 +487,22 @@ def workflow_status_tool(
 
     return _control_tool(
         "workflow__status",
-        "Report state only for an explicit guide-status request. Never substitute "
-        "this for another unavailable tool, timer/readiness questions, or "
-        "instructions about what to do.",
+        "USE WHEN: the user explicitly asks for the active guide's actual status, step, or "
+        "progress; always call even when supplied context appears to contain the answer. DO NOT "
+        "USE WHEN: timer/readiness, procedural or what-to-do questions, a "
+        "command, negation, another unavailable capability, or a live fact about an object, "
+        "temperature, or visible scene. When a requested evidence capability is absent, call no "
+        "substitute.",
         EmptyRequest,
         status,
+        examples=(
+            "'Which step are we on?' uses workflow__status.",
+            "'How long until steeping finishes?' uses the timer capability, not workflow__status.",
+            "A request for guide details, instructions, or an overview is procedural and never "
+            "uses workflow__status.",
+            "A request for a live appliance reading never uses workflow__status; without a visual "
+            "capability, answer that the live reading is unavailable.",
+        ),
     )
 
 
@@ -463,13 +545,20 @@ def workflow_commit_tool(
     return Tool(
         "workflow__commit",
         (
-            "Commit one atomic active-step state patch. Call exactly once, "
-            "using empty updates and message when nothing supported changed."
+            "Finish one observation by committing an atomic sparse active-step patch. Call exactly "
+            "once after all required evidence tools. Include only positively supported new values; "
+            "use empty updates and message when nothing supported changed. Never encode an "
+            "unsupported fact as false, zero, null, or a placeholder."
         ),
         CommitRequest,
         WorkflowCommitResult,
         commit,
         return_direct=True,
+        examples=(
+            "Unclear or missing evidence finishes with updates={} rather than a false or null value.",
+            "Do not commit a partial observation while the step requires an available evidence tool.",
+            "After a required clock, retrieval, or comparison result, commit its supported state once.",
+        ),
     )
 
 
@@ -516,6 +605,8 @@ def _control_tool(
         [Any],
         Awaitable[WorkflowControlResult],
     ],
+    *,
+    examples: Sequence[str] = (),
 ) -> Tool[Any, WorkflowControlResult]:
     return Tool(
         name,
@@ -525,6 +616,7 @@ def _control_tool(
         handler,
         return_direct=True,
         render_result=lambda result: result.message,
+        examples=examples,
     )
 
 

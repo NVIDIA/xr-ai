@@ -18,17 +18,35 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_placement_tools
+from .._adaptive import adaptive_result, reasoning_messages
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+_RESPONSIBILITY = (
+    "Owns requested spatial changes to existing XR objects: move, nudge, swap, contain, stack, "
+    "or restore. A move or restore remains this agent's responsibility when its named target "
+    "cannot be found; report the failed lookup without creating anything. Does not own creation, "
+    "deletion, duplication, recoloring, reshaping, or resizing. Changing color is not a spatial "
+    "change, regardless of verbs such as turn, make, paint, or match."
+)
 DESCRIPTION = (
-    "Move, swap, contain, stack, or restore existing XR objects; never creates, recolors, or "
-    "removes them. Only an object already listed in SCENE OBJECTS can move: \"put the X "
-    "in/on/inside the Y\" with X listed is a move for this agent, while placing an X not yet "
-    "in the scene is a creation for object_agent, initial position included."
+    "Use only when every target being repositioned already exists in SCENE OBJECTS; a verb such "
+    "as put or place does not by itself make a placement task. "
+    f"{_RESPONSIBILITY} A request to put or place a new target is creation. An explicitly "
+    "requested move or restore of a missing named target remains a failed placement attempt, "
+    "never creation. This agent resolves viewer-relative geometry from tracking itself; preserve "
+    "those constraints instead of solving or observing them before delegation. Color words that "
+    "identify which existing object to move do not make the request a recolor."
+)
+_EXAMPLES = (
+    "'Place the existing ring inside the capsule' moves the ring here.",
+    "'Place a new ring inside the capsule' does not belong here.",
+    "'Move the yellow object, not the red one' is placement because color identifies the target.",
+    "A novel collision-free arrangement with interacting constraints remains one complete task.",
 )
 
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
+
 
 def make_placement_agent(
     llm: LLMService,
@@ -43,34 +61,63 @@ def make_placement_agent(
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_placement_tools(scene, tracking, guard=guard)
-            tools.append(Tool(
-                "get_scene_state",
-                "Return every current XR object with its ID, type, world position, color, and size.",
-                EmptyRequest,
-                SceneState,
-                lambda _: scene.get_scene_state.execute(EmptyRequest()),
-            ))
+            tools.append(
+                Tool(
+                    "get_scene_state",
+                    "Return every current XR object with its ID, type, world position, color, and size.",
+                    EmptyRequest,
+                    SceneState,
+                    lambda _: scene.get_scene_state.execute(EmptyRequest()),
+                )
+            )
             toolset = tolerant_toolset(tools)
-            prompt = _prompt_text
             messages = [
-                ChatMessage(role="system", content=prompt),
-                ChatMessage(role="user", content=(
-                    f"Active participant: {current_participant_id.get()}\n"
-                    f"Utterance timestamp: {current_reference_time_us.get()}\n"
-                    f"{await context.describe(current_participant_id.get(), bearings=True)}\n\n"
-                    f"Focused instruction: {request.instruction}"
-                )),
+                ChatMessage(role="system", content=_prompt_text),
+                ChatMessage(
+                    role="user",
+                    content=(
+                        f"Active participant: {current_participant_id.get()}\n"
+                        f"Utterance timestamp: {current_reference_time_us.get()}\n"
+                        f"{await context.describe(current_participant_id.get(), bearings=True)}\n\n"
+                        f"Focused instruction: {request.instruction}"
+                    ),
+                ),
             ]
+
             async def _call_model(transcript, definitions):
-                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+                return await llm.chat(
+                    reasoning_messages(transcript, enabled=True),
+                    tools=list(definitions) or None,
+                    max_tokens=2048,
+                    temperature=0.0,
+                    enable_thinking=True,
+                    thinking_budget=1024,
+                )
+
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=_RESPONSIBILITY,
+                result=loop_result,
+            )
 
-    return Tool(name="placement_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="placement_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=_EXAMPLES,
+    )
 
 
 __all__ = ["make_placement_agent"]

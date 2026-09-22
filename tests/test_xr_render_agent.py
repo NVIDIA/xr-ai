@@ -20,7 +20,7 @@ from xr_ai_runtime import (
 )
 from xr_ai_tools import Tool
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
     VoiceInterrupted,
     VoiceOutput,
@@ -145,7 +145,7 @@ class _VoiceRecorder(Agent):
         self.final = asyncio.Event()
         self.changed = asyncio.Event()
 
-    @subscribe(VOICE_OUTPUT_TOPIC)
+    @subscribe(VOICE_CONTRIBUTION_TOPIC)
     async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
         if output.response_id:
             if output.final and not output.text:
@@ -188,7 +188,9 @@ async def test_render_agent_publishes_voice_output() -> None:
     assert [chunk.text for chunk in chunks] == ["hello"]
     assert [chunk.final for chunk in chunks] == [True]
     assert [chunk.timestamp_us for chunk in chunks] == [1]
-    assert chunks[0].response_id is not None
+    assert chunks[0].response_id is None
+    assert chunks[0].kind == "result"
+    assert chunks[0].turn_id is not None
 
 
 async def test_render_agent_supersedes_a_participant_turn() -> None:

@@ -10,13 +10,22 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, HubVoiceTransport, VadConfig, VoiceAgent, VoiceOutput
+from xr_ai_voice import (
+    VOICE_CONTRIBUTION_TOPIC,
+    HubVoiceTransport,
+    VadConfig,
+    VoiceAgent,
+    VoiceAggregationAgent,
+    VoiceInterrupted,
+    VoiceOutput,
+    VoiceParticipantLeft,
+)
 from xr_ai_voicegate import load_voice_gate_config
 from xr_render_scene import SceneTools
 
@@ -29,6 +38,32 @@ from .agent import (
 from .config import WorkerConfig
 from .supervisor import SceneSupervisor
 from .xr_session import XRSessionController
+
+
+class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
+    """Release render-scoped aggregation state when a participant leaves."""
+
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def participant_left(
+        self,
+        _event: VoiceParticipantLeft,
+        ctx: RuntimeContext,
+    ) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is not None:
+            await self.release(participant_id)
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupted(
+        self,
+        _event: VoiceInterrupted,
+        ctx: RuntimeContext,
+    ) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            await self.release_all()
+        else:
+            await self.release(participant_id)
 
 
 async def run_app(
@@ -50,8 +85,13 @@ async def run_app(
         try:
             await llm.chat(
                 [ChatMessage(role="user", content="Reply with one short sentence.")],
-                tools=[ToolDef(name="warmup_noop", description="Never call this tool.",
-                               parameters={"type": "object", "properties": {}})],
+                tools=[
+                    ToolDef(
+                        name="warmup_noop",
+                        description="Never call this tool.",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ],
                 max_tokens=40,
                 temperature=0.0,
                 timeout=120.0,
@@ -60,6 +100,7 @@ async def run_app(
             logger.opt(exception=True).warning("LLM warmup failed; readiness will retry")
             return False
         return True
+
     stt = make_stt(models, "stt")
     tts = make_tts(models, "tts")
     vlm = make_vlm(models, "vlm")
@@ -93,6 +134,7 @@ async def run_app(
 
         render = RenderAgent(
             supervisor,
+            llm=llm,
             on_participant_left=_participant_left,
         )
         voice = VoiceAgent(
@@ -114,14 +156,21 @@ async def run_app(
             interrupted_topic=INTERRUPTED_TOPIC,
         )
         runtime = AgentRuntime()
+        voice_aggregation = runtime.register(
+            "voice-aggregation",
+            _ParticipantVoiceAggregationAgent(llm=llm),
+        )
         runtime.register("voice", voice)
         runtime.register("xr-render", render)
 
         async def _render_failed(participant_id: str, detail: str) -> None:
             logger.warning("notifying {} of XR start failure: {}", participant_id, detail)
             await runtime.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text="The XR display failed to start. Please try again."),
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(
+                    text="The XR display failed to start. Please try again.",
+                    kind="alert",
+                ),
                 participant_id=participant_id,
             )
 
@@ -138,14 +187,13 @@ async def run_app(
                 await voice.run(runtime)
             finally:
                 await render.stop()
+                await voice_aggregation.stop()
         logger.info("xr-render-demo worker stopped")
     finally:
         await close_clients(scene, tracking, video)
 
 
-async def close_clients(
-    scene: SceneTools, tracking: TrackingTools, video: VideoMemoryTools | None
-) -> None:
+async def close_clients(scene: SceneTools, tracking: TrackingTools, video: VideoMemoryTools | None) -> None:
     await scene.client.close()
     await tracking.close()
     if video is not None:

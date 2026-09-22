@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from inspect import isawaitable
 from typing import Any, Generic, TypeVar, cast
@@ -30,7 +30,12 @@ class ToolInvocationResult:
 
 
 class Tool(Generic[RequestT, ResultT]):
-    """A Pydantic-validated tool shared by agents, voice, and background triggers."""
+    """A Pydantic-validated tool shared by agents, voice, and background triggers.
+
+    ``examples`` are optional model-facing usage examples owned by the tool.
+    They travel with its generated model definition whenever the tool is
+    available.
+    """
 
     def __init__(
         self,
@@ -42,6 +47,7 @@ class Tool(Generic[RequestT, ResultT]):
         *,
         return_direct: bool = False,
         render_result: Callable[[ResultT], str] | None = None,
+        examples: Sequence[str] = (),
     ) -> None:
         if not name:
             raise ValueError("tool name must not be empty")
@@ -53,6 +59,7 @@ class Tool(Generic[RequestT, ResultT]):
         self.result_model = result_model
         self.handler = handler
         self.return_direct = return_direct
+        self.examples = tuple(examples)
         self._request_codec = typed.PydanticCodec(request_model)
         self._result_codec: typed.Codec[ResultT]
         if result_model is None:

@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Supervisor turn-lifecycle tests over fakes, without an LLM."""
+
 from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
 
-from xr_ai_tools import Tool
+from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
     ConversationEntry,
@@ -16,7 +17,9 @@ from xr_ai_tools.text_memory import (
 )
 from xr_ai_voice import UserQuery
 from xr_render_demo_eval import harness
+from xr_render_demo_worker import supervisor as supervisor_module
 from xr_render_demo_worker.agent import RenderAgent
+from xr_render_demo_worker.agents._adaptive import _Disposition, refusal_toolset
 from xr_render_demo_worker.models import SceneRequest
 from xr_render_demo_worker.supervisor import SceneSupervisor
 
@@ -26,11 +29,10 @@ class _RecordingMemory:
 
     def __init__(self) -> None:
         self.records: list[AddTranscriptRequest] = []
-        self.add_transcript = Tool(
-            "add_transcript", "Store.", AddTranscriptRequest, None, self._add)
+        self.add_transcript = Tool("add_transcript", "Store.", AddTranscriptRequest, None, self._add)
         self.recall_conversation = Tool(
-            "recall_conversation", "Recall.", RecallConversationRequest,
-            RecallConversationResult, self._recall)
+            "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, self._recall
+        )
 
     async def _add(self, req: AddTranscriptRequest) -> None:
         self.records.append(req)
@@ -46,6 +48,47 @@ class _RecordingMemory:
             if record.source_id.startswith(f"{req.participant_id}:")
         ]
         return RecallConversationResult(entries=entries)
+
+
+def test_supervisor_prompt_has_no_tool_specific_routing_inventory() -> None:
+    prompt = supervisor_module._PROMPT.read_text(encoding="utf-8")
+
+    assert "Routes:" not in prompt
+    assert "_agent" not in prompt
+    assert not {
+        "placement_agent",
+        "appearance_agent",
+        "object_agent",
+        "vision_agent",
+        "memory_agent",
+    } & set(prompt.split())
+
+
+def test_subagent_disposition_keeps_reason_and_owner() -> None:
+    disposition = _Disposition.model_validate(
+        {
+            "reroute": True,
+            "reason": "This is movement.",
+            "suggested_owner": "placement_agent",
+        }
+    )
+
+    assert disposition.reason == "This is movement."
+    assert disposition.suggested_owner == "placement_agent"
+
+
+async def test_destructive_leaf_decline_tool_returns_direct_structured_result() -> None:
+    tool = refusal_toolset(ToolSet([])).get("subagent__decline")
+    assert tool is not None
+
+    result = await tool.invoke(
+        '{"operation":"placement","reason":"This is movement.",'
+        '"suggested_owner":"placement_agent"}'
+    )
+
+    assert result.return_direct is True
+    assert '"operation":"placement"' in result.content
+    assert '"reason":"This is movement."' in result.content
 
 
 def _make_supervisor(memory: _RecordingMemory | None = None) -> tuple[SceneSupervisor, harness.FakeScene]:
@@ -105,16 +148,13 @@ async def test_every_transcript_reaches_the_supervisor_loop(monkeypatch) -> None
         "Move the cube to",
     )
     for transcript in transcripts:
-        reply = await supervisor.handle(
-            SceneRequest(transcript=transcript, participant_id="alice")
-        )
+        reply = await supervisor.handle(SceneRequest(transcript=transcript, participant_id="alice"))
         assert reply.response == "Placed it?"
         assert any(f"User request: {transcript}" in content for content in seen_user_messages)
 
 
-async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> None:
-    """A change-requesting utterance that only delegated a non-mutating
-    subagent must still get the verification pass."""
+async def test_nonmutating_delegation_does_not_trigger_scene_verification(monkeypatch) -> None:
+    """Verification follows delegated capabilities, not surface action words."""
     supervisor, _fake = _make_supervisor()
     loop_calls = 0
 
@@ -129,46 +169,38 @@ async def test_mixed_vision_and_mutation_request_still_verifies(monkeypatch) -> 
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Look at the room and create a sphere.", participant_id="alice"))
-    # The creation half never happened: the claim-free vision answer keeps
-    # its content and gains the no-change fact.
-    assert reply.response.startswith("The room looks tidy.")
-    assert reply.response.endswith("Nothing in the scene was changed.")
-    assert loop_calls == 2
+    reply = await supervisor.handle(
+        SceneRequest(transcript="Look at the room and create a sphere.", participant_id="alice")
+    )
+    assert reply.response == "The room looks tidy."
+    assert loop_calls == 1
 
 
-async def test_verification_never_offers_repeat_when_mutation_undelegated(monkeypatch) -> None:
-    """A change-requesting utterance whose first pass delegated no mutating
-    subagent must get a verification nudge with no repeat-your-answer out."""
+async def test_tool_free_reply_does_not_trigger_verification_from_surface_words(monkeypatch) -> None:
+    """A capability answer is not reclassified from an embedded action verb."""
     supervisor, _fake = _make_supervisor()
     nudges: list[str] = []
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
         nudges.extend(m.content for m in messages if m.role == "user" and "Verified scene" in m.content)
         return SimpleNamespace(
-            content="Recolored it to match the wall.",
+            content="Yes, I can recolor scene objects when asked.",
             messages=list(messages),
             tool_calls=(),
         )
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
-    assert len(nudges) == 1
-    assert "repeat your final answer" not in nudges[0]
-    assert "never" in nudges[0]
-    # The model repeated its false success anyway; the deterministic guard
-    # must replace it, and the scene must be untouched.
-    assert "Recolored" not in reply.response
-    assert "nothing in the scene was changed" in reply.response
+    reply = await supervisor.handle(
+        SceneRequest(transcript="Could you recolor objects if I asked?", participant_id="alice")
+    )
+    assert nudges == []
+    assert reply.response == "Yes, I can recolor scene objects when asked."
     assert _fake.objects == {}
 
 
 async def test_gate_keeps_claim_free_explanations(monkeypatch) -> None:
-    """A claim-free failure explanation keeps its why; the no-change fact is
-    appended, never substituted."""
+    """A claim-free failure explanation needs no mutation verification."""
     supervisor, _fake = _make_supervisor()
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
@@ -180,20 +212,10 @@ async def test_gate_keeps_claim_free_explanations(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Make the box the color of my shirt.", participant_id="alice"))
-    assert reply.response.startswith("The camera is unavailable")
-    assert reply.response.endswith("Nothing in the scene was changed.")
-
-
-def test_status_questions_are_not_mutation_intent() -> None:
-    from xr_render_demo_worker.supervisor import _wants_mutation
-
-    assert not _wants_mutation("Did you move the cube?")
-    assert not _wants_mutation("Have you added the sphere yet?")
-    assert not _wants_mutation("Was the cube removed?")
-    assert _wants_mutation("Can you move the cube?")
-    assert _wants_mutation("Move the cube.")
+    reply = await supervisor.handle(
+        SceneRequest(transcript="Make the box the color of my shirt.", participant_id="alice")
+    )
+    assert reply.response == "The camera is unavailable, so I could not read your shirt color."
 
 
 async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
@@ -213,8 +235,7 @@ async def test_already_satisfied_reply_stands_on_evidence(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Make the sphere green.", participant_id="alice"))
+    reply = await supervisor.handle(SceneRequest(transcript="Make the sphere green.", participant_id="alice"))
     assert reply.response == "The sphere is already green."
 
 
@@ -232,8 +253,9 @@ async def test_rejected_mutation_without_evidence_gets_honest_reply(monkeypatch)
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Make the box the color of my shirt.", participant_id="alice"))
+    reply = await supervisor.handle(
+        SceneRequest(transcript="Make the box the color of my shirt.", participant_id="alice")
+    )
     assert "nothing in the scene was changed" in reply.response
 
 
@@ -251,8 +273,9 @@ async def test_verification_preserves_clarifying_questions(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    reply = await supervisor.handle(SceneRequest(
-        transcript="Make the sphere the same color as the wall.", participant_id="alice"))
+    reply = await supervisor.handle(
+        SceneRequest(transcript="Make the sphere the same color as the wall.", participant_id="alice")
+    )
     assert reply.response == "What color is the wall?"
 
 
@@ -272,8 +295,7 @@ async def test_verification_offers_repeat_after_mutating_delegation(monkeypatch)
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    await supervisor.handle(SceneRequest(
-        transcript="Paint the sphere crimson.", participant_id="alice"))
+    await supervisor.handle(SceneRequest(transcript="Paint the sphere crimson.", participant_id="alice"))
     assert len(nudges) == 1
     assert "repeat your final answer" in nudges[0]
 
@@ -328,7 +350,11 @@ async def test_supervisor_eval_fails_on_exception_after_delegation(monkeypatch) 
 
     async def fake_loop(messages, toolset, call_model, max_iterations=12):
         tool = toolset.get(case.expect_agent)
-        await tool.execute(SubagentTask(instruction="do the thing"))
+        await tool.execute(
+            SubagentTask(
+                instruction="do the thing",
+            )
+        )
         raise RuntimeError("boom after delegation")
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
@@ -356,25 +382,25 @@ async def test_failing_supervisor_publishes_failure_notice() -> None:
     assert len(published) == 1
     assert published[0].text == "Something went wrong. Please try again."
     assert published[0].final is True
-    assert published[0].response_id == "trace-1"
+    assert published[0].response_id is None
+    assert published[0].kind == "result"
+    assert published[0].turn_id == "trace-1"
 
 
 _REF_US = harness.EVAL_REFERENCE_US
 
 
-def _seed_turn(memory: _RecordingMemory, participant: str, user: str, agent: str,
-               base_us: int = _REF_US - 30_000_000) -> None:
-    memory.records.append(AddTranscriptRequest(
-        source_id=f"{participant}:user", timestamp_us=base_us, text=user))
-    memory.records.append(AddTranscriptRequest(
-        source_id=f"{participant}:agent", timestamp_us=base_us + 1, text=agent))
+def _seed_turn(
+    memory: _RecordingMemory, participant: str, user: str, agent: str, base_us: int = _REF_US - 30_000_000
+) -> None:
+    memory.records.append(AddTranscriptRequest(source_id=f"{participant}:user", timestamp_us=base_us, text=user))
+    memory.records.append(AddTranscriptRequest(source_id=f"{participant}:agent", timestamp_us=base_us + 1, text=agent))
 
 
 async def test_stale_recalled_turns_stay_out_of_recent_conversation(monkeypatch) -> None:
     """Turns older than the recency window never enter [Recent conversation]."""
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
-               base_us=1)
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.", base_us=1)
     supervisor, _fake = _make_supervisor(memory)
     seen_user_messages: list[str] = []
 
@@ -384,9 +410,7 @@ async def test_stale_recalled_turns_stay_out_of_recent_conversation(monkeypatch)
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    await supervisor.handle(SceneRequest(
-        transcript="What am I holding?", participant_id="alice",
-        timestamp_us=_REF_US))
+    await supervisor.handle(SceneRequest(transcript="What am I holding?", participant_id="alice", timestamp_us=_REF_US))
     assert seen_user_messages
     assert all("[Recent conversation]" not in content for content in seen_user_messages)
     assert all("not holding anything" not in content for content in seen_user_messages)
@@ -398,10 +422,8 @@ async def test_recency_window_boundary_is_inclusive(monkeypatch) -> None:
     from xr_render_demo_worker.supervisor import _RECENT_WINDOW_US
 
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "Older question?", "Older answer.",
-               base_us=_REF_US - _RECENT_WINDOW_US - 2)
-    _seed_turn(memory, "alice", "Edge question?", "Edge answer.",
-               base_us=_REF_US - _RECENT_WINDOW_US)
+    _seed_turn(memory, "alice", "Older question?", "Older answer.", base_us=_REF_US - _RECENT_WINDOW_US - 2)
+    _seed_turn(memory, "alice", "Edge question?", "Edge answer.", base_us=_REF_US - _RECENT_WINDOW_US)
     supervisor, _fake = _make_supervisor(memory)
     seen_user_messages: list[str] = []
 
@@ -411,8 +433,9 @@ async def test_recency_window_boundary_is_inclusive(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    await supervisor.handle(SceneRequest(
-        transcript="What did I just say?", participant_id="alice", timestamp_us=_REF_US))
+    await supervisor.handle(
+        SceneRequest(transcript="What did I just say?", participant_id="alice", timestamp_us=_REF_US)
+    )
     joined = "\n".join(seen_user_messages)
     assert "Edge question?" in joined
     assert "Edge answer." in joined
@@ -423,8 +446,7 @@ async def test_unset_timestamp_still_excludes_stale_turns(monkeypatch) -> None:
     """A request without a timestamp gets the wall clock, so the recency
     window still applies."""
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.",
-               base_us=1)
+    _seed_turn(memory, "alice", "What is in my hand?", "You are not holding anything.", base_us=1)
     supervisor, _fake = _make_supervisor(memory)
     seen_user_messages: list[str] = []
 
@@ -446,8 +468,7 @@ async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
 
     now_us = _time.time_ns() // 1_000
     memory = _RecordingMemory()
-    _seed_turn(memory, "alice", "What is in my hand?", "You are holding a torch.",
-               base_us=now_us - 5_000_000)
+    _seed_turn(memory, "alice", "What is in my hand?", "You are holding a torch.", base_us=now_us - 5_000_000)
     supervisor, _fake = _make_supervisor(memory)
     seen_user_messages: list[str] = []
 
@@ -457,15 +478,14 @@ async def test_departure_ends_the_session_for_recall(monkeypatch) -> None:
 
     monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
 
-    await supervisor.handle(SceneRequest(
-        transcript="Hello again.", participant_id="alice", timestamp_us=now_us))
+    await supervisor.handle(SceneRequest(transcript="Hello again.", participant_id="alice", timestamp_us=now_us))
     assert any("holding a torch" in content for content in seen_user_messages)
 
     supervisor.forget_participant("alice")
     seen_user_messages.clear()
-    await supervisor.handle(SceneRequest(
-        transcript="Hello once more.", participant_id="alice",
-        timestamp_us=_time.time_ns() // 1_000))
+    await supervisor.handle(
+        SceneRequest(transcript="Hello once more.", participant_id="alice", timestamp_us=_time.time_ns() // 1_000)
+    )
     assert seen_user_messages
     assert all("holding a torch" not in content for content in seen_user_messages)
 

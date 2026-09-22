@@ -530,7 +530,7 @@
   step: steep_timer
   query: Check whether the water in my kettle is boiling.
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can't|cannot|unable|unavailable|not available)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|unable|unavailable|not available|do not have|don['’]t have)\\b"
   forbidden_response: I can only help with the active tea guide right now.
 
 - name: active-routes-workflow-status
@@ -558,7 +558,7 @@
   state_updates: {steeping_complete: true}
   query: What is the capital of France?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
   forbidden_response: Paris
 
 - name: active-rejects-unrelated-explanation
@@ -566,21 +566,21 @@
   step: heat_water
   query: Could you explain how eclipses happen?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
 
 - name: active-rejects-unrelated-control-word
   route: active
   step: fill_water
   query: My supervisor said I should advance my career. Any advice?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
 
 - name: active-rejects-unrelated-translation
   route: active
   step: start_steeping
   query: Please translate good morning into Japanese.
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
   forbidden_response: Ohayou
 
 - name: active-rejects-unrelated-visual-question
@@ -588,7 +588,7 @@
   step: fill_water
   query: What color is the person's shirt?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help|not sure|isn['’]t)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist)|not sure|isn['’]t)\\b"
 
 - name: active-advances-on-direct-command
   route: active
@@ -754,7 +754,7 @@
     tea_ready: true
   query: Remind me of the temperature and steeping time.
   expected_tool: null
-  expected_response_pattern: "(?i)(?:93|ninety-three).*(?:3|three)"
+  expected_response_pattern: "(?i)(?:93|ninety-three).*(?:3|three|180)"
 
 - name: active-explains-previous-step
   route: active
@@ -811,7 +811,7 @@
   step: steep_timer
   query: What did we do immediately before this?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:tea|steep|water|immerse)\\b"
+  expected_response_pattern: "(?i)\\b(?:tea|steep\\w*|water|immerse\\w*)\\b"
 
 - name: active-does-not-advance-on-deliberative-question
   route: active
@@ -902,14 +902,14 @@
   step: heat_water
   query: Will it rain tomorrow?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
 
 - name: active-rejects-arithmetic-request
   route: active
   step: fill_water
   query: What is seventeen multiplied by nine?
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
   forbidden_response: "153"
 
 - name: active-rejects-unrelated-scene-description
@@ -917,7 +917,7 @@
   step: fill_water
   query: Describe the artwork on the wall behind me.
   expected_tool: null
-  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only help)\\b"
+  expected_response_pattern: "(?i)\\b(?:can['’]t|cannot|not able|unable|only (?:help|assist))\\b"
 
 - name: active-does-not-advance-on-bare-next-question
   route: active

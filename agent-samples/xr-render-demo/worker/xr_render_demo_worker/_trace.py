@@ -27,6 +27,4 @@ class MutationEvidence:
         self.satisfied = 0
 
 
-current_mutation_evidence: ContextVar[MutationEvidence | None] = ContextVar(
-    "current_mutation_evidence", default=None
-)
+current_mutation_evidence: ContextVar[MutationEvidence | None] = ContextVar("current_mutation_evidence", default=None)

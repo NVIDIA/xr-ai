@@ -123,11 +123,18 @@ def tool_definitions(
     return tuple(
         ToolDef(
             name=name,
-            description=tool.description,
+            description=_model_description(tool),
             parameters=tool.request_model.model_json_schema(),
         )
         for name, tool in entries
     )
+
+
+def _model_description(tool: Tool[Any, Any]) -> str:
+    if not tool.examples:
+        return tool.description
+    examples = "\n".join(f"- {example}" for example in tool.examples)
+    return f"{tool.description}\n\nUsage examples:\n{examples}"
 
 
 async def handle_tool_call(call: ToolCall, tools: ToolSet) -> ToolCallResult:

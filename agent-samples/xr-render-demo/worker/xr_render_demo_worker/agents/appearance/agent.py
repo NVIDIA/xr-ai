@@ -17,18 +17,29 @@ from ..._trace import current_participant_id, current_reference_time_us, current
 from ...models import SubagentResult, SubagentTask
 from ...scene import SceneContext
 from ...spatial_ops import TurnGuard, make_appearance_tools
+from .._adaptive import adaptive_result, reasoning_messages
 
 _PROMPT = Path(__file__).with_name("prompt.txt")
+_RESPONSIBILITY = (
+    "Owns requested color changes to existing XR objects, including copying color from another "
+    "scene object or a physical source. Does not own movement, creation, deletion, shape, or size."
+)
 DESCRIPTION = (
-    "Change only the color of existing XR objects: every recolor of an existing object is this "
-    "agent, whatever the verb, never object_agent. The instruction keeps the user's color "
-    "source words verbatim: a color word, an XR object to copy (\"same as capsule-8\"), or a "
-    "physical-world phrase (\"match my jacket\") whose color this agent reads from the camera "
-    "itself; never guess a physical color and never send vision_agent to look one up."
+    "Use for every requested end state that changes only the color of an existing XR object, "
+    "whatever verb expresses it. "
+    f"{_RESPONSIBILITY} Pass the target and the user's complete color-source words. This agent "
+    "reads a physical color source itself, so route the recolor directly here without a separate "
+    "camera lookup."
+)
+_EXAMPLES = (
+    "'Give the existing capsule the color of my backpack' belongs here as one complete recolor; "
+    "do not inspect the backpack first.",
+    "'Copy the cube's color to the ring' copies a scene object's color here.",
 )
 
 
 _prompt_text = _PROMPT.read_text(encoding="utf-8").strip()
+
 
 def make_appearance_agent(
     llm: LLMService,
@@ -43,34 +54,63 @@ def make_appearance_agent(
         async with delegation_lock:
             guard = TurnGuard()
             tools = make_appearance_tools(scene, guard=guard, physical_color=physical_color)
-            tools.append(Tool(
-                "get_scene_state",
-                "Return every current XR object with its ID, type, world position, color, and size.",
-                EmptyRequest,
-                SceneState,
-                lambda _: scene.get_scene_state.execute(EmptyRequest()),
-            ))
+            tools.append(
+                Tool(
+                    "get_scene_state",
+                    "Return every current XR object with its ID, type, world position, color, and size.",
+                    EmptyRequest,
+                    SceneState,
+                    lambda _: scene.get_scene_state.execute(EmptyRequest()),
+                )
+            )
             toolset = tolerant_toolset(tools)
-            prompt = _prompt_text
             messages = [
-                ChatMessage(role="system", content=prompt),
-                ChatMessage(role="user", content=(
-                    f"Active participant: {current_participant_id.get()}\n"
-                    f"Utterance timestamp: {current_reference_time_us.get()}\n"
-                    f"{await context.describe(current_participant_id.get())}\n\n"
-                    f"Focused instruction: {request.instruction}"
-                )),
+                ChatMessage(role="system", content=_prompt_text),
+                ChatMessage(
+                    role="user",
+                    content=(
+                        f"Active participant: {current_participant_id.get()}\n"
+                        f"Utterance timestamp: {current_reference_time_us.get()}\n"
+                        f"{await context.describe(current_participant_id.get())}\n\n"
+                        f"Focused instruction: {request.instruction}"
+                    ),
+                ),
             ]
+
             async def _call_model(transcript, definitions):
-                return await llm.chat(transcript, tools=list(definitions) or None, max_tokens=2048, temperature=0.0)
+                return await llm.chat(
+                    reasoning_messages(transcript, enabled=True),
+                    tools=list(definitions) or None,
+                    max_tokens=2048,
+                    temperature=0.0,
+                    enable_thinking=True,
+                    thinking_budget=1024,
+                )
+
             try:
-                loop_result = await run_tool_loop(messages, toolset, _call_model)
+                loop_result = await run_tool_loop(
+                    messages,
+                    toolset,
+                    _call_model,
+                    max_iterations=6,
+                )
             except ToolLoopError:
                 return SubagentResult(result="I couldn't complete that. Please try again.")
-            return SubagentResult(result=loop_result.content or "Done.")
+            return await adaptive_result(
+                llm,
+                instruction=request.instruction,
+                responsibility=_RESPONSIBILITY,
+                result=loop_result,
+            )
 
-    return Tool(name="appearance_agent", description=DESCRIPTION,
-                request_model=SubagentTask, result_model=SubagentResult, handler=handle)
+    return Tool(
+        name="appearance_agent",
+        description=DESCRIPTION,
+        request_model=SubagentTask,
+        result_model=SubagentResult,
+        handler=handle,
+        examples=_EXAMPLES,
+    )
 
 
 __all__ = ["make_appearance_agent"]

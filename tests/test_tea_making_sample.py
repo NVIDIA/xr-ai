@@ -779,9 +779,11 @@ async def _observe_caption(
 @pytest.mark.asyncio
 async def test_water_presence_is_judged_by_observation_llm() -> None:
     captions: list[str] = []
+    generations: list[dict[str, object]] = []
 
     class Llm:
-        async def chat(self, messages, **_kwargs):
+        async def chat(self, messages, **kwargs):
+            generations.append(kwargs)
             request = json.loads(messages[-1].content)
             caption = request["observation"]
             captions.append(caption)
@@ -822,6 +824,9 @@ async def test_water_presence_is_judged_by_observation_llm() -> None:
         "A reflective pool occupies the lower half of the vessel.",
         "A reflective pool is clearly visible inside the vessel.",
     ]
+    assert all(generation["enable_thinking"] is True for generation in generations)
+    assert all(generation["thinking_budget"] == 256 for generation in generations)
+    assert all(generation["max_tokens"] == 768 for generation in generations)
 
 
 @pytest.mark.asyncio
@@ -1034,8 +1039,8 @@ def test_active_route_leaves_workflow_control_semantics_to_model() -> None:
             timestamp_us=None,
         )
         assert expected_controls <= {name for name, _tool in turn.tools.items()}
-    assert "directly requests" in foreground_module._TEA_PROMPT
-    assert "negated" in foreground_module._TEA_PROMPT
+    assert "direct present command" in foreground_module._ACTION_POLICY
+    assert "negation" in foreground_module._ACTION_POLICY
 
 
 def test_foreground_current_view_uses_first_person_system_prompt(
@@ -1059,43 +1064,32 @@ def test_foreground_current_view_uses_first_person_system_prompt(
     assert captured == [foreground_module._CURRENT_VIEW_PROMPT]
 
 
-def test_procedural_filter_preserves_mixed_and_live_requests() -> None:
-    workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
-    guidance = GuidanceAgent(
-        workflow=workflow,
-        llm=SimpleNamespace(),  # type: ignore[arg-type]
-        current_frame=SimpleNamespace(),  # type: ignore[arg-type]
-        image_query=SimpleNamespace(),  # type: ignore[arg-type]
-        rag=SimpleNamespace(),  # type: ignore[arg-type]
+def test_active_catalog_is_not_pruned_from_query_words() -> None:
+    config = load_config(_SAMPLE / "yaml/tea_making_worker.yaml")
+    foreground = _foreground_for_route_test(
+        config.foreground_prompt,
+        step_id="heat_water",
     )
-    session = guidance.store.get("participant-mixed-query")
-    guidance.store.start(session)
-    guidance.store.advance(session, skip=True)
-    tools = guidance.active_tools(session.participant_id)
-    assert tools is not None
 
-    mixed = foreground_module._guide_tools_for_query(
-        tools,
-        "What is the next step, and is the water hot enough?",
+    procedural = foreground._prepare_turn(
+        "active",
+        query="What is the next step?",
+        ctx=None,
+        timestamp_us=None,
     )
-    assert mixed.get("current_view") is not None
+    live = foreground._prepare_turn(
+        "active",
+        query="Read the details on the kettle gauge.",
+        ctx=None,
+        timestamp_us=None,
+    )
 
-    live_details = foreground_module._guide_tools_for_query(
-        tools,
-        "Read the details on the kettle gauge.",
-    )
-    assert live_details.get("current_view") is not None
-
-    procedural = foreground_module._guide_tools_for_query(
-        tools,
-        "What is the next step?",
-    )
-    assert {name for name, _tool in procedural.items()} == {
-        "workflow__advance",
-        "workflow__reset",
-        "workflow__restart",
-        "workflow__status",
+    assert {name for name, _tool in procedural.tools.items()} == {
+        name for name, _tool in live.tools.items()
     }
+    assert procedural.tools.get("current_view") is not None
+    assert procedural.tools.get("application_context__query") is not None
+    assert procedural.tools.get("change_watch__start") is not None
 
 
 @pytest.mark.asyncio
@@ -1202,10 +1196,12 @@ async def test_slow_observation_does_not_block_reset() -> None:
 async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     observed_tools: set[str] = set()
+    observed_generation: dict[str, object] = {}
 
     class Llm:
-        async def chat(self, _messages, *, tools, **_kwargs):
+        async def chat(self, _messages, *, tools, **kwargs):
             observed_tools.update(tool.name for tool in tools)
+            observed_generation.update(kwargs)
             return ChatResponse("I can manage those tasks.", None, None, "stop", {})
 
     llm = Llm()
@@ -1267,11 +1263,27 @@ async def test_active_workflow_keeps_background_stop_and_status_tools() -> None:
 
     assert observed_tools == {
         "application_context__query",
+        "current_view",
+        "rag_lookup",
+        "change_watch__start",
+        "change_watch__stop",
+        "change_watch__status",
         "transcript__start",
         "transcript__stop",
         "transcript__status",
+        "video_log__start",
+        "video_log__stop",
+        "video_log__status",
+        "workflow__advance",
+        "workflow__reset",
+        "workflow__restart",
+        "workflow__status",
+        "turn__report_progress",
     }
     assert current_view is not None and current_view.return_direct is False
+    assert observed_generation["enable_thinking"] is True
+    assert observed_generation["thinking_budget"] == 1024
+    assert observed_generation["max_tokens"] == 1536
 
 
 @pytest.mark.asyncio
@@ -1492,6 +1504,12 @@ async def test_foreground_record_failure_does_not_suppress_speech() -> None:
             published.append((topic, message))
 
     foreground = object.__new__(ForegroundAgent)
+
+    class Llm:
+        async def chat(self, *_args, **_kwargs):
+            return ChatResponse("", None, None, "stop", {})
+
+    foreground._llm = Llm()
 
     async def answer(*_args, **_kwargs):
         return "Your water is ready.", ["clock__timer"], False
@@ -2008,7 +2026,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     workflow = load_workflow(_SAMPLE / "yaml/workflow.yaml")
     active_prompt = "\n".join(
         (
-            foreground_module._TEA_PROMPT,
+            foreground_module._ACTION_POLICY,
             foreground_module._VOICE_PROMPT,
             foreground_module._ACTIVE_POLICY,
             *(step.voice.prompt for step in workflow.steps.values()),
@@ -2168,16 +2186,35 @@ def _foreground_for_route_test(
     )
     _activate_test_step(guidance, step_id)
     images = SimpleNamespace(images=ImageRegistry(), get_current_frame=SimpleNamespace())
+    placeholder = SimpleNamespace()
     foreground = ForegroundAgent(
         llm=SimpleNamespace(),  # type: ignore[arg-type]
         images=images,  # type: ignore[arg-type]
-        vlm=SimpleNamespace(),  # type: ignore[arg-type]
-        rag=SimpleNamespace(),  # type: ignore[arg-type]
+        vlm=placeholder,  # type: ignore[arg-type]
+        rag=placeholder,  # type: ignore[arg-type]
         guidance=guidance,
-        background_context=SimpleNamespace(),  # type: ignore[arg-type]
-        change_watch=SimpleNamespace(),  # type: ignore[arg-type]
-        transcript=SimpleNamespace(),  # type: ignore[arg-type]
-        video_log=SimpleNamespace(),  # type: ignore[arg-type]
+        background_context=BackgroundContextAgent(),
+        change_watch=ChangeWatchAgent(
+            images=images,  # type: ignore[arg-type]
+            vlm=placeholder,  # type: ignore[arg-type]
+            llm=placeholder,  # type: ignore[arg-type]
+            caption_prompt="Caption.",
+            event_prompt="Compare.",
+            default_instruction="changes",
+            interval_s=2.0,
+        ),
+        transcript=TranscriptAgent(
+            llm=placeholder,  # type: ignore[arg-type]
+            summary_prompt="Summarize.",
+        ),
+        video_log=VideoLogAgent(
+            images=images,  # type: ignore[arg-type]
+            vlm=placeholder,  # type: ignore[arg-type]
+            llm=placeholder,  # type: ignore[arg-type]
+            caption_prompt="Caption.",
+            delta_prompt="Compare.",
+            interval_s=2.0,
+        ),
         prompt=prompt,
     )
     foreground._root_tools = lambda *_args, **_kwargs: ToolSet(())
@@ -2217,12 +2254,22 @@ def test_every_focused_step_selects_its_declared_live_tools(
     )
 
     assert turn.agent.name == f"foreground_tea_{step_id}"
-    assert {name for name, _tool in turn.tools.items()} == expected_tools | {
+    assert expected_tools | {
         "workflow__advance",
         "workflow__reset",
         "workflow__restart",
         "workflow__status",
-    }
+        "application_context__query",
+        "change_watch__start",
+        "change_watch__stop",
+        "change_watch__status",
+        "transcript__start",
+        "transcript__stop",
+        "transcript__status",
+        "video_log__start",
+        "video_log__stop",
+        "video_log__status",
+    } == {name for name, _tool in turn.tools.items()}
 
 
 def test_workflow_tool_typo_fails_when_guidance_is_built(tmp_path: Path) -> None:
@@ -2256,9 +2303,28 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
     assert active_turn.route == "tea"
     assert active_turn.agent.name == "foreground_tea_fill_water"
     assert "general-purpose assistant" not in active_turn.agent.system_prompt
-    assert "Give instructions or verify with current_view" in active_turn.agent.system_prompt
+    assert "Give instructions or obtain fresh visual evidence to verify" in active_turn.agent.system_prompt
+    for agent in foreground._tea_agents.values():
+        assert all(
+            tool_name not in agent.system_prompt
+            for tool_name in {
+                "current_view",
+                "rag_lookup",
+                "temperature__verify",
+                "clock__timer",
+                "workflow__advance",
+                "workflow__reset",
+            }
+        )
     assert json.loads(active_turn.user_message) == {
         "request": "What should I do?",
+        "guide_order": [
+            "Identify the tea",
+            "Fill the heating vessel",
+            "Heat the water",
+            "Start steeping",
+            "Wait for steeping",
+        ],
         "state": {
             "tea_name": "generic tea",
             "target_temperature_c": 93,
@@ -2267,6 +2333,17 @@ def test_foreground_route_appends_policy_through_constructor() -> None:
         },
     }
     assert {name for name, _tool in active_turn.tools.items()} == {
+        "application_context__query",
+        "current_view",
+        "change_watch__start",
+        "change_watch__stop",
+        "change_watch__status",
+        "transcript__start",
+        "transcript__stop",
+        "transcript__status",
+        "video_log__start",
+        "video_log__stop",
+        "video_log__status",
         "workflow__advance",
         "workflow__reset",
         "workflow__restart",

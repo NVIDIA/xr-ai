@@ -18,14 +18,19 @@ import yaml
 from tea_making_worker.background_context import BackgroundContextAgent
 from tea_making_worker.change_watch import ChangeDecision, ChangeWatchAgent
 from tea_making_worker.config import load_config
-from tea_making_worker.foreground import ForegroundAgent
+from tea_making_worker.foreground import _ROUTER_REASONING_GUIDANCE, ForegroundAgent
 from tea_making_worker.spec import load_workflow
 from tea_making_worker.transcript import TranscriptAgent, TranscriptSummary
 from tea_making_worker.video_log import VideoDelta, VideoLogAgent
-from tea_making_worker.workflow import GuidanceAgent, _state_contract
+from tea_making_worker.workflow import (
+    _OBSERVATION_THINKING_BUDGET,
+    GuidanceAgent,
+    _state_contract,
+)
 from tea_making_worker.workflow_tools import workflow_commit_tool
 from xr_ai_models import (
     ChatMessage,
+    ChatResponse,
     LLMService,
     ToolCall,
     load_models_config,
@@ -33,7 +38,8 @@ from xr_ai_models import (
 )
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
+from xr_ai_voice import VoiceTurnController
 
 _SAMPLE = Path(__file__).resolve().parents[1]
 _PROMPTS = _SAMPLE / "worker" / "tea_making_worker" / "prompts"
@@ -151,6 +157,55 @@ def _normalize_response(text: str) -> str:
     return " ".join(text.split())
 
 
+async def _adaptive_response(
+    llm: LLMService,
+    messages: tuple[ChatMessage, ...],
+    domain_tools: ToolSet,
+    *,
+    turn_id: str,
+    thinking_budget: int,
+) -> tuple[ChatResponse, bool]:
+    """Run coordination calls, then return the first domain action for scoring."""
+
+    controller = VoiceTurnController(
+        turn_id=turn_id,
+        timestamp_us=None,
+        publish=None,
+    )
+    tools = controller.extend(domain_tools)
+    transcript = list(messages)
+    if transcript and transcript[0].role == "system":
+        transcript[0] = ChatMessage(
+            role="system",
+            content=f"{transcript[0].content}\n\n{_ROUTER_REASONING_GUIDANCE}",
+        )
+    response: ChatResponse | None = None
+    for _ in range(3):
+        response = await llm.chat(
+            transcript,
+            tools=tool_definitions(tools),
+            max_tokens=1536,
+            temperature=0.0,
+            enable_thinking=True,
+            thinking_budget=thinking_budget,
+        )
+        calls = tuple(response.tool_calls or ())
+        if not calls or any(not call.name.startswith("turn__") for call in calls):
+            return response, True
+        transcript.append(
+            ChatMessage(
+                role="assistant",
+                content=response.content,
+                tool_calls=list(calls),
+            )
+        )
+        for call in calls:
+            result = await handle_tool_call(call, tools)
+            transcript.append(result.message)
+    assert response is not None
+    return response, True
+
+
 def _observation_turn(
     guidance: GuidanceAgent,
     case: dict[str, Any],
@@ -183,7 +238,7 @@ def _observation_turn(
         expected_step_id=step.id,
         expected_revision=session.revision,
     )
-    tools = ToolSet({commit.name: commit, **dict(quick.items())})
+    tools = ToolSet({**dict(quick.items()), commit.name: commit})
     request = json.dumps(
         {
             "observation": case["observation"],
@@ -268,6 +323,7 @@ async def main() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser()
     parser.add_argument("cases", nargs="*", help="Case names; omit to run all")
+    parser.add_argument("--thinking-budget", type=int, default=1024)
     args = parser.parse_args()
     wanted = set(args.cases)
     cases = [case for case in cases if not wanted or case["name"] in wanted]
@@ -311,13 +367,33 @@ async def main() -> None:
                     ChatMessage(role="user", content=turn.user_message),
                 )
                 tools = turn.tools
-            response = await llm.chat(
-                messages,
-                tools=tool_definitions(tools),
-                max_tokens=512,
-                temperature=0.0,
-                enable_thinking=False,
-            )
+            if classifier_case:
+                response = await llm.chat(
+                    messages,
+                    tools=tool_definitions(tools),
+                    max_tokens=512,
+                    temperature=0.0,
+                    enable_thinking=False,
+                )
+                reasoning_enabled = False
+            elif observation_case:
+                response = await llm.chat(
+                    messages,
+                    tools=tool_definitions(tools),
+                    max_tokens=768,
+                    temperature=0.0,
+                    enable_thinking=True,
+                    thinking_budget=_OBSERVATION_THINKING_BUDGET,
+                )
+                reasoning_enabled = True
+            else:
+                response, reasoning_enabled = await _adaptive_response(
+                    llm,
+                    tuple(messages),
+                    tools,
+                    turn_id=f"tea-eval:{case['name']}",
+                    thinking_budget=args.thinking_budget,
+                )
             calls = response.tool_calls or []
             content = response.content or ""
             actual_tools = [call.name for call in calls]
@@ -434,7 +510,10 @@ async def main() -> None:
                 errors.append(f"response contained forbidden {forbidden_response!r}")
             passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "MISS"
-            print(f"{label} {case['name']}: tools={actual_tools!r} content={content!r}")
+            print(
+                f"{label} {case['name']}: tools={actual_tools!r} "
+                f"reasoning={reasoning_enabled} content={content!r}"
+            )
             for error in errors:
                 print(f"  {error}")
             if passed:
