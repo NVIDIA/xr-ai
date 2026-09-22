@@ -68,3 +68,11 @@ the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
 locks under `dependency-manifest/`; the pre-commit hook does the Python one when
 `uv.toml` is staged.
+
+For a targeted security refresh, add an `exclude-newer-package` timestamp in
+`uv.toml` for each fixed package and add its minimum safe version to the
+affected service dependencies. This qualifies the fix without advancing the
+global cutoff. Resolve each affected project with the root config explicitly
+supplied, validate the affected behavior, and regenerate the dependency
+manifest with `uv run --script .github/scripts/generate_dependency_manifest.py`.
+Commit the generated manifest changes alongside the dependency declarations.
