@@ -468,7 +468,9 @@ for both buffered and streamed responses. The default pause is 300 ms;
 samples, so it remains audible with buffered playback. No silence is appended
 for empty or failed synthesis. The service does not split text at punctuation;
 callers that submit one sentence per request receive one pause per sentence.</p>
-<p>Synthesis is serialized. Disconnects and timeouts cancel the upstream RPC;
+<p>Synthesis is serialized. Both buffered and streaming requests watch for client
+disconnects while queued and during synthesis. Abandoned queued requests never
+start an RPC. Disconnects and timeouts cancel an active upstream RPC;
 the synthesis lock stays held until its blocking read finishes, including
 repeated cancellation during cleanup. Errors before the first audio return
 an HTTP error; errors after streaming starts terminate the response without
