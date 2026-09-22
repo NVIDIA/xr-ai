@@ -443,6 +443,109 @@ async def test_pending_capacity_preserves_urgent_work() -> None:
         await _stop(runtime, aggregator)
 
 
+async def test_turn_result_replaces_pending_acknowledgement_and_progress() -> None:
+    gate = asyncio.Event()
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(llm, output_gate=gate)
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Blocking output."),
+            participant_id="alice",
+            source="monitor",
+        )
+        await recorder.wait_for(1)
+        for text, kind in (
+            ("I'll check that.", "acknowledgement"),
+            ("The first part is complete.", "progress"),
+            ("The second part is complete.", "progress"),
+        ):
+            await runtime.publish(
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(text=text, kind=kind, turn_id="turn-1"),
+                participant_id="alice",
+                source="foreground",
+            )
+
+        state = aggregator._states["alice"]
+        assert [item.output.text for item in state.pending] == [
+            "I'll check that.",
+            "The second part is complete.",
+        ]
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Everything is complete.", kind="result", turn_id="turn-1"),
+            participant_id="alice",
+            source="foreground",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Too late.", kind="progress", turn_id="turn-1"),
+            participant_id="alice",
+            source="foreground",
+        )
+
+        assert [item.output.text for item in state.pending] == ["Everything is complete."]
+    finally:
+        gate.set()
+        await _stop(runtime, aggregator)
+
+
+async def test_streaming_result_completes_turn_only_at_stream_end() -> None:
+    gate = asyncio.Event()
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(llm, output_gate=gate)
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Blocking output."),
+            participant_id="alice",
+            source="monitor",
+        )
+        await recorder.wait_for(1)
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(
+                text="Visible ",
+                response_id="view",
+                final=False,
+                kind="result",
+                turn_id="turn-1",
+            ),
+            participant_id="alice",
+            source="foreground",
+        )
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Still checking.", kind="progress", turn_id="turn-1"),
+            participant_id="alice",
+            source="foreground",
+        )
+
+        state = aggregator._states["alice"]
+        assert "turn-1" not in state.completed_turns
+        assert [item.output.kind for item in state.pending] == ["result", "progress"]
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(
+                text="answer.",
+                response_id="view",
+                kind="result",
+                turn_id="turn-1",
+            ),
+            participant_id="alice",
+            source="foreground",
+        )
+
+        assert "turn-1" in state.completed_turns
+        assert [item.output.kind for item in state.pending] == ["result", "result"]
+    finally:
+        gate.set()
+        await _stop(runtime, aggregator)
+
+
 async def test_discarded_stream_does_not_resume_after_other_interrupts() -> None:
     llm = _LLM()
     runtime, aggregator, recorder = await _start(
@@ -649,6 +752,37 @@ async def test_release_cancels_only_departed_participant_state() -> None:
         assert "bob" in aggregator._states
     finally:
         await _stop(runtime, aggregator)
+
+
+async def test_release_all_clears_interrupted_turns_and_accepts_new_work() -> None:
+    llm = _LLM()
+    runtime, aggregator, recorder = await _start(llm)
+    try:
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Old response."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(1)
+
+        await aggregator.release_all()
+        assert aggregator._states == {}
+
+        await runtime.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="New response."),
+            participant_id="alice",
+            source="foreground",
+        )
+        await recorder.wait_for(2)
+    finally:
+        await _stop(runtime, aggregator)
+
+    assert [output.text for output, _metadata in recorder.outputs] == [
+        "Old response.",
+        "New response.",
+    ]
 
 
 async def test_urgent_contribution_interrupts_active_stream() -> None:
