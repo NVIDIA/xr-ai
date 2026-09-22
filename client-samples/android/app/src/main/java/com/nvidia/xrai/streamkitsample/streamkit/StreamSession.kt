@@ -94,10 +94,6 @@ class StreamSession(private val backend: StreamingBackend) {
 
     /** Opt-in handler invoked when the remote agent asks this client for a still image. */
     var onImageCaptureRequested: (suspend (ImageCaptureRequest) -> CapturedImage)? = null
-        set(value) {
-            field = value
-            if (value == null) cancelImageCaptures(reject = true)
-        }
 
     init {
         wireCallbacks()
@@ -322,14 +318,8 @@ class StreamSession(private val backend: StreamingBackend) {
         captureJobs.remove(requestId)?.job?.cancel()
     }
 
-    private fun cancelImageCaptures(reject: Boolean = false) {
-        val requestIds = captureJobs.keys.toList()
+    private fun cancelImageCaptures() {
         captureJobs.values.forEach { it.job?.cancel() }
         captureJobs.clear()
-        if (reject) {
-            requestIds.forEach { requestId ->
-                captureScope.launch { rejectCaptureRequest(requestId) }
-            }
-        }
     }
 }

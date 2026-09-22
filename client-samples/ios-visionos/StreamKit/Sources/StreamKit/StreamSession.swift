@@ -72,13 +72,7 @@ public final class StreamSession: ObservableObject {
 
     /// Opt-in handler invoked when the remote agent asks this client for a still image.
     public var onImageCaptureRequested:
-        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)? {
-        didSet {
-            if onImageCaptureRequested == nil {
-                cancelImageCaptures(reject: true)
-            }
-        }
-    }
+        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)?
 
     // MARK: - Private
 
@@ -330,17 +324,9 @@ public final class StreamSession: ObservableObject {
         captureTasks.removeValue(forKey: requestID)?.task?.cancel()
     }
 
-    private func cancelImageCaptures(reject: Bool = false) {
-        let requestIDs = Array(captureTasks.keys)
+    private func cancelImageCaptures() {
         captureTasks.values.forEach { $0.task?.cancel() }
         captureTasks.removeAll()
-        if reject {
-            Task { [weak self] in
-                for requestID in requestIDs {
-                    await self?.rejectCaptureRequest(requestID)
-                }
-            }
-        }
     }
 }
 

@@ -229,18 +229,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (!granted) {
                             throw SecurityException("Camera permission is required for image capture.")
                         }
-                        if (cameraMode != CameraMode.ON_DEMAND) {
-                            throw CancellationException("On-demand image capture was disabled.")
-                        }
                         val info = availableCameras.firstOrNull { it.id == selectedCameraId }
                         val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
-                        val image = newSession.captureImage(
+                        newSession.captureImage(
                             CameraConfig(deviceId = selectedCameraId, facing = facing)
                         )
-                        if (cameraMode != CameraMode.ON_DEMAND) {
-                            throw CancellationException("On-demand image capture was disabled.")
-                        }
-                        image
                     }
                 }
                 newSession.onImageCaptureRequested = if (cameraMode == CameraMode.ON_DEMAND) {
@@ -468,6 +461,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastError = e.message
             }
             isCameraActive = false
+            // A newer Live selection may have arrived while shutdown was
+            // suspended. Reconcile the latest desired mode after it completes.
+            if (cameraMode == CameraMode.LIVE &&
+                connectionState == ConnectionState.CONNECTED
+            ) {
+                startCamera()
+            }
         }
     }
 

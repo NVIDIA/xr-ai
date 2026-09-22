@@ -160,6 +160,8 @@ export function createBaseModel() {
     isCameraActive:   false,
     /** @type {'off'|'on-demand'|'live'} */
     cameraMode:        loadCameraMode(),
+    /** @type {Promise<void>|null} Serializes camera start/stop mode transitions. */
+    cameraModeTransition: null,
     /** @type {((request: {signal: AbortSignal}) => Promise<object>)|null} */
     imageCaptureHandler: null,
     /** @type {Array<{deviceId: string, label: string}>} */
@@ -504,9 +506,6 @@ export async function connect(model, {
           video: constraints,
         });
         try {
-          if (model.cameraMode !== 'on-demand' || signal.aborted) {
-            throw new DOMException('Capture cancelled', 'AbortError');
-          }
           const track = media.getVideoTracks()[0];
           await enableContinuousExposure(track);
           image = await captureCameraTrack(track, signal, { settleExposure: true });
@@ -777,10 +776,6 @@ export async function stopCamera(model, render, showError) {
  */
 export async function setCameraMode(model, mode, { render, startCamera, stopCamera }) {
   if (!CAMERA_MODES.has(mode)) return;
-  if (model.cameraMode === 'on-demand' && mode !== 'on-demand') {
-    model.captureSequence = (model.captureSequence ?? 0) + 1;
-    model.captureState = 'idle';
-  }
   model.cameraMode = mode;
   saveCameraMode(mode);
   if (model.session) {
@@ -789,13 +784,22 @@ export async function setCameraMode(model, mode, { render, startCamera, stopCame
       : null;
   }
 
-  if (mode === 'live' && model.connectionState === ConnectionState.CONNECTED) {
-    await startCamera();
-    if (model.cameraMode !== 'live' && model.isCameraActive) {
+  const previous = model.cameraModeTransition ?? Promise.resolve();
+  const transition = previous.catch(() => {}).then(async () => {
+    // Superseded selections have no work to do. If a previous transition was
+    // already awaiting shutdown, the latest selection runs next.
+    if (model.cameraMode !== mode) return;
+    if (mode === 'live' && model.connectionState === ConnectionState.CONNECTED) {
+      await startCamera();
+    } else if (model.isCameraActive) {
       await stopCamera();
     }
-  } else if (model.isCameraActive) {
-    await stopCamera();
+  });
+  model.cameraModeTransition = transition;
+  try {
+    await transition;
+  } finally {
+    if (model.cameraModeTransition === transition) model.cameraModeTransition = null;
   }
   render();
 }

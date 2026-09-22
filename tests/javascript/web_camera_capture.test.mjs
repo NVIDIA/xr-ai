@@ -414,57 +414,6 @@ test('cancels an in-flight image capture on terminal disconnect', async () => {
   assert.equal(imagesSent, 0);
 });
 
-test('turning camera mode Off cancels and rejects an in-flight image capture', async () => {
-  let resolveStarted;
-  const started = new Promise(resolve => { resolveStarted = resolve; });
-  let aborted = false;
-  let released = false;
-  const responses = [];
-  const backend = {
-    async [INTERNAL_SEND_BYTE_STREAM](data, request) { responses.push({ data, request }); },
-  };
-  const session = new StreamSession(backend);
-  const handler = ({ signal }) => new Promise((resolve, reject) => {
-    resolveStarted();
-    signal.addEventListener('abort', () => {
-      aborted = true;
-      reject(new DOMException('Capture cancelled', 'AbortError'));
-    }, { once: true });
-  }).finally(() => { released = true; });
-  const model = {
-    cameraMode: 'on-demand',
-    connectionState: ConnectionState.CONNECTED,
-    imageCaptureHandler: handler,
-    isCameraActive: false,
-    session,
-    captureSequence: 1,
-    captureState: 'starting',
-  };
-  session.onImageCaptureRequested = handler;
-
-  backend.onDataReceived(
-    'camera.capture.request',
-    new TextEncoder().encode('{"version":1,"request_id":"capture-1","timeout_ms":5000}'),
-  );
-  await started;
-  await setCameraMode(model, 'off', {
-    render() {},
-    async startCamera() {},
-    async stopCamera() {},
-  });
-  await new Promise(resolve => setTimeout(resolve, 0));
-
-  assert.equal(aborted, true);
-  assert.equal(released, true);
-  assert.equal(model.captureState, 'idle');
-  assert.equal(responses.length, 1);
-  assert.equal(responses[0].request.attributes.request_id, 'capture-1');
-  assert.equal(
-    responses[0].request.mimeType,
-    'application/vnd.xr-ai.capture-rejection+json',
-  );
-});
-
 test('returns a rejection response when image capture is unavailable', async () => {
   const responses = [];
   const backend = {
@@ -544,6 +493,99 @@ test('camera modes are exclusive and survive disconnect', async () => {
   assert.equal(model.cameraMode, 'on-demand');
   assert.equal(saved.get('streamkit.cameraMode'), 'on-demand');
   assert.equal(createBaseModel().cameraMode, 'on-demand');
+});
+
+test('an accepted capture finishes after Off while new requests are rejected', async () => {
+  let resolveStarted;
+  const started = new Promise(resolve => { resolveStarted = resolve; });
+  let finishCapture;
+  const pendingImage = new Promise(resolve => { finishCapture = resolve; });
+  let acceptedSignal;
+  const responses = [];
+  const backend = {
+    async [INTERNAL_SEND_BYTE_STREAM](data, request) { responses.push({ data, request }); },
+  };
+  const session = new StreamSession(backend);
+  const handler = ({ signal }) => {
+    acceptedSignal = signal;
+    resolveStarted();
+    return pendingImage;
+  };
+  const model = {
+    cameraMode: 'on-demand',
+    connectionState: ConnectionState.CONNECTED,
+    imageCaptureHandler: handler,
+    isCameraActive: false,
+    session,
+  };
+  session.onImageCaptureRequested = handler;
+
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"accepted","timeout_ms":5000}'),
+  );
+  await started;
+  await setCameraMode(model, 'off', {
+    render() {},
+    async startCamera() {},
+    async stopCamera() {},
+  });
+
+  assert.equal(acceptedSignal.aborted, false);
+  finishCapture({ data: new Uint8Array([1, 2, 3]), mimeType: 'image/jpeg' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  backend.onDataReceived(
+    'camera.capture.request',
+    new TextEncoder().encode('{"version":1,"request_id":"new","timeout_ms":5000}'),
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(responses.length, 2);
+  assert.equal(responses[0].request.attributes.request_id, 'accepted');
+  assert.equal(responses[0].request.mimeType, 'image/jpeg');
+  assert.equal(responses[1].request.attributes.request_id, 'new');
+  assert.equal(
+    responses[1].request.mimeType,
+    'application/vnd.xr-ai.capture-rejection+json',
+  );
+});
+
+test('camera mode transitions reconcile a newer Live selection after shutdown', async () => {
+  let releaseStop;
+  const stopGate = new Promise(resolve => { releaseStop = resolve; });
+  let resolveStopStarted;
+  const stopStarted = new Promise(resolve => { resolveStopStarted = resolve; });
+  const model = {
+    cameraMode: 'live',
+    connectionState: ConnectionState.CONNECTED,
+    imageCaptureHandler: async () => ({ data: new Uint8Array([1]), mimeType: 'image/jpeg' }),
+    isCameraActive: true,
+    session: { onImageCaptureRequested: null },
+  };
+  let starts = 0;
+  const actions = {
+    render() {},
+    async startCamera() {
+      if (model.isCameraActive) return;
+      starts += 1;
+      model.isCameraActive = true;
+    },
+    async stopCamera() {
+      resolveStopStarted();
+      await stopGate;
+      model.isCameraActive = false;
+    },
+  };
+
+  const selectOff = setCameraMode(model, 'off', actions);
+  await stopStarted;
+  const selectLive = setCameraMode(model, 'live', actions);
+  releaseStop();
+  await Promise.all([selectOff, selectLive]);
+
+  assert.equal(model.cameraMode, 'live');
+  assert.equal(model.isCameraActive, true);
+  assert.equal(starts, 1);
 });
 
 test('failed live camera start falls back to persisted Off mode', async () => {

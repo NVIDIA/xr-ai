@@ -301,13 +301,9 @@ final class AppModel {
             guard self.cameraMode == .onDemand else {
                 throw StreamError.imageCaptureUnavailable("On-demand image capture is not enabled.")
             }
-            let image = try await newSession.captureImage(
+            return try await newSession.captureImage(
                 config: CameraConfig(position: self.cameraPosition)
             )
-            guard self.cameraMode == .onDemand else {
-                throw CancellationError()
-            }
-            return image
         }
         newSession.onImageCaptureRequested = cameraMode == .onDemand
             ? imageCaptureHandler
@@ -490,6 +486,11 @@ final class AppModel {
             lastError = error.localizedDescription
         }
         isCameraActive = false
+        // A newer Live selection may have arrived while shutdown was
+        // suspended. Reconcile the latest desired mode after it completes.
+        if cameraMode == .live, connectionState == .connected {
+            await startCamera()
+        }
     }
 
     func switchCamera(to position: CameraConfig.Position) async {

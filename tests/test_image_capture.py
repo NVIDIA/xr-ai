@@ -211,6 +211,41 @@ async def test_current_frame_falls_back_when_fresh_pixels_are_unavailable() -> N
     assert len(endpoint.requests) == 1
 
 
+async def test_capture_rejection_rechecks_an_already_fresh_live_frame() -> None:
+    endpoint = _Endpoint(respond=False)
+    images = ImageRegistry()
+    tool = CurrentFrameTool(endpoint=endpoint, images=images)  # type: ignore[arg-type]
+
+    async def reject_after_live_frame(request) -> None:
+        endpoint.requests.append(request)
+        await endpoint.frame_callback(FrameSignal(
+            slot=0,
+            seq=8,
+            pts_us=time.time_ns() // 1_000,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGB24,
+            data_sz=12,
+            participant_id="alice",
+            track_id="camera",
+        ))
+        await endpoint.image_callback(ImageCaptureData(
+            participant_id=request.participant_id,
+            request_id=request.request_id,
+            pts_us=0,
+            mime_type=_CAPTURE_REJECTION_MIME_TYPE,
+            data=b'{"version":1,"status":"rejected"}',
+        ))
+
+    endpoint._request_image_capture = reject_after_live_frame
+    result = await tool._get_current_frame(CurrentFrameRequest(participant_id="alice"))
+
+    assert result.sequence == 8
+    assert result.track_id == "camera"
+    assert len(endpoint.requests) == 1
+    assert endpoint.cancels == []
+
+
 async def test_timed_out_capture_is_cancelled_on_the_client() -> None:
     endpoint = _Endpoint(respond=False)
     source = _ClientImageCaptureSource(endpoint, timeout_s=0.01)  # type: ignore[arg-type]

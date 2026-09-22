@@ -103,29 +103,40 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
         self.frames.release(participant_id)
         self.images.release_owner(participant_id)
 
+    async def _fresh_live_frame(self, participant_id: str) -> ImageFrame | None:
+        if participant_id not in self.frames.participants():
+            return None
+        try:
+            frame = await self.frames.get(participant_id)
+        except FrameUnavailable:
+            return None
+        image_bytes = await asyncio.to_thread(
+            lambda: encode_image_bytes(frame_to_pil(frame))
+        )
+        return ImageFrame(
+            image=self.images.put(image_bytes, owner=participant_id),
+            width=frame.width,
+            height=frame.height,
+            timestamp_us=frame.pts_us,
+            sequence=frame.seq,
+            participant_id=frame.participant_id or participant_id,
+            track_id=frame.track_id,
+        )
+
     async def _get_current_frame(self, request: CurrentFrameRequest) -> ImageFrame:
-        if request.participant_id in self.frames.participants():
-            try:
-                frame = await self.frames.get(request.participant_id)
-            except FrameUnavailable:
-                pass
-            else:
-                image_bytes = await asyncio.to_thread(
-                    lambda: encode_image_bytes(frame_to_pil(frame))
-                )
-                return ImageFrame(
-                    image=self.images.put(image_bytes, owner=request.participant_id),
-                    width=frame.width,
-                    height=frame.height,
-                    timestamp_us=frame.pts_us,
-                    sequence=frame.seq,
-                    participant_id=frame.participant_id or request.participant_id,
-                    track_id=frame.track_id,
-                )
+        live_frame = await self._fresh_live_frame(request.participant_id)
+        if live_frame is not None:
+            return live_frame
 
         try:
             captured = await self._captures.capture(request.participant_id)
         except _ImageCaptureUnavailable as exc:
+            # Live mode intentionally has no still-capture handler. A frame may
+            # have arrived while its rejection was in flight, so prefer that
+            # already-fresh frame without extending the request deadline.
+            live_frame = await self._fresh_live_frame(request.participant_id)
+            if live_frame is not None:
+                return live_frame
             raise FrameUnavailable(str(exc)) from exc
         try:
             width, height = await asyncio.to_thread(

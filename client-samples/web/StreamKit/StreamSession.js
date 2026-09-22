@@ -81,22 +81,14 @@ export class StreamSession {
    */
   onNetworkMetrics = null;
 
-  /** @type {((request: {requestId: string, timeoutMs: number, signal: AbortSignal}) =>
-   *   Promise<{data: ArrayBuffer|Uint8Array, mimeType: string, name?: string}>) | null} */
-  #onImageCaptureRequested = null;
-
   /**
    * Opt-in image capture capability invoked by a remote agent.
    * Return `{ data, mimeType, name? }`, where data is encoded JPEG, PNG, or WebP.
+   *
+   * @type {((request: {requestId: string, timeoutMs: number, signal: AbortSignal}) =>
+   *   Promise<{data: ArrayBuffer|Uint8Array, mimeType: string, name?: string}>) | null}
    */
-  get onImageCaptureRequested() {
-    return this.#onImageCaptureRequested;
-  }
-
-  set onImageCaptureRequested(handler) {
-    this.#onImageCaptureRequested = handler;
-    if (!handler) this.#cancelImageCaptures(true);
-  }
+  onImageCaptureRequested = null;
 
   /** @type {Map<string, AbortController>} */
   #captureRequests = new Map();
@@ -364,12 +356,8 @@ export class StreamSession {
     } catch { /* malformed cancellation */ }
   }
 
-  #cancelImageCaptures(reject = false) {
-    const requestIds = [...this.#captureRequests.keys()];
+  #cancelImageCaptures() {
     for (const controller of this.#captureRequests.values()) controller.abort();
     this.#captureRequests.clear();
-    if (reject) {
-      for (const requestId of requestIds) void this.#rejectCaptureRequest(requestId);
-    }
   }
 }
