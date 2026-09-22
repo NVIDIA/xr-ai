@@ -320,7 +320,9 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -491,6 +493,29 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Start without HF_TOKEN (unauthenticated downloads of the multi-GB checkpoints may stall indefinitely).</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Use a named YAML GPU profile instead of automatic detection. Intended for explicitly reviewed custom hardware profiles.</p>
+</dd>
+</dl>
+</section>
+<section id="model-servers-nim">
+<h2>model_servers_nim<a class="headerlink" href="#model-servers-nim" title="Link to this heading">#</a></h2>
+<p>Start a persistent NIM model stack, with hardware-specific local fallbacks.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers-nim/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers_nim<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span><span class="w"> </span><span class="o">[</span>--export-models<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--models<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--allow-anonymous<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop this stack’s model ports.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></dt><dd><p>Validate and print the launch plan without credentials, Docker, or model downloads.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--export-models</span> <span class="pre">PATH</span></code></dt><dd><p>Write a reusable client models JSON and exit without launching servers.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Select a hardware profile; otherwise detect Blackwell, dual Ada, or Spark.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code></dt><dd><p>Custom deployment JSON; defaults to yaml/&lt;gpu-profile&gt;/models.json.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code></dt><dd><p>Allow Hugging Face downloads without HF_TOKEN for local fallback services.</p>
 </dd>
 </dl>
 </section>
