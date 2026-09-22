@@ -46,6 +46,7 @@
 #include "streamkit/Config/CameraConfig.h"
 #include "streamkit/Config/SessionConfig.h"
 #include "streamkit/ConnectionState.h"
+#include "streamkit/ImageCapture.h"
 
 namespace streamkit {
 
@@ -85,6 +86,9 @@ public:
     /// May run on a backend worker thread; marshal to the UI thread as needed.
     /// Exceptions are contained by the built-in LiveKit backend.
     std::function<void(const NetworkMetrics& metrics)> on_network_metrics;
+
+    /// Opt-in handler invoked when the remote agent asks for one still image.
+    std::function<CapturedImage(const ImageCaptureRequest&)> on_image_capture_requested;
 
     // ── State ──────────────────────────────────────────────────────────────
 
@@ -138,9 +142,18 @@ public:
     StreamingBackend* GetBackend() { return backend_.get(); }
 
 private:
+    // Lets the native regression observe private capture-response framing
+    // without adding byte streams to StreamingBackend's public contract.
+    friend struct StreamSessionTestAccess;
+
+    using CaptureResponseSender = std::function<void(
+        const CapturedImage&, std::string_view, std::string_view)>;
+
+    void SendCaptureResponse(const CapturedImage& image, std::string_view request_id);
     void WireCallbacks();
 
     std::unique_ptr<StreamingBackend> backend_;
+    CaptureResponseSender capture_response_sender_;
     ConnectionState connection_state_ = ConnectionState::kDisconnected;
 };
 

@@ -4,6 +4,7 @@
 package com.nvidia.xrai.streamkitsample
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -11,8 +12,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.CapturedImage
+import com.nvidia.xrai.streamkitsample.streamkit.ImageCaptureRequest
 import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamSession
+import com.nvidia.xrai.streamkitsample.streamkit.encodeI420Jpeg
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
@@ -37,6 +41,12 @@ const val VIRTUAL_CAMERA_ID = "__virtual_camera__"
 /** Synthetic-camera frame interval (~30 fps). */
 private const val VIRTUAL_CAMERA_FRAME_MS = 33L
 
+internal enum class CameraMode(val displayName: String) {
+    OFF("Off"),
+    ON_DEMAND("On-demand images"),
+    LIVE("Live video"),
+}
+
 /** A message received from the agent or other remote participants. */
 data class ReceivedMessage(
     val id: String = UUID.randomUUID().toString(),
@@ -54,6 +64,11 @@ data class ReceivedMessage(
  * automatically.
  */
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val settings = application.getSharedPreferences(
+        "streamkit.settings",
+        Context.MODE_PRIVATE,
+    )
 
     // ── Connection settings ────────────────────────────────────────────────────
 
@@ -90,6 +105,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?: VIRTUAL_CAMERA_ID
     )
 
+    internal var cameraMode by mutableStateOf(
+        runCatching {
+            CameraMode.valueOf(settings.getString("camera.mode", CameraMode.OFF.name)!!)
+        }.getOrDefault(CameraMode.OFF)
+    )
+        private set
+
     // ── Live state ─────────────────────────────────────────────────────────────
 
     var connectionState by mutableStateOf(ConnectionState.DISCONNECTED)
@@ -109,6 +131,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Guards the physical-camera start path so two rapid taps can't interleave
      *  stopCamera/startCamera (mirrors iOS `isCameraStarting`). */
     private var isCameraStarting = false
+    internal var requestCameraPermission: (suspend () -> Boolean)? = null
     var isConnecting by mutableStateOf(false)
         private set
     val receivedMessages = mutableStateListOf<ReceivedMessage>()
@@ -131,6 +154,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Running synthetic-camera frame loop, if the Virtual Camera is active. */
     private var syntheticJob: Job? = null
+    private var imageCaptureHandler: (suspend (ImageCaptureRequest) -> CapturedImage)? = null
 
     // ── Connect / disconnect ──────────────────────────────────────────────────
 
@@ -181,6 +205,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         // coroutine, the only place the suspending unpublish can
                         // run from this non-suspend callback. Mirrors web.
                         stopCamera()
+                    } else if (state == ConnectionState.CONNECTED && cameraMode == CameraMode.LIVE) {
+                        startCamera()
                     }
                 }
                 newSession.onAgentStatus = { status ->
@@ -188,6 +214,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 newSession.onNetworkMetrics = { metrics ->
                     networkMetrics = metrics
+                }
+                imageCaptureHandler = {
+                    check(cameraMode == CameraMode.ON_DEMAND) {
+                        "On-demand image capture is not enabled."
+                    }
+                    if (selectedCameraId == VIRTUAL_CAMERA_ID) {
+                        val source = SyntheticCameraSource()
+                        CapturedImage(
+                            encodeI420Jpeg(source.renderFrame(0), source.width, source.height)
+                        )
+                    } else {
+                        val granted = requestCameraPermission?.invoke() == true
+                        if (!granted) {
+                            throw SecurityException("Camera permission is required for image capture.")
+                        }
+                        val info = availableCameras.firstOrNull { it.id == selectedCameraId }
+                        val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
+                        newSession.captureImage(
+                            CameraConfig(deviceId = selectedCameraId, facing = facing)
+                        )
+                    }
+                }
+                newSession.onImageCaptureRequested = if (cameraMode == CameraMode.ON_DEMAND) {
+                    imageCaptureHandler
+                } else {
+                    null
                 }
                 newSession.onDataReceived = { topic, data ->
                     when {
@@ -225,6 +277,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastError = e.message ?: "Connection failed"
                 session?.disconnect()
                 session = null
+                imageCaptureHandler = null
                 connectionState = ConnectionState.DISCONNECTED
             } finally {
                 isConnecting = false
@@ -238,6 +291,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             syntheticJob = null
             session?.disconnect()
             session = null
+            imageCaptureHandler = null
             connectionState = ConnectionState.DISCONNECTED
             agentStatus = null
             networkMetrics = null
@@ -273,7 +327,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Camera ─────────────────────────────────────────────────────────────────
 
+    internal fun setCameraMode(mode: CameraMode) {
+        if (cameraMode == mode) return
+        cameraMode = mode
+        settings.edit().putString("camera.mode", mode.name).apply()
+        session?.onImageCaptureRequested = if (mode == CameraMode.ON_DEMAND) {
+            imageCaptureHandler
+        } else {
+            null
+        }
+        if (mode == CameraMode.LIVE && connectionState == ConnectionState.CONNECTED) {
+            startCamera()
+        } else if (isCameraActive || isCameraStarting || syntheticJob != null) {
+            stopCamera()
+        }
+    }
+
     fun startCamera() {
+        if (cameraMode != CameraMode.LIVE) return
         if (selectedCameraId == VIRTUAL_CAMERA_ID) {
             startVirtualCamera()
             return
@@ -284,12 +355,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         isCameraStarting = true
         viewModelScope.launch {
             try {
+                val granted = requestCameraPermission?.invoke() == true
+                if (!granted) {
+                    lastError = "Camera permission is required for live video."
+                    fallBackToCameraOff()
+                    return@launch
+                }
+                if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) {
+                    return@launch
+                }
                 val info = availableCameras.firstOrNull { it.id == selectedCameraId }
                 val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
                 session?.startCamera(CameraConfig(deviceId = selectedCameraId, facing = facing))
+                if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) {
+                    session?.stopCamera()
+                    return@launch
+                }
                 isCameraActive = true
             } catch (e: Exception) {
                 lastError = e.message
+                fallBackToCameraOff()
             } finally {
                 isCameraStarting = false
             }
@@ -302,6 +387,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * No physical camera or CAMERA permission is involved.
      */
     private fun startVirtualCamera() {
+        if (cameraMode != CameraMode.LIVE) return
         if (connectionState != ConnectionState.CONNECTED) {
             lastError = "Connect before starting the virtual camera."
             return
@@ -322,8 +408,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     source.renderFrame(frame++), source.width, source.height,
                     System.nanoTime() / 1_000,
                 )
+                if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) {
+                    session?.stopCamera()
+                    return@launch
+                }
                 withContext(Dispatchers.Main) { isCameraActive = true }
-                while (isActive) {
+                while (isActive && cameraMode == CameraMode.LIVE) {
                     session?.injectVideoFrame(
                         source.renderFrame(frame++), source.width, source.height,
                         System.nanoTime() / 1_000,
@@ -341,9 +431,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     lastError = e.message
                     isCameraActive = false
+                    fallBackToCameraOff()
                 }
             }
         }
+    }
+
+    private fun fallBackToCameraOff() {
+        if (cameraMode != CameraMode.LIVE || connectionState != ConnectionState.CONNECTED) return
+        cameraMode = CameraMode.OFF
+        settings.edit().putString("camera.mode", CameraMode.OFF.name).apply()
+        session?.onImageCaptureRequested = null
     }
 
     fun stopCamera() {
@@ -363,6 +461,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lastError = e.message
             }
             isCameraActive = false
+            // A newer Live selection may have arrived while shutdown was
+            // suspended. Reconcile the latest desired mode after it completes.
+            if (cameraMode == CameraMode.LIVE &&
+                connectionState == ConnectionState.CONNECTED
+            ) {
+                startCamera()
+            }
         }
     }
 

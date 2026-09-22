@@ -58,6 +58,14 @@ struct LiveKitBackendTestAccess {
     static bool TearDownInProgress(const LiveKitBackend& backend) {
         return backend.teardown_in_progress_.load();
     }
+
+    static void HandleDataReceived(
+        const LiveKitBackend& backend,
+        std::string_view topic,
+        std::span<const std::byte> payload,
+        std::string_view sender_identity) {
+        backend.HandleDataReceived(topic, payload, sender_identity);
+    }
 };
 
 } // namespace streamkit
@@ -225,6 +233,20 @@ int main() {
         streamkit::LiveKitBackendTestAccess::ConnectionEpoch(stale_backend));
     ExpectEq(delivered_metrics, 1);
     stale_backend.Disconnect();
+
+    // Only the configured hub participant may deliver capture control to the
+    // session. Peer data must not reach StreamSession's automatic handler.
+    streamkit::LiveKitBackend isolated_backend{lk};
+    int isolated_data_calls = 0;
+    isolated_backend.on_data_received = [&isolated_data_calls](auto, auto) {
+        ++isolated_data_calls;
+    };
+    streamkit::LiveKitBackendTestAccess::HandleDataReceived(
+        isolated_backend, "camera.capture.request", {}, "peer");
+    ExpectEq(isolated_data_calls, 0);
+    streamkit::LiveKitBackendTestAccess::HandleDataReceived(
+        isolated_backend, "camera.capture.request", {}, "xr-hub-connector");
+    ExpectEq(isolated_data_calls, 1);
 
     // User callback exceptions are contained at the delivery boundary and do
     // not terminate the telemetry worker.

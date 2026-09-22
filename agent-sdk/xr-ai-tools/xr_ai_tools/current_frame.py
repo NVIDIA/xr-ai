@@ -6,9 +6,19 @@
 from __future__ import annotations
 
 import asyncio
+import io
 
+from PIL import Image
 from pydantic import Field
-from xr_ai_hub import LiveFrameSource, ProcessorEndpoint
+from xr_ai_hub import (
+    FrameUnavailable,
+    LiveFrameSource,
+    ProcessorEndpoint,
+)
+from xr_ai_hub._image_capture import (
+    _ClientImageCaptureSource,
+    _ImageCaptureUnavailable,
+)
 
 from ._pixels import encode_image_bytes, frame_to_pil
 from .image import ImageRegistry, TimedImage
@@ -46,7 +56,14 @@ class CurrentFrameRequest(StrictRequest):
 
 
 class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
-    """Return a participant's current frame without running visual inference."""
+    """Return a participant's current image without running visual inference.
+
+    A fresh frame already observed by the hub is preferred. When none is
+    available, the tool transparently asks the participant client to capture
+    and upload one encoded still image. Installing a StreamKit capture handler
+    opts the client in; calls from foreground tools or background pollers may
+    briefly activate that client's camera when video is off.
+    """
 
     def __init__(
         self,
@@ -66,9 +83,15 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
             max_age_s=frame_max_age_s,
             timeout_s=frame_timeout_s,
         )
+        self._captures = _ClientImageCaptureSource(
+            endpoint,
+            timeout_s=frame_timeout_s,
+        )
         super().__init__(
             "get_current_frame",
-            "Return a participant's latest available camera frame without interpreting it.",
+            "Return a participant's latest available camera image without interpreting it. "
+            "When video is off, this may ask an opted-in client to activate its camera "
+            "briefly for one still image.",
             CurrentFrameRequest,
             ImageFrame,
             self._get_current_frame,
@@ -80,18 +103,64 @@ class CurrentFrameTool(Tool[CurrentFrameRequest, ImageFrame]):
         self.frames.release(participant_id)
         self.images.release_owner(participant_id)
 
-    async def _get_current_frame(self, request: CurrentFrameRequest) -> ImageFrame:
-        frame = await self.frames.get(request.participant_id)
-        image_bytes = await asyncio.to_thread(lambda: encode_image_bytes(frame_to_pil(frame)))
+    async def _fresh_live_frame(self, participant_id: str) -> ImageFrame | None:
+        if participant_id not in self.frames.participants():
+            return None
+        try:
+            frame = await self.frames.get(participant_id)
+        except FrameUnavailable:
+            return None
+        image_bytes = await asyncio.to_thread(
+            lambda: encode_image_bytes(frame_to_pil(frame))
+        )
         return ImageFrame(
-            image=self.images.put(image_bytes, owner=request.participant_id),
+            image=self.images.put(image_bytes, owner=participant_id),
             width=frame.width,
             height=frame.height,
             timestamp_us=frame.pts_us,
             sequence=frame.seq,
-            participant_id=frame.participant_id or request.participant_id,
+            participant_id=frame.participant_id or participant_id,
             track_id=frame.track_id,
         )
+
+    async def _get_current_frame(self, request: CurrentFrameRequest) -> ImageFrame:
+        live_frame = await self._fresh_live_frame(request.participant_id)
+        if live_frame is not None:
+            return live_frame
+
+        try:
+            captured = await self._captures.capture(request.participant_id)
+        except _ImageCaptureUnavailable as exc:
+            # Live mode intentionally has no still-capture handler. A frame may
+            # have arrived while its rejection was in flight, so prefer that
+            # already-fresh frame without extending the request deadline.
+            live_frame = await self._fresh_live_frame(request.participant_id)
+            if live_frame is not None:
+                return live_frame
+            raise FrameUnavailable(str(exc)) from exc
+        try:
+            width, height = await asyncio.to_thread(
+                _encoded_image_size,
+                captured.data,
+            )
+        except Exception as exc:
+            raise FrameUnavailable(str(exc)) from exc
+        return ImageFrame(
+            image=self.images.put(captured.data, owner=request.participant_id),
+            width=width,
+            height=height,
+            timestamp_us=captured.pts_us,
+            sequence=0,
+            participant_id=captured.participant_id,
+            track_id="",
+        )
+
+
+def _encoded_image_size(data: bytes) -> tuple[int, int]:
+    with Image.open(io.BytesIO(data)) as image:
+        size = image.size
+        image.verify()
+        return size
 
 
 __all__ = ["CurrentFrameRequest", "CurrentFrameTool", "ImageFrame"]
