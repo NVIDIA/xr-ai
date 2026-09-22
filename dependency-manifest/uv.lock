@@ -2242,6 +2242,33 @@ wheels = [
 ]
 
 [[package]]
+name = "magpie-nim-tts"
+version = "0.1.0"
+source = { editable = "../services/magpie-nim-tts" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "grpcio" },
+    { name = "httpx" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "grpcio", specifier = ">=1.67" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", specifier = ">=0.30" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
+]
+
+[[package]]
 name = "magpie-tts-server"
 version = "0.1.0"
 source = { editable = "../services/magpie-tts" }
@@ -2475,6 +2502,23 @@ wheels = [
 name = "model-servers"
 version = "0.1.0"
 source = { editable = "../model-server-samples/model-servers" }
+dependencies = [
+    { name = "xr-ai-launcher" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
+]
+
+[[package]]
+name = "model-servers-nim"
+version = "0.1.0"
+source = { editable = "../model-server-samples/model-servers-nim" }
 dependencies = [
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
@@ -2835,6 +2879,50 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
+]
+
+[[package]]
+name = "nim-model-adapter"
+version = "0.1.0"
+source = { editable = "../model-server-samples/model-servers-nim/compatibility-adapter" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "grpcio" },
+    { name = "httpx" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "grpcio", specifier = ">=1.67" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "python-multipart", specifier = ">=0.0.18" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", specifier = ">=0.30" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
+]
+
+[[package]]
+name = "nim-riva-server"
+version = "0.1.0"
+source = { editable = "../model-server-samples/model-servers-nim/riva-server" }
+dependencies = [
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
 
 [[package]]
@@ -6284,8 +6372,12 @@ repository = [
     { name = "device-io-hub" },
     { name = "lab-instrument-monitoring" },
     { name = "lab-instrument-monitoring-worker" },
+    { name = "magpie-nim-tts" },
     { name = "magpie-tts-server" },
     { name = "model-servers" },
+    { name = "model-servers-nim" },
+    { name = "nim-model-adapter" },
+    { name = "nim-riva-server" },
     { name = "nim-server" },
     { name = "pocket-tts-server" },
     { name = "simple-vlm-example" },
@@ -6329,10 +6421,14 @@ requires-dist = [
     { name = "lab-instrument-monitoring", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring" },
     { name = "lab-instrument-monitoring-worker", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring/worker" },
     { name = "llama-nemotron-llm-server", marker = "extra == 'vllm'", editable = "../services/llama-nemotron-llm" },
+    { name = "magpie-nim-tts", marker = "extra == 'repository'", editable = "../services/magpie-nim-tts" },
     { name = "magpie-tts-server", marker = "extra == 'repository'", editable = "../services/magpie-tts" },
     { name = "model-servers", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers" },
+    { name = "model-servers-nim", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim" },
     { name = "nemotron-omni-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron-omni-llm" },
     { name = "nemotron3-nano-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron3-nano-llm" },
+    { name = "nim-model-adapter", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim/compatibility-adapter" },
+    { name = "nim-riva-server", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim/riva-server" },
     { name = "nim-server", marker = "extra == 'repository'", editable = "../services/nim-server" },
     { name = "pocket-tts-server", marker = "extra == 'repository'", editable = "../services/pocket-tts" },
     { name = "simple-vlm-example", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example" },
@@ -6424,6 +6520,9 @@ version = "0.1.0"
 source = { editable = "../tests" }
 dependencies = [
     { name = "device-io-hub" },
+    { name = "magpie-nim-tts" },
+    { name = "nim-model-adapter" },
+    { name = "nim-riva-server" },
     { name = "numpy" },
     { name = "pillow" },
     { name = "pytest" },
@@ -6451,6 +6550,9 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "device-io-hub", editable = "../services/device-io-hub" },
+    { name = "magpie-nim-tts", editable = "../services/magpie-nim-tts" },
+    { name = "nim-model-adapter", editable = "../model-server-samples/model-servers-nim/compatibility-adapter" },
+    { name = "nim-riva-server", editable = "../model-server-samples/model-servers-nim/riva-server" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pytest", specifier = ">=8.0" },

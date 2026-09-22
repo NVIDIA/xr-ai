@@ -32,8 +32,12 @@ repository = [
     "xr-ai-voice",
     "xr-ai-web-events",
     "model-servers",
+    "model-servers-nim",
+    "nim-model-adapter",
+    "nim-riva-server",
     "cloudxr-runtime",
     "device-io-hub",
+    "magpie-nim-tts",
     "magpie-tts-server",
     "nim-server",
     "xr-openxr-service",
@@ -78,10 +82,14 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "xr-ai-voice"                      = { path = "../agent-sdk/xr-ai-voice", editable = true }
 "xr-ai-web-events"                 = { path = "../agent-sdk/xr-ai-web-events", editable = true }
 "model-servers"                    = { path = "../model-server-samples/model-servers", editable = true }
+"model-servers-nim"                = { path = "../model-server-samples/model-servers-nim", editable = true }
+"nim-model-adapter"                = { path = "../model-server-samples/model-servers-nim/compatibility-adapter", editable = true }
+"nim-riva-server"                  = { path = "../model-server-samples/model-servers-nim/riva-server", editable = true }
 "cloudxr-runtime"                  = { path = "../services/cloudxr-runtime", editable = true }
 "device-io-hub"                    = { path = "../services/device-io-hub", editable = true }
 "embedding-server"                 = { path = "../services/embedding-server", editable = true }
 "llama-nemotron-llm-server"        = { path = "../services/llama-nemotron-llm", editable = true }
+"magpie-nim-tts"                   = { path = "../services/magpie-nim-tts", editable = true }
 "magpie-tts-server"                = { path = "../services/magpie-tts", editable = true }
 "nemotron-omni-llm-server"         = { path = "../services/nemotron-omni-llm", editable = true }
 "nemotron3-nano-llm-server"        = { path = "../services/nemotron3-nano-llm", editable = true }
