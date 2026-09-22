@@ -62,22 +62,35 @@ class _FakeSceneTools:
         self._fake = fake
         self.get_scene_state = Tool("get_scene_state", "Return scene.", EmptyRequest, SceneState, fake.get_scene_state)
         self.update_primitive = Tool(
-            "update_primitive", "Update.", UpdatePrimitiveRequest, MutationResult, fake.update_primitive)
-        self.add_primitive = Tool(
-            "add_primitive", "Add.", AddPrimitiveRequest, AddPrimitiveResult, fake.add_primitive)
+            "update_primitive", "Update.", UpdatePrimitiveRequest, MutationResult, fake.update_primitive
+        )
+        self.add_primitive = Tool("add_primitive", "Add.", AddPrimitiveRequest, AddPrimitiveResult, fake.add_primitive)
         self.remove_primitive = Tool(
-            "remove_primitive", "Remove.", RemovePrimitiveRequest, MutationResult, fake.remove_primitive)
+            "remove_primitive", "Remove.", RemovePrimitiveRequest, MutationResult, fake.remove_primitive
+        )
+
         async def _noop(req: Any) -> None:
             return None
+
         self.start_xr = Tool("start_xr", "Start.", EmptyRequest, None, _noop)
         self.get_health = Tool("get_health", "Health.", EmptyRequest, None, _noop)
-        self.tools = (self.get_scene_state, self.update_primitive, self.add_primitive,
-                      self.remove_primitive, self.start_xr, self.get_health)
+        self.tools = (
+            self.get_scene_state,
+            self.update_primitive,
+            self.add_primitive,
+            self.remove_primitive,
+            self.start_xr,
+            self.get_health,
+        )
 
 
 class _FakeTrackingTools:
-    def __init__(self, pose: SpatialFrame) -> None:
-        self.get_user_frame = Tool("get_user_frame", "User frame.", EmptyRequest, SpatialFrame, lambda _: pose)
+    def __init__(self, fake: "FakeScene") -> None:
+        def get_user_frame(_: EmptyRequest) -> SpatialFrame:
+            fake.calls.append(("get_user_frame", {}))
+            return fake.pose
+
+        self.get_user_frame = Tool("get_user_frame", "User frame.", EmptyRequest, SpatialFrame, get_user_frame)
 
 
 class _FakeTextMemoryTools:
@@ -98,9 +111,12 @@ class _FakeTextMemoryTools:
             return RecallConversationResult(entries=entries)
 
         self.recall_conversation = Tool(
-            "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, recall)
+            "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, recall
+        )
+
         async def _noop_transcript(req: AddTranscriptRequest) -> None:
             return None
+
         self.add_transcript = Tool("add_transcript", "Add.", AddTranscriptRequest, None, _noop_transcript)
 
 
@@ -116,9 +132,13 @@ class _FakeCurrentFrameTool:
             raise RuntimeError(self._fake.camera_error)
         from xr_ai_tools.current_frame import ImageFrame
         from xr_ai_tools.image import ImageReference
+
         return ImageFrame(
             image=ImageReference(uri="fake://frame"),
-            timestamp_us=0, width=1, height=1, sequence=0,
+            timestamp_us=0,
+            width=1,
+            height=1,
+            sequence=0,
             participant_id=getattr(request, "participant_id", "eval-user"),
         )
 
@@ -138,19 +158,18 @@ class _FakePhysicalColorQuery:
     async def execute(self, request: Any) -> Any:
         from xr_ai_tools.vision import ImageQueryResult
         from xr_render_demo_worker.spatial_ops import _COLOR_WORDS
+
         self._fake.calls.append(("resolve_physical_color", {"question": request.query}))
         if self._fake.vision_error:
             return ImageQueryResult(text=self._fake.vision_error, available=False)
         # A truncated or wrong source in the resolver's query must fail the
         # case, not silently receive the configured color.
-        if (
-            self._fake.physical_expect_source
-            and self._fake.physical_expect_source.lower() not in request.query.lower()
-        ):
+        if self._fake.physical_expect_source and self._fake.physical_expect_source.lower() not in request.query.lower():
             return ImageQueryResult(text="UNKNOWN", available=True)
         if self._fake.physical_answer:
             return ImageQueryResult(text=self._fake.physical_answer, available=True)
         import re as _re
+
         observed = None
         for word in _re.findall(r"[a-z]+", (self._fake.vision_answer or "").lower()):
             if word in _COLOR_WORDS:
@@ -172,16 +191,23 @@ def make_fake_video(fake: "FakeScene", video_error: str = ""):
         if video_error:
             raise RuntimeError(video_error)
         return HistoricalFrameResult(
-            image=ImageReference(uri="fake://past"), timestamp_us=req.start_us,
-            width=640, height=480)
+            image=ImageReference(uri="fake://past"), timestamp_us=req.start_us, width=640, height=480
+        )
 
-    return SimpleNamespace(get_historical_frame=Tool(
-        "get_historical_frame", "Recorded frame nearest a timestamp.",
-        HistoricalFrameRequest, HistoricalFrameResult, historical))
+    return SimpleNamespace(
+        get_historical_frame=Tool(
+            "get_historical_frame",
+            "Recorded frame nearest a timestamp.",
+            HistoricalFrameRequest,
+            HistoricalFrameResult,
+            historical,
+        )
+    )
 
 
 def make_fake_physical_color(fake: "FakeScene"):
     from xr_render_demo_worker._physical_color import make_physical_color_tool
+
     return make_physical_color_tool(_FakeCurrentFrameTool(fake), _FakePhysicalColorQuery(fake))
 
 
@@ -193,12 +219,11 @@ class _FakeImageQueryTool:
 
     async def execute(self, request: Any) -> Any:
         from xr_ai_tools.vision import ImageQueryResult
+
         self._fake.calls.append(("look_at_current_frame", {"question": request.query}))
         if self._fake.vision_error:
             return ImageQueryResult(text=self._fake.vision_error, available=False)
-        return ImageQueryResult(
-            text=self._fake.vision_answer or "Nothing notable is visible.", available=True
-        )
+        return ImageQueryResult(text=self._fake.vision_answer or "Nothing notable is visible.", available=True)
 
 
 # One clock for eval requests and the fake recall entries windowed against them.
@@ -505,7 +530,7 @@ class FakeScene:
     def make_tools(self) -> tuple:
         return (
             _FakeSceneTools(self),
-            _FakeTrackingTools(self.pose),
+            _FakeTrackingTools(self),
             _FakeTextMemoryTools(self),
             _FakeCurrentFrameTool(self),
             _FakeImageQueryTool(self),
@@ -661,17 +686,20 @@ def check_corpus(calls: list[tuple[str, dict[str, Any]]], case: dict[str, Any]) 
         wanted_desc = "; ".join(f"{expect['tool']}({expect.get('args', {})})" for expect in unmatched)
         actual = [f"{name}({args})" for name, args in mutations]
         return False, f"unmatched: {wanted_desc} | actual mutations: {actual} | calls: {names}"
-    if not case.get("ignore_extra", False) and remaining:
-        return False, f"extra mutating calls: {[name for name, _args in remaining]}"
     if (predicate := case.get("predicate")) is not None:
         ok, message = predicate(mutations)
         if not ok:
             return False, f"predicate failed: {message}"
+        if not wanted:
+            return True, "ok"
+    if not case.get("ignore_extra", False) and remaining:
+        return False, f"extra mutating calls: {[name for name, _args in remaining]}"
     return True, "ok"
 
 
-def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
-                     fake_current_frame, fake_image_query) -> SceneSupervisor:
+def _make_supervisor(
+    llm, fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query
+) -> SceneSupervisor:
     from xr_render_demo_worker.agents import (
         make_appearance_agent,
         make_memory_agent,
@@ -680,19 +708,22 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
         make_vision_agent,
     )
     from xr_render_demo_worker.scene import SceneContext
+
     context = SceneContext(fake_scene, fake_tracking)
     physical_color = make_fake_physical_color(fake_scene._fake)
     subagent_tools = [
         make_placement_agent(llm, fake_scene, fake_tracking, context),
         make_appearance_agent(llm, fake_scene, context, physical_color),
         make_object_agent(llm, fake_scene, fake_tracking, context, physical_color),
-        make_vision_agent(llm, fake_current_frame, fake_image_query, context,
-                          make_fake_video(fake_scene._fake)),
+        make_vision_agent(llm, fake_current_frame, fake_image_query, context, make_fake_video(fake_scene._fake)),
         make_memory_agent(llm, fake_text_memory),
     ]
     return SceneSupervisor(
-        llm=llm, scene=fake_scene, tracking=fake_tracking,
-        text_memory=fake_text_memory, subagent_tools=subagent_tools,
+        llm=llm,
+        scene=fake_scene,
+        tracking=fake_tracking,
+        text_memory=fake_text_memory,
+        subagent_tools=subagent_tools,
     )
 
 
@@ -701,13 +732,17 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
     llm = make_llm(load_models_config(models_config_path()), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
-        supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
-                                      fake_current_frame, fake_image_query)
+        supervisor = _make_supervisor(
+            llm, fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query
+        )
         if case.get("recent_moves"):
-            supervisor._context.set_recent_moves(_PARTICIPANT, [
-                f"{object_id}: previously at {before}, now at {after}"
-                for object_id, before, after in case.get("recent_moves", ())
-            ])
+            supervisor._context.set_recent_moves(
+                _PARTICIPANT,
+                [
+                    f"{object_id}: previously at {before}, now at {after}"
+                    for object_id, before, after in case.get("recent_moves", ())
+                ],
+            )
         try:
             reply = await supervisor.handle(
                 SceneRequest(
@@ -738,10 +773,20 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
 # example contamination, and the full corpus hides one-case damage inside its
 # run-to-run variance. Utterances must stay disjoint from prompt examples.
 _BASICS_SCENE = (
-    {"id": "box-0", "type": "box", "position": {"x": 0.6, "y": 1.3, "z": -1.1},
-     "color": {"r": 0, "g": 1, "b": 1}, "size": 0.1},
-    {"id": "sphere-1", "type": "sphere", "position": {"x": -0.5, "y": 1.5, "z": -1.3},
-     "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+    {
+        "id": "box-0",
+        "type": "box",
+        "position": {"x": 0.6, "y": 1.3, "z": -1.1},
+        "color": {"r": 0, "g": 1, "b": 1},
+        "size": 0.1,
+    },
+    {
+        "id": "sphere-1",
+        "type": "sphere",
+        "position": {"x": -0.5, "y": 1.5, "z": -1.3},
+        "color": {"r": 0, "g": 0.8, "b": 0},
+        "size": 0.1,
+    },
 )
 _BASICS_HISTORY = (
     ("Add a cyan cube.", "Added a cyan cube."),
@@ -754,9 +799,13 @@ UTTERANCES = (
         name="basics_physical_color_source",
         request="Make the cylinder the same color as the ceiling.",
         scene=(
-            {"id": "cylinder-0", "type": "cylinder",
-             "position": {"x": 0.0, "y": 1.5, "z": -1.3},
-             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+            {
+                "id": "cylinder-0",
+                "type": "cylinder",
+                "position": {"x": 0.0, "y": 1.5, "z": -1.3},
+                "color": {"r": 1, "g": 1, "b": 1},
+                "size": 0.1,
+            },
         ),
         vision="The ceiling is purple.",
         physical_expect_source="ceiling",
@@ -785,25 +834,29 @@ UTTERANCES = (
         request="What am I holding?",
         vision="A hand holding a blue lid.",
         scene=(
-            {"id": "sphere-0", "type": "sphere",
-             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
-            {"id": "box-0", "type": "box",
-             "position": {"x": 0.5, "y": 1.4, "z": -1.2},
-             "color": {"r": 1, "g": 0.5, "b": 0}, "size": 0.1},
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.8, "b": 0},
+                "size": 0.1,
+            },
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+                "color": {"r": 1, "g": 0.5, "b": 0},
+                "size": 0.1,
+            },
         ),
         history=(
-            ("No cameras cannot see the scene.",
-             "The scene is empty, so there are no objects for the camera to see."),
-            ("The camera doesn't look at the scene.",
-             "The camera is not currently viewing any objects in the scene."),
+            ("No cameras cannot see the scene.", "The scene is empty, so there are no objects for the camera to see."),
+            ("The camera doesn't look at the scene.", "The camera is not currently viewing any objects in the scene."),
             ("Okay.", "What would you like me to do?"),
             ("Tell me what the camera sees.", "You are looking at the camera."),
             ("True.", "What would you like me to do?"),
-            ("Make a spear the color of the thing I am holding.",
-             "What are you holding?"),
-            ("Look for yourself.",
-             "I see a green sphere and an orange box in the scene."),
+            ("Make a spear the color of the thing I am holding.", "What are you holding?"),
+            ("Look for yourself.", "I see a green sphere and an orange box in the scene."),
         ),
         required_tools=frozenset({"look_at_current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
@@ -814,10 +867,7 @@ UTTERANCES = (
         # the pending request through the camera, never echo those words.
         request="Look for yourself.",
         vision="A hand holding a blue lid.",
-        history=(
-            ("Make a spear the color of the thing I am holding.",
-             "What are you holding?"),
-        ),
+        history=(("Make a spear the color of the thing I am holding.", "What are you holding?"),),
         required_tools=frozenset({"add_primitive"}),
         expected_colors=(("sphere-0", (0.0, 0.4, 1.0)),),
     ),
@@ -827,12 +877,20 @@ UTTERANCES = (
         # SCENE OBJECTS is never the answer.
         request="Describe what you can see.",
         scene=(
-            {"id": "sphere-0", "type": "sphere",
-             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
-            {"id": "box-0", "type": "box",
-             "position": {"x": 0.5, "y": 1.4, "z": -1.2},
-             "color": {"r": 1, "g": 0.5, "b": 0}, "size": 0.1},
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.8, "b": 0},
+                "size": 0.1,
+            },
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+                "color": {"r": 1, "g": 0.5, "b": 0},
+                "size": 0.1,
+            },
         ),
         vision="A cluttered desk with a laptop and a coffee mug.",
         required_tools=frozenset({"look_at_current_frame"}),
@@ -845,10 +903,7 @@ UTTERANCES = (
         # question; the literal words are never the delegation.
         request="Use the camera.",
         vision="A bookshelf against a white wall.",
-        history=(
-            ("What's behind me right now?",
-             "Could you say more about what you mean?"),
-        ),
+        history=(("What's behind me right now?", "Could you say more about what you mean?"),),
         required_tools=frozenset({"look_at_current_frame"}),
         forbidden_tools=_FORBID_MUTATIONS,
         reply_contains="bookshelf",
@@ -859,9 +914,13 @@ UTTERANCES = (
         # neither SCENE OBJECTS nor the transcript holds the answer.
         request="What's in my hand right now?",
         scene=(
-            {"id": "box-1", "type": "box",
-             "position": {"x": -0.5, "y": 1.6, "z": -1.5},
-             "color": {"r": 0, "g": 0.8, "b": 0}, "size": 0.1},
+            {
+                "id": "box-1",
+                "type": "box",
+                "position": {"x": -0.5, "y": 1.6, "z": -1.5},
+                "color": {"r": 0, "g": 0.8, "b": 0},
+                "size": 0.1,
+            },
         ),
         history=(
             ("Make a green box.", "Created a green box in front of you."),
@@ -887,9 +946,13 @@ UTTERANCES = (
         # resolver was attempted, nothing mutated, no invented color.
         request="Make the box the color of my shirt.",
         scene=(
-            {"id": "box-0", "type": "box",
-             "position": {"x": 0.3, "y": 1.4, "z": -1.2},
-             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.3, "y": 1.4, "z": -1.2},
+                "color": {"r": 1, "g": 1, "b": 1},
+                "size": 0.1,
+            },
         ),
         camera_error="RPCError: camera feed unavailable",
         required_tools=frozenset({"current_frame"}),
@@ -913,8 +976,7 @@ UTTERANCES = (
         request="Make a spear the color of the thing I am holding.",
         vision="A hand holding a blue lid.",
         history=(
-            ("The camera doesn't look at the scene.",
-             "I'm sorry, but I can't help with that."),
+            ("The camera doesn't look at the scene.", "I'm sorry, but I can't help with that."),
             ("Tell me what the camera sees.", "You are looking at a blue plastic lid."),
         ),
         required_tools=frozenset({"add_primitive"}),
@@ -926,9 +988,13 @@ UTTERANCES = (
         # existing object never satisfies it.
         request="Make a red cube.",
         scene=(
-            {"id": "box-0", "type": "box",
-             "position": {"x": 0.0, "y": 1.6, "z": -1.5},
-             "color": {"r": 1, "g": 0, "b": 0}, "size": 0.1},
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.0, "y": 1.6, "z": -1.5},
+                "color": {"r": 1, "g": 0, "b": 0},
+                "size": 0.1,
+            },
         ),
         history=(("Make a red cube.", "Created a red cube in front of you."),),
         required_tools=frozenset({"add_primitive"}),
@@ -938,9 +1004,13 @@ UTTERANCES = (
         name="basics_create_despite_similar_existing",
         request="Make a cube the color of what I'm holding.",
         scene=(
-            {"id": "box-0", "type": "box",
-             "position": {"x": 0.4, "y": 1.5, "z": -1.2},
-             "color": {"r": 1, "g": 1, "b": 1}, "size": 0.1},
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.4, "y": 1.5, "z": -1.2},
+                "color": {"r": 1, "g": 1, "b": 1},
+                "size": 0.1,
+            },
         ),
         vision="A hand holding a blue lid.",
         history=(
@@ -1102,8 +1172,13 @@ UTTERANCES = (
         # the cube lands on the user's left of the anchor.
         request="Put a yellow cube to the left of the blue cube.",
         scene=(
-            {"id": "box-0", "type": "box", "position": {"x": 0.5, "y": 1.4, "z": -1.2},
-             "color": {"r": 0, "g": 0, "b": 1}, "size": 0.1},
+            {
+                "id": "box-0",
+                "type": "box",
+                "position": {"x": 0.5, "y": 1.4, "z": -1.2},
+                "color": {"r": 0, "g": 0, "b": 1},
+                "size": 0.1,
+            },
         ),
         history=_BASICS_HISTORY,
         required_tools=frozenset({"add_primitive"}),
@@ -1189,8 +1264,9 @@ async def run_case(case: Case) -> bool:
     llm = make_llm(load_models_config(models_config_path()), "agent_llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
-        supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
-                                      fake_current_frame, fake_image_query)
+        supervisor = _make_supervisor(
+            llm, fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query
+        )
         errored = False
         try:
             reply = await supervisor.handle(
@@ -1223,28 +1299,18 @@ async def run_case(case: Case) -> bool:
         if object_id not in scene.objects or scene.objects[object_id].size != expected
     }
     wrong_colors = {
-        object_id: (
-            tuple(scene.objects[object_id].color.model_dump().values())
-            if object_id in scene.objects
-            else None
-        )
+        object_id: (tuple(scene.objects[object_id].color.model_dump().values()) if object_id in scene.objects else None)
         for object_id, expected in case.expected_colors
-        if object_id not in scene.objects
-        or tuple(scene.objects[object_id].color.model_dump().values()) != expected
+        if object_id not in scene.objects or tuple(scene.objects[object_id].color.model_dump().values()) != expected
     }
     wrong_positions = {
         object_id: (
-            tuple(scene.objects[object_id].position.model_dump().values())
-            if object_id in scene.objects
-            else None
+            tuple(scene.objects[object_id].position.model_dump().values()) if object_id in scene.objects else None
         )
         for object_id, expected in case.expected_positions
-        if object_id not in scene.objects
-        or tuple(scene.objects[object_id].position.model_dump().values()) != expected
+        if object_id not in scene.objects or tuple(scene.objects[object_id].position.model_dump().values()) != expected
     }
-    wrong_reply = bool(
-        case.reply_contains and case.reply_contains.lower() not in response.lower()
-    ) or bool(
+    wrong_reply = bool(case.reply_contains and case.reply_contains.lower() not in response.lower()) or bool(
         case.reply_excludes and case.reply_excludes.lower() in response.lower()
     )
     passed = (
@@ -1286,33 +1352,22 @@ def audit_prompts() -> None:
     worker = (Path(__file__).resolve().parent / "../../worker/xr_render_demo_worker").resolve()
     # Model-visible text lives in the prompt files and in the tool field
     # descriptions of spatial_ops.py; both shape the model's templates.
-    prompts = (sorted(worker.rglob("*prompt*.txt"))
-               + [worker / "spatial_ops.py", worker / "_physical_color.py",
-                  worker / "supervisor.py"]
-               + sorted(worker.glob("agents/*/agent.py")))
+    prompts = (
+        sorted(worker.rglob("*prompt*.txt"))
+        + [worker / "spatial_ops.py", worker / "_physical_color.py", worker / "supervisor.py"]
+        + sorted(worker.glob("agents/*/agent.py"))
+    )
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
     utterances += [case.request for case in (*CASES, *UTTERANCES)]
     # History turns and fixture answers reach the model verbatim too; a
     # prompt example copied from them scores recall, not behavior.
-    eval_texts = [
-        text
-        for case in (*CASES, *UTTERANCES)
-        for turn in case.history
-        for text in turn
-    ]
+    eval_texts = [text for case in (*CASES, *UTTERANCES) for turn in case.history for text in turn]
     eval_texts += [case.vision for case in (*CASES, *UTTERANCES) if case.vision]
     eval_texts += [case["vlm_answer"] for case in CORPUS_CASES if case.get("vlm_answer")]
-    eval_texts += [
-        text
-        for case in CORPUS_CASES
-        for turn in case.get("history", ())
-        for text in turn
-    ]
-    fixture_ids = {
-        item["id"]
-        for case in CORPUS_CASES
-        for item in case.get("scene", ())
-    } | {item["id"] for case in (*CASES, *UTTERANCES) for item in case.scene}
+    eval_texts += [text for case in CORPUS_CASES for turn in case.get("history", ()) for text in turn]
+    fixture_ids = {item["id"] for case in CORPUS_CASES for item in case.get("scene", ())} | {
+        item["id"] for case in (*CASES, *UTTERANCES) for item in case.scene
+    }
     # The other tiers score the same prompts; their inputs must stay
     # disjoint from prompt examples too.
     try:
@@ -1329,12 +1384,7 @@ def audit_prompts() -> None:
         pass
     else:
         utterances += [case.request for case in eval_supervisor.CASES]
-        eval_texts += [
-            text
-            for case in eval_supervisor.CASES
-            for turn in case.history
-            for text in turn
-        ]
+        eval_texts += [text for case in eval_supervisor.CASES for turn in case.history for text in turn]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}
     try:
         from . import live_perception
@@ -1342,15 +1392,9 @@ def audit_prompts() -> None:
         pass
     else:
         utterances += [case["prompt"] for case in live_perception.CASES]
-        utterances += [
-            turn for case in live_perception.CASES for turn in case.get("history", ())
-        ]
+        utterances += [turn for case in live_perception.CASES for turn in case.get("history", ())]
         utterances += [case["pending"] for case in live_perception.CASES if "pending" in case]
-        eval_texts += [
-            text
-            for case in live_perception.CASES
-            for _role, text in case.get("poisoned", ())
-        ]
+        eval_texts += [text for case in live_perception.CASES for _role, text in case.get("poisoned", ())]
     for prompt_path in prompts:
         label = str(prompt_path.relative_to(worker))
         text = prompt_path.read_text(encoding="utf-8")
@@ -1381,9 +1425,7 @@ def _resolve_case_names(case_names: list[str]) -> set[str]:
         return {case.name for case in UTTERANCES}
 
     available = (
-        {case["name"] for case in CORPUS_CASES}
-        | {case.name for case in CASES}
-        | {case.name for case in UTTERANCES}
+        {case["name"] for case in CORPUS_CASES} | {case.name for case in CASES} | {case.name for case in UTTERANCES}
     )
     unknown = wanted - available
     if unknown:
