@@ -495,11 +495,10 @@ async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_st
 
 
 async def test_factory_streaming_does_not_expand_public_sdk_contract(tmp_path, riva_stub):
-    import xr_ai_models
     import xr_ai_vllm
     from xr_ai_models._protocols import _StreamingTTSService, _TTSChunk
 
-    assert not hasattr(xr_ai_models, "TTSChunk")
+    assert not hasattr(sys.modules["xr_ai_models"], "TTSChunk")
     assert not hasattr(xr_ai_vllm, "has_xr_ai_ownership_marker")
     assert not hasattr(xr_ai_vllm, "pid_on_port_checked")
     cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
@@ -510,3 +509,33 @@ async def test_factory_streaming_does_not_expand_public_sdk_contract(tmp_path, r
         chunks = [chunk async for chunk in streaming.stream("hello")]
         assert chunks and all(isinstance(chunk, _TTSChunk) for chunk in chunks)
         assert b"".join(chunk.data for chunk in chunks) == await buffered.synthesize("hello", response_format="pcm")
+
+
+@pytest.mark.parametrize("buffered", [False, True])
+async def test_disconnect_at_completed_rpc_read_is_not_swallowed(tmp_path, riva_stub, monkeypatch, buffered):
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_tts(cfg, "tts") as tts:
+        call = _ControlledAudio([b"\x01\x02"])
+        tts._tts.synthesize_online = lambda *args, **kwargs: call
+        real_shield = asyncio.shield
+        first_read = True
+
+        def disconnect_after_read(task):
+            nonlocal first_read
+            protected = real_shield(task)
+            if first_read:
+                first_read = False
+                # Cancel after shield receives the audio but before the consumer
+                # resumes. wait_for can swallow this cancellation on Python 3.11.
+                task.add_done_callback(lambda _task: pending.cancel())
+            return protected
+
+        monkeypatch.setattr(asyncio, "shield", disconnect_after_read)
+        stream = tts.stream("hello")
+        pending = asyncio.create_task(tts.synthesize("hello") if buffered else anext(stream))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            assert call.cancelled.is_set()
+        finally:
+            await stream.aclose()

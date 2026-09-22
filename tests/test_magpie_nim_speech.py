@@ -29,6 +29,7 @@ SILENCE = b"\x00\x00" * 13230  # 300 ms at 44,100 Hz.
 class ControlledSpeech(rpc.RivaSpeechSynthesisServicer):
     def __init__(self):
         self.started = threading.Event()
+        self.first_chunk_sent = threading.Event()
         self.release = threading.Event()
         self.exited = threading.Event()
         self.calls = []
@@ -48,6 +49,7 @@ class ControlledSpeech(rpc.RivaSpeechSynthesisServicer):
                 return
             if request.text != "before-first":
                 yield pb.SynthesizeSpeechResponse(audio=FIRST)
+                self.first_chunk_sent.set()
             if request.text != "immediate":
                 while not self.release.wait(0.01):
                     if not context.is_active():
@@ -286,4 +288,55 @@ def test_timeout_after_audio_cancels_rpc_and_allows_following_request(monkeypatc
             assert await asyncio.to_thread(backend.exited.wait, 2)
             following = await client.post("/v1/audio/speech", json=request("immediate"))
             assert following.status_code == 200 and following.content == FIRST + LAST + SILENCE
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("response_format", ["wav", "pcm"])
+@pytest.mark.parametrize("text", ["before-first", "hold"])
+def test_buffered_disconnect_cancels_rpc_and_allows_next_request(response_format, text):
+    async def run():
+        async with running_adapter() as (client, backend):
+            pending = asyncio.create_task(client.post("/v1/audio/speech", json={
+                "input": text, "response_format": response_format,
+            }))
+            try:
+                assert await asyncio.to_thread(backend.started.wait, 2)
+                if text == "hold":
+                    assert await asyncio.to_thread(backend.first_chunk_sent.wait, 2)
+                pending.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await pending
+                assert await asyncio.to_thread(backend.exited.wait, 2), "abandoned buffered RPC stayed active"
+                following = await client.post("/v1/audio/speech", json=request("immediate"))
+                assert following.status_code == 200 and following.content == FIRST + LAST + SILENCE
+                assert [call.text for call in backend.calls] == [text, "immediate"]
+            finally:
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_disconnected_queued_buffered_request_never_starts_synthesis():
+    async def run():
+        async with running_adapter() as (client, backend):
+            async with client.stream("POST", "/v1/audio/speech", json=request()) as response:
+                chunks = response.aiter_bytes()
+                assert await anext(chunks) == FIRST
+                queued = asyncio.create_task(client.post("/v1/audio/speech", json={"input": "abandoned"}))
+                try:
+                    await asyncio.sleep(0.1)
+                    assert not queued.done() and len(backend.calls) == 1
+                    queued.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await queued
+                    # Process the connection close while the first request still owns the lock.
+                    await asyncio.sleep(0.1)
+                    backend.release.set()
+                    assert b"".join([part async for part in chunks]) == LAST + SILENCE
+                finally:
+                    queued.cancel()
+                    await asyncio.gather(queued, return_exceptions=True)
+            following = await client.post("/v1/audio/speech", json={"input": "immediate", "response_format": "pcm"})
+            assert following.status_code == 200 and following.content == FIRST + LAST + SILENCE
+            assert [call.text for call in backend.calls] == ["hold", "immediate"]
     asyncio.run(run())

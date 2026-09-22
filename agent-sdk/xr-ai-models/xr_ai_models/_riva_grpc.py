@@ -248,7 +248,10 @@ class RivaTTS:
                 # gRPC iteration blocks. Read only when the consumer asks for
                 # another chunk, keeping buffering bounded by one response.
                 read_task = asyncio.create_task(asyncio.to_thread(next, responses, None))
-                response = await asyncio.wait_for(asyncio.shield(read_task), remaining)
+                # Keep the deadline in this task: wait_for can swallow caller
+                # cancellation when the read completes concurrently on 3.11.
+                async with asyncio.timeout(remaining):
+                    response = await asyncio.shield(read_task)
                 if response is None:
                     break
                 pending += response.audio

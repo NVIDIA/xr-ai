@@ -9,7 +9,7 @@ import io
 import wave
 from typing import Literal
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from xr_ai_models import AdapterSpec, EndpointSpec, ModelsConfig, TTSSpec, make_tts
@@ -22,6 +22,33 @@ class SpeechRequest(BaseModel):
     input: str
     response_format: Literal["wav", "pcm"] = "wav"
     stream: bool = False
+
+
+async def _buffered_audio(backend, text: str, lock: asyncio.Lock, request: Request) -> bytes | None:
+    async def synthesize():
+        # The SDK keeps cancellation pending until its blocking RPC read exits.
+        async with lock:
+            return await backend.synthesize(text, response_format="pcm")
+
+    async def disconnect():
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+
+    operation = asyncio.create_task(synthesize())
+    disconnected = asyncio.create_task(disconnect())
+    try:
+        done, _ = await asyncio.wait((operation, disconnected), return_when=asyncio.FIRST_COMPLETED)
+        if disconnected in done:
+            await disconnected
+            return None
+        return await operation
+    finally:
+        # Cancel queued work too, and join synthesis before the handler exits.
+        # Its lock remains owned until the SDK's RPC cleanup has completed.
+        for task in (operation, disconnected):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(operation, disconnected, return_exceptions=True)
 
 
 def build_app(config: dict, *, backend=None):
@@ -40,14 +67,16 @@ def build_app(config: dict, *, backend=None):
     trailing_silence = b"\x00\x00" * round(rate * pause_ms / 1000)
 
     @app.post("/v1/audio/speech")
-    async def synthesize(request: SpeechRequest):
+    async def synthesize(request: SpeechRequest, http_request: Request):
         if request.stream and request.response_format != "pcm":
             raise HTTPException(400, "streaming speech requires response_format 'pcm'")
         if request.stream:
             return SpeechStreamResponse(backend, request.input, rate, generation_lock,
                                         trailing_silence=trailing_silence)
-        async with generation_lock:
-            audio = await backend.synthesize(request.input, response_format="pcm")
+        audio = await _buffered_audio(backend, request.input, generation_lock, http_request)
+        if audio is None:
+            # The peer is gone; finish the ASGI request without generating audio.
+            return Response(status_code=204)
         if audio:
             audio += trailing_silence
         if request.response_format == "wav":
