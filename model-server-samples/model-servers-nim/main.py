@@ -146,7 +146,12 @@ def _stop_unselected_services(processes: list[Process], profile: Path) -> None:
             endpoint = urlsplit(url if "://" in url else "//" + url)
             if endpoint.hostname in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} and endpoint.port:
                 selected_ports.add(endpoint.port)
-    unselected = [(service, port) for service, port in _known_ports()
+    known_ports = _known_ports()
+    # A retained local adapter still needs its backend, including when its
+    # endpoint is external to this launcher's ownership.
+    selected_services.update(_BACKENDS[service] for service, port in known_ports
+                             if port in selected_ports and service in _BACKENDS)
+    unselected = [(service, port) for service, port in known_ports
                   if service not in selected_services and port not in selected_ports]
     if not stop_persistent_servers(unselected):
         raise RuntimeError("could not stop persistent model servers outside the selected profile")

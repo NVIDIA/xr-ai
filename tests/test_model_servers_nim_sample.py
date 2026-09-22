@@ -352,3 +352,25 @@ def test_cleanup_preserves_external_local_endpoint_but_not_old_owned_port(tmp_pa
     monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: stopped.extend(ports) or True)
     sample._stop_unselected_services(processes, profile)
     assert stopped == [("tts-adapter", 8205)]
+
+
+@pytest.mark.parametrize("port", [8100, 8110])
+def test_external_vlm_endpoint_preserves_its_backend(tmp_path, monkeypatch, port):
+    profile = reduced_profile(tmp_path)
+    data = json.loads(profile.read_text())
+    data["models"]["vlm"] = {
+        "adapter": {"preset": "cosmos3_nano_reasoner"},
+        "endpoint": {"base_url": f"http://localhost:{port}"},
+        "deployment": {"ownership": "external"},
+    }
+    profile.write_text(json.dumps(data))
+    processes, _, _ = sample._build_processes("96G_blackwell", profile)
+    stopped = []
+    # Keep port discovery real but isolate its STT ownership probe from this machine.
+    monkeypatch.setattr(sample, "pid_on_port_checked", lambda port: (None, True, False))
+    monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: stopped.extend(ports) or True)
+    sample._stop_unselected_services(processes, profile)
+    assert ("vlm-nim", 8110) not in stopped
+    assert (("vlm-adapter", 8100) not in stopped) == (port == 8100)
+    assert ("llm-adapter", 8108) in stopped and ("llm-nim", 8118) in stopped
+    assert ("tts-adapter", 8105) not in stopped and ("tts-nim", 9011) not in stopped
