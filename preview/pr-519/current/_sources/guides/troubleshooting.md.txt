@@ -135,7 +135,7 @@ cannot be evaluated when `cudaMemGetInfo` itself fails. Lower the setting only
 for later failures that report insufficient memory for the requested
 utilization or KV cache.
 
-### DGX Spark — vLLM reports insufficient KV cache only on a cold start
+### Pinned vLLM KV-cache capacity and DGX Spark cold starts
 
 **Symptom:** Nemotron Omni or the Cosmos VLM reports a negative or smaller
 KV-cache capacity on its first start than on a later start with the same
@@ -151,22 +151,25 @@ automatically sized KV cache. The behavior is tracked in [vLLM issue
 The model-server launcher starts these services sequentially, so concurrent
 startup is not required to trigger the page-cache accounting error.
 
-**Fix:** the bundled `spark` profile sets `kv_cache_memory_bytes` explicitly
-for both Nemotron Omni and Cosmos instead of using the fractional profiler to
-size their caches. Keep the fixed allocations when copying or modifying the
-profile. The values are 2 GiB for Omni's 32,768-token hybrid Mamba/attention
-cache and 1.5 GiB for Cosmos's 8,192-token cache. The Cosmos budget supports
-one maximum-length request while `max_num_seqs: 4` retains concurrency for
-shorter requests. Concurrent requests near the context limit can queue,
-preempt, or recompute when their aggregate token demand exceeds the fixed
-cache. Increase the fixed cache when a custom Spark deployment needs parallel
-full-context requests.
+**Fix:** the bundled `spark`, `dual_48G_ada`, and `96G_blackwell` profiles set
+`kv_cache_memory_bytes` explicitly for both Nemotron Omni and Cosmos instead
+of using the fractional profiler to size their caches. Keep the fixed
+allocations when copying or modifying a profile. The values are 2 GiB for
+Omni's 32,768-token hybrid Mamba/attention cache and 1.5 GiB for Cosmos's
+8,192-token cache. The Cosmos allocation supports one maximum-length request;
+its `max_num_seqs` setting retains scheduling concurrency for shorter requests.
+vLLM reports the actual GPU KV-cache token capacity and maximum concurrency at
+startup. Requests beyond resident capacity can queue, preempt, or recompute.
+Increase the fixed cache when a deployment needs more resident capacity.
 
-The Spark files intentionally retain `gpu_memory_utilization`. In the bundled
+These files intentionally retain `gpu_memory_utilization`. In the bundled
 vLLM versions, `kv_cache_memory_bytes` controls the cache allocation and skips
-the unreliable profiling calculation, but vLLM still evaluates
-`gpu_memory_utilization` during its initial free-memory admission check. Do
-not remove the profile value and fall back to vLLM's higher default.
+the profiling calculation, but vLLM still evaluates `gpu_memory_utilization`
+during its initial free-memory admission check. The fraction is not a total
+memory cap in this mode. Do not remove the profile value and fall back to
+vLLM's higher default. Increasing `max_model_len` also requires recalculating
+the fixed cache, increasing it as needed, and cold-starting the full profile on
+the target hardware.
 
 Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
 settings into a custom Spark profile. Do not flush the filesystem cache

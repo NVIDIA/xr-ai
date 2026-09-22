@@ -635,24 +635,38 @@ service occupies port 8000. Refer to the <code class="docutils literal notransla
 <section id="running-on-other-gpus">
 <h2>Running on other GPUs<a class="headerlink" href="#running-on-other-gpus" title="Link to this heading">#</a></h2>
 <p>A profile (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
-that pins two knobs per model server so the stack fits a known configuration:</p>
+that pins the memory policy for each model server so the stack fits a known
+configuration:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> — which physical GPU each server runs on (for example,
 the <code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code> profile places some servers on GPU <code class="docutils literal notranslate"><span class="pre">0</span></code> and others on GPU <code class="docutils literal notranslate"><span class="pre">1</span></code>).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> — the fraction of that GPU’s VRAM the server may use.
-Several servers share one GPU, so each takes a slice (for example, <code class="docutils literal notranslate"><span class="pre">0.43</span></code>), and
-the slices on a given GPU must sum to less than <code class="docutils literal notranslate"><span class="pre">1.0</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> — the fraction used to size the KV cache automatically
+when <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> is absent. When explicit cache bytes are present,
+vLLM still uses the fraction for its initial free-memory admission check, but
+it does not size or cap the cache with that fraction.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> — an optional fixed KV-cache allocation. The bundled
+profiles set it for Cosmos and Nemotron Omni to make resident cache capacity
+deterministic. This intentionally bounds capacity; it is not a cap on the
+model server’s total GPU memory use.</p></li>
 </ul>
 <p>To run on a GPU that is not one of the presets, copy the closest profile directory
 and adjust those knobs to your hardware:</p>
 <ol class="arabic simple">
 <li><p>Set <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> in each server’s YAML to your GPU index, or spread
 the servers across the GPUs you have.</p></li>
-<li><p>Tune <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> per server so the slices on each GPU fit its VRAM.
-Lower the values if a server fails to start with an out-of-memory error; raise
-them if you have spare VRAM.</p></li>
-<li><p>On lower-VRAM GPUs, run fewer models concurrently, or lower <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code> on
-the LLM and VLM servers to reduce the KV-cache footprint.</p></li>
+<li><p>For a server without explicit cache bytes, tune <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> so
+the automatically sized allocations fit alongside the colocated services.
+For a server with explicit cache bytes, tune <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code> to the
+required resident token capacity and keep <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> as an
+admission threshold appropriate for the target GPU.</p></li>
+<li><p>Check vLLM’s startup log for the resulting GPU KV-cache token capacity and
+maximum concurrency. <code class="docutils literal notranslate"><span class="pre">max_num_seqs</span></code> is a scheduling limit, not a guarantee
+that every admitted sequence can simultaneously occupy <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>
+tokens; requests beyond resident capacity can queue, preempt, or recompute.</p></li>
+<li><p>If you change <code class="docutils literal notranslate"><span class="pre">max_model_len</span></code>, recalculate the fixed cache so at least one
+maximum-length request fits, increase it for the desired resident
+concurrency, and cold-start the full profile on the target hardware. On
+lower-memory GPUs, running fewer models concurrently may also be necessary.</p></li>
 </ol>
 <p>Then select the reviewed profile explicitly:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>

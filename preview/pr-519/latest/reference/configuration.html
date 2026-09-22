@@ -1419,8 +1419,9 @@ workflow.</p></li>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
 <span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="c1"># The fraction gates startup against the memory available after colocated services;</span>
-<span class="c1"># explicit bytes keep the generation cache deterministic within that budget.</span>
+<span class="c1"># The fraction is the startup admission threshold. The explicit bytes</span>
+<span class="c1"># independently bound the resident cache; vLLM reports its token capacity and</span>
+<span class="c1"># maximum concurrency at startup.</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -1566,10 +1567,9 @@ workflow.</p></li>
 
 <span class="c1"># VLM server — single Blackwell 96 GB.</span>
 <span class="c1">#</span>
-<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
-<span class="c1"># free_at_startup ≈ 96 − 34 (Omni) − 2 (STT) ≈ 60 GiB.</span>
-<span class="c1"># The 0.23 fraction keeps startup admission within the 60 GiB available after</span>
-<span class="c1"># colocated services. Pin 1.5 GiB of KV cache for deterministic token capacity.</span>
+<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm. The Reasoner weights were</span>
+<span class="c1"># measured at 16.8 GiB. The 0.23 fraction is the startup admission threshold;</span>
+<span class="c1"># the explicit 1.5 GiB allocation bounds the KV cache independently.</span>
 <span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
 <span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
 
@@ -1583,12 +1583,14 @@ workflow.</p></li>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.23</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
 <span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Raise max_model_len too if multi-image turns outgrow the context window.</span>
+<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
+<span class="c1"># cold-start validation on the target profile.</span>
 <span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 
 <span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
@@ -1636,8 +1638,9 @@ workflow.</p></li>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
 <span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="c1"># The fraction gates startup against the memory available after colocated services;</span>
-<span class="c1"># explicit bytes keep the generation cache deterministic within that budget.</span>
+<span class="c1"># The fraction is the startup admission threshold. The explicit bytes</span>
+<span class="c1"># independently bound the resident cache; vLLM reports its token capacity and</span>
+<span class="c1"># maximum concurrency at startup.</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -1818,15 +1821,18 @@ workflow.</p></li>
 
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 
-<span class="c1"># The 0.47 fraction keeps startup admission within the per-GPU memory available</span>
-<span class="c1"># after colocated services. Pin 1.5 GiB of KV cache for deterministic capacity.</span>
+<span class="c1"># The Reasoner weights were measured at 16.8 GiB. The 0.47 fraction is the</span>
+<span class="c1"># startup admission threshold; the explicit 1.5 GiB allocation bounds the KV</span>
+<span class="c1"># cache independently.</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
 <span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Raise max_model_len too if multi-image turns outgrow the context window.</span>
+<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
+<span class="c1"># cold-start validation on the target profile.</span>
 <span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 
 <span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
@@ -2051,6 +2057,7 @@ workflow.</p></li>
 <span class="c1"># four concurrent sequences.</span>
 <span class="c1"># gpu_memory_utilization remains the vLLM startup admission threshold; it does</span>
 <span class="c1"># not size the cache when the byte value is set.</span>
+<span class="c1"># vLLM reports the resulting token capacity and maximum concurrency at startup.</span>
 
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
@@ -2232,12 +2239,14 @@ workflow.</p></li>
 <span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
 <span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
 <span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
 <span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
 <span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Raise max_model_len too if multi-image turns outgrow the context window.</span>
+<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
+<span class="c1"># cold-start validation on the target profile.</span>
 <span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
 
 <span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
