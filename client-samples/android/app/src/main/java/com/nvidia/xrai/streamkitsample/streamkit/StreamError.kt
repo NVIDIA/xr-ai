@@ -32,4 +32,16 @@ sealed class StreamError(message: String) : Exception(message) {
     /** startCamera() was called while not connected. */
     object CameraRequiresConnection :
         StreamError("Connect before starting the camera.")
+
+    /** The selected custom backend does not implement file transfer. */
+    object FileTransferUnsupported :
+        StreamError("The selected streaming backend does not support file transfer.")
+
+    /** File-transfer metadata violates the StreamKit wire contract. */
+    class InvalidFileMetadata(reason: String) :
+        StreamError("Invalid file metadata: $reason")
+
+    /** The active connection changed before the file stream closed. */
+    object FileTransferIncomplete :
+        StreamError("The file stream did not close successfully on the active connection.")
 }

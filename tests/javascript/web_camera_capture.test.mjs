@@ -53,11 +53,12 @@ function makeRoom(publishTrack, {
   localTracks = [],
   remoteTracks = [],
   quality = 'unknown',
-  streamBytes = async () => {},
+  streamBytes = null,
 } = {}) {
   const handlers = new Map();
   const room = {
     state: 'disconnected',
+    streamedByteOptions: [],
     remoteParticipants: new Map(remoteTracks.length ? [[
       'remote',
       { trackPublications: new Map(remoteTracks.map((track, i) => [String(i), { track }])) },
@@ -69,7 +70,14 @@ function makeRoom(publishTrack, {
       trackPublications: new Map(localTracks.map((track, i) => [String(i), { track }])),
       publishTrack,
       publishData: async () => {},
-      streamBytes,
+      streamBytes: streamBytes ?? (async options => {
+        room.streamedByteOptions.push(options);
+        return {
+          info: { id: 'stream-1' },
+          write: async () => {},
+          close: async () => {},
+        };
+      }),
       unpublishTrack: async track => {
         globalThis.__livekitRoom.unpublishedTracks.push(track);
       },
@@ -183,6 +191,23 @@ test('primes remote audio on connect and retries before sending', async (t) => {
   assert.equal(room.startAudioCalls, 1);
   await backend.send('hello');
   assert.equal(room.startAudioCalls, 2);
+});
+
+test('preserves __proto__ as an ordinary file attribute', async (t) => {
+  const { backend, room } = await connectedBackend(t, async () => {});
+  const attributes = JSON.parse('{"__proto__":"request-value"}');
+
+  await backend.sendBytes(new Uint8Array([1]), {
+    topic: 'image.response',
+    name: 'capture.png',
+    mimeType: 'image/png',
+    attributes,
+  });
+
+  const wireAttributes = room.streamedByteOptions[0].attributes;
+  assert.equal(Object.hasOwn(wireAttributes, '__proto__'), true);
+  assert.equal(wireAttributes.__proto__, 'request-value');
+  assert.equal(wireAttributes['_streamkit.topic'], 'image.response');
 });
 
 test('publishes and previews the captured full-frame camera track', async (t) => {

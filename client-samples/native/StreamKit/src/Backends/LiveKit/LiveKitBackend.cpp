@@ -33,6 +33,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -58,6 +59,137 @@
 namespace streamkit {
 
 namespace {
+
+constexpr std::string_view kFileStreamTopic = "_streamkit.file";
+constexpr std::string_view kFileReservedPrefix = "_streamkit.";
+constexpr std::string_view kFileTopicAttribute = "_streamkit.topic";
+constexpr std::size_t kFileMaxFieldBytes = 255;
+constexpr std::size_t kFileMaxAttributeKeyBytes = 128;
+constexpr std::size_t kFileMaxAttributeValueBytes = 1024;
+constexpr std::size_t kFileMaxAttributes = 32;
+constexpr std::size_t kFileMaxAttributesBytes = 8 * 1024;
+struct EffectiveFileOptions {
+    std::string topic;
+    std::string name;
+    std::string mime_type;
+    std::map<std::string, std::string> attributes;
+    std::size_t size;
+};
+
+void ValidateFileField(std::string_view value, std::string_view name,
+                       std::size_t max_bytes,
+                       bool allows_empty = false) {
+    if (!allows_empty && value.empty()) {
+        throw InvalidFileMetadataError(std::string(name) + " must be nonempty");
+    }
+    if (value.find('\0') != std::string_view::npos) {
+        throw InvalidFileMetadataError(std::string(name) + " cannot contain NUL");
+    }
+    if (value.size() > max_bytes) {
+        throw InvalidFileMetadataError(
+            std::string(name) + " exceeds " + std::to_string(max_bytes) + " UTF-8 bytes");
+    }
+}
+
+EffectiveFileOptions MakeFileOptions(const FileSendOptions& options,
+                                     std::size_t size,
+                                     std::string default_name = {}) {
+    ValidateFileField(options.topic, "file topic", kFileMaxFieldBytes);
+    if (options.topic.starts_with(kFileReservedPrefix)) {
+        throw InvalidFileMetadataError("file topic uses the reserved _streamkit. prefix");
+    }
+    auto name = options.name.empty() ? std::move(default_name) : options.name;
+    ValidateFileField(name, "file name", kFileMaxFieldBytes);
+    auto mime_type = options.mime_type.empty()
+        ? std::string("application/octet-stream")
+        : options.mime_type;
+    ValidateFileField(mime_type, "file MIME type", kFileMaxFieldBytes);
+    auto attributes = options.attributes;
+    if (attributes.size() > kFileMaxAttributes) {
+        throw InvalidFileMetadataError("file attributes exceed 32 application entries");
+    }
+    std::size_t attribute_bytes = 0;
+    for (const auto& [key, value] : attributes) {
+        ValidateFileField(key, "file attribute key", kFileMaxAttributeKeyBytes);
+        ValidateFileField(
+            value, "file attribute value", kFileMaxAttributeValueBytes, true);
+        if (key.starts_with(kFileReservedPrefix)) {
+            throw InvalidFileMetadataError("file attribute '" + key + "' is reserved");
+        }
+        attribute_bytes += key.size() + value.size();
+    }
+    if (attribute_bytes > kFileMaxAttributesBytes) {
+        throw InvalidFileMetadataError("file attributes exceed 8192 UTF-8 bytes");
+    }
+    attributes[std::string(kFileTopicAttribute)] = options.topic;
+    return {
+        .topic = options.topic,
+        .name = std::move(name),
+        .mime_type = std::move(mime_type),
+        .attributes = std::move(attributes),
+        .size = size,
+    };
+}
+
+detail::ByteStreamWireOptions MakeByteStreamWireOptions(
+    std::string_view topic,
+    const std::map<std::string, std::string>& attributes,
+    std::string_view mime_type,
+    std::string_view name,
+    std::size_t total_size,
+    const std::optional<std::string>& hub_identity) {
+    const auto destinations = hub_identity.has_value() && !hub_identity->empty()
+        ? std::vector<std::string>{*hub_identity}
+        : std::vector<std::string>{};
+    return {
+        .topic = std::string(topic),
+        .attributes = attributes,
+        .destination_identities = destinations,
+        .mime_type = std::string(mime_type),
+        .name = std::string(name),
+        .total_size = total_size,
+    };
+}
+
+detail::ByteStreamWireOptions MakeByteStreamWireOptions(
+    const EffectiveFileOptions& options,
+    const std::optional<std::string>& hub_identity) {
+    return MakeByteStreamWireOptions(
+        kFileStreamTopic,
+        options.attributes,
+        options.mime_type,
+        options.name,
+        options.size,
+        hub_identity);
+}
+
+FileTransferInfo MakeFileTransferInfo(
+    const EffectiveFileOptions& options,
+    std::string stream_id) {
+    return {
+        .id = std::move(stream_id),
+        .topic = options.topic,
+        .name = options.name,
+        .mime_type = options.mime_type,
+        .size = options.size,
+    };
+}
+
+template <typename Send>
+FileTransferInfo SendFileTransfer(
+    const EffectiveFileOptions& options,
+    const std::optional<std::string>& hub_identity,
+    const detail::ByteStreamConnection& connection,
+    Send&& send) {
+    const auto wire = MakeByteStreamWireOptions(options, hub_identity);
+    try {
+        return MakeFileTransferInfo(
+            options,
+            std::forward<Send>(send)(wire, connection));
+    } catch (const detail::ByteStreamConnectionChanged&) {
+        throw FileTransferIncompleteError{};
+    }
+}
 
 LiveKitBackend*& MetricsCallbackBackend() {
     static thread_local LiveKitBackend* backend = nullptr;
@@ -545,26 +677,82 @@ std::string LiveKitBackend::SendByteStream(
     const std::map<std::string, std::string>& attributes,
     std::string_view mime_type,
     std::string_view name) {
-    if (!is_connected_.load()) throw NotConnectedError{};
-    std::vector<std::string> destinations;
-    if (config_.hub_identity) destinations.push_back(*config_.hub_identity);
-    const auto generation = connect_generation_.load();
     return detail::LiveKitByteStreamWriter::SendBytes(
         std::as_bytes(data),
-        detail::ByteStreamWireOptions{
-            .topic = std::string(topic),
-            .attributes = attributes,
-            .destination_identities = std::move(destinations),
-            .mime_type = std::string(mime_type),
-            .name = std::string(name),
-            .total_size = data.size(),
+        MakeByteStreamWireOptions(
+            topic,
+            attributes,
+            mime_type,
+            name,
+            data.size(),
+            config_.hub_identity),
+        ActiveByteStreamConnection());
+}
+
+FileTransferInfo LiveKitBackend::SendBytes(
+    std::span<const std::byte> data,
+    const FileSendOptions& options) {
+    const auto effective = MakeFileOptions(options, data.size());
+    const auto connection = ActiveByteStreamConnection();
+    return SendFileTransfer(
+        effective,
+        config_.hub_identity,
+        connection,
+        [data](const detail::ByteStreamWireOptions& wire,
+               const detail::ByteStreamConnection& active) {
+            return detail::LiveKitByteStreamWriter::SendBytes(data, wire, active);
+        });
+}
+
+detail::ByteStreamConnection LiveKitBackend::ActiveByteStreamConnection() {
+    std::shared_ptr<livekit::Room> active_room;
+    std::uint64_t generation;
+    std::uint64_t byte_stream_epoch;
+    {
+        std::scoped_lock lock(teardown_mutex_);
+        if (!is_connected_.load()
+#if STREAMKIT_HAVE_LIVEKIT
+            || !room_
+#endif
+        ) {
+            throw NotConnectedError{};
+        }
+        active_room = room_;
+        generation = connect_generation_.load();
+        byte_stream_epoch = byte_stream_epoch_.load();
+    }
+    return {
+        .room = active_room,
+        .is_active = [this, active_room, generation, byte_stream_epoch]() {
+            std::scoped_lock lock(teardown_mutex_);
+            return is_connected_.load() && room_ == active_room &&
+                   connect_generation_.load() == generation &&
+                   byte_stream_epoch_.load() == byte_stream_epoch;
         },
-        detail::ByteStreamConnection{
-            .room = room_,
-            .is_active = [this, generation]() {
-                return is_connected_.load() &&
-                    connect_generation_.load() == generation;
-            },
+    };
+}
+
+FileTransferInfo LiveKitBackend::SendFile(
+    const std::filesystem::path& path,
+    const FileSendOptions& options) {
+    auto effective = MakeFileOptions(options, 0, path.filename().string());
+    const auto connection = ActiveByteStreamConnection();
+    std::error_code file_error;
+    if (!std::filesystem::is_regular_file(path, file_error) || file_error) {
+        throw InvalidFileMetadataError("file is not readable");
+    }
+    file_error.clear();
+    effective.size = std::filesystem::file_size(path, file_error);
+    if (file_error) {
+        throw InvalidFileMetadataError("file is not readable");
+    }
+    return SendFileTransfer(
+        effective,
+        config_.hub_identity,
+        connection,
+        [&path](const detail::ByteStreamWireOptions& wire,
+                const detail::ByteStreamConnection& active) {
+            return detail::LiveKitByteStreamWriter::SendFile(path, wire, active);
         });
 }
 
@@ -619,6 +807,7 @@ void LiveKitBackend::BlockNetworkMetricsDelivery() {
     const auto delivery = network_metrics_.delivery;
     std::scoped_lock lock(delivery->mutex);
     is_connected_.store(false);
+    byte_stream_epoch_.fetch_add(1);
     network_metrics_.connection_epoch.fetch_add(1);
     delivery->blocked = true;
 }

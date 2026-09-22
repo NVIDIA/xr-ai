@@ -125,6 +125,26 @@
  */
 
 /**
+ * Send a complete in-memory payload using the backend's file-transfer transport.
+ *
+ * @function
+ * @name StreamingBackend#sendBytes
+ * @param {ArrayBuffer | Uint8Array} data
+ * @param {{topic: string, name: string, mimeType?: string, attributes?: Record<string, string>}} options
+ * @returns {Promise<object>}
+ */
+
+/**
+ * Send a file using the backend's file-transfer transport.
+ *
+ * @function
+ * @name StreamingBackend#sendFile
+ * @param {File} file
+ * @param {{topic: string, name?: string, mimeType?: string, attributes?: Record<string, string>}} options
+ * @returns {Promise<object>}
+ */
+
+/**
  * Cleanly disconnect and release all resources (tracks, sockets, etc.).
  *
  * Must resolve even if the session was never connected.

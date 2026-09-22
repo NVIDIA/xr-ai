@@ -213,6 +213,9 @@ def main_runtime(monkeypatch, tmp_path):
     )
     config = SimpleNamespace(
         hub_push_addr="ipc://unused-in", hub_sub_addr="ipc://unused-out",
+        hub_file_push_addr="ipc://unused-file-in",
+        hub_file_sub_addr="ipc://unused-file-out",
+        incoming_file_ipc_hwm=2, incoming_file_max_bytes=16 * 1024 * 1024,
         video_recording={}, web_server_tls=False, enable_web_server=False,
         lk_port_ws=7880, room_name="test",
     )

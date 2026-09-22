@@ -34,6 +34,14 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Reserved LiveKit topic for internal agent status messages.
     /// Matches the web client's `LiveKitBackend.#STATUS_TOPIC`.
     private static let agentStatusTopic = "_agent.status"
+    private static let fileStreamTopic = "_streamkit.file"
+    private static let fileTopicAttribute = "_streamkit.topic"
+    private static let fileReservedPrefix = "_streamkit."
+    private static let fileMaxFieldBytes = 255
+    private static let fileMaxAttributeKeyBytes = 128
+    private static let fileMaxAttributeValueBytes = 1_024
+    private static let fileMaxAttributes = 32
+    private static let fileMaxAttributesBytes = 8 * 1_024
 
     // MARK: Private state
 
@@ -397,6 +405,56 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try await room.localParticipant.publish(data: data, options: options)
     }
 
+    public func sendBytes(_ data: Data, options: FileSendOptions) async throws -> FileTransferInfo {
+        let effective = try makeFileOptions(options, size: data.count, defaultName: nil)
+        let connection = try activeByteStreamConnection()
+        let streamID: String
+        do {
+            streamID = try await LiveKitByteStreamWriter.sendBytes(
+                data,
+                options: effective.wire,
+                connection: connection,
+                isConnectionActive: isByteStreamConnectionActive
+            )
+        } catch ByteStreamTransportError.connectionChanged {
+            throw StreamError.fileTransferIncomplete
+        }
+        return effective.transferInfo(id: streamID)
+    }
+
+    public func sendFile(_ fileURL: URL, options: FileSendOptions) async throws -> FileTransferInfo {
+        var effective = try makeFileOptions(
+            options,
+            size: 0,
+            defaultName: fileURL.lastPathComponent
+        )
+        let connection = try activeByteStreamConnection()
+        let values: URLResourceValues
+        do {
+            values = try fileURL.resourceValues(
+                forKeys: [.fileSizeKey, .isRegularFileKey]
+            )
+        } catch {
+            throw StreamError.invalidFileMetadata("file is not readable")
+        }
+        guard values.isRegularFile == true, let size = values.fileSize else {
+            throw StreamError.invalidFileMetadata("file is not readable")
+        }
+        effective = effective.withSize(size)
+        let streamID: String
+        do {
+            streamID = try await LiveKitByteStreamWriter.sendFile(
+                fileURL,
+                options: effective.wire,
+                connection: connection,
+                isConnectionActive: isByteStreamConnectionActive
+            )
+        } catch ByteStreamTransportError.connectionChanged {
+            throw StreamError.fileTransferIncomplete
+        }
+        return effective.transferInfo(id: streamID)
+    }
+
     // MARK: - Private helpers
 
     /// Roll the recording engine back to its idle state: drop prepared mode and
@@ -407,6 +465,157 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try? AudioManager.shared.setEngineAvailability(
             AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
         )
+    }
+
+    private struct EffectiveFileOptions {
+        let topic: String
+        let name: String
+        let mimeType: String
+        let size: Int
+        let wire: ByteStreamWireOptions
+
+        func transferInfo(id: String) -> FileTransferInfo {
+            FileTransferInfo(
+                id: id,
+                topic: topic,
+                name: name,
+                mimeType: mimeType,
+                size: size
+            )
+        }
+
+        func withSize(_ size: Int) -> EffectiveFileOptions {
+            EffectiveFileOptions(
+                topic: topic,
+                name: name,
+                mimeType: mimeType,
+                size: size,
+                wire: ByteStreamWireOptions(
+                    topic: wire.topic,
+                    attributes: wire.attributes,
+                    destinationIdentities: wire.destinationIdentities,
+                    mimeType: wire.mimeType,
+                    name: wire.name,
+                    totalSize: size
+                )
+            )
+        }
+    }
+
+    private func makeByteStreamWireOptions(
+        topic: String,
+        attributes: [String: String],
+        mimeType: String?,
+        name: String?,
+        totalSize: Int
+    ) -> ByteStreamWireOptions {
+        ByteStreamWireOptions(
+            topic: topic,
+            attributes: attributes,
+            destinationIdentities: config.hubIdentity.map {
+                [Participant.Identity(from: $0)]
+            } ?? [],
+            mimeType: mimeType,
+            name: name,
+            totalSize: totalSize
+        )
+    }
+
+    private func makeFileOptions(
+        _ options: FileSendOptions,
+        size: Int,
+        defaultName: String?
+    ) throws -> EffectiveFileOptions {
+        let topic = try Self.validateFileField(
+            options.topic,
+            name: "topic",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        guard !topic.hasPrefix(Self.fileReservedPrefix) else {
+            throw StreamError.invalidFileMetadata("topic uses the reserved _streamkit. prefix")
+        }
+        let name = try Self.validateFileField(
+            options.name ?? defaultName,
+            name: "name",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        let mimeType = try Self.validateFileField(
+            options.mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream",
+            name: "MIME type",
+            maxBytes: Self.fileMaxFieldBytes
+        )
+        var attributes = options.attributes
+        guard attributes.count <= Self.fileMaxAttributes else {
+            throw StreamError.invalidFileMetadata("attributes exceed 32 application entries")
+        }
+        var attributeBytes = 0
+        for (key, value) in attributes {
+            _ = try Self.validateFileField(
+                key,
+                name: "attribute key",
+                maxBytes: Self.fileMaxAttributeKeyBytes
+            )
+            _ = try Self.validateFileField(
+                value,
+                name: "attribute value",
+                maxBytes: Self.fileMaxAttributeValueBytes,
+                allowsEmpty: true
+            )
+            guard !key.hasPrefix(Self.fileReservedPrefix) else {
+                throw StreamError.invalidFileMetadata("attribute \(key) is reserved")
+            }
+            attributeBytes += key.utf8.count + value.utf8.count
+        }
+        guard attributeBytes <= Self.fileMaxAttributesBytes else {
+            throw StreamError.invalidFileMetadata("attributes exceed 8192 UTF-8 bytes")
+        }
+        attributes[Self.fileTopicAttribute] = topic
+        return EffectiveFileOptions(
+            topic: topic,
+            name: name,
+            mimeType: mimeType,
+            size: size,
+            wire: makeByteStreamWireOptions(
+                topic: Self.fileStreamTopic,
+                attributes: attributes,
+                mimeType: mimeType,
+                name: name,
+                totalSize: size
+            )
+        )
+    }
+
+    private func activeByteStreamConnection() throws -> ByteStreamConnection {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        return ByteStreamConnection(room: room, generation: connectionGeneration)
+    }
+
+    private func isByteStreamConnectionActive(_ connection: ByteStreamConnection) -> Bool {
+        room === connection.room &&
+            connectionGeneration == connection.generation &&
+            connection.room.connectionState == .connected
+    }
+
+    private static func validateFileField(
+        _ value: String?,
+        name: String,
+        maxBytes: Int,
+        allowsEmpty: Bool = false
+    ) throws -> String {
+        guard let value, allowsEmpty || !value.isEmpty else {
+            throw StreamError.invalidFileMetadata("\(name) must be nonempty")
+        }
+        guard !value.contains("\0") else {
+            throw StreamError.invalidFileMetadata("\(name) cannot contain NUL")
+        }
+        guard value.utf8.count <= maxBytes else {
+            throw StreamError.invalidFileMetadata(
+                "\(name) exceeds \(maxBytes) UTF-8 bytes"
+            )
+        }
+        return value
     }
 
     private func tearDown() async {
@@ -739,30 +948,19 @@ extension LiveKitBackend {
         mimeType: String?,
         name: String?
     ) async throws -> String {
-        guard let room, room.connectionState == .connected else {
-            throw StreamError.notConnected
-        }
-        let connection = ByteStreamConnection(
-            room: room,
-            generation: connectionGeneration
-        )
-        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        let connection = try activeByteStreamConnection()
         return try await LiveKitByteStreamWriter.sendBytes(
             data,
-            options: ByteStreamWireOptions(
+            options: makeByteStreamWireOptions(
                 topic: topic,
                 attributes: attributes,
-                destinationIdentities: destinations,
                 mimeType: mimeType,
                 name: name,
                 totalSize: data.count
             ),
             connection: connection,
             isConnectionActive: { [weak self] candidate in
-                guard let self else { return false }
-                return self.room === candidate.room
-                    && candidate.room.connectionState == .connected
-                    && self.connectionGeneration == candidate.generation
+                self?.isByteStreamConnectionActive(candidate) ?? false
             }
         )
     }

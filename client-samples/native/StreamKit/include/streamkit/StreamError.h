@@ -50,4 +50,26 @@ public:
         : StreamError("Connect() before starting the camera.") {}
 };
 
+/// Thrown when a custom backend does not implement file transfer.
+class FileTransferUnsupportedError : public StreamError {
+public:
+    FileTransferUnsupportedError()
+        : StreamError("The selected streaming backend does not support file transfer.") {}
+};
+
+/// Thrown when file-transfer metadata violates the StreamKit wire contract.
+class InvalidFileMetadataError : public StreamError {
+public:
+    explicit InvalidFileMetadataError(const std::string& reason)
+        : StreamError("Invalid file metadata: " + reason) {}
+};
+
+/// Thrown when the active connection changes before a file stream closes.
+class FileTransferIncompleteError : public StreamError {
+public:
+    FileTransferIncompleteError()
+        : StreamError(
+              "The file stream did not close successfully on the active connection.") {}
+};
+
 } // namespace streamkit

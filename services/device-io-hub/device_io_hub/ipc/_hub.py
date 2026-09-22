@@ -37,19 +37,22 @@ return — do not hold the view beyond the callback boundary.
 """
 from __future__ import annotations
 
-from loguru import logger
+import asyncio
+import base64
 import json
 import time
 from typing import Awaitable, Callable
 
 import zmq
 import zmq.asyncio
+from loguru import logger
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
-                       ControlMessage, DataMessage, FrameData, MsgType,
+                       ControlMessage, DataMessage, FileMessage, FrameData, MsgType,
                        ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
                        decode, encode)
 from xr_ai_hub._capture import CAPTURE_PUBLISH_PREFIX, CAPTURE_TOPICS
+from xr_ai_hub._file_ordering import FileRoute, FileSessionOrderer
 
 from ._registration import _CONNECTOR_REGISTER_ACK_TOPIC
 
@@ -82,10 +85,19 @@ TOPIC_VIDEO              = b"video"       # FRAME_SIGNAL metadata (fires at full
 TOPIC_VIDEO_DATA         = b"video_data"  # FRAME_DATA pixel response (on-demand only)
 TOPIC_AUDIO              = b"audio"
 TOPIC_DATA               = b"data"
+TOPIC_FILE               = b"file"
 TOPIC_CONTROL            = b"control"
 TOPIC_RETURN_AUDIO       = b"return_audio"
 TOPIC_RETURN_AUDIO_FLUSH = b"return_audio_flush"
 TOPIC_RETURN_DATA        = b"return_data"
+_DEFAULT_FILE_MAX_BYTES = 16 * 1024 * 1024
+_FILE_IPC_METADATA_ALLOWANCE = 64 * 1024
+
+
+def _file_prefix(participant_id: str) -> bytes:
+    """Return an exact, delimiter-safe participant prefix for file IPC."""
+    encoded = base64.urlsafe_b64encode(participant_id.encode("utf-8")).rstrip(b"=")
+    return b"file." + encoded + b"."
 
 
 class HubEndpoint:
@@ -94,11 +106,40 @@ class HubEndpoint:
 
     Parameters
     ----------
-    pull_addr : ZMQ address the hub binds for connector PUSH traffic.
-    pub_addr  : ZMQ address the hub binds for consumer SUB traffic.
+    pull_addr :
+        ZMQ address the hub binds for connector real-time traffic.
+    pub_addr :
+        ZMQ address the hub binds for processor real-time traffic.
+    file_pull_addr :
+        Optional ZMQ address for completed files from connectors.
+    file_pub_addr :
+        Optional ZMQ address for completed files sent to processors. Must be
+        configured together with ``file_pull_addr``.
+    file_hwm :
+        Maximum complete-file messages queued at each file socket and pending
+        participant lifecycle correlation.
+    file_max_bytes :
+        Maximum file payload accepted on the file IPC lane.
     """
 
-    def __init__(self, pull_addr: str, pub_addr: str) -> None:
+    def __init__(
+        self,
+        pull_addr: str,
+        pub_addr: str,
+        *,
+        file_pull_addr: str | None = None,
+        file_pub_addr: str | None = None,
+        file_hwm: int = 2,
+        file_max_bytes: int = _DEFAULT_FILE_MAX_BYTES,
+    ) -> None:
+        if isinstance(file_hwm, bool) or not isinstance(file_hwm, int) or file_hwm <= 0:
+            raise ValueError("file_hwm must be a positive integer")
+        if (
+            isinstance(file_max_bytes, bool)
+            or not isinstance(file_max_bytes, int)
+            or file_max_bytes <= 0
+        ):
+            raise ValueError("file_max_bytes must be a positive integer")
         ctx = zmq.asyncio.Context.instance()
 
         self._pull: zmq.asyncio.Socket = ctx.socket(zmq.PULL)
@@ -107,11 +148,32 @@ class HubEndpoint:
         self._pub: zmq.asyncio.Socket = ctx.socket(zmq.PUB)
         self._pub.bind(pub_addr)
 
+        self._file_pull: zmq.asyncio.Socket | None = None
+        self._file_pub: zmq.asyncio.Socket | None = None
+        self._file_hwm = file_hwm
+        self._file_max_bytes = file_max_bytes
+        if (file_pull_addr is None) != (file_pub_addr is None):
+            raise ValueError("file_pull_addr and file_pub_addr must be configured together")
+        if file_pull_addr is not None and file_pub_addr is not None:
+            self._file_pull = ctx.socket(zmq.PULL)
+            self._file_pull.setsockopt(zmq.RCVHWM, file_hwm)
+            self._file_pull.setsockopt(
+                zmq.MAXMSGSIZE,
+                file_max_bytes + _FILE_IPC_METADATA_ALLOWANCE,
+            )
+            self._file_pull.bind(file_pull_addr)
+            self._file_pub = ctx.socket(zmq.PUB)
+            self._file_pub.setsockopt(zmq.SNDHWM, file_hwm)
+            self._file_pub.bind(file_pub_addr)
+
         # connector_id → ShmRingBuffer (opened on CONNECTOR_REGISTER)
         self._ring_registry: dict[str, ShmRingBuffer] = {}
         self._ring_names: dict[str, str] = {}
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
+        self._participant_sessions: dict[str, str] = {}
+        self._file_orderer = FileSessionOrderer(file_hwm)
+        self._file_session_events: asyncio.Queue[ParticipantEvent] = asyncio.Queue()
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
         # The slot is held open (not released) until the next frame for the same
         # track arrives, the participant disconnects, or the hub shuts down — so
@@ -309,19 +371,196 @@ class HubEndpoint:
     async def run(self) -> None:
         """Receive and dispatch messages from all connectors until stop()."""
         self._running = True
-        while self._running:
-            try:
-                raw = await self._pull.recv()
-            except zmq.ZMQError as exc:
-                if not self._running:
+        file_tasks = []
+        if self._file_pull is not None:
+            file_tasks = [asyncio.create_task(self._run_files(), name="hub-file-ipc")]
+        try:
+            while self._running:
+                try:
+                    raw = await self._pull.recv()
+                except zmq.ZMQError as exc:
+                    if not self._running:
+                        break
+                    logger.error("ZMQ recv error: {}", exc)
+                    continue
+                try:
+                    type_id, msg = decode(raw)
+                    await self._dispatch(type_id, msg)
+                except Exception:
+                    logger.exception("Error dispatching message")
+        finally:
+            for task in file_tasks:
+                task.cancel()
+            await asyncio.gather(*file_tasks, return_exceptions=True)
+
+    async def _run_files(self) -> None:
+        """Route bounded complete-file messages independently of real-time traffic."""
+        assert self._file_pull is not None
+        assert self._file_pub is not None
+        receive = asyncio.ensure_future(self._file_pull.recv())
+        lifecycle = asyncio.create_task(self._file_session_events.get())
+        try:
+            while self._running:
+                timeout = self._file_orderer.seconds_until_expiry()
+                done, _ = await asyncio.wait(
+                    (receive, lifecycle),
+                    timeout=timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not done:
+                    self._log_expired_files()
+                    continue
+                if lifecycle in done:
+                    lifecycle = await self._drain_file_session_events(lifecycle)
+                if receive in done:
+                    completed_receive = receive
+                    try:
+                        raw = completed_receive.result()
+                    except zmq.ZMQError as exc:
+                        if not self._running:
+                            break
+                        logger.error("File IPC ZMQ error: {}", exc)
+                        receive = asyncio.ensure_future(self._file_pull.recv())
+                        continue
+                    if not self._running:
+                        break
+                    try:
+                        receive = asyncio.ensure_future(self._file_pull.recv())
+                    except zmq.ZMQError as exc:
+                        if self._running:
+                            logger.error("File IPC ZMQ error: {}", exc)
+                        break
+                    try:
+                        type_id, msg = await asyncio.to_thread(decode, raw)
+                        if type_id != MsgType.FILE_MESSAGE:
+                            logger.warning("Unknown file IPC message type {} ignored", type_id)
+                            continue
+                        if len(msg.data) > self._file_max_bytes:
+                            logger.warning(
+                                "File {} dropped: {} bytes exceeds the {} byte IPC limit",
+                                msg.transfer_id,
+                                len(msg.data),
+                                self._file_max_bytes,
+                            )
+                            continue
+                        lifecycle = await self._drain_file_session_events(lifecycle)
+                        await self._route_file(msg)
+                    except zmq.ZMQError as exc:
+                        if self._running:
+                            logger.error("File IPC ZMQ error: {}", exc)
+                    except Exception:
+                        logger.exception("Error routing file message")
+        except asyncio.CancelledError:
+            raise
+        finally:
+            receive.cancel()
+            lifecycle.cancel()
+            await asyncio.gather(receive, lifecycle, return_exceptions=True)
+
+    async def _drain_file_session_events(
+        self,
+        lifecycle: asyncio.Task,
+    ) -> asyncio.Task:
+        """Apply every lifecycle event already pending on the file lane."""
+        await asyncio.sleep(0)
+        while True:
+            if lifecycle.done():
+                event = lifecycle.result()
+                lifecycle = asyncio.create_task(self._file_session_events.get())
+            else:
+                try:
+                    event = self._file_session_events.get_nowait()
+                except asyncio.QueueEmpty:
                     break
-                logger.error("ZMQ recv error: {}", exc)
-                continue
             try:
-                type_id, msg = decode(raw)
-                await self._dispatch(type_id, msg)
+                await self._apply_file_session_event(event)
             except Exception:
-                logger.exception("Error dispatching message")
+                logger.exception("Error applying file-lane participant event")
+        return lifecycle
+
+    async def _publish_file(self, msg: FileMessage) -> None:
+        assert self._file_pub is not None
+        if not self._file_session_is_active(msg):
+            logger.debug(
+                "File {} dropped: participant session is no longer active",
+                msg.transfer_id,
+            )
+            return
+        topic = _file_prefix(msg.participant_id) + msg.topic.encode("utf-8")
+        encoded = await asyncio.to_thread(encode, MsgType.FILE_MESSAGE, msg)
+        # The active session can change while encoding runs in a worker thread.
+        if not self._file_session_is_active(msg):
+            logger.debug(
+                "File {} dropped: participant session is no longer active",
+                msg.transfer_id,
+            )
+            return
+        await self._file_pub.send_multipart([topic, encoded])
+
+    async def _route_file(self, msg: FileMessage) -> None:
+        """Publish an active file or retain one until its lifecycle event arrives."""
+        route = self._file_orderer.route(msg)
+        if route is FileRoute.READY:
+            await self._publish_file(msg)
+        elif route is FileRoute.BUFFERED:
+            logger.debug(
+                "Buffering file {} until participant {} joins",
+                msg.transfer_id,
+                msg.participant_id,
+            )
+        elif route is FileRoute.INACTIVE:
+            logger.debug(
+                "File {} dropped: participant session is no longer active",
+                msg.transfer_id,
+            )
+        else:
+            logger.warning(
+                "File {} dropped: pre-join file buffer is full",
+                msg.transfer_id,
+            )
+        self._log_expired_files()
+
+    async def _apply_file_session_event(self, event: ParticipantEvent) -> None:
+        if event.joined:
+            ready, inactive = self._file_orderer.participant_joined(
+                event.participant_id,
+                event.participant_session_id,
+            )
+            for msg in inactive:
+                logger.debug(
+                    "File {} dropped: participant session is no longer active",
+                    msg.transfer_id,
+                )
+            for msg in ready:
+                await self._publish_file(msg)
+        else:
+            discarded = self._file_orderer.participant_left(
+                event.participant_id,
+                event.participant_session_id,
+            )
+            for msg in discarded:
+                logger.debug(
+                    "File {} dropped: participant session is no longer active",
+                    msg.transfer_id,
+                )
+        self._log_expired_files()
+
+    def _file_session_is_active(self, msg: FileMessage) -> bool:
+        active_session = self._participant_sessions.get(msg.participant_id)
+        return (
+            msg.participant_id in self._participant_sessions
+            and (
+                not msg.participant_session_id
+                or active_session == msg.participant_session_id
+            )
+        )
+
+    def _log_expired_files(self) -> None:
+        for msg in self._file_orderer.expire():
+            logger.debug(
+                "File {} dropped: participant join did not arrive before timeout",
+                msg.transfer_id,
+            )
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.CONNECTOR_REGISTER:
@@ -486,8 +725,24 @@ class HubEndpoint:
         elif type_id == MsgType.PARTICIPANT_EVENT:
             if msg.joined:
                 self._participant_connector[msg.participant_id] = msg.connector_id
+                self._participant_sessions[msg.participant_id] = (
+                    msg.participant_session_id
+                )
             else:
+                active_session = self._participant_sessions.get(msg.participant_id, "")
+                if (
+                    msg.participant_session_id
+                    and active_session
+                    and msg.participant_session_id != active_session
+                ):
+                    logger.debug(
+                        "Ignoring stale departure for participant {!r}",
+                        msg.participant_id,
+                    )
+                    return
                 self._participant_connector.pop(msg.participant_id, None)
+                self._participant_sessions.pop(msg.participant_id, None)
+                departed_session = msg.participant_session_id or active_session
                 self._published_status.pop(msg.participant_id, None)
                 for per_participant in self._agent_status.values():
                     per_participant.pop(msg.participant_id, None)
@@ -507,12 +762,32 @@ class HubEndpoint:
                     await cb(msg)
                 except Exception:
                     logger.exception("participant callback error")
-            await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
             if msg.joined:
+                await self._pub.send_multipart([
+                    b"participant",
+                    encode(MsgType.PARTICIPANT_EVENT, msg),
+                ])
+                if self._file_pull is not None:
+                    self._file_session_events.put_nowait(msg)
                 # A joining client has no status yet; publish the aggregate
                 # unconditionally so it starts from a real state instead of
                 # inheriting whatever the previous occupant of this pid saw.
                 await self.publish_agent_status(msg.participant_id, force=True)
+            else:
+                await self._pub.send_multipart([
+                    b"participant",
+                    encode(MsgType.PARTICIPANT_EVENT, msg),
+                ])
+                if self._file_pull is not None and departed_session:
+                    self._file_session_events.put_nowait(
+                        ParticipantEvent(
+                            participant_id=msg.participant_id,
+                            joined=False,
+                            pts_us=msg.pts_us,
+                            connector_id=msg.connector_id,
+                            participant_session_id=departed_session,
+                        ),
+                    )
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:
@@ -544,10 +819,13 @@ class HubEndpoint:
             await self._replay_roster()
 
         elif type_id == MsgType.SUBSCRIPTION_PROBE:
-            await self._pub.send_multipart([
+            probe = [
                 f"_probe.{msg.token}".encode(),
                 encode(MsgType.SUBSCRIPTION_PROBE, msg),
-            ])
+            ]
+            await self._pub.send_multipart(probe)
+            if self._file_pub is not None:
+                await self._file_pub.send_multipart(probe)
 
         elif type_id == MsgType.AGENT_PRESENCE:
             if msg.attached:
@@ -577,6 +855,7 @@ class HubEndpoint:
             event = ParticipantEvent(
                 participant_id=pid, joined=True,
                 pts_us=pts_us, connector_id=connector_id,
+                participant_session_id=self._participant_sessions.get(pid, ""),
             )
             await self._pub.send_multipart([
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
@@ -665,6 +944,10 @@ class HubEndpoint:
     def close(self) -> None:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
+        if self._file_pull is not None:
+            self._file_pull.close(linger=0)
+        if self._file_pub is not None:
+            self._file_pub.close(linger=0)
         for ring, view in self._latest_slots.values():
             self._release_held_slot(ring, view, context="hub shutdown")
         self._latest_slots.clear()

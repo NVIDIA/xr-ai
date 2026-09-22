@@ -34,6 +34,7 @@
  */
 
 #include <cstddef>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <span>
@@ -47,6 +48,7 @@
 #include "streamkit/Config/SessionConfig.h"
 #include "streamkit/ConnectionState.h"
 #include "streamkit/ImageCapture.h"
+#include "streamkit/FileTransfer.h"
 
 namespace streamkit {
 
@@ -133,6 +135,14 @@ public:
     void Send(std::span<const std::byte> data,
               bool reliable = true,
               std::string_view topic = "");
+
+    /// Sends a complete in-memory payload as a client-to-agent file transfer.
+    FileTransferInfo SendBytes(std::span<const std::byte> data,
+                               const FileSendOptions& options);
+
+    /// Streams a local file as a client-to-agent file transfer.
+    FileTransferInfo SendFile(const std::filesystem::path& path,
+                              const FileSendOptions& options);
 
     // ── Advanced ──────────────────────────────────────────────────────────
 

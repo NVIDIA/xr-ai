@@ -90,7 +90,14 @@ async def main(ready_file: Path | None = None) -> None:
 
     cfg = load_config()
 
-    hub = HubEndpoint(pull_addr=cfg.hub_push_addr, pub_addr=cfg.hub_sub_addr)
+    hub = HubEndpoint(
+        pull_addr=cfg.hub_push_addr,
+        pub_addr=cfg.hub_sub_addr,
+        file_pull_addr=cfg.hub_file_push_addr,
+        file_pub_addr=cfg.hub_file_sub_addr,
+        file_hwm=cfg.incoming_file_ipc_hwm,
+        file_max_bytes=cfg.incoming_file_max_bytes,
+    )
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
     hub.on_data(on_data)

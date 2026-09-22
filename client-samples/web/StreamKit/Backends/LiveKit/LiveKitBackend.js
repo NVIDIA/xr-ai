@@ -26,6 +26,7 @@ import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
 import {
+  ByteStreamConnectionChanged,
   INTERNAL_SEND_BYTE_STREAM,
   LiveKitByteStreamWriter,
 } from './ByteStreamTransport.js';
@@ -63,6 +64,85 @@ function mapQuality(lkQuality) {
     case 'lost':      return NetworkQuality.LOST;
     default:          return NetworkQuality.UNKNOWN;
   }
+}
+
+const FILE_STREAM_TOPIC = '_streamkit.file';
+const FILE_TOPIC_ATTRIBUTE = '_streamkit.topic';
+const FILE_RESERVED_PREFIX = '_streamkit.';
+const FILE_MAX_FIELD_BYTES = 255;
+const FILE_MAX_ATTRIBUTE_KEY_BYTES = 128;
+const FILE_MAX_ATTRIBUTE_VALUE_BYTES = 1024;
+const FILE_MAX_ATTRIBUTES = 32;
+const FILE_MAX_ATTRIBUTES_BYTES = 8 * 1024;
+const UTF8_ENCODER = new TextEncoder();
+
+function validateFileField(value, name, maxBytes, { required = true } = {}) {
+  if (typeof value !== 'string' || (required && value.length === 0)) {
+    throw new TypeError(`${name} must be a ${required ? 'nonempty ' : ''}string`);
+  }
+  if (value.includes('\0')) throw new TypeError(`${name} cannot contain NUL`);
+  if (UTF8_ENCODER.encode(value).byteLength > maxBytes) {
+    throw new TypeError(`${name} exceeds ${maxBytes} UTF-8 bytes`);
+  }
+  return value;
+}
+
+function targetedByteStreamOptions(options, hubIdentity) {
+  const targeted = { ...options };
+  if (hubIdentity) targeted.destinationIdentities = [hubIdentity];
+  return targeted;
+}
+
+function fileStreamOptions(options, size, defaultName, defaultMimeType, hubIdentity) {
+  if (!options || typeof options !== 'object') {
+    throw new TypeError('file options are required');
+  }
+  const topic = validateFileField(options.topic, 'file topic', FILE_MAX_FIELD_BYTES);
+  if (topic.startsWith(FILE_RESERVED_PREFIX)) {
+    throw new TypeError(`file topic cannot begin with '${FILE_RESERVED_PREFIX}'`);
+  }
+  const name = validateFileField(
+    options.name ?? defaultName,
+    'file name',
+    FILE_MAX_FIELD_BYTES,
+  );
+  const mimeType = validateFileField(
+    options.mimeType || defaultMimeType || 'application/octet-stream',
+    'file MIME type',
+    FILE_MAX_FIELD_BYTES,
+  );
+  const applicationAttributes = Object.entries(options.attributes ?? {});
+  if (applicationAttributes.length > FILE_MAX_ATTRIBUTES) {
+    throw new TypeError('file attributes exceed 32 application entries');
+  }
+  let attributeBytes = 0;
+  for (const [key, value] of applicationAttributes) {
+    validateFileField(key, 'file attribute key', FILE_MAX_ATTRIBUTE_KEY_BYTES);
+    validateFileField(
+      value,
+      `file attribute '${key}'`,
+      FILE_MAX_ATTRIBUTE_VALUE_BYTES,
+      { required: false },
+    );
+    if (key.startsWith(FILE_RESERVED_PREFIX)) {
+      throw new TypeError(`file attribute '${key}' is reserved`);
+    }
+    attributeBytes += UTF8_ENCODER.encode(key).byteLength;
+    attributeBytes += UTF8_ENCODER.encode(value).byteLength;
+  }
+  if (attributeBytes > FILE_MAX_ATTRIBUTES_BYTES) {
+    throw new TypeError('file attributes exceed 8192 UTF-8 bytes');
+  }
+  const attributes = Object.fromEntries(applicationAttributes);
+  attributes[FILE_TOPIC_ATTRIBUTE] = topic;
+  const liveKitOptions = targetedByteStreamOptions({
+    topic: FILE_STREAM_TOPIC,
+    name,
+    mimeType,
+    attributes,
+    totalSize: size,
+  }, hubIdentity);
+  return { topic, name, mimeType, liveKitOptions };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -493,17 +573,72 @@ export class LiveKitBackend {
       throw StreamError.notConnected();
     }
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-    const options = {
+    const options = targetedByteStreamOptions({
       topic: request.topic,
       attributes: request.attributes,
       mimeType: request.mimeType,
       name: request.name,
       totalSize: bytes.byteLength,
-    };
-    if (this.#config.hubIdentity) {
-      options.destinationIdentities = [this.#config.hubIdentity];
-    }
+    }, this.#config.hubIdentity);
     return this.#byteStreamWriter.sendBytes(bytes, options);
+  }
+
+  async sendBytes(data, options) {
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const transfer = fileStreamOptions(
+      options,
+      bytes.byteLength,
+      undefined,
+      'application/octet-stream',
+      this.#config.hubIdentity,
+    );
+    const room = this.#room;
+    if (!room || room.state !== 'connected') throw StreamError.notConnected();
+    let id;
+    try {
+      id = await this.#byteStreamWriter.sendBytes(bytes, transfer.liveKitOptions);
+    } catch (error) {
+      if (error instanceof ByteStreamConnectionChanged) {
+        throw StreamError.fileTransferIncomplete();
+      }
+      throw error;
+    }
+    return {
+      id,
+      topic: transfer.topic,
+      name: transfer.name,
+      mimeType: transfer.mimeType,
+      size: bytes.byteLength,
+    };
+  }
+
+  async sendFile(file, options) {
+    if (!(file instanceof File)) throw new TypeError('file must be a File');
+    const transfer = fileStreamOptions(
+      options,
+      file.size,
+      file.name,
+      file.type,
+      this.#config.hubIdentity,
+    );
+    const room = this.#room;
+    if (!room || room.state !== 'connected') throw StreamError.notConnected();
+    let id;
+    try {
+      id = await this.#byteStreamWriter.sendFile(file, transfer.liveKitOptions);
+    } catch (error) {
+      if (error instanceof ByteStreamConnectionChanged) {
+        throw StreamError.fileTransferIncomplete();
+      }
+      throw error;
+    }
+    return {
+      id,
+      topic: transfer.topic,
+      name: transfer.name,
+      mimeType: transfer.mimeType,
+      size: file.size,
+    };
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

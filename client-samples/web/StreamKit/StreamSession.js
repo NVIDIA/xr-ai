@@ -35,6 +35,7 @@
 import { INTERNAL_SEND_BYTE_STREAM } from './Backends/LiveKit/ByteStreamTransport.js';
 
 import { ConnectionState } from './ConnectionState.js';
+import { StreamError } from './StreamError.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -239,6 +240,42 @@ export class StreamSession {
    */
   async send(data, options) {
     await this.#backend.send(data, options);
+  }
+
+  /**
+   * Sends a complete in-memory payload as a StreamKit file transfer.
+   *
+   * @param {ArrayBuffer | Uint8Array} data
+   * @param {object} options
+   * @param {string} options.topic
+   * @param {string} options.name
+   * @param {string} [options.mimeType='application/octet-stream']
+   * @param {Record<string, string>} [options.attributes]
+   * @returns {Promise<{id: string, topic: string, name: string, mimeType: string, size: number}>}
+   */
+  async sendBytes(data, options) {
+    if (typeof this.#backend.sendBytes !== 'function') {
+      throw StreamError.fileTransferUnsupported();
+    }
+    return this.#backend.sendBytes(data, options);
+  }
+
+  /**
+   * Streams a browser File as a StreamKit file transfer.
+   *
+   * @param {File} file
+   * @param {object} options
+   * @param {string} options.topic
+   * @param {string} [options.name]
+   * @param {string} [options.mimeType]
+   * @param {Record<string, string>} [options.attributes]
+   * @returns {Promise<{id: string, topic: string, name: string, mimeType: string, size: number}>}
+   */
+  async sendFile(file, options) {
+    if (typeof this.#backend.sendFile !== 'function') {
+      throw StreamError.fileTransferUnsupported();
+    }
+    return this.#backend.sendFile(file, options);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
