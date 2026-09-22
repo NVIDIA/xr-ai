@@ -51,6 +51,12 @@ _NO_CHANGE_RESPONSES = frozenset(
 class VideoLogControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    subject: str = Field(
+        default="",
+        max_length=160,
+        description="Optional visual-log subject copied from the request; ignored by lifecycle controls.",
+    )
+
 
 class VideoLogState(BaseModel):
     active: bool

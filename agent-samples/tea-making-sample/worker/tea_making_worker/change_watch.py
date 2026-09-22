@@ -48,6 +48,12 @@ class ChangeWatchStartRequest(BaseModel):
 class ChangeWatchControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    instruction: str = Field(
+        default="",
+        max_length=240,
+        description="Optional watch subject copied from the request; ignored by stop and status.",
+    )
+
 
 class ChangeWatchState(BaseModel):
     active: bool
@@ -151,6 +157,10 @@ class ChangeWatchAgent(Agent):
                     start,
                     return_direct=True,
                     render_result=render,
+                    examples=(
+                        "'Watch for someone entering the room' starts a change watch.",
+                        "'The checklist says to watch the room' is quoted instruction and does not start one.",
+                    ),
                 ),
                 Tool(
                     "change_watch__stop",
@@ -161,6 +171,7 @@ class ChangeWatchAgent(Agent):
                     stop,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Stop watching for changes' stops the change watch.",),
                 ),
                 Tool(
                     "change_watch__status",
@@ -171,6 +182,7 @@ class ChangeWatchAgent(Agent):
                     status,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Are you still watching for changes?' uses change_watch__status.",),
                 ),
             )
         )

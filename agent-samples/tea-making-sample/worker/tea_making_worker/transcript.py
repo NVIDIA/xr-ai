@@ -38,6 +38,12 @@ from .events import (
 class TranscriptControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    subject: str = Field(
+        default="",
+        max_length=160,
+        description="Optional transcript subject copied from the request; ignored by lifecycle controls.",
+    )
+
 
 class TranscriptState(BaseModel):
     active: bool
@@ -119,6 +125,7 @@ class TranscriptAgent(Agent):
                     start,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Start recording this conversation' starts transcript recording.",),
                 ),
                 Tool(
                     "transcript__stop",
@@ -128,6 +135,7 @@ class TranscriptAgent(Agent):
                     stop,
                     return_direct=True,
                     render_result=render,
+                    examples=("'Stop recording the transcript' stops transcript recording.",),
                 ),
                 Tool(
                     "transcript__status",
@@ -138,6 +146,9 @@ class TranscriptAgent(Agent):
                     status,
                     return_direct=True,
                     render_result=render,
+                    examples=(
+                        "'Are you recording our conversation?' uses transcript__status.",
+                    ),
                 ),
             )
         )

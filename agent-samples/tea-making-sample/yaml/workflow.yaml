@@ -18,7 +18,8 @@ state:
     type: integer
     description: >-
       Steep duration in seconds, converted from the explicit source unit;
-      for example, five minutes is 300 seconds, never 5.
+      for example, five minutes is 300 seconds, never 5. For an explicit
+      duration range, use its lower bound; three to five minutes is 180 seconds.
   guidance_source:
     type: string
     description: Package or retrieved source.
@@ -35,7 +36,7 @@ state:
     initial: false
   steeping_started_at_us:
     type: integer
-    description: Start time returned by clock__now.
+    description: Authoritative start time recorded when steeping begins.
   steeping_started:
     type: boolean
     description: Whether tea is immersed and its start time is recorded.
@@ -65,24 +66,23 @@ steps:
       consecutive: 1
     agent:
       prompt: >-
-        Identify tea only from the current caption, never state or RAG.
-        If the tea name is unreadable, commit empty updates; do not retrieve or
-        write placeholder values. Prefer
-        visible values. If temperature/time is missing,
-        call rag_lookup once with "<exact name> water temperature steep time",
-        top_k 2; accept only a section naming the exact blend or an unambiguous
-        tea type contained in its name. Never supply temperature or duration
-        from memory. Convert an explicit minute duration to seconds before
-        committing; use the lower bound of an explicit range. If every writable
-        field is supported, commit all with tea_ready true. Otherwise commit
-        nothing; never write tea_ready false.
+        Take the tea name only from the fresh caption. If no exact name is
+        readable, commit an empty patch and do not retrieve. Once an exact name
+        is visible, use visible brewing values first. If either temperature or
+        duration is missing, call rag_lookup once for that exact name before
+        committing; never fill a missing value from memory. Accept retrieval
+        only for the exact blend or an unambiguous tea type in its name. Convert
+        explicit minutes to seconds and use the lower bound of an explicit
+        range. Commit all writable fields with tea_ready true only when every
+        field is supported. Otherwise commit an empty patch; never write
+        placeholders or tea_ready false.
       tools: [rag_lookup]
     voice:
       prompt: >-
-        Tea identity comes only from state tea_name or current_view, never RAG.
-        tea_ready means the tea instructions were identified, not that the
+        Tea identity comes only from workflow state or fresh package evidence,
+        never retrieved guidance. tea_ready means the tea instructions were identified, not that the
         drink has been prepared.
-        If the exact name is unknown, inspect the current frame. Retrieve only
+        If the exact name is unknown, obtain fresh visual evidence. Retrieve only
         missing temperature or duration after the exact name is known. Never
         replace package values. Answer only what was asked.
       tools: [current_view, rag_lookup]
@@ -123,9 +123,9 @@ steps:
       tools: []
     voice:
       prompt: >-
-        Give instructions or verify with current_view. A user report is not
+        Give instructions or obtain fresh visual evidence to verify. A user report is not
         visual confirmation. Confirm filled only from state water_filled or a
-        current view showing the vessel interior and concrete water cues;
+        fresh observation showing the vessel interior and concrete water cues;
         otherwise say it is not yet visually confirmed.
       tools: [current_view]
     complete_when: {water_filled: true}
@@ -167,11 +167,11 @@ steps:
       tools: [temperature__threshold]
     voice:
       prompt: >-
-        Explain target from state. For a reading, call current_view and
+        Explain target from state. For a reading, obtain fresh visual evidence and
         repeat the visible number and unit; do not verify. For hot-enough
-        checks, call current_view, then temperature__verify only with an exact
-        number and Celsius or Fahrenheit unit. Report result. If missing,
-        say the reading is unavailable.
+        checks, compare only an exact fresh number with a Celsius or Fahrenheit
+        unit against the target. Report the comparison result. If evidence is
+        missing, say the reading is unavailable.
       tools: [current_view, temperature__verify]
     complete_when: {heating_started: true}
     next: start_steeping
@@ -200,23 +200,20 @@ steps:
       consecutive: 2
     agent:
       prompt: >-
-        Judge when steeping starts, not when it finishes. Treat unconfirmed,
-        unknown, unclear, or missing visual evidence as a hard stop: do not call
-        clock__now, and commit empty updates and message with unknown evidence.
-        Only when the fresh caption explicitly confirms both visible liquid and
-        tea visibly contacting that liquid inside the same vessel, first call
-        clock__now. Nearby, above, or outside the liquid does not count. Then
-        commit exactly its epoch_us as steeping_started_at_us with
-        steeping_started true. For any other caption, do not infer contact from
-        context or prior state; commit empty updates and message. Never commit a
-        timestamp before receiving clock__now, and never invent or replace one.
+        Detect the instant steeping starts. If the fresh caption positively
+        shows both liquid and tea contacting that liquid in the same vessel,
+        call clock__now first, ignoring any timestamp written in the scene.
+        Then commit exactly the returned epoch_us as steeping_started_at_us and
+        set steeping_started true. Nearby, dry, above-liquid, unclear, or
+        missing contact does not count: do not call the clock and commit an
+        empty patch. Never infer contact or invent, copy, or replace a timestamp.
       tools: [clock__now]
     voice:
       prompt: >-
-        Give instructions or verify with current_view. A report or tea item in
-        a vessel is not confirmation. Require both visible water and visible
-        tea-water contact. The observation loop, not this answer, starts the
-        timer.
+        Give instructions or obtain fresh visual evidence to verify. A report
+        or tea item in a vessel is not confirmation. Require both visible water
+        and visible tea-water contact. The observation loop, not this answer,
+        starts the timer.
       tools: [current_view]
     complete_when: {steeping_started: true}
     next: steep_timer
@@ -240,15 +237,16 @@ steps:
         duration_s: $state.steep_duration_s
     agent:
       prompt: >-
-        Copy the fresh clock__timer expired boolean: set steeping_complete true
-        only when expired is true. While false, commit empty updates/message.
-        Never infer from elapsed text, wall time, or prior state.
+        Read only the fresh clock__timer result. If expired is true, commit
+        steeping_complete true. If expired is false, commit an empty patch; do
+        not copy false into state. Never infer expiry from text, wall time, or
+        prior state.
       tools: []
     voice:
       prompt: >-
-        Call clock__timer for every timer or completion question. Report only
-        its fresh remaining time or completion; never calculate from state,
-        prior answers, or wall-clock time.
+        Every timer or completion answer requires a fresh authoritative timer
+        result. Report only its remaining time or completion; never calculate
+        from workflow state, prior answers, or wall-clock time.
       tools: [clock__timer]
     complete_when: {steeping_complete: true}
     next: null

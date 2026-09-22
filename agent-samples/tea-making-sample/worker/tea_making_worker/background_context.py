@@ -66,7 +66,9 @@ class BackgroundContextAgent(Agent):
                     "application_context__query",
                     (
                         "Read recent facts produced by active background applications. "
-                        "Use only when those facts help answer the current request."
+                        "Use for the user's request about recorded observations, events, changes, "
+                        "or history. Do not use for the live scene or to start, stop, or inspect "
+                        "the running state of an application."
                     ),
                     BackgroundContextRequest,
                     BackgroundContextResult,

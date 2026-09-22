@@ -72,6 +72,7 @@ _PROMPTS = Path(__file__).resolve().parent / "prompts"
 _OBSERVATION_PROMPT = _PROMPTS / "guidance_observation.txt"
 _VOICE_PROMPT = _PROMPTS / "guidance_voice.txt"
 _POLL_INTERVAL_S = 0.25
+_OBSERVATION_THINKING_BUDGET = 256
 _DURATION_RANGE = re.compile(
     r"(?<![\w.])(\d+(?:\.\d+)?)\s*[-\u2013\u2014]\s*"
     r"(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?)(?!\w)",
@@ -483,8 +484,8 @@ class GuidanceAgent(Agent):
         )
         tools = ToolSet(
             {
-                commit.name: commit,
                 **dict(quick.items()),
+                commit.name: commit,
             }
         )
         request = json.dumps(
@@ -511,9 +512,10 @@ class GuidanceAgent(Agent):
             response = await self._llm.chat(
                 messages,
                 tools=definitions,
-                max_tokens=512,
+                max_tokens=768,
                 temperature=0.0,
-                enable_thinking=False,
+                enable_thinking=True,
+                thinking_budget=_OBSERVATION_THINKING_BUDGET,
             )
             async with session.lock:
                 if not self._current(session, step, revision):
