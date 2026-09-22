@@ -104,8 +104,13 @@ class FileSessionOrderer:
                 or message.participant_session_id == participant_session_id
             ):
                 ready.append(message)
-            else:
+            elif (
+                participant_id,
+                message.participant_session_id,
+            ) in self._departed:
                 inactive.append(message)
+            else:
+                retained.append(pending)
         self._pending = retained
         return ready, inactive
 

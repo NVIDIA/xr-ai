@@ -1088,7 +1088,7 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
         assert slow._file_sub is not None
 
         for index in range(3):
-            assert await connector.push_file(FileMessage(
+            message = FileMessage(
                 participant_id="alice",
                 topic="image.response",
                 pts_us=index,
@@ -1098,7 +1098,10 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
                 attributes={},
                 data=b"png",
                 participant_session_id="session-1",
-            ))
+            )
+            async with asyncio.timeout(1):
+                while not await connector.push_file(message):
+                    await asyncio.sleep(0.001)
             if index == 0:
                 assert await slow._file_sub.poll(timeout=1000) & zmq.POLLIN
             async with asyncio.timeout(1):
@@ -1150,6 +1153,9 @@ async def test_hub_buffers_file_that_arrives_before_participant_join(
 
     monkeypatch.setattr(hub, "_publish_file", record_file)
     try:
+        await hub._route_file(message)
+        assert published == []
+
         if prior_session is not None:
             prior_join = ParticipantEvent(
                 participant_id="alice",
@@ -1160,8 +1166,7 @@ async def test_hub_buffers_file_that_arrives_before_participant_join(
             )
             await hub._dispatch(MsgType.PARTICIPANT_EVENT, prior_join)
             await hub._apply_file_session_event(prior_join)
-        await hub._route_file(message)
-        assert published == []
+            assert published == []
 
         if prior_session is not None:
             prior_leave = ParticipantEvent(
@@ -1213,6 +1218,9 @@ async def test_processor_buffers_file_that_arrives_before_participant_join(
         participant_session_id="session-1",
     )
     try:
+        processor._route_file(message)
+        assert processor._file_queue.empty()
+
         if prior_session is not None:
             prior_join = ParticipantEvent(
                 participant_id="alice",
@@ -1223,8 +1231,7 @@ async def test_processor_buffers_file_that_arrives_before_participant_join(
             )
             await processor._dispatch(MsgType.PARTICIPANT_EVENT, prior_join)
             processor._apply_file_session_event(prior_join)
-        processor._route_file(message)
-        assert processor._file_queue.empty()
+            assert processor._file_queue.empty()
 
         if prior_session is not None:
             prior_leave = ParticipantEvent(
