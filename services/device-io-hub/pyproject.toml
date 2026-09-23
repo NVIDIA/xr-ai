@@ -14,6 +14,8 @@ dependencies = [
     "xr-ai-hub-client",
     # Shared loguru setup (setup_logging + stdlib InterceptHandler)
     "xr-ai-logging",
+    # Shared stdlib artifact lifecycle helpers
+    "xr-ai-launcher",
     # IPC layer — server side uses ZMQ directly (connector + hub)
     "pyzmq>=27.0",
     # LiveKit transport
@@ -42,6 +44,7 @@ device_io_capture_render = "device_io_hub.capture._render_cli:run"
 [tool.uv.sources]
 xr-ai-hub-client = { path = "../../agent-sdk/xr-ai-hub", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["device_io_hub"]

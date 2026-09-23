@@ -359,10 +359,7 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-On first run the orchestrator automatically downloads the pinned LOVR version to
-`deps/lovr/` inside the repository. For WebRTC profiles it also builds the web
-vendor bundle, which requires npm and network access. Existing artifacts are
-reused on subsequent runs.
+Before first launch, the orchestrator invokes the scene and hub preparation commands. The scene verifies and caches the pinned LOVR version under `$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/` (default `~/.cache/xr-ai/lovr/0.18.0/`). For WebRTC profiles, DeviceIOHub also builds the WebXR vendor bundle, which requires npm and network access. Valid cached artifacts are reused on subsequent runs.
 
 ```{note}
 On **DGX Spark** (aarch64), LOVR does not publish a prebuilt aarch64 Linux

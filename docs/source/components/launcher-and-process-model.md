@@ -43,6 +43,17 @@ explicit reused and external deployment entries remain accepted. Refer to
 {ref}`model profile formats <deployment-profiles>` for the worker and launcher
 requirements.
 
+## Service artifact preparation
+
+Download-capable service entry points accept `--prepare` with their normal `--config <path>` argument. This mode resolves or downloads the service's artifacts and exits without starting its server, opening listeners, or reporting ready. Run it through the service project so preparation uses the same dependency environment as a normal start:
+
+```bash
+uv run --project services/vlm-server vlm_server \
+  --config services/vlm-server/vlm_server.yaml --prepare
+```
+
+The supported services prepare container images, Hugging Face snapshots, NIM profiles, speech assets, DeviceIOHub browser artifacts, or the pinned LOVR executable as applicable. Warm preparation checks recorded files, selected versions, or the pinned LOVR checksum. Invalid Hugging Face manifests trigger fresh downloads; other artifacts follow their service-specific cache checks. Preparation failures include the service name. The `[prepare]` status lines are human-readable progress output.
+
 The orchestrator declares the process sequence in code:
 
 ```python
@@ -192,11 +203,7 @@ sub-project without dragging in a heavy dependency chain. Their public names,
 signatures, types, defaults, fields, and method behavior are generated in the
 {doc}`Python API reference </reference/python/index>`.
 
-**`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
-`Parallel`, and `run_stack` API described above, plus helpers for CloudXR
-environment setup, credential loading, and GPU detection. Intentionally
-stdlib-only so it can be added to any sample without pulling in the dependency
-chain of the processes it manages.
+**`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`, `Parallel`, and `run_stack` API described above, plus helpers for CloudXR environment setup, credential loading, GPU detection, artifact manifests, preparation status, and preparation error handling. Intentionally stdlib-only so it can be added to any sample without pulling in the dependency chain of the processes it manages.
 
 **`xr-ai-logging`** — shared loguru setup for the monorepo. Every process calls
 `setup_logging()` once at startup to get a unified logging stack: a stderr sink
@@ -218,10 +225,4 @@ and the participant-joined greeting hook. Workers feed STT transcripts via
 `feed` and register handlers for the events it emits (query, stop, phrase-only,
 drop, participant-joined).
 
-**`xr-ai-vllm`** — pluggable vLLM backend for inference services. Each
-vLLM-backed service can host vllm via `pip` (the pip-installed `vllm` CLI in
-the wrapper's venv, the default) or `docker` (the image selected by
-`vllm_image`), chosen per-server via `vllm_backend: pip|docker` in the service
-YAML. Both paths honor identical configuration keys; only the runtime hosting
-vllm differs. Stdlib-only by contract, so the docker path stays light even when
-pip vllm is not installed.
+**`xr-ai-vllm`** — pluggable vLLM backend for inference services. Each vLLM-backed service can host vllm via `pip` (the pip-installed `vllm` CLI in the wrapper's venv, the default) or `docker` (the image selected by `vllm_image`), chosen per-server via `vllm_backend: pip|docker` in the service YAML. Both paths honor identical configuration keys; only the runtime hosting vllm differs. Services can also use the package to prepare vLLM or NIM images and model artifacts without starting a server. Its only runtime dependency is the stdlib-only `xr-ai-launcher` package, so the docker path stays light even when pip vllm is not installed.

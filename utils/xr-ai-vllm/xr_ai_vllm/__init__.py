@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr-ai-vllm — pluggable vLLM backend for xr-ai inference services.
+xr-ai-vllm provides model hosting and preparation helpers.
 
-Lets each vLLM-backed service host vllm via either:
+It hosts NIM services and lets each vLLM-backed service host vllm via either:
 
 * `pip`    — pip-installed `vllm` CLI in the wrapper's venv (default; today's behavior).
 * `docker` — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` (NGC container).
@@ -13,8 +13,9 @@ The choice is per-server, set via `vllm_backend: pip|docker` in the service's
 YAML. Both paths honor identical config keys (model, ports, vllm flags); only
 the runtime hosting vllm differs.
 
-Stdlib-only by contract — no vllm or other heavy deps imported here, so the
-docker path stays light even when pip vllm is not installed.
+This package and its xr-ai-launcher dependency are stdlib-only. No vllm or
+other serving framework is imported here, so the docker path stays light even
+when pip vllm is not installed.
 
 Typical usage from a service wrapper::
 
@@ -43,16 +44,22 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
+
+from xr_ai_launcher import prepare_or_exit as _prepare_or_exit
+from xr_ai_launcher import report_prepare_status as _report_prepare_status
 
 from . import _docker, _pip
 from ._config import (
     gpu_compute_major,
     load_config,
+    prepare_requested,
     resolve_model_cache,
     setup_hf_env,
 )
 from ._nim import serve_nim
+from ._prepare import prepare_nim, prepare_vllm
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +68,16 @@ DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.08-py3"
 
 Individual services may pin a newer image when required by their model.
 """
+
+
+def prepare_or_exit(service: str, action: Callable[[], None]) -> None:
+    """Run a preparation action with prefixed errors and shell signal exits."""
+    _prepare_or_exit(service, action)
+
+
+def report_prepare_status(name: str, state: str, size: int | None) -> None:
+    """Print one artifact preparation status line."""
+    _report_prepare_status(name, state, size)
 
 
 def serve(
@@ -298,12 +315,17 @@ def stop_persistent_servers(
 
 
 __all__ = [
+    "DEFAULT_IMAGE",
+    "gpu_compute_major",
+    "load_config",
+    "prepare_nim",
+    "prepare_or_exit",
+    "prepare_requested",
+    "prepare_vllm",
+    "report_prepare_status",
+    "resolve_model_cache",
     "serve",
     "serve_nim",
-    "stop_persistent_servers",
-    "DEFAULT_IMAGE",
-    "resolve_model_cache",
-    "load_config",
     "setup_hf_env",
-    "gpu_compute_major",
+    "stop_persistent_servers",
 ]

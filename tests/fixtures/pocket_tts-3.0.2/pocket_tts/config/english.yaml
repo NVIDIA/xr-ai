@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Fields used by xr-ai, copied from pocket-tts==3.0.2:
+# pocket_tts/config/english.yaml (sig: a0ac5076.yaml)
+# Wheel RECORD: sha256=RjYFsVhA0cYmZtFmmw_HBJXEXvTo_I69pCL34PvA9UY, 1501 bytes
+weights_path: hf://kyutai/pocket-tts/languages/english/model.safetensors@39592ff23c9ef80098bb74895d104c26275fe2c9
+weights_path_without_voice_cloning: hf://kyutai/pocket-tts-without-voice-cloning/languages/english/model.safetensors@d29db7978e464fb90cb3359ee0c69a273b9142cc
+flow_lm:
+  lookup_table:
+    tokenizer_path: hf://kyutai/pocket-tts-without-voice-cloning/languages/english/tokenizer.model@d29db7978e464fb90cb3359ee0c69a273b9142cc

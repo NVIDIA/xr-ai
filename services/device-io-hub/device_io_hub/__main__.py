@@ -19,10 +19,12 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 
 from loguru import logger
+from xr_ai_launcher import prepare_or_exit
 from xr_ai_logging import setup_logging
 
-from device_io_hub._config_loader import load_config
+from device_io_hub._config_loader import load_artifact_config, load_config
 from device_io_hub._errors import StartupError
+from device_io_hub._prepare import prepare_artifacts
 from device_io_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from device_io_hub.transport.livekit import LiveKitConnector, make_client_token
 
@@ -87,8 +89,10 @@ async def main(ready_file: Path | None = None) -> None:
     global _recorder
 
     setup_logging("hub")
-
-    cfg = load_config()
+    try:
+        cfg = load_config()
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"[device_io_hub] {exc}") from None
 
     hub = HubEndpoint(
         pull_addr=cfg.hub_push_addr,
@@ -183,7 +187,15 @@ async def main(ready_file: Path | None = None) -> None:
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     ns, _ = p.parse_known_args()
+    if ns.prepare:
+        setup_logging("hub")
+        prepare_or_exit(
+            "device_io_hub",
+            lambda: prepare_artifacts(load_artifact_config()),
+        )
+        return
     try:
         asyncio.run(main(ready_file=ns.ready_file))
     except StartupError as e:

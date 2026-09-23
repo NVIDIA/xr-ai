@@ -33,6 +33,7 @@ Config keys
                                     (docker backend only; default: auto-detect).
 """
 import os
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -42,6 +43,10 @@ from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
+    prepare_or_exit,
+    prepare_requested,
+    prepare_vllm,
+    report_prepare_status,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -70,10 +75,35 @@ _CONTAINER_NAME = "xr-ai-vllm-nemotron3-nano-llm-server"
 
 def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
     path = model_cache / _PARSER_FILENAME
-    if not path.exists():
-        logger.info("Downloading {}…", _PARSER_FILENAME)
-        with urllib.request.urlopen(url) as resp:
-            path.write_bytes(resp.read())
+    if path.is_file() and path.stat().st_size > 0:
+        mode = path.stat().st_mode
+        if not mode & 0o004:
+            path.chmod(mode | 0o044)
+        return path
+
+    logger.info("Downloading {}…", _PARSER_FILENAME)
+    with urllib.request.urlopen(url) as resp:
+        content = resp.read()
+    if not content:
+        raise RuntimeError(f"downloaded {_PARSER_FILENAME} is empty")
+
+    model_cache.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=model_cache,
+            prefix=f".{_PARSER_FILENAME}.",
+            delete=False,
+        ) as output:
+            temporary = Path(output.name)
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.chmod(0o644)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return path
 
 
@@ -123,6 +153,31 @@ def run() -> None:
         if _cuda_bin.exists():
             os.environ["PATH"] = str(_cuda_bin) + ":" + os.environ.get("PATH", "")
         os.environ.setdefault("MAX_JOBS", "4")
+
+    if prepare_requested():
+        def prepare() -> None:
+            prepare_vllm(
+                backend=backend,
+                image=image,
+                model=model,
+                model_cache=model_cache,
+                hf_token=os.environ.get("HF_TOKEN") or None,
+            )
+            parser_path = model_cache / _PARSER_FILENAME
+            if parser_path.is_file() and parser_path.stat().st_size > 0:
+                report_prepare_status(
+                    f"reasoning parser {_PARSER_FILENAME}",
+                    "cached",
+                    parser_path.stat().st_size,
+                )
+            else:
+                report_prepare_status(
+                    f"reasoning parser {_PARSER_FILENAME}", "downloading", None
+                )
+            _ensure_reasoning_parser(model_cache, parser_url)
+
+        prepare_or_exit("nemotron3_nano_llm_server", prepare)
+        return
 
     parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 

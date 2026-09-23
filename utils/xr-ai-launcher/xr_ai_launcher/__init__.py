@@ -26,6 +26,17 @@ Typical usage::
         run_stack(PROCESSES, _BASE)
 """
 
+from ._artifacts import (
+    ArtifactManifest,
+    docker_image_size,
+    format_size,
+    path_size,
+    prepare_or_exit,
+    read_artifact_manifest,
+    repair_hf_snapshot,
+    report_prepare_status,
+    write_artifact_manifest,
+)
 from ._cloudxr_env import (
     NATIVE_DEVICE_PROFILES,
     XR_RUNTIME_VAR,
@@ -46,6 +57,8 @@ from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
 __all__ = [
+    "ArtifactManifest", "docker_image_size", "format_size", "path_size", "prepare_or_exit",
+    "read_artifact_manifest", "repair_hf_snapshot", "report_prepare_status", "write_artifact_manifest",
     "XR_RUNTIME_VAR", "load_cloudxr_env",
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",

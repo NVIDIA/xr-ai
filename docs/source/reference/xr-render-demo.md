@@ -33,15 +33,10 @@ shared model services.
 | openxr-service | sample | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
 | worker | sample | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
 
-Before starting the stack, the orchestrator runs two setup steps:
+Before starting the stack, the orchestrator invokes preparation in the hub and scene service environments:
 
-- **Web vendor bundle** — builds the CloudXR and LiveKit ESM bundle via
-  `client-samples/web-xr-build/build.sh` (skipped if already present;
-  requires `npm`). Built only for WebRTC device profiles; native profiles
-  never serve the web page, so the build (and its npm dependency) is skipped.
-- **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
-  not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
-  `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
+- **Web vendor bundle:** DeviceIOHub runs the executable selected by `web_xr_vendor_build_script`. The repository builder produces the CloudXR and LiveKit ESM modules and records both selected versions. It requires `npm`. Native profiles clear the browser paths and skip this artifact.
+- **LOVR binary:** the scene service verifies and caches the LOVR v0.18.0 AppImage under `$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/` (default `~/.cache/xr-ai/lovr/0.18.0/`). Resolution order is `$LOVR_BIN`, `lovr_bin` in `scene/scene_service.yaml`, then the verified cache. `lovr_cache_dir` selects an exact replacement cache directory. Normal scene startup never downloads LOVR; it reports the `--prepare` command when no valid executable is available.
 
 ## Source map and extension points
 
@@ -119,7 +114,7 @@ restart `xr_render_demo` to apply a change.
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
-| `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
+| `scene/scene_service.yaml` | LOVR binary, optional download cache, app, scene endpoint, and CloudXR environment |
 
 `NV_DEVICE_PROFILE` in the environment overrides
 `cloudxr_env.NV_DEVICE_PROFILE` in `cloudxr_runtime.yaml`. `LOVR_BIN` similarly
