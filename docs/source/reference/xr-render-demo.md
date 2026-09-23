@@ -221,6 +221,22 @@ grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute `start_us`.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
+(xr-render-recording-prerequisites)=
+
+### Recorded-video prerequisites
+
+Recorded selection requires all of the following settings:
+
+- Enable `video_recording.enabled` in `yaml/device_io_hub.yaml`.
+- Set `recordings_dir` in `yaml/video_memory_service.yaml` to the hub's
+  effective `video_recording.out_dir`. When `out_dir` is omitted, the hub uses
+  `/dev/shm/xr-ai/recordings`.
+- Enable `video_history_enabled` in `yaml/xr_render_demo_worker.yaml`.
+
+Omitting `video_history_enabled` enables history. The checked-in worker YAML
+sets it to `false` because the sample hub disables recording. With history
+disabled, perception uses current frames only.
+
 Start the shared model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
 The worker does not poll model health endpoints. It retains a tool-shaped LLM
@@ -323,7 +339,8 @@ scene diff decides whether the verification pass runs.
 
 At worker startup, `app.py` composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
-instances provided by `xr_ai_tools`. Lifecycle tools (`start_xr`,
+instances provided by `xr_ai_tools`. Video-memory tools are wired only when
+worker `video_history_enabled` is enabled. Lifecycle tools (`start_xr`,
 `get_health`) remain worker-managed and are not exposed to the supervisor.
 
 Final messages are also persisted through native
