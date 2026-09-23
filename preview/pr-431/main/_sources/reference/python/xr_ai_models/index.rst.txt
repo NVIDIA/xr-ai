@@ -923,6 +923,11 @@ Package Contents
 
    Process ownership for the endpoint that serves a model role.
 
+   Client profiles can omit ``deployment``: the default ``external`` ownership
+   leaves the endpoint's process lifecycle to its operator. Shared model-server
+   profiles use ``managed`` to select processes to launch. Explicit ``reused``
+   metadata remains supported for older profiles.
+
    ``credentials`` names keys the launched service itself needs (e.g.
    NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
    even when the endpoint takes no API key.
@@ -1020,7 +1025,7 @@ Package Contents
       :value: 'health'
 
 
-      How the client determines whether the endpoint is ready.
+      Policy for explicit ``health()`` calls; does not schedule startup probes.
 
 
 
@@ -1029,7 +1034,7 @@ Package Contents
       :value: '/health'
 
 
-      Endpoint path probed for readiness (NIM containers use /v1/health/ready).
+      Path used by explicit HTTP ``health()`` calls (NIM: /v1/health/ready).
 
 
 
@@ -1037,7 +1042,7 @@ Package Contents
       :type: bool
 
 
-      Whether readiness requires a successful endpoint health check.
+      Whether an explicit ``health()`` call probes the endpoint.
 
 
 
@@ -1314,8 +1319,7 @@ Package Contents
 
 .. py:class:: RivaTTS(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, voice: str = '', language: str = 'en-US', sample_rate: int = 44100, timeout: float = 30.0, health_check: bool = True)
 
-   Riva TTS client: streaming synthesis over gRPC, concatenated to one
-   WAV (or raw PCM) result.
+   Riva TTS client with buffered WAV or PCM synthesis.
 
 
    .. py:method:: synthesize(text: str, *, response_format: str = 'wav', timeout: float | None = None) -> bytes

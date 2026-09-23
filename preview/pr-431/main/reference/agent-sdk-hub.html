@@ -329,6 +329,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -347,7 +348,9 @@
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -359,6 +362,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -477,7 +481,36 @@ ordinary joined events for participants already present. Join callbacks must
 therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for <code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions()</span></code> before announcing
 availability.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code> combines data, audio, and video. <code class="docutils literal notranslate"><span class="pre">Subscribe.DEFAULT</span></code> is
+the same real-time-only filter. <code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> remains an equivalent but
+deprecated compatibility alias; completed files stay explicitly opt-in.</p>
+<section id="completed-files">
+<h3>Completed files<a class="headerlink" href="#completed-files" title="Link to this heading">#</a></h3>
+<p>File transfer is opt-in and uses a bounded IPC lane separate from real-time
+messages. Pass the file publisher address and include <code class="docutils literal notranslate"><span class="pre">Subscribe.FILE</span></code>, then
+register an async callback:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span><span class="p">,</span> <span class="n">Subscribe</span>
+
+<span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
+    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_pub"</span><span class="p">,</span>
+    <span class="n">push_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_in"</span><span class="p">,</span>
+    <span class="n">file_sub_addr</span><span class="o">=</span><span class="s2">"ipc:///tmp/xr_hub_file_pub"</span><span class="p">,</span>
+    <span class="nb">filter</span><span class="o">=</span><span class="n">Subscribe</span><span class="o">.</span><span class="n">REALTIME</span> <span class="o">|</span> <span class="n">Subscribe</span><span class="o">.</span><span class="n">FILE</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_file</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="n">FileMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">participant_id</span><span class="p">,</span> <span class="n">message</span><span class="o">.</span><span class="n">topic</span><span class="p">,</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
+
+<span class="n">unsubscribe</span> <span class="o">=</span> <span class="n">endpoint</span><span class="o">.</span><span class="n">on_file</span><span class="p">(</span><span class="n">on_file</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The callback runs only after DeviceIOHub has received and validated the complete
+LiveKit byte stream. File callbacks are awaited serially on their own receive
+loop. Audio, lifecycle, and packet-data traffic continue on the real-time loop.
+<code class="docutils literal notranslate"><span class="pre">attributes</span></code> contains only application metadata; StreamKit’s reserved routing
+attributes are removed.</p>
 <p><a id="frames"></a></p>
+</section>
 </section>
 <section id="frames-and-return-routing">
 <span id="agent-sdk-hub-frames"></span><h2>Frames and return routing<a class="headerlink" href="#frames-and-return-routing" title="Link to this heading">#</a></h2>
@@ -557,7 +590,10 @@ new types use new wire identifiers rather than changing existing tags.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#processor-endpoints">Processor endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#processor-endpoints">Processor endpoints</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#completed-files">Completed files</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frames-and-return-routing">Frames and return routing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-memory-and-codec-extensions">Shared memory and codec extensions</a></li>
 </ul>

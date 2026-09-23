@@ -329,6 +329,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
@@ -347,7 +348,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -359,6 +362,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -600,7 +604,7 @@ mounted <em>nim_cache</em> makes subsequent starts fast.</p>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="xr_ai_vllm.DEFAULT_IMAGE">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_IMAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nvcr.io/nvidia/vllm:26.04-py3'</span></em><a class="headerlink" href="#xr_ai_vllm.DEFAULT_IMAGE" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_IMAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nvcr.io/nvidia/vllm:26.08-py3'</span></em><a class="headerlink" href="#xr_ai_vllm.DEFAULT_IMAGE" title="Link to this definition">#</a></dt>
 <dd><p>Default NGC vLLM image used when a service does not override <code class="docutils literal notranslate"><span class="pre">vllm_image</span></code>.</p>
 <p>Individual services may pin a newer image when required by their model.</p>
 </dd></dl>
@@ -653,10 +657,8 @@ helper can find it.</p>
 <p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
 missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
 docker-only list of pip-installable package specs for model architectures
-whose wheels the image doesn’t bundle — e.g.
-<code class="docutils literal notranslate"><span class="pre">[&quot;mamba-ssm&quot;,</span> <span class="pre">&quot;causal-conv1d&quot;]</span></code> for Nemotron-Omni’s hybrid SSM
-backbone. Silently ignored in pip mode (deps belong in the wrapper’s
-pyproject.toml there).</p>
+whose wheels the image doesn’t bundle. Silently ignored in pip mode (deps
+belong in the wrapper’s pyproject.toml there).</p>
 <p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
 prefetching and syncing the Hugging Face snapshot before CUDA starts, and
 one bounded restart of a container attempt launched by this wrapper after
