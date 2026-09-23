@@ -98,6 +98,35 @@ def launch_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:20]
 
 
+def _hf_download_env(model_cache: Path) -> dict[str, str]:
+    env_vars = {
+        "HF_HOME": str(model_cache),
+        "HF_HUB_CACHE": str(model_cache / "hub"),
+        "HF_XET_HIGH_PERFORMANCE": os.environ.get(
+            "HF_XET_HIGH_PERFORMANCE", "1"
+        ),
+    }
+    for key in _HF_DOWNLOAD_ENV_KEYS[1:]:
+        if key in os.environ:
+            env_vars[key] = os.environ[key]
+    return env_vars
+
+
+def _hf_xet_setup_commands(env_vars: dict[str, str]) -> list[str]:
+    if env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
+        "1",
+        "ON",
+        "YES",
+        "TRUE",
+    }:
+        return []
+    xet_check = shlex.join(["python3", "-c", _HF_XET_IMPORT_CHECK])
+    xet_install = shlex.join(
+        ["python3", "-m", "pip", "install", "-q", _HF_XET_REQUIREMENT]
+    )
+    return [f"( {xet_check} || {xet_install} )", xet_check]
+
+
 def build_run_argv(
     *,
     image: str,
@@ -119,15 +148,7 @@ def build_run_argv(
     as pip-mode vLLM.  With --network host the vLLM process is visible to
     ss(8) on the host, so no docker-specific stop logic is needed.
     """
-    env_vars: dict[str, str] = {
-        "HF_HOME": str(model_cache),
-        "HF_XET_HIGH_PERFORMANCE": os.environ.get(
-            "HF_XET_HIGH_PERFORMANCE", "1"
-        ),
-    }
-    for key in _HF_DOWNLOAD_ENV_KEYS[1:]:
-        if key in os.environ:
-            env_vars[key] = os.environ[key]
+    env_vars = _hf_download_env(model_cache)
     if extra_env:
         env_vars.update(extra_env)
 
@@ -188,23 +209,10 @@ def build_run_argv(
     # Some vLLM images default to `vllm serve`; override the entrypoint so
     # dependency checks and optional setup installs run before the server.
     argv += ["--entrypoint", "/bin/bash", image]
-    xet_check = shlex.join(["python3", "-c", _HF_XET_IMPORT_CHECK])
-    xet_install = shlex.join(
-        ["python3", "-m", "pip", "install", "-q", _HF_XET_REQUIREMENT]
-    )
-    commands: list[str] = []
-    xet_disabled = env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
-        "1",
-        "ON",
-        "YES",
-        "TRUE",
-    }
-    if not xet_disabled:
-        # Images vary in their Hub/Xet stack. Repair a missing or incompatible
-        # hf-xet wheel, then re-check the complete Hub integration so an
-        # incapable Hub or install failure stops startup instead of falling
-        # back to HTTPS.
-        commands.extend([f"( {xet_check} || {xet_install} )", xet_check])
+    # Images vary in their Hub/Xet stack. Repair a missing or incompatible
+    # hf-xet wheel, then re-check the complete Hub integration so an incapable
+    # Hub or install failure stops startup instead of falling back to HTTPS.
+    commands = _hf_xet_setup_commands(env_vars)
     if prefetch_model:
         # Spark's CPU and GPU share one memory pool. Finish network transfer,
         # snapshot reconstruction, and writeback before vLLM initializes CUDA

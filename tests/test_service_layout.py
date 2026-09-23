@@ -193,115 +193,40 @@ def test_reusable_services_are_direct_children() -> None:
     assert _LEGACY_ROOTS.isdisjoint(tracked_roots)
 
 
-def test_xr_render_checks_the_web_xr_vendor_bundle() -> None:
-    source = (_ROOT / "agent-samples/xr-render-demo/main.py").read_text()
-
-    assert "client-samples/web-xr/vendor" in source
-    assert "client-samples/web/vendor" not in source
-    assert 'vendor_dir / "cloudxr-sdk.esm.mjs"' in source
-    assert 'vendor_dir / "livekit-client.esm.mjs"' in source
-
-
-def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
-    tmp_path: Path,
+def test_xr_render_delegates_artifact_preparation_to_its_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sample = _load_module(
-        "service_layout_render_vendor_bundle",
+        "service_layout_render_prepare",
         "agent-samples/xr-render-demo/main.py",
     )
-    sample_root = tmp_path / "agent-samples" / "xr-render-demo"
-    sample_root.mkdir(parents=True)
-    vendor_dir = (sample_root / "../../client-samples/web-xr/vendor").resolve()
-    vendor_dir.mkdir(parents=True)
-    (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr")
-    build_script = (
-        sample_root / "../../client-samples/web-xr-build/build.sh"
-    ).resolve()
-    build_script.parent.mkdir(parents=True)
-    build_script.write_text("#!/bin/sh\n")
-    (build_script.parent / ".sdk-version").write_text("6.2.0\n")
-    (build_script.parent / "package.json").write_text(
-        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
+    prepared: list[str] = []
+    launched: list[str] = []
+    monkeypatch.setattr(sample, "setup_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(sample, "read_device_profile", lambda _path: "auto-webrtc")
+    monkeypatch.setattr(sample, "is_native_profile", lambda _profile: False)
+    monkeypatch.setattr(
+        sample,
+        "_prepare_process",
+        lambda process: prepared.append(process.name),
     )
-    version_marker = vendor_dir / ".cloudxr-sdk-version"
-    livekit_version_marker = vendor_dir / ".livekit-client-version"
-    calls: list[list[str]] = []
-    produce_livekit = True
-
-    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
-        calls.append(command)
-        if produce_livekit:
-            (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
-            version_marker.write_text("6.2.0\n")
-            livekit_version_marker.write_text("^2.21.0\n")
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(sample, "_BASE", sample_root)
-    monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
-    monkeypatch.setattr(sample.subprocess, "run", fake_run)
-
-    sample._ensure_web_vendor()
-    assert calls == [[str(build_script)]]
-
-    calls.clear()
-    sample._ensure_web_vendor()
-    assert calls == []
-
-    (vendor_dir / "livekit-client.esm.mjs").unlink()
-    produce_livekit = False
-    with pytest.raises(SystemExit, match="completed without producing"):
-        sample._ensure_web_vendor()
-    assert calls == [[str(build_script)]]
-
-
-def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sample = _load_module(
-        "service_layout_render_stale_vendor_bundle",
-        "agent-samples/xr-render-demo/main.py",
+    monkeypatch.setattr(
+        sample,
+        "run_stack",
+        lambda processes, _base: launched.extend(process.name for process in processes),
     )
-    sample_root = tmp_path / "agent-samples" / "xr-render-demo"
-    sample_root.mkdir(parents=True)
-    vendor_dir = (sample_root / "../../client-samples/web-xr/vendor").resolve()
-    vendor_dir.mkdir(parents=True)
-    (vendor_dir / "cloudxr-sdk.esm.mjs").write_text("cloudxr-6.1")
-    (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
-    version_marker = vendor_dir / ".cloudxr-sdk-version"
-    version_marker.write_text("6.1.0\n")
-    build_script = (
-        sample_root / "../../client-samples/web-xr-build/build.sh"
-    ).resolve()
-    build_script.parent.mkdir(parents=True)
-    build_script.write_text("#!/bin/sh\n")
-    (build_script.parent / ".sdk-version").write_text("6.2.0\n")
-    (build_script.parent / "package.json").write_text(
-        '{"dependencies":{"livekit-client":"^2.21.0"}}\n'
-    )
-    livekit_version_marker = vendor_dir / ".livekit-client-version"
-    livekit_version_marker.write_text("^2.20.0\n")
-    calls: list[list[str]] = []
 
-    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
-        calls.append(command)
-        version_marker.write_text("6.2.0\n")
-        livekit_version_marker.write_text("^2.21.0\n")
-        return subprocess.CompletedProcess(command, 0)
+    sample.run([])
 
-    monkeypatch.setattr(sample, "_BASE", sample_root)
-    monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
-    monkeypatch.setattr(sample.subprocess, "run", fake_run)
-
-    sample._ensure_web_vendor()
-
-    assert calls == [[str(build_script)]]
-    assert version_marker.read_text().strip() == "6.2.0"
-
-    calls.clear()
-    sample._ensure_web_vendor()
-    assert calls == []
+    assert prepared == ["hub", "scene"]
+    assert launched == [
+        "hub",
+        "cloudxr",
+        "video-memory",
+        "scene",
+        "openxr-service",
+        "worker",
+    ]
 
 
 def test_web_xr_build_replaces_stale_sdk_tarball(tmp_path: Path) -> None:
@@ -531,6 +456,8 @@ def test_hub_configuration_web_client_paths_resolve(monkeypatch) -> None:
         assert (config_path.parent / config["web_client_dir"]).resolve() == (
             _SAMPLE_WEB_CLIENTS[sample]
         )
+        if script := config.get("web_xr_vendor_build_script"):
+            assert (config_path.parent / script).resolve().is_file()
 
 
 def test_tracked_text_has_no_retired_service_paths() -> None:

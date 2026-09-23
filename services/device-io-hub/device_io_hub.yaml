@@ -54,6 +54,9 @@ web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
 web_client_dir:    ../../client-samples/web
+# Optional WebXR vendor builder, resolved relative to this file. The script
+# must use the repository web-xr-build output and version-marker contract.
+# web_xr_vendor_build_script: ../../client-samples/web-xr-build/build.sh
 # HTTPS is on by default. A stable development root CA and a signed server
 # leaf are auto-generated on first run under ~/.local/share/xr-ai/. Browsers
 # reach LiveKit via the same-origin wss://<host>:web_server_port/rtc proxy.

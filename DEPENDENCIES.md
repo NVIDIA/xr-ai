@@ -245,7 +245,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Python: `>=3.11,<3.13`
 - Build dependencies:
   - `hatchling`
-- Runtime dependencies: none
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
@@ -284,6 +285,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `pyzmq>=27.0`
   - `livekit>=1.1.16`
   - `livekit-api>=1.0`
@@ -369,6 +371,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
@@ -450,6 +453,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `fastapi>=0.111`
   - `uvicorn[standard]>=0.29`
   - `pyyaml>=6.0`
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
@@ -485,6 +489,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
@@ -914,8 +919,7 @@ Keep non-obvious fan-out in the same change:
 
 - `utils/xr-ai-launcher/` has zero runtime dependencies and remains stdlib-only.
 - `utils/xr-ai-logging/` depends only on `loguru`.
-- `utils/xr-ai-vllm/` has zero runtime dependencies. Adding dependencies would
-  defeat docker mode by pulling vLLM-side packages into the wrapper environment.
+- `utils/xr-ai-vllm/` depends only on the stdlib-only `xr-ai-launcher` utility. It has no third-party serving dependencies, keeping docker-only wrapper environments lightweight.
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`; it has no
   server-side packages.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and

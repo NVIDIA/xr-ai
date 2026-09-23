@@ -77,6 +77,14 @@ def load_config(argv: list[str] | None = None) -> tuple[dict, Path, Path | None]
     return cfg, yaml_dir, ns.ready_file
 
 
+def prepare_requested(argv: list[str] | None = None) -> bool:
+    """Return whether the service wrapper was invoked in artifact-only mode."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--prepare", action="store_true")
+    ns, _ = parser.parse_known_args(argv)
+    return ns.prepare
+
+
 def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     """Apply the shared HuggingFace / CUDA env block.
 

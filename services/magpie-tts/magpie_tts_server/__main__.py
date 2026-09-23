@@ -28,14 +28,22 @@ Config keys
 """
 import argparse
 import asyncio
+import hashlib
 import io
 import os
 import sys
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 from loguru import logger
+from xr_ai_launcher import (
+    prepare_or_exit,
+    read_artifact_manifest,
+    repair_hf_snapshot,
+    report_prepare_status,
+    write_artifact_manifest,
+)
 from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT        = 8104
@@ -49,6 +57,97 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
         p = (yaml_dir / p).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _hf_hub_cache(hf_home: Path) -> Path:
+    value = os.environ.get(
+        "HF_HUB_CACHE",
+        os.environ.get("HUGGINGFACE_HUB_CACHE", str(hf_home / "hub")),
+    )
+    return Path(os.path.expandvars(os.path.expanduser(value))).resolve()
+
+
+def _is_hf_artifact_root(root: Path, snapshot_root: Path) -> bool:
+    artifact_root = Path(os.path.abspath(root))
+    snapshot = artifact_root.parent if artifact_root.is_file() else artifact_root
+    return snapshot.resolve().parent == snapshot_root
+
+
+def _prepare(cfg: dict, yaml_dir: Path) -> None:
+    model_name = cfg.get("model")
+    if not model_name:
+        raise ValueError("'model' is required in config")
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
+    hf_home = Path(
+        os.path.expandvars(
+            os.path.expanduser(
+                os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
+            )
+        )
+    ).resolve()
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+
+    from huggingface_hub import hf_hub_download, snapshot_download
+
+    revision = cfg.get("model_revision") or None
+    hub_cache = _hf_hub_cache(hf_home)
+    identity = f"magpie\0{hub_cache}\0{model_name}\0{revision or ''}"
+    marker = model_cache / ".xr-ai-prepare" / (
+        "hf-magpie-" + hashlib.sha256(identity.encode()).hexdigest()[:20]
+    )
+    repair = marker.is_file()
+    manifest = read_artifact_manifest(marker)
+    snapshot_root = (
+        hub_cache
+        / ("models--" + str(model_name).replace("/", "--"))
+        / "snapshots"
+    ).resolve()
+    if manifest is not None and _is_hf_artifact_root(manifest.root, snapshot_root):
+        report_prepare_status(
+            f"Hugging Face model {model_name}", "cached", manifest.size
+        )
+        return
+    report_prepare_status(
+        f"Hugging Face model {model_name}", "downloading", None
+    )
+    if revision and "/" in str(model_name):
+        cached = Path(hf_hub_download(
+            repo_id=str(model_name),
+            filename=PurePosixPath(str(model_name)).name + ".nemo",
+            revision=str(revision),
+            cache_dir=hub_cache,
+            force_download=repair,
+        ))
+    else:
+        if repair:
+            cached = repair_hf_snapshot(
+                str(model_name),
+                hub_cache,
+                revision=str(revision or "main"),
+            )
+        else:
+            cached = Path(
+                snapshot_download(
+                    repo_id=str(model_name),
+                    revision=revision,
+                    cache_dir=hub_cache,
+                    force_download=False,
+                )
+            )
+    if not _is_hf_artifact_root(cached, snapshot_root):
+        raise RuntimeError(
+            f"Hugging Face model {model_name} returned an invalid cache path: {cached}"
+        )
+    artifacts = (cached,) if cached.is_file() else (
+        child for child in cached.rglob("*") if child.is_file()
+    )
+    write_artifact_manifest(
+        marker,
+        cached,
+        artifacts,
+    )
 
 
 class _TtsBackend:
@@ -83,7 +182,6 @@ class _TtsBackend:
                 # restore from the cached .nemo file.  NeMo's from_pretrained()
                 # always pulls HEAD, so we bypass it when a revision is pinned.
                 import nemo
-                from pathlib import PurePosixPath
                 from huggingface_hub import hf_hub_download
                 from huggingface_hub import get_token as _get_hf_token
 
@@ -226,6 +324,7 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -234,6 +333,10 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if ns.prepare:
+        prepare_or_exit("magpie_tts_server", lambda: _prepare(cfg, yaml_dir))
+        return
 
     asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
 

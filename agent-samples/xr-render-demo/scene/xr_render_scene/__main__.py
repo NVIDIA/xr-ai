@@ -11,9 +11,11 @@ import sys
 from pathlib import Path
 
 from loguru import logger
+from xr_ai_launcher import prepare_or_exit
 from xr_ai_logging import setup_logging
 from xr_ai_tools.rpc import RPCServer
 
+from ._prepare import prepare_lovr, resolve_lovr
 from .engine import (
     SceneDispatcher,
     _build_config,
@@ -59,12 +61,21 @@ def run() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--ready-file", type=Path, default=None)
+    parser.add_argument("--prepare", action="store_true")
     args, _ = parser.parse_known_args()
 
     setup_logging("xr-render-scene")
     config_path = args.config or _DEFAULT_CONFIG
     if not config_path.exists():
         sys.exit(f"xr-render-scene: config file not found: {config_path}")
+
+    if args.prepare:
+        prepare_or_exit("xr-render-scene", lambda: prepare_lovr(config_path))
+        return
+    try:
+        os.environ["LOVR_BIN"] = str(resolve_lovr(config_path))
+    except RuntimeError as exc:
+        sys.exit(f"xr-render-scene: {exc}")
     asyncio.run(_serve(config_path, args.ready_file))
 
 
