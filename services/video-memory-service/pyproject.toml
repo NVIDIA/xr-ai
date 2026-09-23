@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "xr-video-memory-service"
 version = "0.1.0"
 description = "Recorded-video memory service for XR AI."
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-logging",
     "xr-ai-tools[services]",
