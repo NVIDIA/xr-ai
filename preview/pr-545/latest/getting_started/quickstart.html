@@ -728,7 +728,12 @@ uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py
 </pre></div>
 </div>
-<p>Before first launch, the orchestrator invokes the scene and hub preparation commands. The scene verifies and caches the pinned LOVR version under <code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/.cache/xr-ai/lovr/0.18.0/</span></code>). For WebRTC profiles, DeviceIOHub also builds the WebXR vendor bundle, which requires npm and network access. Valid cached artifacts are reused on subsequent runs.</p>
+<p>Before first launch, the orchestrator invokes the scene and hub preparation
+commands. The scene verifies and caches the pinned LOVR version under
+<code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/.cache/xr-ai/lovr/0.18.0/</span></code>).
+For WebRTC profiles, DeviceIOHub also builds the WebXR vendor bundle, which
+requires npm and network access. Valid cached artifacts are reused on subsequent
+runs.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>On <strong>DGX Spark</strong> (aarch64), LOVR does not publish a prebuilt aarch64 Linux

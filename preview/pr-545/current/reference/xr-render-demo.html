@@ -518,10 +518,20 @@ shared model services.</p>
 </tbody>
 </table>
 </div>
-<p>Before starting the stack, the orchestrator invokes preparation in the hub and scene service environments:</p>
+<p>Before starting the stack, the orchestrator invokes preparation in the hub and
+scene service environments:</p>
 <ul class="simple">
-<li><p><strong>Web vendor bundle:</strong> DeviceIOHub runs the executable selected by <code class="docutils literal notranslate"><span class="pre">web_xr_vendor_build_script</span></code>. The repository builder produces the CloudXR and LiveKit ESM modules and records both selected versions. It requires <code class="docutils literal notranslate"><span class="pre">npm</span></code>. Native profiles clear the browser paths and skip this artifact.</p></li>
-<li><p><strong>LOVR binary:</strong> the scene service verifies and caches the LOVR v0.18.0 AppImage under <code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/.cache/xr-ai/lovr/0.18.0/</span></code>). Resolution order is <code class="docutils literal notranslate"><span class="pre">$LOVR_BIN</span></code>, <code class="docutils literal notranslate"><span class="pre">lovr_bin</span></code> in <code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code>, then the verified cache. <code class="docutils literal notranslate"><span class="pre">lovr_cache_dir</span></code> selects an exact replacement cache directory. Normal scene startup never downloads LOVR; it reports the <code class="docutils literal notranslate"><span class="pre">--prepare</span></code> command when no valid executable is available.</p></li>
+<li><p><strong>Web vendor bundle:</strong> DeviceIOHub runs the executable selected by
+<code class="docutils literal notranslate"><span class="pre">web_xr_vendor_build_script</span></code>. The repository builder produces the CloudXR and
+LiveKit ESM modules and records both selected versions. It requires <code class="docutils literal notranslate"><span class="pre">npm</span></code>.
+Native profiles clear the browser paths and skip this artifact.</p></li>
+<li><p><strong>LOVR binary:</strong> the scene service verifies and caches the LOVR v0.18.0
+AppImage under <code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/xr-ai/lovr/0.18.0/</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">~/.cache/xr-ai/lovr/0.18.0/</span></code>). Resolution order is <code class="docutils literal notranslate"><span class="pre">$LOVR_BIN</span></code>, <code class="docutils literal notranslate"><span class="pre">lovr_bin</span></code> in
+<code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code>, then the verified cache. <code class="docutils literal notranslate"><span class="pre">lovr_cache_dir</span></code> selects
+an exact replacement cache directory. Normal scene startup never downloads
+LOVR; it reports the <code class="docutils literal notranslate"><span class="pre">--prepare</span></code> command when no valid executable is
+available.</p></li>
 </ul>
 </section>
 <section id="source-map-and-extension-points">
