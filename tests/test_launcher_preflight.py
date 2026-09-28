@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import errno
 import importlib.util
 import json
 import socket
@@ -17,12 +16,31 @@ from xr_ai_launcher._models import EndpointProbe
 from xr_ai_launcher._stack import Process
 
 _REAL_PORT_IS_FREE = _preflight._port_is_free
+_REAL_EPHEMERAL_PORT_CHECKS = _preflight._ephemeral_port_checks
+
+
+def _inspection(
+    state: _preflight._PortInspectionState,
+    evidence: str = "",
+    *,
+    remediation: str = "",
+    error_kind: _preflight._PortInspectionErrorKind | None = None,
+) -> _preflight._PortInspection:
+    return _preflight._PortInspection(
+        state=state,
+        evidence=evidence,
+        remediation=remediation,
+        error_kind=error_kind,
+    )
 
 
 @pytest.fixture(autouse=True)
 def _isolate_host_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_preflight, "load_credentials", lambda: None)
-    monkeypatch.setattr(_preflight, "_port_is_free", lambda *_args: (True, "free"))
+    monkeypatch.setattr(
+        _preflight, "_port_is_free", lambda *_args: _inspection("clear")
+    )
+    monkeypatch.setattr(_preflight, "_ephemeral_port_checks", lambda _services: [])
     for name in (
         "HF_TOKEN",
         "NGC_API_KEY",
@@ -31,6 +49,15 @@ def _isolate_host_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "HF_HUB_ENABLE_HF_TRANSFER",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def no_port_sockets(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        _preflight.socket,
+        "socket",
+        lambda *_args, **_kwargs: pytest.fail("port inspection must not create sockets"),
+    )
 
 
 def _write(path: Path, value: object) -> Path:
@@ -400,7 +427,11 @@ def test_owned_healthy_responder_is_conflict_without_identity_proof(
         tmp_path / "requirements.json",
         {"ports": [{"name": "vlm", "port": 8100, "health": "/health"}]},
     )
-    monkeypatch.setattr(_preflight, "_port_is_free", lambda *_args: (False, "occupied"))
+    monkeypatch.setattr(
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible tcp socket"),
+    )
     process = Process("vlm", ".", "vlm_server", port=8100)
 
     result = _preflight.preflight(contract, processes=(process,), base=tmp_path)
@@ -418,7 +449,11 @@ def test_owned_port_accepts_explicit_compatible_identity_probe(
         tmp_path / "requirements.json",
         {"ports": [{"name": "vlm", "port": 8100}]},
     )
-    monkeypatch.setattr(_preflight, "_port_is_free", lambda *_args: (False, "occupied"))
+    monkeypatch.setattr(
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible tcp socket"),
+    )
     cudnn = tmp_path / "host-cudnn"
     keep = tmp_path / "other-libs"
     cudnn.mkdir()
@@ -448,7 +483,11 @@ def test_legacy_managed_container_reports_targeted_restart_remediation(
         tmp_path / "requirements.json",
         {"ports": [{"name": "vlm", "port": 8100}]},
     )
-    monkeypatch.setattr(_preflight, "_port_is_free", lambda *_args: (False, "occupied"))
+    monkeypatch.setattr(
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible tcp socket"),
+    )
 
     def reject_legacy(_env: object) -> bool:
         raise _preflight.OwnershipProbeMismatch(
@@ -547,7 +586,7 @@ def test_resolved_owned_bind_conflicts_fail_before_host_probes(
     monkeypatch.setattr(
         _preflight,
         "_port_is_free",
-        lambda *args: probe_calls.append(args) or (True, "free"),
+        lambda *args: probe_calls.append(args) or _inspection("clear"),
     )
 
     result = _preflight.preflight(
@@ -648,6 +687,189 @@ def test_disabled_optional_hub_servers_do_not_require_ports(tmp_path: Path) -> N
     )
 
     assert services == ()
+    assert _REAL_EPHEMERAL_PORT_CHECKS(
+        services,
+        port_range_path=tmp_path / "missing-range",
+        reserved_ports_path=tmp_path / "missing-reservations",
+    ) == []
+
+
+@pytest.mark.parametrize(
+    ("port", "reserved", "warns"),
+    [
+        (40000, "", True),
+        (50000, "", True),
+        (39999, "", False),
+        (50001, "", False),
+        (45000, "45000", False),
+        (45000, "44999-45001", False),
+        (45000, "41000,43000-45000,47000", False),
+    ],
+    ids=(
+        "lower-bound", "upper-bound", "below", "above",
+        "reserved-single", "reserved-range", "reserved-mixed-range-boundary",
+    ),
+)
+def test_ephemeral_port_warnings_follow_range_and_reservations(
+    port: int,
+    reserved: str,
+    warns: bool,
+    tmp_path: Path,
+) -> None:
+    port_range = tmp_path / "ip_local_port_range"
+    reservations = tmp_path / "ip_local_reserved_ports"
+    port_range.write_text("40000 50000\n", encoding="utf-8")
+    reservations.write_text(reserved, encoding="utf-8")
+
+    checks = _REAL_EPHEMERAL_PORT_CHECKS(
+        (_preflight.ResolvedService("service", "own", port=port),),
+        port_range_path=port_range,
+        reserved_ports_path=reservations,
+    )
+
+    assert bool(checks) is warns
+    if warns:
+        assert checks[0].name == f"ephemeral_port:service:tcp:{port}"
+        assert checks[0].ok
+        assert checks[0].status == "warning"
+        assert "preserve every existing" in checks[0].remediation.lower()
+        assert "replaces the complete list" in checks[0].remediation
+        assert "does not release an existing connection" in checks[0].remediation
+
+
+def test_ephemeral_port_warning_applies_only_to_resolved_owned_tcp_and_udp(
+    tmp_path: Path,
+) -> None:
+    port_range = tmp_path / "ip_local_port_range"
+    reservations = tmp_path / "ip_local_reserved_ports"
+    port_range.write_text("40000 50000\n", encoding="utf-8")
+    reservations.write_text("", encoding="utf-8")
+    services = (
+        _preflight.ResolvedService("tcp", "own", port=45000),
+        _preflight.ResolvedService("udp", "own", port=45001, proto="udp"),
+        _preflight.ResolvedService("reused", "reuse", port=45002),
+        _preflight.ResolvedService("external", "external", port=45003),
+    )
+
+    checks = _REAL_EPHEMERAL_PORT_CHECKS(
+        services,
+        port_range_path=port_range,
+        reserved_ports_path=reservations,
+    )
+
+    assert {check.name for check in checks} == {
+        "ephemeral_port:tcp:tcp:45000",
+        "ephemeral_port:udp:udp:45001",
+    }
+
+
+def test_ephemeral_port_policy_read_failure_is_one_nonblocking_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    port_range = tmp_path / "ip_local_port_range"
+    reservations = tmp_path / "ip_local_reserved_ports"
+    reservations.write_text("", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def read_text(path: Path, *args, **kwargs) -> str:
+        if path == port_range:
+            raise PermissionError(13, "Permission denied", str(path))
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    checks = _REAL_EPHEMERAL_PORT_CHECKS(
+        (
+            _preflight.ResolvedService("first", "own", port=45000),
+            _preflight.ResolvedService("second", "own", port=45001),
+        ),
+        port_range_path=port_range,
+        reserved_ports_path=reservations,
+    )
+
+    assert len(checks) == 1
+    assert checks[0].name == "ephemeral_ports"
+    assert checks[0].ok
+    assert checks[0].status == "warning"
+    assert "Permission denied" in checks[0].detected
+    assert "sysctl net.ipv4.ip_local_port_range" in checks[0].remediation
+
+
+@pytest.mark.parametrize(
+    ("port_range_text", "reserved_text"),
+    [
+        ("40000\n", ""),
+        ("40000 50000\n", "45000-bad"),
+        ("40000 50000\n", "45001-45000"),
+    ],
+)
+def test_malformed_ephemeral_port_policy_is_one_nonblocking_warning(
+    port_range_text: str,
+    reserved_text: str,
+    tmp_path: Path,
+) -> None:
+    port_range = tmp_path / "ip_local_port_range"
+    reservations = tmp_path / "ip_local_reserved_ports"
+    port_range.write_text(port_range_text, encoding="utf-8")
+    reservations.write_text(reserved_text, encoding="utf-8")
+
+    checks = _REAL_EPHEMERAL_PORT_CHECKS(
+        (_preflight.ResolvedService("service", "own", port=45000),),
+        port_range_path=port_range,
+        reserved_ports_path=reservations,
+    )
+
+    assert len(checks) == 1
+    assert checks[0].name == "ephemeral_ports"
+    assert checks[0].status == "warning"
+    assert "could not inspect host ephemeral port policy" in checks[0].detected
+
+
+def test_ephemeral_port_warning_does_not_gate_expensive_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    port_range = tmp_path / "ip_local_port_range"
+    reservations = tmp_path / "ip_local_reserved_ports"
+    port_range.write_text("40000 50000\n", encoding="utf-8")
+    reservations.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        _preflight,
+        "_ephemeral_port_checks",
+        lambda services: _REAL_EPHEMERAL_PORT_CHECKS(
+            services,
+            port_range_path=port_range,
+            reserved_ports_path=reservations,
+        ),
+    )
+    monkeypatch.setattr(_preflight.ctypes.util, "find_library", lambda _name: "vulkan")
+    expensive_calls: list[tuple[tuple[str, ...], bool]] = []
+
+    def expensive(names, *, force):
+        expensive_calls.append((tuple(names), force))
+        return [
+            _preflight.CheckResult(
+                "vulkan_device", True, "usable", "usable", "", tier="expensive",
+            )
+        ]
+
+    monkeypatch.setattr(_preflight, "_expensive_checks", expensive)
+    contract = _write(
+        tmp_path / "requirements.json",
+        {"ports": [{"name": "service", "port": 45000}], "vulkan": True},
+    )
+
+    result = _preflight.preflight(
+        contract,
+        processes=(Process("service", ".", "service", port=45000),),
+        base=tmp_path,
+    )
+
+    warning = _result(result, "ephemeral_port:service:tcp:45000")
+    assert warning.ok
+    assert warning.status == "warning"
+    assert result.ok
+    assert expensive_calls == [(('vulkan_device',), False)]
 
 
 def test_reused_endpoint_failure_has_shared_stack_remediation(
@@ -798,143 +1020,479 @@ def test_version_constraints(
     ) is expected
 
 
-def test_tcp_port_probe_enables_reuse_before_binding(
+@pytest.mark.parametrize(
+    (
+        "proto", "host", "ipv4_output", "ipv6_output", "expected_state",
+        "expected_families",
+    ),
+    [
+        (
+            "tcp", "0.0.0.0",
+            "LISTEN 0 4096 192.0.2.30:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "192.0.2.10",
+            "LISTEN 0 4096 192.0.2.11:8100 0.0.0.0:*\n", "",
+            "clear", ("-4", "-6"),
+        ),
+        (
+            "tcp", "192.0.2.10",
+            "LISTEN 0 4096 192.0.2.10:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "192.0.2.10",
+            "LISTEN 0 4096 0.0.0.0:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "2001:db8::10",
+            "LISTEN 0 4096 0.0.0.0:8100 0.0.0.0:*\n", "",
+            "clear", ("-6",),
+        ),
+        (
+            "tcp", "0.0.0.0", "",
+            "LISTEN 0 4096 [::]:8100 [::]:*\n",
+            "clear", ("-4", "-6"),
+        ),
+        (
+            "tcp", "0.0.0.0", "",
+            "LISTEN 0 4096 [::1]:8100 [::]:*\n",
+            "clear", ("-4", "-6"),
+        ),
+        (
+            "tcp", "192.0.2.10", "",
+            "LISTEN 0 4096 [::ffff:192.0.2.10]:8100 [::]:*\n",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "127.0.0.1",
+            "LISTEN 0 4096 127.0.0.1%lo:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "2001:db8::10", "",
+            "LISTEN 0 4096 [2001:db8::10]:8100 [::]:*\n",
+            "occupied", ("-6",),
+        ),
+        (
+            "tcp", "2001:db8::10", "",
+            "LISTEN 0 4096 [2001:db8::11]:8100 [::]:*\n",
+            "clear", ("-6",),
+        ),
+        (
+            "tcp", "2001:db8::10", "",
+            "LISTEN 0 4096 *:8100 *:*\n",
+            "occupied", ("-6",),
+        ),
+        (
+            "tcp", "0.0.0.0", "",
+            "LISTEN 0 4096 *:8100 *:*\n",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "0.0.0.0", "",
+            "LISTEN 0 4096 :::8100 :::*\n",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "0.0.0.0", "",
+            "LISTEN 0 4096 [::ffff:192.0.2.10]:8100 [::]:*\n",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "192.0.2.10",
+            "LISTEN 0 4096 *:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "tcp", "fe80::1%eth0", "",
+            "LISTEN 0 4096 [fe80::1]%eth0:8100 [::]:*\n",
+            "occupied", ("-6",),
+        ),
+        (
+            "tcp", "2001:db8::10", "",
+            "LISTEN 0 4096 *%eth0:8100 *:*\n",
+            "occupied", ("-6",),
+        ),
+        (
+            "tcp", "192.0.2.10",
+            (
+                "LISTEN 0 4096 192.0.2.11:8100 0.0.0.0:*\n"
+                "LISTEN 0 4096 192.0.2.10:8100 0.0.0.0:*\n\n"
+            ),
+            "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "udp", "192.0.2.10",
+            "ESTAB 0 0 192.0.2.10:8100 192.0.2.20:53000\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+        (
+            "udp", "0.0.0.0",
+            "UNCONN 0 0 192.0.2.30:8100 0.0.0.0:*\n", "",
+            "occupied", ("-4", "-6"),
+        ),
+    ],
+    ids=(
+        "wildcard-sees-nonloopback", "disjoint-ipv4-specific",
+        "same-ipv4-specific", "ipv4-wildcard-listener",
+        "ipv6-target-ignores-ipv4", "ipv6-only-wildcard-allows-ipv4",
+        "ipv6-loopback-allows-ipv4", "matching-ipv4-mapped", "scoped-ipv4",
+        "same-ipv6-specific",
+        "disjoint-ipv6-specific", "ipv6-star-against-ipv6",
+        "ipv6-star-against-ipv4", "bracketless-ipv6-wildcard",
+        "wildcard-ipv4-against-mapped", "ipv4-star", "scoped-ipv6",
+        "scoped-ipv6-star", "two-rows-with-trailing-blank",
+        "connected-udp", "unconnected-udp",
+    ),
+)
+def test_port_inspection_detects_visible_socket_conflicts(
+    proto: str,
+    host: str,
+    ipv4_output: str,
+    ipv6_output: str,
+    expected_state: str,
+    expected_families: tuple[str, ...],
     monkeypatch: pytest.MonkeyPatch,
+    no_port_sockets: None,
 ) -> None:
-    events: list[tuple[object, ...]] = []
+    commands: list[list[str]] = []
 
-    class Candidate:
-        def __init__(self, family, sock_type):
-            self.family = family
-            events.append(("socket", family, sock_type))
+    def run(command, **kwargs):
+        command = list(command)
+        commands.append(command)
+        assert kwargs == {
+            "capture_output": True,
+            "text": True,
+            "check": False,
+            "timeout": 2.0,
+        }
+        output = ipv4_output if "-4" in command else ipv6_output
+        return subprocess.CompletedProcess(command, 0, output, "")
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def setsockopt(self, level, option, value):
-            events.append(("setsockopt", self.family, level, option, value))
-
-        def bind(self, address):
-            events.append(("bind", self.family, address))
-
-        def listen(self, backlog):
-            events.append(("listen", self.family, backlog))
-
-    monkeypatch.setattr(_preflight.socket, "socket", Candidate)
-
-    assert _REAL_PORT_IS_FREE(8100, "tcp", "0.0.0.0") == (True, "free")
-    assert ("listen", socket.AF_INET, 1) in events
-    for index, event in enumerate(events):
-        if event[0] == "bind":
-            family = event[1]
-            assert any(
-                earlier[:2] == ("setsockopt", family)
-                and earlier[3:] == (socket.SO_REUSEADDR, 1)
-                for earlier in events[:index]
-            )
-
-
-def test_port_probe_checks_ipv6_listeners(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    families: list[int] = []
-    listens: list[tuple[int, int]] = []
-
-    class Candidate:
-        def __init__(self, family, _sock_type):
-            self.family = family
-            families.append(family)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def setsockopt(self, *_args):
-            pass
-
-        def bind(self, _address):
-            if self.family == socket.AF_INET6:
-                raise OSError(errno.EADDRINUSE, "address already in use")
-
-        def listen(self, backlog):
-            listens.append((self.family, backlog))
-
-    monkeypatch.setattr(_preflight.socket, "socket", Candidate)
-
-    free, detected = _REAL_PORT_IS_FREE(8100, "tcp", "::")
-
-    assert not free
-    assert "occupied" in detected
-    assert families == [socket.AF_INET6]
-    assert listens == []
-
-
-def test_ipv6_wildcard_port_probe_allows_an_ipv4_only_listener(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    families: list[int] = []
-    listens: list[tuple[int, int]] = []
-
-    class Candidate:
-        def __init__(self, family, _sock_type):
-            self.family = family
-            families.append(family)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def setsockopt(self, *_args):
-            pass
-
-        def bind(self, _address):
-            pass
-
-        def listen(self, backlog):
-            listens.append((self.family, backlog))
-
-    monkeypatch.setattr(_preflight.socket, "socket", Candidate)
-
-    assert _REAL_PORT_IS_FREE(8100, "tcp", "::") == (True, "free")
-    assert families == [socket.AF_INET6]
-    assert listens == [(socket.AF_INET6, 1)]
-
-
-def test_port_probe_distinguishes_an_unresolvable_bind_host(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class Candidate:
-        def __init__(self, _family, _sock_type):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def setsockopt(self, *_args):
-            pass
-
-        def bind(self, _address):
-            raise socket.gaierror(-2, "Name or service not known")
-
-    monkeypatch.setattr(_preflight.socket, "socket", Candidate)
-
-    free, detected = _REAL_PORT_IS_FREE(8100, "tcp", "not-a-host.invalid")
-
-    assert not free
-    assert detected == (
-        "could not resolve bind host 'not-a-host.invalid' "
-        "(Name or service not known)"
+    monkeypatch.setattr(_preflight.subprocess, "run", run)
+    monkeypatch.setattr(
+        _preflight.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: pytest.fail("numeric hosts must not be resolved"),
     )
+
+    inspection = _REAL_PORT_IS_FREE(8100, proto, host)
+
+    assert inspection.state == expected_state
+    if expected_state == "clear":
+        assert inspection.detected == "no visible socket conflict"
+    else:
+        assert inspection.detected.startswith("occupied (")
+    expected_commands = [
+        [
+            "ss", "-H", "-n", family,
+            "-l" if proto == "tcp" else "-a",
+            "-t" if proto == "tcp" else "-u",
+            "sport = :8100",
+        ]
+        for family in expected_families
+    ]
+    assert commands == expected_commands
+
+
+def test_port_inspection_resolves_hostname_to_numeric_bind_address(
+    monkeypatch: pytest.MonkeyPatch,
+    no_port_sockets: None,
+) -> None:
+    commands: list[list[str]] = []
+    resolutions: list[tuple[str, object, int]] = []
+
+    def run(command, **_kwargs):
+        command = list(command)
+        commands.append(command)
+        output = (
+            "LISTEN 0 4096 192.0.2.10:8100 0.0.0.0:*\n"
+            if "-4" in command else ""
+        )
+        return subprocess.CompletedProcess(command, 0, output, "")
+
+    def resolve(host, port, family):
+        resolutions.append((host, port, family))
+        return [
+            (family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("192.0.2.10", 0))
+        ]
+
+    monkeypatch.setattr(_preflight.subprocess, "run", run)
+    monkeypatch.setattr(_preflight.socket, "getaddrinfo", resolve)
+
+    inspection = _REAL_PORT_IS_FREE(8100, "tcp", "service.internal")
+
+    assert inspection.state == "occupied"
+    assert inspection.detected.startswith("occupied (")
+    assert resolutions == [("service.internal", None, socket.AF_INET)]
+    assert commands == [
+        ["ss", "-H", "-n", "-4", "-l", "-t", "sport = :8100"],
+        ["ss", "-H", "-n", "-6", "-l", "-t", "sport = :8100"],
+    ]
+
+
+@pytest.mark.parametrize(
+    ("failure", "proto", "error_kind", "expected", "remediation"),
+    [
+        ("missing", "tcp", "missing", "ss not found", "iproute2"),
+        (
+            "timeout", "tcp", "timeout", "ss timed out after 2 seconds",
+            "diagnose the timeout",
+        ),
+        ("nonzero", "tcp", "command", "permission denied", "same login session"),
+        (
+            "permission", "tcp", "command", "ss failed: permission denied",
+            "same login session",
+        ),
+        ("malformed", "tcp", "malformed", "malformed ss output", "`ss -V`"),
+        ("malformed-ipv6", "tcp", "malformed", "not-an-ip", "`ss -V`"),
+        ("wrong-family", "tcp", "malformed", "[::1]:8100", "`ss -V`"),
+        ("wrong-port", "tcp", "malformed", "127.0.0.1:8101", "`ss -V`"),
+        ("invalid-udp-state", "udp", "malformed", "close", "`ss -V`"),
+        ("tcp-non-listen", "tcp", "malformed", "estab", "`ss -V`"),
+        ("stderr", "tcp", "command", "unexpected warning", "same login session"),
+        ("stderr-long", "tcp", "command", "ss reported", "same login session"),
+    ],
+)
+def test_port_inspection_fails_closed_when_ss_is_unreliable(
+    failure: str,
+    proto: str,
+    error_kind: str,
+    expected: str,
+    remediation: str,
+    monkeypatch: pytest.MonkeyPatch,
+    no_port_sockets: None,
+) -> None:
+    def run(command, **kwargs):
+        if failure == "missing":
+            raise FileNotFoundError("ss")
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        if failure == "nonzero":
+            return subprocess.CompletedProcess(command, 1, "", "permission denied")
+        if failure == "permission":
+            raise PermissionError(13, "Permission denied")
+        if failure == "malformed":
+            return subprocess.CompletedProcess(command, 0, "LISTEN 0 broken\n", "")
+        if failure == "malformed-ipv6":
+            output = "LISTEN 0 4096 [not-an-ip]:8100 [::]:*\n" if "-6" in command else ""
+            return subprocess.CompletedProcess(command, 0, output, "")
+        if failure == "wrong-family":
+            output = "LISTEN 0 4096 [::1]:8100 [::]:*\n"
+            return subprocess.CompletedProcess(command, 0, output, "")
+        if failure == "wrong-port":
+            output = "LISTEN 0 4096 127.0.0.1:8101 0.0.0.0:*\n"
+            return subprocess.CompletedProcess(command, 0, output, "")
+        if failure == "invalid-udp-state":
+            output = "CLOSE 0 0 127.0.0.1:8100 0.0.0.0:*\n"
+            return subprocess.CompletedProcess(command, 0, output, "")
+        if failure == "tcp-non-listen":
+            output = "ESTAB 0 0 127.0.0.1:8100 192.0.2.10:50000\n"
+            return subprocess.CompletedProcess(command, 0, output, "")
+        if failure == "stderr-long":
+            return subprocess.CompletedProcess(command, 0, "", "reason " + "x" * 500)
+        return subprocess.CompletedProcess(command, 0, "", "unexpected warning")
+
+    monkeypatch.setattr(_preflight.subprocess, "run", run)
+
+    inspection = _REAL_PORT_IS_FREE(8100, proto, "127.0.0.1")
+
+    assert inspection.state == "uninspectable"
+    assert inspection.error_kind == error_kind
+    assert inspection.detected.startswith("could not inspect (")
+    assert expected in inspection.detected.lower()
+    assert remediation in inspection.remediation
+    if failure == "stderr-long":
+        assert inspection.evidence.endswith("...")
+        assert len(inspection.evidence) <= 220
+
+
+def test_ipv6_inspection_failure_overrides_visible_ipv4_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+    no_port_sockets: None,
+) -> None:
+    def run(command, **_kwargs):
+        if "-4" in command:
+            return subprocess.CompletedProcess(
+                command, 0, "LISTEN 0 4096 127.0.0.1:8100 0.0.0.0:*\n", "",
+            )
+        return subprocess.CompletedProcess(command, 1, "", "IPv6 table unavailable")
+
+    monkeypatch.setattr(_preflight.subprocess, "run", run)
+
+    inspection = _REAL_PORT_IS_FREE(8100, "tcp", "127.0.0.1")
+
+    assert inspection.state == "uninspectable"
+    assert inspection.error_kind == "command"
+    assert "ipv6 table unavailable" in inspection.detected.lower()
+
+
+def test_port_inspection_reports_bind_host_resolution_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    no_port_sockets: None,
+) -> None:
+    monkeypatch.setattr(
+        _preflight.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            socket.gaierror(-2, "Name or service not known")
+        ),
+    )
+    monkeypatch.setattr(
+        _preflight.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("ss must not run for an unknown host"),
+    )
+
+    inspection = _REAL_PORT_IS_FREE(8100, "tcp", "not-a-host.invalid")
+
+    assert inspection.state == "uninspectable"
+    assert inspection.error_kind == "bind_host"
+    assert "could not resolve bind host 'not-a-host.invalid'" in inspection.detected
+    assert "Name or service not known" in inspection.detected
+
+
+@pytest.mark.parametrize(
+    ("error_kind", "evidence", "outcome"),
+    [
+        ("missing", "ss not found", "verified"),
+        ("malformed", "malformed ss output: 'bad row'", "verified"),
+        ("command", "ss reported: unexpected warning", "verified"),
+        ("command", "ss exited with status 1: permission denied", "verified"),
+        ("missing", "ss not found", "false"),
+        ("malformed", "malformed ss output: 'bad row'", "raises"),
+        ("missing", "ss not found", "mismatch"),
+    ],
+    ids=(
+        "missing-verified", "malformed-verified", "stderr-verified",
+        "nonzero-verified", "false", "raises", "mismatch",
+    ),
+)
+def test_non_timeout_inspection_failure_uses_managed_ownership_probe(
+    error_kind: str,
+    evidence: str,
+    outcome: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ownership_calls: list[dict[str, str]] = []
+
+    monkeypatch.setattr(
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection(
+            "uninspectable",
+            evidence,
+            remediation=f"remediate: {evidence}",
+            error_kind=error_kind,
+        ),
+    )
+
+    def ownership(env: dict[str, str]) -> bool:
+        ownership_calls.append(dict(env))
+        if outcome == "raises":
+            raise RuntimeError("probe unavailable")
+        if outcome == "mismatch":
+            raise _preflight.OwnershipProbeMismatch(
+                "managed identity mismatch",
+                "stop the mismatched managed service",
+            )
+        return outcome == "verified"
+
+    result = _preflight.preflight(
+        tmp_path / "requirements.json",
+        processes=(
+            Process(
+                "vlm",
+                ".",
+                "vlm_server",
+                port=8100,
+                ownership_probe=ownership,
+            ),
+        ),
+        base=tmp_path,
+    )
+
+    check = _result(result, "port:vlm:tcp:8100")
+    assert len(ownership_calls) == 1
+    assert check.required == "no conflicting socket on tcp port 8100"
+    if outcome == "verified":
+        assert check.remediation == f"remediate: {evidence}"
+        assert check.ok
+        assert check.status == "warning"
+        assert check.detected == (
+            "verified as the expected managed service; "
+            f"socket inspection failed ({evidence})"
+        )
+        assert result.services[0].verified_running
+    elif outcome == "mismatch":
+        assert not check.ok
+        assert check.status == "failed"
+        assert check.detected == (
+            f"could not inspect ({evidence}); managed identity mismatch"
+        )
+        assert "unverified" not in check.detected
+        assert check.remediation == "stop the mismatched managed service"
+        assert not result.services[0].verified_running
+    else:
+        assert check.remediation == f"remediate: {evidence}"
+        assert not check.ok
+        assert check.status == "failed"
+        assert check.detected.startswith(f"could not inspect ({evidence})")
+        assert check.detected.endswith("; ownership unverified")
+        if outcome == "raises":
+            assert "ownership probe failed (RuntimeError)" in check.detected
+        assert not result.services[0].verified_running
+
+
+@pytest.mark.parametrize(
+    ("error_kind", "evidence"),
+    [
+        ("timeout", "ss timed out after 2 seconds"),
+        ("bind_host", "could not resolve bind host 'bad.invalid'"),
+    ],
+)
+def test_timeout_and_invalid_bind_host_skip_managed_ownership_probe(
+    error_kind: str,
+    evidence: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection(
+            "uninspectable",
+            evidence,
+            remediation="correct inspection failure",
+            error_kind=error_kind,
+        ),
+    )
+    result = _preflight.preflight(
+        tmp_path / "requirements.json",
+        processes=(
+            Process(
+                "vlm",
+                ".",
+                "vlm_server",
+                port=8100,
+                ownership_probe=lambda _env: pytest.fail(
+                    f"{error_kind} must not invoke ownership"
+                ),
+            ),
+        ),
+        base=tmp_path,
+    )
+
+    check = _result(result, "port:vlm:tcp:8100")
+    assert not check.ok
+    assert check.detected == f"could not inspect ({evidence}); ownership not probed"
+    assert check.remediation == "correct inspection failure"
+    assert not result.services[0].verified_running
 
 
 def test_cheap_failure_gates_expensive_checks(
@@ -1041,7 +1599,9 @@ def test_pip_only_model_profile_skips_docker_and_container_checks(
         "_docker_version",
         lambda: pytest.fail("pip-only services must not inspect Docker"),
     )
-    monkeypatch.setattr(_preflight, "_port_is_free", lambda *_args: (True, "free"))
+    monkeypatch.setattr(
+        _preflight, "_port_is_free", lambda *_args: _inspection("clear")
+    )
 
     result = _preflight.preflight(contract, processes=(process,), base=tmp_path)
 
@@ -1427,7 +1987,9 @@ def test_credentials_load_before_owned_process_identity_probe(
 
     monkeypatch.setattr(_preflight, "load_credentials", load)
     monkeypatch.setattr(
-        _preflight, "_port_is_free", lambda *_args: (False, "occupied")
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible tcp socket"),
     )
     result = _preflight.preflight(
         tmp_path / "requirements.json",
@@ -1636,7 +2198,9 @@ def test_standalone_contract_keeps_local_named_ports_with_external_endpoints(
         readiness="none",
     )
     monkeypatch.setattr(
-        _preflight, "_port_is_free", lambda *_args: (False, "occupied")
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible tcp socket"),
     )
 
     result = _preflight.preflight(contract, endpoints=(probe,))
@@ -2106,7 +2670,9 @@ def test_livekit_port_conflict_has_container_specific_remediation(
         {"ports": [{"name": "hub", "port": 9002, "proto": "udp"}]},
     )
     monkeypatch.setattr(
-        _preflight, "_port_is_free", lambda *_args: (False, "occupied")
+        _preflight,
+        "_port_is_free",
+        lambda *_args: _inspection("occupied", "visible udp socket"),
     )
 
     result = _preflight.preflight(

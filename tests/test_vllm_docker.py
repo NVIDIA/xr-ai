@@ -652,6 +652,71 @@ class TestContainerHelpers:
         ):
             assert pid_on_port(8100) is None
 
+    def test_pid_inspection_default_waits_without_deadline(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value='users:(("python",pid=4321,fd=7))',
+        ) as check_output:
+            assert _docker.pid_on_port_checked(8100) == (4321, True, True)
+
+        assert check_output.call_args.kwargs["timeout"] is None
+
+    @pytest.mark.parametrize(
+        "ss_failure",
+        [
+            FileNotFoundError(),
+            _docker.subprocess.CalledProcessError(1, "ss"),
+        ],
+        ids=("ss-missing", "ss-nonzero"),
+    )
+    def test_pid_inspection_fallback_is_bounded(self, ss_failure):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            side_effect=[ss_failure, "4321\n"],
+        ) as check_output:
+            assert _docker.pid_on_port_checked(
+                8100, timeout=0.25
+            ) == (4321, True, True)
+
+        assert [call.args[0][0] for call in check_output.call_args_list] == [
+            "ss", "lsof",
+        ]
+        assert [call.kwargs["timeout"] for call in check_output.call_args_list] == [
+            0.25, 0.25,
+        ]
+
+    def test_pid_inspection_ss_timeout_does_not_fallback(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            side_effect=_docker.subprocess.TimeoutExpired("ss", 0.25),
+        ) as check_output:
+            assert _docker.pid_on_port_checked(
+                8100, timeout=0.25
+            ) == (None, False, False)
+
+        assert check_output.call_count == 1
+        assert check_output.call_args.args[0][0] == "ss"
+        assert check_output.call_args.kwargs["timeout"] == 0.25
+
+    def test_pid_inspection_lsof_timeout_is_unverified(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            side_effect=[
+                FileNotFoundError(),
+                _docker.subprocess.TimeoutExpired("lsof", 0.25),
+            ],
+        ) as check_output:
+            assert _docker.pid_on_port_checked(
+                8100, timeout=0.25
+            ) == (None, False, False)
+
+        assert [call.args[0][0] for call in check_output.call_args_list] == [
+            "ss", "lsof",
+        ]
+        assert [call.kwargs["timeout"] for call in check_output.call_args_list] == [
+            0.25, 0.25,
+        ]
+
 
 def _run_kwargs(tmp_path):
     return dict(

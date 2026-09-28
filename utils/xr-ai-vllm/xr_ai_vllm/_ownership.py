@@ -22,7 +22,7 @@ from ._config import (
 )
 
 _LAUNCH_IDENTITY_RE = re.compile(r"[0-9a-f]{20}")
-_DOCKER_PROBE_TIMEOUT_S = 2.0
+_OWNERSHIP_PROBE_TIMEOUT_S = 2.0
 _MODEL_SERVERS_STOP = (
     "uv run --project model-server-samples/model-servers "
     "model_servers --stop"
@@ -50,7 +50,9 @@ def _local_process_matches(
     env: Mapping[str, str] | None,
     mismatch_remediation: str | None,
 ) -> bool:
-    pid, checked, listening = _docker.pid_on_port_checked(port)
+    pid, checked, listening = _docker.pid_on_port_checked(
+        port, timeout=_OWNERSHIP_PROBE_TIMEOUT_S
+    )
     if not checked or not listening or pid is None:
         return False
     try:
@@ -223,13 +225,13 @@ def managed_service_matches(
         )
 
     holders, checked = _docker.containers_on_port_checked(
-        port, timeout=_DOCKER_PROBE_TIMEOUT_S
+        port, timeout=_OWNERSHIP_PROBE_TIMEOUT_S
     )
     if not checked or len(holders) != 1:
         return False
     holder = holders[0]
     snapshot, snapshot_checked = _docker.container_ownership_snapshot_checked(
-        holder, timeout=_DOCKER_PROBE_TIMEOUT_S
+        holder, timeout=_OWNERSHIP_PROBE_TIMEOUT_S
     )
     if not snapshot_checked or snapshot is None or not snapshot.running:
         return False

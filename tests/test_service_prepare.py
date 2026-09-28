@@ -1114,8 +1114,8 @@ def test_managed_service_probe_bounds_docker_queries_and_fails_closed(
         project=tmp_path,
     )
     assert calls == [
-        ("discover", _ownership._DOCKER_PROBE_TIMEOUT_S),
-        ("inspect", _ownership._DOCKER_PROBE_TIMEOUT_S),
+        ("discover", _ownership._OWNERSHIP_PROBE_TIMEOUT_S),
+        ("inspect", _ownership._OWNERSHIP_PROBE_TIMEOUT_S),
     ]
 
 
@@ -1457,7 +1457,7 @@ def test_pip_launch_identity_round_trips_through_the_serving_child(
     monkeypatch.setattr(
         _ownership._docker,
         "pid_on_port_checked",
-        lambda _port: (4321, True, True),
+        lambda _port, **_kwargs: (4321, True, True),
     )
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
 
@@ -1477,6 +1477,28 @@ def test_pip_launch_identity_round_trips_through_the_serving_child(
             env={},
             needs_docker=False,
         )
+
+
+def test_local_service_probe_bounds_pid_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "stt.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    calls: list[tuple[int, float | None]] = []
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "pid_on_port_checked",
+        lambda port, *, timeout=None: (
+            calls.append((port, timeout)) or (None, False, False)
+        ),
+    )
+
+    assert not _ownership.managed_service_matches(
+        config, "stt_server", 8103, needs_docker=False
+    )
+    assert calls == [(8103, _ownership._OWNERSHIP_PROBE_TIMEOUT_S)]
 
 
 def test_local_service_probe_verifies_proc_command_config_and_digest(
@@ -1506,7 +1528,7 @@ def test_local_service_probe_verifies_proc_command_config_and_digest(
     monkeypatch.setattr(
         _ownership._docker,
         "pid_on_port_checked",
-        lambda _port: (4321, True, True),
+        lambda _port, **_kwargs: (4321, True, True),
     )
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
 

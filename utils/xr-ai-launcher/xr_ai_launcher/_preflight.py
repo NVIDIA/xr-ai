@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import ctypes.util
-import errno
+import ipaddress
 import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -36,6 +37,12 @@ Tier = Literal["cheap", "expensive"]
 CheckStatus = Literal["ok", "warning", "failed", "skipped", "blocked", "deferred"]
 """Stable machine-readable state for one dependency check."""
 
+_IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+_PortInspectionState = Literal["clear", "occupied", "uninspectable"]
+_PortInspectionErrorKind = Literal[
+    "bind_host", "missing", "timeout", "command", "malformed",
+]
+
 _TOP_LEVEL_FIELDS = {
     "$schema",
     "os",
@@ -57,9 +64,12 @@ _VERSION_CLAUSE = re.compile(r"^(>=|<=|==|!=|>|<)?\s*([0-9]+(?:\.[0-9]+)*)$")
 _VERSION_TEXT = re.compile(r"[0-9]+(?:\.[0-9]+)+|[0-9]+")
 _REPORT_VERSION = 2
 _DOCS = "docs/source/guides/troubleshooting.md"
+_EPHEMERAL_PORT_RANGE = Path("/proc/sys/net/ipv4/ip_local_port_range")
+_RESERVED_PORTS = Path("/proc/sys/net/ipv4/ip_local_reserved_ports")
 _GPU_PROBE_CLEANUP_TIMEOUT = 2.0
 _GPU_PROBE_CLEANUP_RETRY_INTERVAL = 0.05
 _GPU_PROBE_CLEANUP_COMMAND_TIMEOUT = 0.5
+_PORT_INSPECTION_TIMEOUT = 2.0
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -92,6 +102,28 @@ class _ProbeSignalInterrupt(BaseException):
         super().__init__(signum)
         self.signum = signum
         self.frame = frame
+
+
+@dataclass(frozen=True)
+class _PortInspection:
+    state: _PortInspectionState
+    evidence: str = ""
+    remediation: str = ""
+    error_kind: _PortInspectionErrorKind | None = None
+
+    @property
+    def detected(self) -> str:
+        if self.state == "clear":
+            return "no visible socket conflict"
+        if self.state == "occupied":
+            return f"occupied ({self.evidence})"
+        return f"could not inspect ({self.evidence})"
+
+
+@dataclass(frozen=True)
+class _VisibleSocketAddress:
+    address: _IPAddress
+    dual_stack_wildcard: bool = False
 
 
 @dataclass(frozen=True)
@@ -831,33 +863,240 @@ def _port_is_free(
     port: int,
     proto: str,
     host: str = "0.0.0.0",
-) -> tuple[bool, str]:
-    sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
+) -> _PortInspection:
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    try:
-        candidate = socket.socket(family, sock_type)
-    except OSError as exc:
-        return False, f"could not inspect ({exc.strerror or type(exc).__name__})"
-    with candidate:
-        try:
-            if proto == "tcp":
-                candidate.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if family == socket.AF_INET6:
-                candidate.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-            candidate.bind((host, port))
-            if proto == "tcp":
-                candidate.listen(1)
-        except socket.gaierror as exc:
-            return False, (
-                f"could not resolve bind host {host!r} "
-                f"({exc.strerror or type(exc).__name__})"
+    targets, error = _resolve_bind_addresses(host, family)
+    if error is not None:
+        return error
+
+    families = (socket.AF_INET6,) if family == socket.AF_INET6 else (
+        socket.AF_INET,
+        socket.AF_INET6,
+    )
+    visible: list[tuple[int, _VisibleSocketAddress]] = []
+    for visible_family in families:
+        addresses, error = _visible_socket_addresses(port, proto, visible_family)
+        if error is not None:
+            return error
+        visible.extend((visible_family, address) for address in addresses)
+
+    for visible_family, socket_address in visible:
+        if _socket_conflicts(targets, family, socket_address, visible_family):
+            address = socket_address.address
+            if socket_address.dual_stack_wildcard:
+                rendered = "*"
+            else:
+                rendered = f"[{address}]" if address.version == 6 else str(address)
+            return _PortInspection(
+                state="occupied",
+                evidence=f"visible {proto} socket on {rendered}:{port}",
+                remediation=(
+                    "Stop the process using this port or configure a different port. "
+                    f"See {_DOCS}#preflight-port."
+                ),
             )
-        except OSError as exc:
+    return _PortInspection(state="clear")
+
+
+def _resolve_bind_addresses(
+    host: str,
+    family: int,
+) -> tuple[set[_IPAddress], _PortInspection | None]:
+    normalized = host.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    literal = normalized.rsplit("%", 1)[0]
+    try:
+        address = ipaddress.ip_address(literal)
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(normalized, None, family)
+        except socket.gaierror as exc:
             description = exc.strerror or type(exc).__name__
-            if exc.errno == errno.EADDRINUSE:
-                return False, f"occupied ({description})"
-            return False, f"could not bind {host!r} ({description})"
-    return True, "free"
+            return set(), _PortInspection(
+                state="uninspectable",
+                error_kind="bind_host",
+                evidence=f"could not resolve bind host {host!r}: {description}",
+                remediation=(
+                    f"Correct bind host {host!r} in the service configuration, then "
+                    f"rerun preflight. See {_DOCS}#preflight-port."
+                ),
+            )
+        addresses = {
+            ipaddress.ip_address(info[4][0].rsplit("%", 1)[0])
+            for info in infos
+        }
+    else:
+        addresses = {address}
+    return addresses, None
+
+
+def _visible_socket_addresses(
+    port: int,
+    proto: str,
+    family: int,
+) -> tuple[set[_VisibleSocketAddress], _PortInspection | None]:
+    command = [
+        "ss",
+        "-H",
+        "-n",
+        "-6" if family == socket.AF_INET6 else "-4",
+        "-l" if proto == "tcp" else "-a",
+        "-t" if proto == "tcp" else "-u",
+        f"sport = :{port}",
+    ]
+    diagnostic = shlex.join(command)
+    command_remediation = (
+        f"Run `{diagnostic}` in the same login session and correct the reported "
+        f"error. See {_DOCS}#preflight-port."
+    )
+    try:
+        completed = _run(command, timeout=_PORT_INSPECTION_TIMEOUT)
+    except FileNotFoundError:
+        return set(), _PortInspection(
+            state="uninspectable",
+            error_kind="missing",
+            evidence="ss not found",
+            remediation=(
+                "Install the iproute2 package so `ss` is available on PATH, then "
+                f"rerun preflight. See {_DOCS}#preflight-port."
+            ),
+        )
+    except subprocess.TimeoutExpired:
+        return set(), _PortInspection(
+            state="uninspectable",
+            error_kind="timeout",
+            evidence=f"ss timed out after {_PORT_INSPECTION_TIMEOUT:g} seconds",
+            remediation=(
+                f"Run `{diagnostic}` directly to diagnose the timeout, then rerun "
+                f"preflight. See {_DOCS}#preflight-port."
+            ),
+        )
+    except OSError as exc:
+        description = exc.strerror or type(exc).__name__
+        return set(), _PortInspection(
+            state="uninspectable",
+            error_kind="command",
+            evidence=f"ss failed: {description}",
+            remediation=command_remediation,
+        )
+    detail = _bounded_inspection_text(completed.stderr)
+    if completed.returncode != 0:
+        suffix = f": {detail}" if detail else ""
+        return set(), _PortInspection(
+            state="uninspectable",
+            error_kind="command",
+            evidence=f"ss exited with status {completed.returncode}{suffix}",
+            remediation=command_remediation,
+        )
+    if detail:
+        return set(), _PortInspection(
+            state="uninspectable",
+            error_kind="command",
+            evidence=f"ss reported: {detail}",
+            remediation=command_remediation,
+        )
+
+    addresses: set[_VisibleSocketAddress] = set()
+    for line in completed.stdout.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split()
+        if (
+            len(fields) != 5
+            or not fields[1].isdigit()
+            or not fields[2].isdigit()
+            or (proto == "tcp" and fields[0] != "LISTEN")
+            or (proto == "udp" and fields[0] not in {"UNCONN", "ESTAB"})
+        ):
+            return set(), _malformed_socket_inspection(line, diagnostic)
+        address = _parse_ss_local_address(fields[3], port, family)
+        if address is None:
+            return set(), _malformed_socket_inspection(line, diagnostic)
+        addresses.add(address)
+    return addresses, None
+
+
+def _bounded_inspection_text(text: str) -> str:
+    detail = " ".join(text.split())
+    return f"{detail[:197]}..." if len(detail) > 200 else detail
+
+
+def _malformed_socket_inspection(row: str, diagnostic: str) -> _PortInspection:
+    return _PortInspection(
+        state="uninspectable",
+        error_kind="malformed",
+        evidence=f"malformed ss output: {_bounded_inspection_text(row)!r}",
+        remediation=(
+            f"Report the parsing gap with output from `ss -V` and `{diagnostic}`. "
+            f"See {_DOCS}#preflight-port."
+        ),
+    )
+
+
+def _parse_ss_local_address(
+    endpoint: str,
+    port: int,
+    family: int,
+) -> _VisibleSocketAddress | None:
+    bracketed = endpoint.startswith("[")
+    if bracketed:
+        closing = endpoint.find("]")
+        if closing < 0:
+            return None
+        host = endpoint[1:closing]
+        scope, delimiter, port_text = endpoint[closing + 1:].rpartition(":")
+        if not delimiter or (scope and not scope.startswith("%")):
+            return None
+    else:
+        host, delimiter, port_text = endpoint.rpartition(":")
+        if not delimiter:
+            return None
+    if not port_text.isdigit() or int(port_text) != port:
+        return None
+    host = host.rsplit("%", 1)[0]
+    wildcard = host == "*"
+    if wildcard:
+        host = "::" if family == socket.AF_INET6 else "0.0.0.0"
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    expected_version = 6 if family == socket.AF_INET6 else 4
+    if address.version != expected_version:
+        return None
+    # ss renders a dual-stack wildcard as * and an IPv6-only wildcard as [::].
+    return _VisibleSocketAddress(
+        address=address,
+        dual_stack_wildcard=(
+            family == socket.AF_INET6
+            and address.is_unspecified
+            and (wildcard or not bracketed)
+        ),
+    )
+
+
+def _socket_conflicts(
+    targets: set[_IPAddress],
+    target_family: int,
+    visible: _VisibleSocketAddress,
+    visible_family: int,
+) -> bool:
+    address = visible.address
+    if target_family == visible_family:
+        return any(
+            target.is_unspecified or address.is_unspecified or target == address
+            for target in targets
+        )
+    if target_family != socket.AF_INET or visible_family != socket.AF_INET6:
+        return False
+    if visible.dual_stack_wildcard:
+        return True
+    mapped = address.ipv4_mapped
+    return mapped is not None and any(
+        target.is_unspecified or target == mapped
+        for target in targets
+    )
 
 
 def _bind_hosts_overlap(left: str, right: str) -> bool:
@@ -906,6 +1145,104 @@ def _owned_bind_conflict_checks(
                     f"{left.proto} ports or non-overlapping bind addresses."
                 ),
             ))
+    return checks
+
+
+def _read_ephemeral_port_policy(
+    port_range_path: Path,
+    reserved_ports_path: Path,
+) -> tuple[tuple[int, int], tuple[tuple[int, int], ...]]:
+    range_fields = port_range_path.read_text(encoding="utf-8").split()
+    if len(range_fields) != 2:
+        raise ValueError(f"{port_range_path} must contain two integers")
+    try:
+        first, last = (int(value) for value in range_fields)
+    except ValueError as exc:
+        raise ValueError(f"{port_range_path} must contain two integers") from exc
+    if not 1 <= first <= last <= 65535:
+        raise ValueError(f"{port_range_path} contains an invalid port range")
+
+    reservations: list[tuple[int, int]] = []
+    reserved_text = reserved_ports_path.read_text(encoding="utf-8").strip()
+    if reserved_text:
+        for entry in reserved_text.split(","):
+            fields = entry.strip().split("-")
+            if len(fields) not in {1, 2}:
+                raise ValueError(
+                    f"{reserved_ports_path} contains invalid entry {entry!r}"
+                )
+            try:
+                start = int(fields[0])
+                end = int(fields[-1])
+            except ValueError as exc:
+                raise ValueError(
+                    f"{reserved_ports_path} contains invalid entry {entry!r}"
+                ) from exc
+            if not 1 <= start <= end <= 65535:
+                raise ValueError(
+                    f"{reserved_ports_path} contains invalid entry {entry!r}"
+                )
+            reservations.append((start, end))
+    return (first, last), tuple(reservations)
+
+
+def _ephemeral_port_checks(
+    services: Sequence[ResolvedService],
+    *,
+    port_range_path: Path = _EPHEMERAL_PORT_RANGE,
+    reserved_ports_path: Path = _RESERVED_PORTS,
+) -> list[CheckResult]:
+    owned = [
+        service
+        for service in services
+        if service.ownership == "own" and service.port is not None
+    ]
+    if not owned:
+        return []
+    try:
+        port_range, reservations = _read_ephemeral_port_policy(
+            port_range_path, reserved_ports_path,
+        )
+    except (OSError, ValueError) as exc:
+        return [CheckResult(
+            name="ephemeral_ports",
+            ok=True,
+            detected=f"could not inspect host ephemeral port policy ({exc})",
+            required="host ephemeral port policy available for owned ports",
+            remediation=(
+                f"Read `{port_range_path}` and `{reserved_ports_path}`, or run "
+                "`sysctl net.ipv4.ip_local_port_range "
+                "net.ipv4.ip_local_reserved_ports`, then correct the access or "
+                f"value and rerun preflight. Refer to {_DOCS}#preflight-port."
+            ),
+            status="warning",
+        )]
+
+    first, last = port_range
+    checks: list[CheckResult] = []
+    for service in owned:
+        port = service.port
+        if not first <= port <= last or any(
+            start <= port <= end for start, end in reservations
+        ):
+            continue
+        checks.append(CheckResult(
+            name=f"ephemeral_port:{service.name}:{service.proto}:{port}",
+            ok=True,
+            detected=(
+                f"{service.proto} port {port} for {service.name} is inside the host "
+                f"ephemeral range {first}-{last} and is not reserved"
+            ),
+            required="owned service port excluded from automatic ephemeral allocation",
+            remediation=(
+                "Preserve every existing `net.ipv4.ip_local_reserved_ports` entry "
+                f"and add port {port}; writing this setting replaces the complete "
+                "list. The reservation prevents future automatic allocation but "
+                "does not release an existing connection. "
+                f"Refer to {_DOCS}#preflight-port."
+            ),
+            status="warning",
+        ))
     return checks
 
 
@@ -1877,31 +2214,44 @@ def preflight(
         if process.name
     }
     verified_services: set[str] = set()
+    checks.extend(_ephemeral_port_checks(services))
     checks.extend(_owned_bind_conflict_checks(services))
     for service in services:
         if service.ownership != "own" or service.port is None:
             continue
-        free, detected = _port_is_free(
+        inspection = _port_is_free(
             service.port, service.proto, service.bind_host,
         )
+        detected = inspection.detected
         verified = False
+        inspection_warning = False
         process = process_by_name.get(service.name)
         ownership_probe = process.ownership_probe if process is not None else None
-        remediation = (
-            f"Stop the process using this port or configure a different port. "
-            f"See {_DOCS}#preflight-port."
-        )
+        remediation = inspection.remediation
         is_device_io_hub = (
             process is not None and process.command == "device_io_hub"
         )
-        if service.name == "hub" and (process is None or is_device_io_hub):
+        if (
+            inspection.state == "occupied"
+            and service.name == "hub"
+            and (process is None or is_device_io_hub)
+        ):
             remediation = (
                 "If this is a LiveKit listener, stop or restart the "
                 "`xr-ai-livekit-server` container. Otherwise, stop the process using "
                 f"the port or configure a different port for the hub. See {_DOCS}#preflight-port."
             )
+        probe_inspection_failure = (
+            inspection.state == "uninspectable"
+            and inspection.error_kind in {"missing", "command", "malformed"}
+        )
+        should_probe_ownership = (
+            inspection.state == "occupied" or probe_inspection_failure
+        )
+        ownership_probe_attempted = False
         targeted_mismatch = False
-        if not free and callable(ownership_probe):
+        if should_probe_ownership and callable(ownership_probe):
+            ownership_probe_attempted = True
             try:
                 verified = ownership_probe(_effective_process_env(process)) is True
             except OwnershipProbeMismatch as exc:
@@ -1911,16 +2261,34 @@ def preflight(
             except Exception as exc:
                 detected += f"; ownership probe failed ({type(exc).__name__})"
             if verified:
-                detected = "occupied by the expected managed service"
+                if inspection.state == "occupied":
+                    detected = "occupied by the expected managed service"
+                else:
+                    detected = (
+                        "verified as the expected managed service; socket inspection "
+                        f"failed ({inspection.evidence})"
+                    )
+                    inspection_warning = True
                 verified_services.add(service.name)
-        if not free and service.health:
+        if (
+            inspection.state == "uninspectable"
+            and not verified
+            and not targeted_mismatch
+        ):
+            detected += (
+                "; ownership unverified"
+                if ownership_probe_attempted
+                else "; ownership not probed"
+            )
+        if inspection.state == "occupied" and service.health:
             if not verified and not targeted_mismatch:
                 detected += "; ownership unverified"
         checks.append(CheckResult(
             f"port:{service.name}:{service.proto}:{service.port}",
-            free or verified, detected,
-            f"{service.proto} port {service.port} free",
+            inspection.state == "clear" or verified, detected,
+            f"no conflicting socket on {service.proto} port {service.port}",
             remediation,
+            status="warning" if inspection_warning else None,
         ))
     if verified_services:
         services = tuple(

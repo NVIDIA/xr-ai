@@ -1198,23 +1198,31 @@ def container_ownership_snapshot_checked(
         return None, False
 
 
-def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
+def pid_on_port_checked(
+    port: int,
+    *,
+    timeout: float | None = None,
+) -> tuple[int | None, bool, bool]:
     """Return the listening PID, inspection status, and listener presence.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
     A listener without a visible PID is still reported so callers fail closed
-    instead of mistaking an uninspectable listener for an unused port.
+    instead of mistaking an uninspectable listener for an unused port. *timeout*
+    bounds each inspection command; ``None`` waits without a deadline.
     """
     try:
         out = subprocess.check_output(
             ["ss", "-tlnpH", f"sport = :{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=timeout,
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
             return int(m.group(1)), True, True
         return None, True, bool(out.strip())
+    except subprocess.TimeoutExpired:
+        return None, False, False
     except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
@@ -1222,10 +1230,13 @@ def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
             ["lsof", "-ti", f"tcp:{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=timeout,
         ).strip()
         if out:
             return int(out.splitlines()[0]), True, True
         return None, True, False
+    except subprocess.TimeoutExpired:
+        return None, False, False
     except subprocess.CalledProcessError:
         return None, True, False
     except FileNotFoundError:
