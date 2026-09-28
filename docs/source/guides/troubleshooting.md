@@ -50,6 +50,216 @@ is the problem.
 described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
 `sudo`, then retry the model-server command.
 
+(preflight-platform)=
+### Preflight reports an unsupported platform
+
+**Cause:** the selected sample's `requirements.json` does not list the detected
+operating system or machine architecture. For `xr-render-demo`, automatic LOVR
+download supports Linux x86_64. On Linux aarch64, a custom executable satisfies
+the architecture requirement.
+
+**Fix:** confirm the host values with `uname -s` and `uname -m`. Use a supported
+host, or follow the
+[DGX Spark LOVR instructions](#dgx-spark-lovr-auto-download-is-not-supported)
+and set `LOVR_BIN` before rerunning preflight.
+
+(preflight-command)=
+### Preflight reports a missing command
+
+**Cause:** an executable named in the dependency contract is not on `PATH`.
+
+**Fix:** install the command and open a new shell so its installation directory
+is on `PATH`. Install `uv` with the
+[official installer](https://docs.astral.sh/uv/getting-started/installation/).
+For `npm`, follow the Node.js instructions below.
+
+(preflight-python)=
+### Preflight reports an unsupported Python version
+
+**Cause:** the Python interpreter running the orchestrator is outside the
+sample's supported range.
+
+**Fix:** install Python 3.11 or 3.12, then let `uv` select it:
+
+```bash
+uv python install 3.12
+uv sync --python 3.12
+```
+
+(preflight-nvidia-driver)=
+### Preflight reports an old or unavailable NVIDIA driver
+
+**Cause:** `nvidia-smi` is missing, cannot communicate with the kernel driver,
+or reports a version below 580. The checked-in CUDA 13 model containers and
+DeviceIOHub hardware codecs require a current driver.
+
+**Fix:** run `nvidia-smi` to distinguish a missing command from a driver-load
+failure. Install driver 580 or newer using the
+[NVIDIA driver installation guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/),
+reboot if the installer requests it, and rerun preflight.
+
+(preflight-docker)=
+### Preflight reports that Docker is missing or unavailable
+
+**Cause:** Docker 24 or newer is missing, the daemon is stopped, or the current
+user cannot access its socket. DeviceIOHub uses Docker for LiveKit, and the
+checked-in model profiles use it for vLLM or NIM containers.
+
+**Fix:** install or update
+[Docker Engine](https://docs.docker.com/engine/install/), start the daemon, and
+make `docker info` succeed as the same user that launches XR AI.
+
+(preflight-container-toolkit)=
+### Preflight reports missing NVIDIA Container Toolkit or GPU access
+
+**Cause:** Docker does not expose the NVIDIA runtime, or that runtime cannot
+give containers GPU access. Docker can be healthy while a model container later
+fails to discover GPU devices.
+
+**Fix:** follow {ref}`docker-host-setup` to install the NVIDIA Container
+Toolkit, register the runtime, refresh Docker group membership, and run the
+repository's container GPU check.
+
+(preflight-vulkan)=
+### Preflight reports that Vulkan is unavailable
+
+**Cause:** `xr-render-demo` cannot create a hardware Vulkan device. A missing
+loader or ICD, a software-only device, and WSL2's compute-only GPU path all fail
+this check.
+
+**Fix:** use bare-metal Linux with the NVIDIA Vulkan driver. On Ubuntu or
+Debian, install the loader, headers, and diagnostic utility, then confirm
+`vulkaninfo --summary` lists the NVIDIA GPU:
+
+```bash
+sudo apt install libvulkan1 libvulkan-dev vulkan-tools
+vulkaninfo --summary
+```
+
+(preflight-nvenc)=
+### Preflight reports that NVENC is unavailable
+
+**Cause:** the NVIDIA video-encode library is missing, the driver cannot create
+an encoder session, or `ffmpeg` is unavailable for the functional probe.
+DeviceIOHub requires NVIDIA hardware codecs.
+
+**Fix:** install `ffmpeg` for preflight (`sudo apt install ffmpeg` on Ubuntu or
+Debian), and install or repair the NVIDIA driver if encoder initialization
+fails. In a containerized deployment, also expose the GPU and include `video` in
+`NVIDIA_DRIVER_CAPABILITIES`. Refer to
+[Hub fails immediately because NVIDIA codec libraries are missing](#hub-fails-immediately-with-runtimeerror-missing-libnvcuvid-so-libnvidia-encode-so).
+
+(preflight-node)=
+### Preflight reports an old or unavailable Node.js runtime
+
+**Cause:** the WebXR vendor build requires Node.js 20.19.0 or newer and `npm`.
+Native CloudXR device profiles skip this requirement because they do not serve
+the WebXR client.
+
+**Fix:** install a current Node.js LTS release from
+[nodejs.org](https://nodejs.org/en/download), then verify `node --version` and
+`npm --version` in the launch shell.
+
+(preflight-disk)=
+### Preflight reports insufficient cache space
+
+**Cause:** a filesystem containing an owned service cache lacks either the
+declared runtime headroom or enough space for the caller's known remaining
+selected artifacts plus that headroom. If the caller has not supplied
+preparation inventory for a preparation-enabled process, preflight reports that
+capacity as deferred.
+
+**Fix:** inspect the reported paths with `df -h <path>`. Remove unneeded
+artifacts or other files, or move the affected cache by changing `model_cache`
+or `nim_cache` in the service YAML. For a deferred result, collect the service
+preparation inventory and rerun preflight before preparing artifacts.
+
+(preflight-port)=
+### Preflight reports an owned port conflict or inspection failure
+
+**Cause:** an `occupied` result means another process has a visible TCP listener
+or UDP socket on a port that the selected stack owns. A `could not inspect`
+result identifies an invalid or unresolvable bind host, a missing or failed
+Linux iproute2 `ss` command, a timeout, or output the launcher could not parse.
+A warning about the host ephemeral range means an owned service port is not
+reserved from automatic allocation, or the kernel policy could not be read.
+A successful health response alone does not grant the launcher permission to
+adopt a service. For ownership fallback behavior and inspection limitations,
+refer to {doc}`the launcher model </components/launcher-and-process-model>`.
+
+**Fix:** use the reported reason to select the recovery:
+
+- For an invalid or unresolvable bind host, correct `bind_host` or the service
+  setting named by `bind_config_key` so that it resolves to a local address.
+- If `ss` is missing, install iproute2 and rerun preflight.
+- If `ss` failed, timed out, or reported an error, run it from the same login
+  session and correct the reported runtime or permission problem.
+- For output the launcher could not parse, capture the raw `ss` row and the
+  output of `ss -V` when reporting the compatibility problem.
+- For a warning about a verified managed service, repair socket inspection and
+  rerun preflight to clear the warning.
+- For an unreserved ephemeral-range port, read the current
+  `net.ipv4.ip_local_reserved_ports` value and merge the reported port into it.
+  Preserve every existing entry because writing the setting replaces the whole
+  list. The reservation does not release a connection already using the port.
+- If the ephemeral policy could not be inspected, read
+  `/proc/sys/net/ipv4/ip_local_port_range` and
+  `/proc/sys/net/ipv4/ip_local_reserved_ports`, or inspect both with `sysctl`,
+  then correct the reported access or value problem.
+
+For an occupied port, inspect the reported port, stop the conflicting process,
+or assign the XR AI service a different port in its YAML:
+
+```bash
+ss -ltnp
+ss -aunp
+```
+
+Keep endpoint URLs and client configuration synchronized with any port change.
+
+For LiveKit ports 7880-7882, inspect the named `xr-ai-livekit-server` container
+as well as `ss`; Docker-proxied listeners may not expose a useful host PID. Stop
+a stale instance with `docker stop xr-ai-livekit-server`. DeviceIOHub recreates
+its LiveKit container during the next launch.
+
+(preflight-reused-service)=
+### Preflight reports that a reused model service is unavailable
+
+**Cause:** the application sample is configured to reuse the named service, but
+the resolved health URL in the report is not responding.
+
+**Fix:** start or restore that specific service at the reported URL. If it
+belongs to the shared model stack, select a model-server profile that includes
+the service and wait for that profile to report ready. If the service
+intentionally runs elsewhere, update the sample's `yaml/models.json` endpoint.
+Starting the default profile unconditionally can stop services selected by
+another profile.
+
+(preflight-external-service)=
+### Preflight reports that an external service is unavailable
+
+**Cause:** an endpoint classified as external failed its configured health
+probe. A loopback URL with omitted deployment metadata commonly points to a
+separately launched local model stack; a remote URL commonly points to a hosted
+provider.
+
+**Fix:** for a loopback endpoint, start the named shared service at the reported
+URL or correct the profile. For a hosted endpoint, verify the URL, network
+route, and provider status. If a hosted provider does not expose a health
+endpoint, set `endpoint.readiness` to `none`; this disables both launcher
+preflight requests and explicit SDK `health()` requests. Do not use it to hide a
+stopped local service.
+
+(preflight-credential)=
+### Preflight reports a missing credential
+
+**Cause:** a required contract or model-profile credential is absent from the
+environment and the XR AI credential store.
+
+**Fix:** configure it as described in {doc}`/getting_started/credentials` and
+rerun preflight. Preflight reports only whether the value is present and never
+prints the credential itself.
+
 ### DGX Spark — `uv sync` fails to build a wheel
 
 **Symptom:** `uv sync` fails on a DGX Spark system while building NeMo or
@@ -178,6 +388,7 @@ can reproduce the profiling variation. An explicit KV cache cannot bypass an
 earlier CUDA driver-allocation failure; the prefetch and bounded retry are
 separate safeguards for that stage.
 
+(dgx-spark-lovr-auto-download-is-not-supported)=
 ### DGX Spark — LOVR auto-download is not supported
 
 **Symptom:** `uv run --project agent-samples/xr-render-demo xr_render_demo`

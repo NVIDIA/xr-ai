@@ -30,23 +30,26 @@ def run(
     host: str,
     port: int,
     ready_file: Path | None,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> None:
     health_url = _lifecycle.health_url(host, port)
 
     # A profile switch can leave an xr-ai container (vLLM docker or NIM) on
     # this port; it can answer the health probe and be silently mistaken for
     # a reusable pip server. Evict it before the reuse check.
-    holder, checked = _docker.container_on_port_checked(port)
-    if checked and holder:
-        print(
-            f"[{log_prefix}] port {port} is held by container {holder}; "
-            f"stopping it to make way",
-            flush=True,
-        )
-        _docker.stop_container(holder)
-        if not _docker.remove_container(holder) and _docker.container_running(holder):
-            log.error("could not evict container %s from port %d", holder, port)
-            sys.exit(1)
+    holders, checked = _docker.containers_on_port_checked(port)
+    if checked:
+        for holder in holders:
+            print(
+                f"[{log_prefix}] port {port} is held by container {holder}; "
+                f"stopping it to make way",
+                flush=True,
+            )
+            _docker.stop_container(holder)
+            if not _docker.remove_container(holder) and _docker.container_running(holder):
+                log.error("could not evict container %s from port %d", holder, port)
+                sys.exit(1)
 
     if persistent and _lifecycle.health_ok(health_url):
         print(
@@ -70,6 +73,10 @@ def run(
         "XR_AI_VLLM_MANAGED": "1",
         "XR_AI_VLLM_PORT": str(port),
     }
+    if config_digest:
+        env["XR_AI_SERVICE_CONFIG_DIGEST"] = config_digest
+    if service_identity:
+        env["XR_AI_SERVICE_IDENTITY"] = service_identity
     proc = subprocess.Popen(vllm_argv, env=env, start_new_session=persistent)
 
     _lifecycle.wait_until_healthy(

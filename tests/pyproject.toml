@@ -33,6 +33,7 @@ dependencies = [
     "xr-video-memory-service",
     "xr-rag-service",
     # Test runner.
+    "jsonschema>=4.23,<5",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",

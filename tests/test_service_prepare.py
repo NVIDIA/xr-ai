@@ -15,17 +15,34 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import xr_ai_vllm
 from xr_ai_launcher import _artifacts as launcher_artifacts
 from xr_ai_launcher import prepare_or_exit
+from xr_ai_vllm import _config as vllm_config
+from xr_ai_vllm import _docker, _nim, _ownership, _pip
 from xr_ai_vllm import _prepare as vllm_prepare
-from xr_ai_vllm._config import prepare_requested
+from xr_ai_vllm._config import (
+    local_service_identity_env,
+    prepare_requested,
+    service_config_digest,
+)
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MISSING_MODULE = object()
 
 
+def _described_identity(output: str) -> str:
+    values = [
+        line.removeprefix(_docker._LAUNCH_IDENTITY_PREFIX)
+        for line in output.splitlines()
+        if line.startswith(_docker._LAUNCH_IDENTITY_PREFIX)
+    ]
+    assert len(values) == 1
+    return values[0]
+
+
 @pytest.fixture(autouse=True)
-def _isolate_prepare_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolate_credential_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "CUDA_VISIBLE_DEVICES",
         "HF_HOME",
@@ -97,15 +114,334 @@ def test_prepare_requested_coexists_with_config() -> None:
     assert not prepare_requested(["--config", "service.yaml"])
 
 
+def test_service_config_digest_protects_every_credential(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "service.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    protected: list[str] = []
+    monkeypatch.setenv("HF_TOKEN", "hf-secret")
+    monkeypatch.setenv("NGC_API_KEY", "ngc-secret")
+    monkeypatch.setattr(
+        vllm_config,
+        "credential_digest",
+        lambda value: protected.append(value) or f"pbkdf2:{value}",
+    )
+
+    digest = service_config_digest(config)
+
+    assert digest is not None
+    assert protected == ["hf-secret", "ngc-secret"]
+    assert "hf-secret" not in digest
+    assert "ngc-secret" not in digest
+
+
+def test_service_config_digest_includes_the_canonical_config_path(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "first" / "service.yaml"
+    second = tmp_path / "second" / "service.yaml"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    contents = "model: org/model\nmodel_cache: ./models\n"
+    first.write_text(contents, encoding="utf-8")
+    second.write_text(contents, encoding="utf-8")
+
+    assert service_config_digest(first, env={}) != service_config_digest(
+        second, env={}
+    )
+
+
+def test_local_service_wrappers_share_the_child_identity_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "NEMO_LOGGING_LEVEL",
+        "NUMEXPR_MAX_THREADS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    stt = _load_module(
+        "service_prepare_stt_digest",
+        "services/stt-server/stt_server/__main__.py",
+    )
+    pocket = _load_module(
+        "service_prepare_pocket_digest",
+        "services/pocket-tts/pocket_tts_server/__main__.py",
+    )
+
+    assert stt.local_service_identity_env is local_service_identity_env
+    assert pocket.local_service_identity_env is local_service_identity_env
+
+
+def test_child_identity_env_removes_stale_digest_without_current_config() -> None:
+    source = {
+        "XR_AI_SERVICE_CONFIG_DIGEST": "stale-parent-value",
+        "UNCHANGED": "value",
+    }
+
+    child = local_service_identity_env(None, "stt_server", env=source)
+
+    assert "XR_AI_SERVICE_CONFIG_DIGEST" not in child
+    assert child["XR_AI_SERVICE_IDENTITY"] == "stt_server"
+    assert child["UNCHANGED"] == "value"
+    assert source["XR_AI_SERVICE_CONFIG_DIGEST"] == "stale-parent-value"
+
+
+def test_local_service_wrappers_resolve_relative_config_in_child_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stt = _load_module(
+        "service_prepare_stt_relative_identity",
+        "services/stt-server/stt_server/__main__.py",
+    )
+    pocket = _load_module(
+        "service_prepare_pocket_relative_identity",
+        "services/pocket-tts/pocket_tts_server/__main__.py",
+    )
+    config = tmp_path / "service.yaml"
+    config.write_text("voice: bill_boerst\nport: 8105\n", encoding="utf-8")
+    expected_digest = service_config_digest(config)
+    assert expected_digest is not None
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XR_AI_SERVICE_CONFIG_DIGEST", "parent-value")
+
+    stt_child: dict[str, str] = {}
+    monkeypatch.setattr(stt, "setup_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stt, "_health_url_ok", lambda *_args: False)
+    monkeypatch.setattr(stt, "_idle_until_stopped", lambda *_args: None)
+
+    def start_stt(*_args: object, env: dict[str, str]):
+        stt_child.update(env)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(stt, "_start_persistent_server", start_stt)
+    monkeypatch.setattr(sys, "argv", ["stt_server", "--config", "service.yaml"])
+    stt.run()
+
+    assert stt_child["XR_AI_SERVICE_CONFIG_DIGEST"] == expected_digest
+    assert stt_child["XR_AI_SERVICE_IDENTITY"] == "stt_server"
+    assert os.environ["XR_AI_SERVICE_CONFIG_DIGEST"] == "parent-value"
+
+    pocket_child: dict[str, str] = {}
+    monkeypatch.setattr(pocket, "setup_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pocket, "_health_url_ok", lambda *_args: False)
+    monkeypatch.setattr(pocket, "_port_open", lambda *_args: False)
+    monkeypatch.setattr(pocket, "_ensure_owned_process_group", lambda: None)
+    monkeypatch.setattr(
+        pocket.os,
+        "execvpe",
+        lambda _executable, _argv, env: pocket_child.update(env),
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["pocket_tts_server", "--config", "service.yaml"]
+    )
+    pocket.run()
+
+    assert pocket_child["XR_AI_SERVICE_CONFIG_DIGEST"] == expected_digest
+    assert pocket_child["XR_AI_SERVICE_IDENTITY"] == "pocket_tts_server"
+    assert os.environ["XR_AI_SERVICE_CONFIG_DIGEST"] == "parent-value"
+
+
+def test_vllm_wrapper_describes_resolved_mounts_and_defaults_without_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    embedding = _load_module(
+        "service_prepare_embedding_describe",
+        "services/embedding-server/embedding_server/__main__.py",
+    )
+    monkeypatch.setattr(embedding, "setup_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        _docker,
+        "run",
+        lambda **_kwargs: pytest.fail("describe mode must not launch Docker"),
+    )
+    monkeypatch.setattr(
+        _pip,
+        "run",
+        lambda **_kwargs: pytest.fail("describe mode must not launch pip vLLM"),
+    )
+    contents = (
+        "model: org/model\n"
+        "model_cache: ./models\n"
+        "vllm_backend: docker\n"
+    )
+    first = tmp_path / "first" / "embedding.yaml"
+    second = tmp_path / "second" / "embedding.yaml"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text(contents, encoding="utf-8")
+    second.write_text(contents, encoding="utf-8")
+    ready_file = tmp_path / "ready"
+
+    def describe(config: Path) -> str:
+        for name in (
+            "HF_HUB_DISABLE_XET",
+            "HF_HUB_ENABLE_HF_TRANSFER",
+            "HF_XET_HIGH_PERFORMANCE",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "embedding_server",
+                "--config",
+                str(config),
+                "--ready-file",
+                str(ready_file),
+                "--describe-launch",
+            ],
+        )
+        embedding.run()
+        return _described_identity(capsys.readouterr().out)
+
+    first_identity = describe(first)
+    second_identity = describe(second)
+
+    assert first_identity != second_identity
+    assert not (first.parent / "models").exists()
+    assert not (second.parent / "models").exists()
+    assert not ready_file.exists()
+
+    absolute_cache = tmp_path / "shared-models"
+    first.write_text(
+        f"model: org/model\nmodel_cache: {absolute_cache}\nvllm_backend: docker\n",
+        encoding="utf-8",
+    )
+    second.write_text(
+        f"# source-only change\nvllm_backend: docker\n"
+        f"model_cache: {absolute_cache}\nmodel: org/model\n",
+        encoding="utf-8",
+    )
+    stable_identity = describe(first)
+    assert stable_identity == describe(second)
+
+    monkeypatch.setattr(embedding, "_DEFAULT_GPU_MEM", 0.42)
+    assert describe(first) != stable_identity
+
+
+def test_nim_wrapper_describes_launch_without_credentials_or_cache_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    nim = _load_module(
+        "service_prepare_nim_describe",
+        "services/nim-server/nim_server/__main__.py",
+    )
+    monkeypatch.setattr(nim, "setup_logging", lambda *_args, **_kwargs: None)
+    config = tmp_path / "nim.yaml"
+    config.write_text(
+        "image: nvcr.io/nim/example/model:1\n"
+        "http_port: 8100\n"
+        "nim_cache: ./nim-cache\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NGC_API_KEY", "  ngc-secret\n")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nim_server", "--config", str(config), "--describe-launch"],
+    )
+
+    nim.run()
+
+    identity = _described_identity(capsys.readouterr().out)
+    digest = service_config_digest(config)
+    assert digest is not None
+    assert identity == _nim.nim_launch_identity(
+        image="nvcr.io/nim/example/model:1",
+        http_port=8100,
+        grpc_port=None,
+        nim_cache=tmp_path / "nim-cache" / "xr-ai-nim-model",
+        cuda_visible_devices=None,
+        extra_env={},
+        service_identity="nim_server",
+    )
+    monkeypatch.setenv("NGC_API_KEY", "ngc-secret")
+    argv = _nim.build_nim_run_argv(
+        image="nvcr.io/nim/example/model:1",
+        container_name="xr-ai-nim-model",
+        http_port=8100,
+        grpc_port=None,
+        nim_cache=tmp_path / "nim-cache" / "xr-ai-nim-model",
+        cuda_visible_devices=None,
+        extra_env={},
+        config_digest=digest,
+        service_identity="nim_server",
+    )
+    assert _docker._requested_fingerprint(argv) == identity
+    assert not (tmp_path / "nim-cache").exists()
+
+
+def test_nano_describe_derives_the_parser_path_without_downloading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    nano = _load_module(
+        "service_prepare_nano_describe",
+        "services/nemotron3-nano-llm/nemotron3_nano_llm_server/__main__.py",
+    )
+    monkeypatch.setattr(nano, "setup_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(nano, "gpu_compute_major", lambda: 8)
+    monkeypatch.setattr(nano, "_gpu_is_dgx_spark", lambda: False)
+    monkeypatch.setattr(
+        nano,
+        "_ensure_reasoning_parser",
+        lambda *_args, **_kwargs: pytest.fail(
+            "describe mode must not download the reasoning parser"
+        ),
+    )
+    monkeypatch.setattr(
+        _docker,
+        "run",
+        lambda **_kwargs: pytest.fail("describe mode must not launch Docker"),
+    )
+    config = tmp_path / "nano.yaml"
+    config.write_text(
+        "model_cache: ./models\n"
+        "vllm_backend: docker\n"
+        "spark_uma: false\n",
+        encoding="utf-8",
+    )
+    ready_file = tmp_path / "ready"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "nemotron3_nano_llm_server",
+            "--config",
+            str(config),
+            "--ready-file",
+            str(ready_file),
+            "--describe-launch",
+        ],
+    )
+
+    nano.run()
+
+    assert len(_described_identity(capsys.readouterr().out)) == 20
+    assert not (tmp_path / "models").exists()
+    assert not ready_file.exists()
+
+
 def test_public_vllm_exports_are_complete() -> None:
     import xr_ai_vllm
 
     expected = {
+        "managed_service_matches",
         "prepare_nim",
         "prepare_or_exit",
         "prepare_requested",
         "prepare_vllm",
         "report_prepare_status",
+        "service_config_digest",
+        "source_config_digest",
     }
 
     assert expected <= set(xr_ai_vllm.__all__)
@@ -605,6 +941,629 @@ def test_nim_prepare_uses_download_utility_and_warm_marker(
     output = capsys.readouterr().out
     assert "NIM model profile nvcr.io/nim/nvidia/model:1: downloading" in output
     assert "NIM model profile nvcr.io/nim/nvidia/model:1: cached" in output
+
+
+def test_managed_service_probe_ignores_source_only_changes_and_rejects_effective(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n")
+    health: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        _ownership,
+        "_health_ok",
+        lambda port, path: health.append((port, path)) or True,
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, **_kwargs: (("arbitrary-generated-name",), True),
+    )
+    launch_identity = "1" * 20
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda _name, **_kwargs: (
+            _docker.ContainerOwnershipSnapshot(
+                container_id="a" * 64,
+                running=True,
+                config_label=launch_identity,
+                service_label="vlm_server",
+            ),
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        _ownership,
+        "_describe_launch_identity",
+        lambda *_args: launch_identity,
+    )
+
+    assert _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        needs_docker=True,
+        health_path="/ready",
+        project=tmp_path,
+    )
+    assert health == [(8100, "/ready")]
+    config.write_text("# formatting-only source change\nmodel: org/model\n")
+    assert _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        needs_docker=True,
+        project=tmp_path,
+    )
+
+    monkeypatch.setattr(
+        _ownership,
+        "_describe_launch_identity",
+        lambda *_args: "2" * 20,
+    )
+    with pytest.raises(_ownership.OwnershipProbeMismatch) as mismatch:
+        _ownership.managed_service_matches(
+            config,
+            "vlm_server",
+            8100,
+            needs_docker=True,
+            mismatch_remediation="restart the managed stack",
+        )
+    assert "different effective launch identity" in mismatch.value.detected
+    assert mismatch.value.remediation == "restart the managed stack"
+
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, **_kwargs: (("unrelated",), True),
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda _name, **_kwargs: (
+            _docker.ContainerOwnershipSnapshot(
+                container_id="b" * 64,
+                running=True,
+                config_label=None,
+                service_label=None,
+            ),
+            True,
+        ),
+    )
+    assert not _ownership.managed_service_matches(
+        config, "vlm_server", 8100, needs_docker=True
+    )
+
+
+def test_managed_service_probe_identifies_a_legacy_container(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, **_kwargs: (("xr-ai-vllm-vlm",), True),
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda _name, **_kwargs: (
+            _docker.ContainerOwnershipSnapshot(
+                container_id="c" * 64,
+                running=True,
+                config_label="old-fingerprint",
+                service_label=None,
+            ),
+            True,
+        ),
+    )
+
+    with pytest.raises(_ownership.OwnershipProbeMismatch) as mismatch:
+        _ownership.managed_service_matches(
+            config,
+            "vlm_server",
+            8100,
+            needs_docker=True,
+            mismatch_remediation="stop every persisted model stack, then rerun",
+        )
+
+    assert mismatch.value.detected == (
+        "legacy managed container 'xr-ai-vllm-vlm' "
+        "(id cccccccccccc) lacks launch identity labels"
+    )
+    assert mismatch.value.remediation == (
+        "stop every persisted model stack, then rerun"
+    )
+
+
+def test_managed_service_probe_bounds_docker_queries_and_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    calls: list[tuple[str, float | None]] = []
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, *, timeout=None: (
+            calls.append(("discover", timeout)) or ("xr-ai-vllm-test",),
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda _name, *, timeout=None: (
+            calls.append(("inspect", timeout)) or None,
+            False,
+        ),
+    )
+
+    assert not _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        needs_docker=True,
+        project=tmp_path,
+    )
+    assert calls == [
+        ("discover", _ownership._OWNERSHIP_PROBE_TIMEOUT_S),
+        ("inspect", _ownership._OWNERSHIP_PROBE_TIMEOUT_S),
+    ]
+
+
+def test_managed_service_probe_rejects_ambiguous_container_ownership(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, **_kwargs: (("first", "second"), True),
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("ambiguous ownership must not inspect one candidate")
+        ),
+    )
+
+    assert not _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        needs_docker=True,
+        project=tmp_path,
+    )
+
+
+def test_managed_service_probe_consumes_labels_from_container_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    digest = service_config_digest(config)
+    assert digest is not None
+    argv = _docker.build_run_argv(
+        image="example/vllm:1",
+        container_name="xr-ai-vllm-test",
+        port=8100,
+        model_cache=tmp_path / "models",
+        hf_token=None,
+        cuda_visible_devices=None,
+        extra_env=None,
+        extra_pip=None,
+        vllm_argv=["vllm", "serve", "org/model"],
+        config_digest=digest,
+        service_identity="vlm_server",
+    )
+    labels = {
+        value.split("=", 1)[0]: value.split("=", 1)[1]
+        for index, item in enumerate(argv)
+        if item == "--label"
+        for value in (argv[index + 1],)
+    }
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "containers_on_port_checked",
+        lambda _port, **_kwargs: (("xr-ai-vllm-test",), True),
+    )
+    monkeypatch.setattr(
+        _ownership._docker,
+        "container_ownership_snapshot_checked",
+        lambda _name, **_kwargs: (
+            _docker.ContainerOwnershipSnapshot(
+                container_id="d" * 64,
+                running=True,
+                config_label=labels.get(_docker._CONFIG_LABEL),
+                service_label=labels.get(_docker._SERVICE_LABEL),
+            ),
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        _ownership,
+        "_describe_launch_identity",
+        lambda *_args: labels[_docker._CONFIG_LABEL],
+    )
+
+    assert _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        needs_docker=True,
+        project=tmp_path,
+    )
+
+    monkeypatch.setattr(
+        _ownership,
+        "_describe_launch_identity",
+        lambda *_args: "f" * 20,
+    )
+    with pytest.raises(_ownership.OwnershipProbeMismatch) as mismatch:
+        _ownership.managed_service_matches(
+            config,
+            "vlm_server",
+            8100,
+            needs_docker=True,
+            project=tmp_path,
+        )
+    assert "different effective launch identity" in mismatch.value.detected
+    assert "managed container 'xr-ai-vllm-test' (id dddddddddddd)" in (
+        mismatch.value.remediation
+    )
+    assert "port 8100" in mismatch.value.remediation.lower()
+    assert "model_servers --stop" in mismatch.value.remediation
+    assert "kill" not in mismatch.value.remediation
+    assert "docker rm" not in mismatch.value.remediation
+
+
+def test_launch_identity_query_uses_the_service_project_without_syncing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    project = tmp_path / "service"
+    project.mkdir()
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(_ownership.shutil, "which", lambda _name: "/usr/bin/uv")
+
+    class Process:
+        pid = 4321
+        returncode = 0
+
+        def communicate(self, *, timeout: float) -> tuple[str, str]:
+            assert timeout == 15
+            return (
+                f"log output\n{_docker._LAUNCH_IDENTITY_PREFIX}{'a' * 20}\n",
+                "",
+            )
+
+    def popen(argv: list[str], **kwargs: object) -> Process:
+        calls.append((argv, kwargs))
+        return Process()
+
+    monkeypatch.setattr(_ownership.subprocess, "Popen", popen)
+
+    assert _ownership._describe_launch_identity(
+        config,
+        "vlm_server",
+        project,
+        {"CUDA_VISIBLE_DEVICES": "1"},
+    ) == "a" * 20
+    argv, kwargs = calls[0]
+    assert argv == [
+        "/usr/bin/uv",
+        "run",
+        "--quiet",
+        "--offline",
+        "--no-sync",
+        "--project",
+        str(project),
+        "vlm_server",
+        "--config",
+        str(config),
+        "--describe-launch",
+    ]
+    assert kwargs["env"] == {"CUDA_VISIBLE_DEVICES": "1"}
+    assert kwargs["stdout"] is _ownership.subprocess.PIPE
+    assert kwargs["stderr"] is _ownership.subprocess.PIPE
+    assert kwargs["text"] is True
+    assert kwargs["start_new_session"] is True
+
+
+@pytest.mark.parametrize("failure", [subprocess.TimeoutExpired("uv", 15), KeyboardInterrupt()])
+def test_launch_identity_query_cleans_up_owned_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: BaseException,
+) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    project = tmp_path / "service"
+    project.mkdir()
+    communicates: list[float] = []
+    signals: list[tuple[int, int]] = []
+
+    class Process:
+        pid = 4321
+        returncode = None
+
+        def communicate(self, *, timeout: float) -> tuple[str, str]:
+            communicates.append(timeout)
+            if len(communicates) == 1:
+                raise failure
+            self.returncode = -signal.SIGKILL
+            return "", ""
+
+    monkeypatch.setattr(_ownership.shutil, "which", lambda _name: "/usr/bin/uv")
+    monkeypatch.setattr(
+        _ownership.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: Process(),
+    )
+    monkeypatch.setattr(
+        _ownership.os,
+        "killpg",
+        lambda pid, sig: signals.append((pid, sig)),
+    )
+
+    if isinstance(failure, KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
+            _ownership._describe_launch_identity(
+                config, "vlm_server", project, None
+            )
+    else:
+        assert _ownership._describe_launch_identity(
+            config, "vlm_server", project, None
+        ) is None
+    assert signals == [(4321, signal.SIGKILL)]
+    assert communicates == [15, 1]
+
+
+def test_launch_identity_cleanup_closes_stuck_owned_pipes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    project = tmp_path / "service"
+    project.mkdir()
+    class Stream:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    stdout = Stream()
+    stderr = Stream()
+
+    class Process:
+        pid = 4321
+        returncode = None
+
+        def communicate(self, *, timeout: float) -> tuple[str, str]:
+            raise subprocess.TimeoutExpired("uv", timeout)
+
+        def kill(self) -> None:
+            self.returncode = -signal.SIGKILL
+
+        def wait(self, *, timeout: float) -> int:
+            assert timeout == 1
+            return self.returncode
+
+    process = Process()
+    process.stdout = stdout
+    process.stderr = stderr
+    monkeypatch.setattr(_ownership.shutil, "which", lambda _name: "/usr/bin/uv")
+    monkeypatch.setattr(
+        _ownership.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(_ownership.os, "killpg", lambda *_args: None)
+
+    assert _ownership._describe_launch_identity(
+        config, "vlm_server", project, None
+    ) is None
+    assert stdout.closed
+    assert stderr.closed
+
+
+def test_pip_launch_identity_round_trips_through_the_serving_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "vlm.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    digest = service_config_digest(config, env={})
+    assert digest is not None
+    spawned: dict[str, object] = {}
+
+    class Child:
+        def poll(self) -> None:
+            return None
+
+    def popen(argv: list[str], **kwargs: object) -> Child:
+        spawned.update(argv=list(argv), **kwargs)
+        return Child()
+
+    monkeypatch.setattr(
+        _pip._docker,
+        "containers_on_port_checked",
+        lambda _port: ((), True),
+    )
+    monkeypatch.setattr(_pip._lifecycle, "health_ok", lambda _url: False)
+    monkeypatch.setattr(
+        _pip._lifecycle,
+        "wait_until_healthy",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        _pip._lifecycle,
+        "idle_until_stopped",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(_pip.subprocess, "Popen", popen)
+
+    xr_ai_vllm.serve(
+        backend="pip",
+        persistent=True,
+        container_name="unused",
+        log_prefix="vlm_server",
+        model="org/model",
+        extra_serve_args=[],
+        host="127.0.0.1",
+        port=8100,
+        model_cache=tmp_path / "models",
+        config_digest=digest,
+        service_identity="vlm_server",
+    )
+
+    child_argv = spawned["argv"]
+    child_env = spawned["env"]
+    assert isinstance(child_argv, list)
+    assert isinstance(child_env, dict)
+    assert child_argv[:3] == ["vllm", "serve", "org/model"]
+    assert child_env["XR_AI_SERVICE_CONFIG_DIGEST"] == digest
+    assert child_env["XR_AI_SERVICE_IDENTITY"] == "vlm_server"
+    original_read_bytes = Path.read_bytes
+
+    def read_bytes(path: Path) -> bytes:
+        if str(path) == "/proc/4321/cmdline":
+            return b"\0".join(item.encode() for item in child_argv) + b"\0"
+        if str(path) == "/proc/4321/environ":
+            return b"\0".join(
+                f"{key}={value}".encode()
+                for key, value in child_env.items()
+            ) + b"\0"
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "pid_on_port_checked",
+        lambda _port, **_kwargs: (4321, True, True),
+    )
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+
+    assert _ownership.managed_service_matches(
+        config,
+        "vlm_server",
+        8100,
+        env={},
+        needs_docker=False,
+    )
+    config.write_text("model: org/changed\n", encoding="utf-8")
+    with pytest.raises(_ownership.OwnershipProbeMismatch, match="launch identity"):
+        _ownership.managed_service_matches(
+            config,
+            "vlm_server",
+            8100,
+            env={},
+            needs_docker=False,
+        )
+
+
+def test_local_service_probe_bounds_pid_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "stt.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    calls: list[tuple[int, float | None]] = []
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "pid_on_port_checked",
+        lambda port, *, timeout=None: (
+            calls.append((port, timeout)) or (None, False, False)
+        ),
+    )
+
+    assert not _ownership.managed_service_matches(
+        config, "stt_server", 8103, needs_docker=False
+    )
+    assert calls == [(8103, _ownership._OWNERSHIP_PROBE_TIMEOUT_S)]
+
+
+def test_local_service_probe_verifies_proc_command_config_and_digest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "stt.yaml"
+    config.write_text("model: org/model\n", encoding="utf-8")
+    digest = service_config_digest(config)
+    assert digest is not None
+    original_read_bytes = Path.read_bytes
+    process_config = [config.resolve()]
+    process_digest = [digest]
+
+    def read_bytes(path: Path) -> bytes:
+        if str(path) == "/proc/4321/cmdline":
+            return (
+                b"uv\0stt_server\0--config\0"
+                + str(process_config[0]).encode()
+                + b"\0"
+            )
+        if str(path) == "/proc/4321/environ":
+            return f"XR_AI_SERVICE_CONFIG_DIGEST={process_digest[0]}\0".encode()
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(_ownership, "_health_ok", lambda *_args: True)
+    monkeypatch.setattr(
+        _ownership._docker,
+        "pid_on_port_checked",
+        lambda _port, **_kwargs: (4321, True, True),
+    )
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+
+    assert _ownership.managed_service_matches(
+        config, "stt_server", 8103, needs_docker=False
+    )
+
+    process_config[0] = tmp_path / "other.yaml"
+    with pytest.raises(_ownership.OwnershipProbeMismatch) as path_mismatch:
+        _ownership.managed_service_matches(
+            config,
+            "stt_server",
+            8103,
+            needs_docker=False,
+            mismatch_remediation="restart the local service",
+        )
+    assert path_mismatch.value.detected == (
+        "managed process 4321 uses a different service config"
+    )
+    assert path_mismatch.value.remediation == "restart the local service"
+
+    process_config[0] = config.resolve()
+    process_digest[0] = "different-digest"
+    with pytest.raises(_ownership.OwnershipProbeMismatch) as digest_mismatch:
+        _ownership.managed_service_matches(
+            config,
+            "stt_server",
+            8103,
+            needs_docker=False,
+            mismatch_remediation="restart the local service",
+        )
+    assert digest_mismatch.value.detected == (
+        "managed process 4321 has a different launch identity"
+    )
+    assert digest_mismatch.value.remediation == "restart the local service"
 
 
 @pytest.mark.parametrize(
@@ -1233,6 +2192,8 @@ def test_download_capable_service_cli_dispatches_prepare_without_serving(
                 None,
             ),
         )
+    if hasattr(module, "source_config_digest"):
+        monkeypatch.setattr(module, "source_config_digest", lambda: "digest")
     if hasattr(module, "resolve_model_cache"):
         monkeypatch.setattr(
             module,

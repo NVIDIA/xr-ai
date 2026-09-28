@@ -5,13 +5,55 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from ._config import read_config_scalar
 
 LaunchMode = Literal["own", "reuse"]
+Ownership = Literal["own", "reuse", "external"]
+"""Resolved lifecycle ownership reported as ``own``, ``reuse``, or ``external``.
+
+Deployment profiles spell the corresponding values ``managed``, ``reused``,
+and ``external``.
+"""
+
+
+@dataclass(frozen=True)
+class EndpointProbe:
+    """Resolved readiness endpoint for a managed, reused, or external service."""
+
+    name: str
+    """Managed service name, or the model role for an external endpoint."""
+
+    health_url: str | None
+    """Resolved readiness URL.
+
+    ``None`` fails a ``health`` readiness policy and is valid only when
+    ``readiness`` is ``none``.
+    """
+
+    ownership: Ownership
+    """Whether the launcher owns, reuses, or connects to the endpoint."""
+
+    readiness: Literal["health", "none"] = "health"
+    """Readiness policy selected by the deployment profile."""
+
+    api_key_env: str | None = None
+    """Environment variable used as a bearer credential."""
+
+    required_credentials: tuple[str, ...] = ()
+    """Credential names needed to launch a managed endpoint."""
+
+    timeout: float = 3.0
+    """Maximum seconds for one endpoint readiness probe."""
+
+    role: str | None = None
+    """Model role used to distinguish shared-service endpoint checks."""
+
+    endpoint_url: str | None = None
+    """Configured service base URL, before appending the readiness path."""
 
 
 @dataclass(frozen=True)
@@ -27,19 +69,25 @@ class ModelDeployment:
     required_credentials: tuple[str, ...]
     """Environment-variable names required by configured model endpoints."""
 
+    endpoint_probes: tuple[EndpointProbe, ...] = field(default_factory=tuple)
+    """Profile-selected endpoints with their launcher ownership."""
+
     def launch_mode(self, service: str) -> Literal["own", "reuse"] | None:
         """Return the configured ownership mode for *service*, if managed."""
         return self.services.get(service)
 
 
 def load_model_deployment(worker_config: Path) -> ModelDeployment:
-    """Load the JSON profile selected by a YAML worker configuration."""
+    """Load the model deployment selected by a worker configuration.
 
-    raw_path = read_config_scalar(
-        worker_config,
-        "models_config",
-        "models.local.json",
-    ) or "models.local.json"
+    Use ``models_config`` when set, otherwise an adjacent ``models.json`` when
+    present, and finally ``models.local.json``.
+    """
+
+    raw_path = read_config_scalar(worker_config, "models_config")
+    if not raw_path:
+        adjacent = worker_config.parent / "models.json"
+        raw_path = adjacent.name if adjacent.is_file() else "models.local.json"
     profile_path = Path(raw_path)
     if not profile_path.is_absolute():
         profile_path = worker_config.parent / profile_path
@@ -65,6 +113,7 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
 
     services: dict[str, LaunchMode] = {}
     credentials: set[str] = set()
+    probes: dict[tuple[str, Ownership], EndpointProbe] = {}
     for role, model in models.items():
         if not isinstance(role, str) or not role:
             raise ValueError(f"{profile_path}: model role names must be strings")
@@ -73,14 +122,14 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
 
         adapter = model.get("adapter")
         endpoint = model.get("endpoint")
-        deployment = model.get("deployment")
-        if not all(
-            isinstance(section, dict)
-            for section in (adapter, endpoint, deployment)
-        ):
+        deployment = model.get("deployment", {})
+        if not all(isinstance(section, dict) for section in (adapter, endpoint)):
             raise ValueError(
-                f"{profile_path}: {role!r} must define adapter, endpoint, "
-                "and deployment objects"
+                f"{profile_path}: {role!r} must define adapter, endpoint objects"
+            )
+        if not isinstance(deployment, dict):
+            raise ValueError(
+                f"{profile_path}: deployment for {role!r} must be an object"
             )
 
         readiness = endpoint.get("readiness", "health")
@@ -97,6 +146,18 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
                 )
             credentials.add(credential)
 
+        base_url = endpoint.get("base_url")
+        if not isinstance(base_url, str) or not base_url:
+            raise ValueError(
+                f"{profile_path}: role {role!r} needs endpoint.base_url"
+            )
+        health_path = endpoint.get("health_path", "/health")
+        if not isinstance(health_path, str) or not health_path.startswith("/"):
+            raise ValueError(
+                f"{profile_path}: health_path for {role!r} must start with '/'"
+            )
+        health_url = base_url.rstrip("/") + health_path
+
         # Keys the launched service itself needs; see the rationale on
         # xr_ai_models DeploymentSpec.credentials.
         deployment_credentials = deployment.get("credentials", [])
@@ -109,13 +170,24 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
                 raise ValueError(
                     f"{profile_path}: deployment credentials for {role!r} must be non-empty strings"
                 )
-            credentials.add(name)
 
         ownership = deployment.get("ownership", "external")
         if ownership == "external":
+            probe = EndpointProbe(
+                name=role,
+                role=role,
+                health_url=health_url,
+                endpoint_url=base_url,
+                ownership="external",
+                readiness=readiness,
+                api_key_env=credential,
+                required_credentials=tuple(sorted(deployment_credentials)),
+            )
+            probes[(role, "external")] = probe
             continue
         if ownership == "managed":
             launch_mode: LaunchMode = "own"
+            credentials.update(deployment_credentials)
         elif ownership == "reused":
             launch_mode = "reuse"
         else:
@@ -133,9 +205,21 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
             raise ValueError(
                 f"{profile_path}: conflicting ownership for service {service!r}"
             )
+        probe = EndpointProbe(
+            name=service,
+            role=role,
+            health_url=health_url,
+            endpoint_url=base_url,
+            ownership=launch_mode,
+            readiness=readiness,
+            api_key_env=credential,
+            required_credentials=tuple(sorted(deployment_credentials)),
+        )
+        probes[(role, launch_mode)] = probe
 
     return ModelDeployment(
         profile_path=profile_path,
         services=services,
         required_credentials=tuple(sorted(credentials)),
+        endpoint_probes=tuple(probes.values()),
     )

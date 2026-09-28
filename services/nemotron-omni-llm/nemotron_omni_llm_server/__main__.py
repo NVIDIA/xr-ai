@@ -58,6 +58,7 @@ from xr_ai_vllm import (
     resolve_model_cache,
     serve,
     setup_hf_env,
+    source_config_digest,
 )
 from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool
 
@@ -84,6 +85,7 @@ def run() -> None:
     setup_logging("llm-nemotron-omni")
 
     cfg, yaml_dir, ready_file = load_config()
+    launch_config_digest = source_config_digest()
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     # setup_hf_env sets CUDA_VISIBLE_DEVICES before gpu_compute_major() so
@@ -201,6 +203,8 @@ def run() -> None:
         extra_pip=extra_pip,
         ready_file=ready_file,
         spark_uma=spark_uma,
+        config_digest=launch_config_digest,
+        service_identity="nemotron_omni_llm_server",
     )
 
 

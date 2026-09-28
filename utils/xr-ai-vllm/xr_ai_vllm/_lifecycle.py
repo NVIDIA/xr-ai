@@ -17,6 +17,7 @@ import time
 import urllib.request
 
 log = logging.getLogger(__name__)
+_LOCAL_HEALTH_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def health_url(host: str, port: int) -> str:
@@ -29,12 +30,17 @@ def health_url(host: str, port: int) -> str:
     return f"http://127.0.0.1:{port}/health"
 
 
-def health_ok(url: str, timeout: float = 3.0) -> bool:
+def local_health_ok(url: str, timeout: float = 3.0) -> bool:
+    """Probe a loopback service without honoring process proxy settings."""
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        with _LOCAL_HEALTH_OPENER.open(url, timeout=timeout) as r:
             return r.status == 200
     except Exception:
         return False
+
+
+def health_ok(url: str, timeout: float = 3.0) -> bool:
+    return local_health_ok(url, timeout)
 
 
 def wait_until_healthy(

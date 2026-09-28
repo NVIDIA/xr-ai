@@ -11,14 +11,14 @@ import xr_ai_vllm
 
 
 def test_stop_fails_closed_when_listener_discovery_fails(monkeypatch) -> None:
-    monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: (None, True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "containers_on_port_checked", lambda _port: ((), True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (None, False, False))
 
     assert not xr_ai_vllm.stop_persistent_servers([("omni", 8108)])
 
 
 def test_stop_does_not_signal_unidentified_listener(monkeypatch) -> None:
-    monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: (None, True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "containers_on_port_checked", lambda _port: ((), True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (1234, True, True))
     monkeypatch.setattr(xr_ai_vllm._docker, "is_xr_ai_server_process", lambda *_args: False)
 
@@ -27,7 +27,7 @@ def test_stop_does_not_signal_unidentified_listener(monkeypatch) -> None:
 
 def test_stop_container_without_visible_host_pid(monkeypatch) -> None:
     stopped: list[str] = []
-    monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: ("omni", True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "containers_on_port_checked", lambda _port: (("omni",), True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (None, True, False))
     monkeypatch.setattr(xr_ai_vllm._docker, "stop_container", lambda name: stopped.append(name) or True)
     monkeypatch.setattr(xr_ai_vllm._docker, "remove_container", lambda _name: True)
@@ -36,8 +36,32 @@ def test_stop_container_without_visible_host_pid(monkeypatch) -> None:
     assert stopped == ["omni"]
 
 
+def test_stop_removes_every_labelled_container_on_port(monkeypatch) -> None:
+    stopped: list[str] = []
+    removed: list[str] = []
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "containers_on_port_checked",
+        lambda _port: (("first", "second"), True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "stop_container",
+        lambda name: stopped.append(name) or True,
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "remove_container",
+        lambda name: removed.append(name) or True,
+    )
+
+    assert xr_ai_vllm.stop_persistent_servers([("omni", 8108)])
+    assert stopped == ["first", "second"]
+    assert removed == ["first", "second"]
+
+
 def test_stop_fails_closed_for_listener_without_visible_pid(monkeypatch) -> None:
-    monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: (None, True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "containers_on_port_checked", lambda _port: ((), True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (None, True, True))
 
     assert not xr_ai_vllm.stop_persistent_servers([("omni", 8108)])
@@ -49,7 +73,7 @@ def test_stop_does_not_signal_external_vllm_process(tmp_path, monkeypatch) -> No
     (proc_root / "cmdline").write_text("vllm\0serve\0external-model")
     (proc_root / "environ").write_bytes(b"PATH=/bin\0")
     monkeypatch.setattr(xr_ai_vllm._docker, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
-    monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: (None, True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "containers_on_port_checked", lambda _port: ((), True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (1234, True, True))
     monkeypatch.setattr(xr_ai_vllm.os, "kill", lambda *_args: (_ for _ in ()).throw(AssertionError()))
 
@@ -161,8 +185,8 @@ def test_stop_signals_complete_managed_process_group(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "container_on_port_checked",
-        lambda _port: (None, True),
+        "containers_on_port_checked",
+        lambda _port: ((), True),
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -204,8 +228,8 @@ def test_stop_keeps_unverified_pocket_process_pid_scoped(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "container_on_port_checked",
-        lambda _port: (None, True),
+        "containers_on_port_checked",
+        lambda _port: ((), True),
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -248,8 +272,8 @@ def test_pid_cleanup_waits_for_exit_after_sigkill(monkeypatch) -> None:
     force_killed = False
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "container_on_port_checked",
-        lambda _port: (None, True),
+        "containers_on_port_checked",
+        lambda _port: ((), True),
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,
@@ -294,8 +318,8 @@ def test_stop_keeps_non_pocket_managed_process_pid_scoped(monkeypatch) -> None:
     calls: list[tuple[int, int]] = []
     monkeypatch.setattr(
         xr_ai_vllm._docker,
-        "container_on_port_checked",
-        lambda _port: (None, True),
+        "containers_on_port_checked",
+        lambda _port: ((), True),
     )
     monkeypatch.setattr(
         xr_ai_vllm._docker,

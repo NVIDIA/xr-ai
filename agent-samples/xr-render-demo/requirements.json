@@ -1,0 +1,91 @@
+{
+  "$schema": "../../utils/xr-ai-launcher/requirements.schema.json",
+  "os": "linux",
+  "arch": {
+    "allowed": [
+      "x86_64"
+    ],
+    "unless_env_present": "LOVR_BIN",
+    "unless_config": "lovr_bin"
+  },
+  "python": ">=3.11,<3.13",
+  "nvidia_driver": "580",
+  "docker": "24",
+  "vulkan": true,
+  "nvenc": true,
+  "node": {
+    "version": ">=20.19.0",
+    "unless_env_truthy": "DEVICE_IO_HUB_NO_WEB_CLIENT"
+  },
+  "ports": [
+    {
+      "name": "hub",
+      "port": 7880,
+      "proto": "tcp",
+      "config_key": "lk_port_ws"
+    },
+    {
+      "name": "hub",
+      "port": 7881,
+      "proto": "tcp",
+      "config_key": "lk_port_tcp"
+    },
+    {
+      "name": "hub",
+      "port": 7882,
+      "proto": "udp",
+      "config_key": "lk_port_udp"
+    },
+    {
+      "name": "hub",
+      "port": 8000,
+      "proto": "tcp",
+      "config_key": "token_server_port",
+      "enabled_config_key": "enable_token_server",
+      "bind_config_key": "token_server_host"
+    },
+    {
+      "name": "hub",
+      "port": 8080,
+      "proto": "tcp",
+      "config_key": "web_server_port",
+      "enabled_config_key": "enable_web_server",
+      "bind_config_key": "web_server_host"
+    },
+    {
+      "name": "cloudxr",
+      "port": 48322,
+      "proto": "tcp",
+      "unless_env_truthy": "DEVICE_IO_HUB_NO_WEB_CLIENT"
+    },
+    {
+      "name": "cloudxr",
+      "port": 49100,
+      "proto": "tcp"
+    },
+    {
+      "name": "video-memory",
+      "port": 8310,
+      "proto": "tcp"
+    },
+    {
+      "name": "scene",
+      "port": 8320,
+      "proto": "tcp"
+    },
+    {
+      "name": "openxr-service",
+      "port": 8330,
+      "proto": "tcp"
+    }
+  ],
+  "commands": [
+    "uv",
+    {
+      "name": "npm",
+      "unless_env_truthy": "DEVICE_IO_HUB_NO_WEB_CLIENT"
+    },
+    "ffmpeg",
+    "vulkaninfo"
+  ]
+}

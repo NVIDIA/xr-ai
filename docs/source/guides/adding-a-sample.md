@@ -50,20 +50,23 @@ agent-samples/<name>/
         └── …                       ← cohesive workflow, transport, and config modules
 ```
 
-`yaml/models.json` names the logical models the worker needs (`llm`,
-`vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
-adapter and endpoint spec, with optional deployment metadata. Consumer samples
-omit `deployment` and connect to shared endpoints; the shared model-server
-profiles use it to select managed services. For startup probes, refer to
+`yaml/models.json` names the logical models the worker needs (`llm`, `vlm`,
+`stt`, `tts`, or any sample-specific name). Each role composes an adapter and
+endpoint spec, with optional deployment metadata. Consumer samples may omit
+`deployment`. The shared model-server profiles use deployment metadata to select
+managed services. For startup probes, refer to
 {py:class}`~xr_ai_voice.VoiceAgent` and {ref}`consumer-model-readiness`.
-Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
-shared with the stdlib-only orchestrator requires the wrapped nested JSON shape
-including deployment metadata. The worker passes either form to
-`load_models_config(...)` and constructs services with `make_llm`, `make_vlm`,
-`make_stt`, or `make_tts` from `xr_ai_models`. Schema, preset
-table, compatibility formats, and the profile contract are in
-{doc}`/reference/agent-sdk-models`. To reuse a customized shared stack, follow
-{doc}`Customizing model servers <customizing-model-servers>`.
+
+Worker-only profiles may remain in the legacy flat JSON or YAML shape. A profile
+loaded by the stdlib-only launcher requires the wrapped nested JSON shape, but
+deployment metadata remains optional and omitted entries are classified as
+external. Consumer orchestrators do not read worker profiles automatically; load
+the profile explicitly when an orchestrator needs deployment-aware preflight.
+The worker passes either form to `load_models_config(...)` and constructs
+services with `make_llm`, `make_vlm`, `make_stt`, or `make_tts` from
+`xr_ai_models`. Schema, preset table, compatibility formats, and the profile
+contract are in {doc}`/reference/agent-sdk-models`. To reuse a customized shared
+stack, follow {doc}`Customizing model servers <customizing-model-servers>`.
 
 When the worker is small, keep its implementation in the package's
 `__main__.py`. Split it once argument parsing, lifecycle, configuration, and

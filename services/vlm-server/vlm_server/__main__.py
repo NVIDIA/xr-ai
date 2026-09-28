@@ -58,6 +58,7 @@ from xr_ai_vllm import (
     resolve_model_cache,
     serve,
     setup_hf_env,
+    source_config_digest,
 )
 from xr_ai_vllm._config import parse_config_bool
 
@@ -82,6 +83,7 @@ def run() -> None:
     setup_logging("vlm")
 
     cfg, yaml_dir, ready_file = load_config()
+    launch_config_digest = source_config_digest()
 
     if not cfg.get("model"):
         logger.error("'model' is required in config")
@@ -189,6 +191,8 @@ def run() -> None:
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
         spark_uma=spark_uma,
+        config_digest=launch_config_digest,
+        service_identity="vlm_server",
     )
 
 

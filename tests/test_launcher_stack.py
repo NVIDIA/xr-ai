@@ -55,19 +55,28 @@ class TestProcessDataclass:
         assert p.gpu is None
         assert p.launch_mode == "own"
         assert p.port is None
+        assert p.ownership_probe is None
+        assert not p.needs_docker
 
     def test_all_fields(self):
+        def probe(_env):
+            return True
+
         p = _stack.Process(
             "vlm", "../../services/vlm-server", "vlm_server",
             config="yaml/vlm.yaml",
             gpu="0",
             launch_mode="persist",
             port=8100,
+            ownership_probe=probe,
+            needs_docker=True,
         )
         assert p.config == "yaml/vlm.yaml"
         assert p.gpu == "0"
         assert p.launch_mode == "persist"
         assert p.port == 8100
+        assert p.ownership_probe is probe
+        assert p.needs_docker
 
     def test_frozen_immutability(self):
         p = _stack.Process("hub", "../../services/device-io-hub", "device_io_hub")

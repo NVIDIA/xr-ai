@@ -51,13 +51,29 @@ warmup, and {doc}`XR Render </reference/xr-render-demo>` retains its LLM warmup,
 including for hosted LLMs. Tea making retains its RAG capability probe and
 {ref}`embedding health checks <rag-embedding-health>`.
 
-Endpoint `readiness` and `health_path` settings still control explicit `health()`
-calls, but do not enable automatic worker polling. Out-of-tree applications
-that require the former behavior can explicitly pass
+`endpoint.readiness` and `endpoint.health_path` still control explicit
+`health()` calls, but do not enable automatic worker polling. Setting
+`endpoint.readiness` to `none` disables the explicit endpoint request in both
+SDK health calls and launcher preflight. Out-of-tree applications that require
+the former startup behavior can explicitly pass
 `probes={"stt": stt.health, "tts": tts.health}` to `VoiceAgent`.
 
 ## Operator-visible runtime changes
 
+- The persistent Docker launch contract increased from version 2 to version 3.
+  The first launch recreates repository-owned version 2 containers once, which
+  reloads their models. Ownership probes cannot verify legacy containers that
+  lack the service and effective-launch labels; from the repository root, run
+  `uv run --project model-server-samples/model-servers model_servers --stop`,
+  then relaunch the owning stack before starting a consumer sample. Current
+  containers expose the actual service, source-configuration digest, and
+  effective launch identity. The source digest is diagnostic; reuse depends on
+  the service and effective identity, so a comment-only or reordered YAML edit
+  does not restart an otherwise equivalent container.
+- Local STT, Pocket TTS, and pip-mode vLLM processes from earlier releases may
+  lack the `XR_AI_SERVICE_IDENTITY` and `XR_AI_SERVICE_CONFIG_DIGEST` markers.
+  Ownership probes leave these processes unverified. Stop and relaunch the
+  owning model stack before starting a consumer sample.
 - `Subscribe.ALL` is deprecated because it names the pre-file-transfer set of
   data, audio, and video subscriptions rather than every available category.
   Use `Subscribe.REALTIME` for the same behavior. Files remain opt-in through

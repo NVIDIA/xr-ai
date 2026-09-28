@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Regression coverage for shared service preparation."""
+"""Regression coverage for shared service preparation and launch identity."""
 from __future__ import annotations
 
 import importlib.util
@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import device_io_hub.__main__ as hub_main
 import pytest
 from xr_ai_launcher import read_artifact_manifest, write_artifact_manifest
+from xr_ai_vllm import _docker, _lifecycle, _ownership
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MISSING_MODULE = object()
@@ -68,6 +69,73 @@ def test_artifact_manifest_accepts_empty_files_and_rejects_unsafe_entries(
     )
     (tmp_path / "outside").write_bytes(b"x")
     assert read_artifact_manifest(marker) is None
+
+
+def test_credential_digest_memoizes_the_full_pbkdf_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, bytes, bytes, int]] = []
+
+    def pbkdf(
+        algorithm: str,
+        value: bytes,
+        salt: bytes,
+        iterations: int,
+    ) -> bytes:
+        calls.append((algorithm, value, salt, iterations))
+        return b"x" * 32
+
+    _docker.credential_digest.cache_clear()
+    monkeypatch.setattr(_docker.hashlib, "pbkdf2_hmac", pbkdf)
+    try:
+        assert _docker.credential_digest("same-secret") == "78" * 6
+        assert _docker.credential_digest("same-secret") == "78" * 6
+        assert len(calls) == 1
+        assert calls[0] == (
+            "sha256",
+            b"same-secret",
+            b"xr-ai-vllm.launch-contract",
+            600_000,
+        )
+        for index in range(12):
+            _docker.credential_digest(f"secret-{index}")
+        assert _docker.credential_digest.cache_info().currsize == 8
+    finally:
+        _docker.credential_digest.cache_clear()
+
+
+def test_local_health_probes_share_proxy_free_opener(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, float]] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    class Opener:
+        def open(self, url: str, *, timeout: float):
+            calls.append((url, timeout))
+            return Response()
+
+    monkeypatch.setattr(_lifecycle, "_LOCAL_HEALTH_OPENER", Opener())
+    monkeypatch.setattr(
+        _lifecycle.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: pytest.fail("local probes must bypass proxies"),
+    )
+
+    assert _lifecycle.health_ok("http://127.0.0.1:8100/health", timeout=0.5)
+    assert _ownership._health_ok(8101, "/ready")
+    assert calls == [
+        ("http://127.0.0.1:8100/health", 0.5),
+        ("http://127.0.0.1:8101/ready", 2),
+    ]
 
 
 def test_hub_main_prefixes_config_value_errors(

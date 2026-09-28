@@ -92,6 +92,14 @@ def test_startup_timeout_rejects_non_finite_values(value):
         stt_main._parse_startup_timeout(value)
 
 
+def test_health_url_uses_shared_proxy_free_probe(monkeypatch):
+    probe = Mock(return_value=True)
+    monkeypatch.setattr(stt_main, "local_health_ok", probe)
+
+    assert stt_main._health_url_ok("http://127.0.0.1:8103/health")
+    probe.assert_called_once_with("http://127.0.0.1:8103/health", timeout=2)
+
+
 def test_start_persistent_server_returns_healthy_child(monkeypatch):
     process = Mock()
     process.poll.return_value = None

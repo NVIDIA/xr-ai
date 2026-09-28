@@ -41,6 +41,7 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
+    describe_launch_requested,
     gpu_compute_major,
     load_config,
     prepare_or_exit,
@@ -50,6 +51,7 @@ from xr_ai_vllm import (
     resolve_model_cache,
     serve,
     setup_hf_env,
+    source_config_digest,
 )
 from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool
 
@@ -111,6 +113,7 @@ def run() -> None:
     setup_logging("llm-nemotron3-nano")
 
     cfg, yaml_dir, ready_file = load_config()
+    launch_config_digest = source_config_digest()
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     # setup_hf_env sets CUDA_VISIBLE_DEVICES before gpu_compute_major() so
@@ -179,7 +182,9 @@ def run() -> None:
         prepare_or_exit("nemotron3_nano_llm_server", prepare)
         return
 
-    parser_path = _ensure_reasoning_parser(model_cache, parser_url)
+    parser_path = model_cache / _PARSER_FILENAME
+    if not describe_launch_requested():
+        parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 
     extra_serve_args = [
         "--served-model-name", served_name,
@@ -213,6 +218,8 @@ def run() -> None:
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
         spark_uma=spark_uma,
+        config_digest=launch_config_digest,
+        service_identity="nemotron3_nano_llm_server",
     )
 
 

@@ -35,10 +35,13 @@ NVDEC.
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
 | Python | 3.11 or 3.12 | tested and currently allowed; supporting other versions requires updating `requires-python` and CI |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
+| iproute2 | Distribution package providing `ss` | required for preflight checks of launcher-owned TCP and UDP ports |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
 | NVIDIA Container Toolkit | latest | required, with the `nvidia` runtime registered in Docker; refer to {ref}`docker-host-setup` |
-| Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
+| Node.js | 20.19.0+ with npm | required to prepare xr-render-demo's default WebRTC vendor bundle |
+| FFmpeg | Distribution package with `h264_nvenc` support | required by the `simple-vlm-example` and `xr-render-demo` functional NVENC probes |
+| Vulkan tools | Distribution package providing `vulkaninfo` | required by xr-render-demo's functional Vulkan probe |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
 virtual-environment setup needed. If you do not have it:

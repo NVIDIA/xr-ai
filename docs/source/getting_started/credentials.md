@@ -25,6 +25,7 @@ so any token saved in the credentials file, exported in the environment, or
 stored by `huggingface-cli login` is injected into **every** subprocess in the
 stack automatically — no per-sample wiring needed.
 
+(huggingface-token)=
 ## HuggingFace token (`HF_TOKEN`)
 
 **Required by default** for the launchers that download model checkpoints

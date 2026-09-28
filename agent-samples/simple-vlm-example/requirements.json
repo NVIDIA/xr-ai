@@ -1,0 +1,48 @@
+{
+  "$schema": "../../utils/xr-ai-launcher/requirements.schema.json",
+  "os": "linux",
+  "python": ">=3.11,<3.13",
+  "nvidia_driver": "580",
+  "docker": "24",
+  "nvenc": true,
+  "ports": [
+    {
+      "name": "hub",
+      "port": 7880,
+      "proto": "tcp",
+      "config_key": "lk_port_ws"
+    },
+    {
+      "name": "hub",
+      "port": 7881,
+      "proto": "tcp",
+      "config_key": "lk_port_tcp"
+    },
+    {
+      "name": "hub",
+      "port": 7882,
+      "proto": "udp",
+      "config_key": "lk_port_udp"
+    },
+    {
+      "name": "hub",
+      "port": 8000,
+      "proto": "tcp",
+      "config_key": "token_server_port",
+      "enabled_config_key": "enable_token_server",
+      "bind_config_key": "token_server_host"
+    },
+    {
+      "name": "hub",
+      "port": 8080,
+      "proto": "tcp",
+      "config_key": "web_server_port",
+      "enabled_config_key": "enable_web_server",
+      "bind_config_key": "web_server_host"
+    }
+  ],
+  "commands": [
+    "uv",
+    "ffmpeg"
+  ]
+}

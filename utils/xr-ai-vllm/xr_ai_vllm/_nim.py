@@ -21,8 +21,37 @@ import sys
 from pathlib import Path
 
 from . import _docker
+from ._config import describe_launch_requested
 
 log = logging.getLogger(__name__)
+
+
+def nim_launch_identity(
+    *,
+    image: str,
+    http_port: int,
+    grpc_port: int | None,
+    nim_cache: Path,
+    cuda_visible_devices: str | None,
+    extra_env: dict[str, str] | None,
+    service_identity: str | None = None,
+) -> str:
+    """Return the side-effect-free fingerprint of a NIM Docker launch."""
+    ngc_api_key = os.environ.get("NGC_API_KEY")
+    if ngc_api_key is not None:
+        ngc_api_key = ngc_api_key.strip()
+    return _docker.launch_fingerprint({
+        "image": image,
+        "http_port": http_port,
+        "grpc_port": grpc_port,
+        "nim_cache": str(nim_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "extra_env": extra_env or {},
+        "service_identity": service_identity,
+        "ngc_api_key_digest": _docker.credential_digest(
+            ngc_api_key
+        ),
+    })
 
 
 def build_nim_run_argv(
@@ -34,6 +63,8 @@ def build_nim_run_argv(
     nim_cache: Path,
     cuda_visible_devices: str | None,
     extra_env: dict[str, str] | None,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> list[str]:
     """Build the foreground ``docker run …`` argv for a NIM container.
 
@@ -49,18 +80,20 @@ def build_nim_run_argv(
     # serve_nim exports NGC_API_KEY before building the argv; a rotated key
     # must change the launch contract or a stopped container restarts with
     # the expired key baked into its creation-time env.
-    fingerprint = _docker.launch_fingerprint({
-        "image": image,
-        "http_port": http_port,
-        "grpc_port": grpc_port,
-        "nim_cache": str(nim_cache),
-        "cuda_visible_devices": cuda_visible_devices,
-        "extra_env": extra_env or {},
-        "ngc_api_key_digest": _docker.credential_digest(
-            os.environ.get("NGC_API_KEY")
-        ),
-    })
+    fingerprint = nim_launch_identity(
+        image=image,
+        http_port=http_port,
+        grpc_port=grpc_port,
+        nim_cache=nim_cache,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        service_identity=service_identity,
+    )
     argv += ["--label", f"{_docker._CONFIG_LABEL}={fingerprint}"]
+    if config_digest:
+        argv += ["--label", f"{_docker._SOURCE_CONFIG_LABEL}={config_digest}"]
+    if service_identity:
+        argv += ["--label", f"{_docker._SERVICE_LABEL}={service_identity}"]
     # Bridge networking with explicit -p maps to each family's documented
     # internal defaults. Env-var port overrides (NIM_HTTP_API_PORT) are
     # honored inconsistently across NIM images, and host networking makes the
@@ -108,13 +141,34 @@ def serve_nim(
     cuda_visible_devices: str | None = None,
     extra_env: dict[str, str] | None = None,
     ready_file: Path | None = None,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> None:
     """Pull (if needed) and run a NIM container, blocking until stopped.
 
     Readiness is ``/v1/health/ready`` on *http_port*. First start includes
     the NGC engine download (multi-GB), so expect a long cold start; the
     mounted *nim_cache* makes subsequent starts fast.
+
+    *config_digest* is exposed as diagnostic source metadata. Docker
+    compatibility uses the effective fingerprint containing resolved mounts
+    and all arguments above. *service_identity* is stamped on the container
+    for strict ownership probes.
     """
+    effective_cache = nim_cache / container_name
+    if describe_launch_requested():
+        identity = nim_launch_identity(
+            image=image,
+            http_port=http_port,
+            grpc_port=grpc_port,
+            nim_cache=effective_cache,
+            cuda_visible_devices=cuda_visible_devices,
+            extra_env=extra_env,
+            service_identity=service_identity,
+        )
+        print(f"{_docker._LAUNCH_IDENTITY_PREFIX}{identity}", flush=True)
+        return
+
     ngc_api_key = os.environ.get("NGC_API_KEY", "").strip()
     if not ngc_api_key:
         log.error(
@@ -130,7 +184,7 @@ def serve_nim(
     # baked-in users (see the -u rationale in build_nim_run_argv), and in a
     # shared dir one image's root-owned subtree blocks the next image's
     # non-root writes.
-    nim_cache = nim_cache / container_name
+    nim_cache = effective_cache
     try:
         nim_cache.mkdir(parents=True, exist_ok=True)
         nim_cache.chmod(0o777)
@@ -157,6 +211,8 @@ def serve_nim(
         nim_cache=nim_cache,
         cuda_visible_devices=cuda_visible_devices,
         extra_env=extra_env,
+        config_digest=config_digest,
+        service_identity=service_identity,
     )
     _docker.run_container(
         argv=argv,

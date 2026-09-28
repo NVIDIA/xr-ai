@@ -28,7 +28,9 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +41,10 @@ log = logging.getLogger(__name__)
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[str] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
-_LAUNCH_CONTRACT_VERSION = 2
+_SOURCE_CONFIG_LABEL = "xr-ai-vllm.source-config"
+_SERVICE_LABEL = "xr-ai-vllm.service"
+_LAUNCH_IDENTITY_PREFIX = "XR_AI_LAUNCH_IDENTITY="
+_LAUNCH_CONTRACT_VERSION = 3
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
     "HF_HUB_DISABLE_XET",
@@ -68,6 +73,7 @@ _SPARK_UMA_RETRY_DELAY_S = 10.0
 # ── docker run argv builder ──────────────────────────────────────────────────
 
 
+@lru_cache(maxsize=8)
 def credential_digest(value: str | None) -> str | None:
     """One-way digest so a credential can join a fingerprint without exposure.
 
@@ -75,7 +81,7 @@ def credential_digest(value: str | None) -> str | None:
     deterministic across processes and machines for the container label
     comparison to work.
     """
-    if not value:
+    if value is None:
         return None
     return hashlib.pbkdf2_hmac(
         "sha256", value.encode(), b"xr-ai-vllm.launch-contract", 600_000
@@ -112,6 +118,40 @@ def _hf_download_env(model_cache: Path) -> dict[str, str]:
     return env_vars
 
 
+def vllm_launch_identity(
+    *,
+    image: str,
+    port: int,
+    model_cache: Path,
+    hf_token: str | None,
+    cuda_visible_devices: str | None,
+    extra_env: dict[str, str] | None,
+    extra_pip: list[str] | None,
+    vllm_argv: list[str],
+    prefetch_model: str | None = None,
+    service_identity: str | None = None,
+) -> str:
+    """Return the side-effect-free fingerprint of a vLLM Docker launch."""
+    env_vars = _hf_download_env(model_cache)
+    if extra_env:
+        env_vars.update(extra_env)
+    payload: dict[str, Any] = {
+        "image": image,
+        "port": port,
+        "model_cache": str(model_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "env_vars": env_vars,
+        "extra_pip": extra_pip or [],
+        "vllm_argv": vllm_argv,
+        "service_identity": service_identity,
+    }
+    if prefetch_model:
+        payload["prefetch_model"] = prefetch_model
+    if hf_token:
+        payload["hf_token_digest"] = credential_digest(hf_token)
+    return launch_fingerprint(payload)
+
+
 def _hf_xet_setup_commands(env_vars: dict[str, str]) -> list[str]:
     if env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
         "1",
@@ -139,6 +179,8 @@ def build_run_argv(
     extra_pip: list[str] | None,
     vllm_argv: list[str],
     prefetch_model: str | None = None,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
 
@@ -154,28 +196,26 @@ def build_run_argv(
 
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
-    # Label lets container_on_port find this container by port without the
-    # caller needing to know the container name — implementation detail stays
-    # inside this module.
+    # Label lets port ownership discovery find this container without callers
+    # needing to know its name.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
-    payload: dict[str, Any] = {
-        "image": image,
-        "port": port,
-        "model_cache": str(model_cache),
-        "cuda_visible_devices": cuda_visible_devices,
-        "env_vars": env_vars,
-        "extra_pip": extra_pip or [],
-        "vllm_argv": vllm_argv,
-    }
-    if prefetch_model:
-        payload["prefetch_model"] = prefetch_model
-    # The name-only -e resolves the token into the container's creation-time
-    # env, so a rotated token must change the contract; the key is omitted
-    # entirely when unset to keep tokenless fingerprints stable.
-    if hf_token:
-        payload["hf_token_digest"] = credential_digest(hf_token)
-    fingerprint = launch_fingerprint(payload)
+    fingerprint = vllm_launch_identity(
+        image=image,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+        prefetch_model=prefetch_model,
+        service_identity=service_identity,
+    )
     argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
+    if config_digest:
+        argv += ["--label", f"{_SOURCE_CONFIG_LABEL}={config_digest}"]
+    if service_identity:
+        argv += ["--label", f"{_SERVICE_LABEL}={service_identity}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
     # small for the KV cache shards.  --ipc host gives them the host's larger
@@ -709,6 +749,8 @@ def run(
     extra_pip: list[str] | None,
     ready_file: Path | None,
     spark_uma: bool = False,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> None:
     if hf_token:
         # Exported for build_run_argv's name-only passthrough.
@@ -724,6 +766,8 @@ def run(
         extra_pip=extra_pip,
         vllm_argv=vllm_argv,
         prefetch_model=vllm_argv[2] if spark_uma else None,
+        config_digest=config_digest,
+        service_identity=service_identity,
     )
     run_container(
         argv=argv,
@@ -826,26 +870,29 @@ def run_container(
     # this port (e.g. a NIM container where the local vLLM belongs, or vice
     # versa). Evict it by label before any reuse probe: a foreign server can
     # answer the health probe and be silently mistaken for ours.
-    holder, checked = container_on_port_checked(port)
+    holders, checked = containers_on_port_checked(port)
     if not checked:
         print(
             f"[{log_prefix}] could not inspect port {port} ownership; if the "
             f"launch fails to bind, stop whatever holds the port",
             flush=True,
         )
-    if checked and holder and holder != container_name:
-        print(
-            f"[{log_prefix}] port {port} is held by container {holder}; "
-            f"stopping it to make way for {container_name}",
-            flush=True,
-        )
-        stop_container(holder)
-        if not remove_container(holder) and container_running(holder):
-            # Falling through would reuse the foreign server under our
-            # identity via the health probe.
-            log.error("could not evict container %s from port %d", holder, port)
-            sys.exit(1)
-    if checked and not holder:
+    if checked:
+        for holder in holders:
+            if holder == container_name:
+                continue
+            print(
+                f"[{log_prefix}] port {port} is held by container {holder}; "
+                f"stopping it to make way for {container_name}",
+                flush=True,
+            )
+            stop_container(holder)
+            if not remove_container(holder) and container_running(holder):
+                # Falling through would reuse the foreign server under our
+                # identity via the health probe.
+                log.error("could not evict container %s from port %d", holder, port)
+                sys.exit(1)
+    if checked and not holders:
         # The same profile switch can leave a pip-mode server on this port;
         # it too can answer the health probe and be mistaken for ours.
         evict_local_listener(port, log_prefix)
@@ -1064,8 +1111,12 @@ def run_container(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port_checked(port: int) -> tuple[str | None, bool]:
-    """Return a labelled container and whether Docker discovery succeeded."""
+def containers_on_port_checked(
+    port: int,
+    *,
+    timeout: float | None = None,
+) -> tuple[tuple[str, ...], bool]:
+    """Return all running labelled containers and whether discovery succeeded."""
     try:
         out = subprocess.check_output(
             ["docker", "ps",
@@ -1073,45 +1124,105 @@ def container_on_port_checked(port: int) -> tuple[str | None, bool]:
              "--format", "{{.Names}}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=timeout,
         ).strip()
-        names = out.splitlines()
-        return (names[0] if names else None), True
+        return tuple(out.splitlines()), True
     except FileNotFoundError:
         # Without the Docker CLI, a local Docker container cannot be managed;
         # pip-mode ownership is still established from the listener process.
-        return None, True
-    except subprocess.CalledProcessError:
+        return (), True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return (), False
+
+
+@dataclass(frozen=True)
+class ContainerOwnershipSnapshot:
+    """Identity fields read atomically from one Docker inspect result."""
+
+    container_id: str
+    running: bool
+    config_label: str | None
+    service_label: str | None
+
+
+def container_ownership_snapshot_checked(
+    name: str,
+    *,
+    timeout: float | None = None,
+) -> tuple[ContainerOwnershipSnapshot | None, bool]:
+    """Return one ownership snapshot and whether inspection was conclusive."""
+    try:
+        raw = subprocess.check_output(
+            ["docker", "inspect", "--format", "{{json .}}", name],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+        container = json.loads(raw)
+        if not isinstance(container, dict):
+            return None, False
+        container_id = container.get("Id")
+        state = container.get("State")
+        config = container.get("Config")
+        if (
+            not isinstance(container_id, str)
+            or not container_id
+            or not isinstance(state, dict)
+            or not isinstance(state.get("Running"), bool)
+            or not isinstance(config, dict)
+        ):
+            return None, False
+        labels = config.get("Labels")
+        if labels is None:
+            labels = {}
+        if not isinstance(labels, dict):
+            return None, False
+        config_label = labels.get(_CONFIG_LABEL)
+        service_label = labels.get(_SERVICE_LABEL)
+        if config_label is not None and not isinstance(config_label, str):
+            return None, False
+        if service_label is not None and not isinstance(service_label, str):
+            return None, False
+        return ContainerOwnershipSnapshot(
+            container_id=container_id,
+            running=state["Running"],
+            config_label=config_label,
+            service_label=service_label,
+        ), True
+    except (
+        FileNotFoundError,
+        json.JSONDecodeError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ):
         return None, False
 
 
-def container_on_port(port: int) -> str | None:
-    """Return the name of a running xr-ai-vllm container serving *port*, or None.
-
-    ``docker ps --filter publish=<port>`` silently misses ``--network host``
-    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
-    run time and filter by that label here instead.
-    """
-    container, _ = container_on_port_checked(port)
-    return container
-
-
-def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
+def pid_on_port_checked(
+    port: int,
+    *,
+    timeout: float | None = None,
+) -> tuple[int | None, bool, bool]:
     """Return the listening PID, inspection status, and listener presence.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
     A listener without a visible PID is still reported so callers fail closed
-    instead of mistaking an uninspectable listener for an unused port.
+    instead of mistaking an uninspectable listener for an unused port. *timeout*
+    bounds each inspection command; ``None`` waits without a deadline.
     """
     try:
         out = subprocess.check_output(
             ["ss", "-tlnpH", f"sport = :{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=timeout,
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
             return int(m.group(1)), True, True
         return None, True, bool(out.strip())
+    except subprocess.TimeoutExpired:
+        return None, False, False
     except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
@@ -1119,10 +1230,13 @@ def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
             ["lsof", "-ti", f"tcp:{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=timeout,
         ).strip()
         if out:
             return int(out.splitlines()[0]), True, True
         return None, True, False
+    except subprocess.TimeoutExpired:
+        return None, False, False
     except subprocess.CalledProcessError:
         return None, True, False
     except FileNotFoundError:

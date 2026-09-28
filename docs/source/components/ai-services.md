@@ -324,11 +324,19 @@ that proxy to exit after readiness, so repeated `model-servers` starts do not
 leave idle wrappers behind. When no server exists, the bootstrap replaces
 itself with the foreground Uvicorn and Pocket TTS process.
 
-Docker containers carry a fingerprint of their image, GPU assignment, model
-cache, environment, bootstrap packages, complete vLLM command, and a versioned
-launcher-controlled Docker contract. This prevents a failed container created
-by one sample profile—or by older launcher behavior—from being restarted later
-with stale memory limits, entrypoint, setup commands, or model arguments.
+Docker containers expose three identities: the actual service entry point in
+`xr-ai-vllm.service`, the source-configuration digest in
+`xr-ai-vllm.source-config`, and the effective launch fingerprint in
+`xr-ai-vllm.config`. The effective fingerprint covers the image, GPU assignment,
+resolved model cache, launch environment, bootstrap packages, complete vLLM
+command, and versioned launcher-controlled Docker contract. Compatibility checks
+compare the actual service and effective fingerprint. The source digest remains
+available for diagnostics without forcing a restart when different YAML bytes
+produce the same effective launch.
+
+Local persistent processes carry the corresponding `XR_AI_SERVICE_IDENTITY` and
+`XR_AI_SERVICE_CONFIG_DIGEST` environment markers. Their ownership checks
+require both the service identity and source-configuration digest to match.
 
 **Stopping the persisted servers**, from the repo root:
 

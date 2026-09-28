@@ -129,11 +129,15 @@ def test_consumer_profiles_connect_without_model_lifecycle_metadata(relative) ->
         for model in raw.values()
     )
     models = load_models_config(profile)
+    deployment = load_deployment_profile(profile)
 
     assert all(spec.deployment == DeploymentSpec() for spec in models.entries.values())
     assert all(spec.endpoint.readiness == "health" for spec in models.entries.values())
-    with pytest.raises(ValueError, match="must define adapter, endpoint, and deployment objects"):
-        load_deployment_profile(profile)
+    assert deployment.services == {}
+    assert {probe.role for probe in deployment.endpoint_probes} == set(models.entries)
+    assert all(
+        probe.ownership == "external" for probe in deployment.endpoint_probes
+    )
 
 
 def test_launcher_rejects_worker_only_yaml_profile(tmp_path) -> None:
@@ -229,6 +233,40 @@ def test_deployment_credentials_are_collected(tmp_path) -> None:
     deployment = load_model_deployment(config)
 
     assert deployment.required_credentials == ("NGC_API_KEY",)
+
+
+@pytest.mark.parametrize("ownership", ["reused", "external"])
+def test_deployment_download_credentials_only_apply_to_managed_services(
+    tmp_path: Path,
+    ownership: str,
+) -> None:
+    deployment_body = {
+        "ownership": ownership,
+        "credentials": ["NGC_API_KEY"],
+    }
+    if ownership == "reused":
+        deployment_body["service"] = "vlm"
+    profile = tmp_path / "models.hosted.json"
+    profile.write_text(
+        json.dumps({
+            "models": {
+                "vision": {
+                    "adapter": {"preset": "cosmos_vlm"},
+                    "endpoint": {
+                        "base_url": "https://models.example.test",
+                        "api_key_env": "ENDPOINT_API_KEY",
+                        "readiness": "none",
+                    },
+                    "deployment": deployment_body,
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    deployment = load_deployment_profile(profile)
+
+    assert deployment.required_credentials == ("ENDPOINT_API_KEY",)
 
 
 @pytest.mark.parametrize(

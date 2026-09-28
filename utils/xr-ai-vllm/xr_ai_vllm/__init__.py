@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-xr-ai-vllm provides model hosting and preparation helpers.
+xr-ai-vllm provides model hosting, preparation, and launch identity helpers.
 
-It hosts NIM services and lets each vLLM-backed service host vllm via either:
+It hosts NIM services, fingerprints persistent local model services, and lets
+each vLLM-backed service host vllm via either:
 
 * `pip`    — pip-installed `vllm` CLI in the wrapper's venv (default; today's behavior).
 * `docker` — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` (NGC container).
@@ -52,13 +53,19 @@ from xr_ai_launcher import report_prepare_status as _report_prepare_status
 
 from . import _docker, _pip
 from ._config import (
+    describe_launch_requested,
     gpu_compute_major,
     load_config,
+    local_service_identity_env,
     prepare_requested,
     resolve_model_cache,
+    service_config_digest,
     setup_hf_env,
+    source_config_digest,
 )
+from ._lifecycle import local_health_ok
 from ._nim import serve_nim
+from ._ownership import managed_service_matches
 from ._prepare import prepare_nim, prepare_vllm
 
 log = logging.getLogger(__name__)
@@ -98,6 +105,8 @@ def serve(
     extra_pip: list[str] | None = None,
     ready_file: Path | None = None,
     spark_uma: bool = False,
+    config_digest: str | None = None,
+    service_identity: str | None = None,
 ) -> None:
     """Launch vLLM via *backend* (`"pip"` or `"docker"`).
 
@@ -135,6 +144,13 @@ def serve(
     a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
     Docker lifecycle option, preserving the one-field backend switch used by
     the service YAML files.
+
+    *config_digest* identifies source config for Docker diagnostics and local
+    child ownership. Docker reuse compares the effective launch fingerprint.
+
+    *service_identity* identifies the installed entry point. It is stamped on
+    Docker containers and pip child environments for strict ownership probes.
+    Service wrappers should pass their installed entry-point name.
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,
@@ -142,6 +158,27 @@ def serve(
         "--port", str(port),
     ]
     vllm_argv += list(extra_serve_args)
+
+    if backend not in {"pip", "docker"}:
+        raise ValueError(
+            f"unknown vllm_backend: {backend!r} (expected 'pip' or 'docker')"
+        )
+
+    if describe_launch_requested():
+        identity = _docker.vllm_launch_identity(
+            image=image,
+            port=port,
+            model_cache=model_cache,
+            hf_token=hf_token,
+            cuda_visible_devices=cuda_visible_devices,
+            extra_env=extra_env,
+            extra_pip=extra_pip,
+            vllm_argv=vllm_argv,
+            prefetch_model=model if spark_uma else None,
+            service_identity=service_identity,
+        )
+        print(f"{_docker._LAUNCH_IDENTITY_PREFIX}{identity}", flush=True)
+        return
 
     if backend == "pip":
         _pip.run(
@@ -151,8 +188,10 @@ def serve(
             host=host,
             port=port,
             ready_file=ready_file,
+            config_digest=config_digest,
+            service_identity=service_identity,
         )
-    elif backend == "docker":
+    else:
         _docker.run(
             image=image,
             container_name=container_name,
@@ -167,10 +206,8 @@ def serve(
             extra_pip=extra_pip,
             ready_file=ready_file,
             spark_uma=spark_uma,
-        )
-    else:
-        raise ValueError(
-            f"unknown vllm_backend: {backend!r} (expected 'pip' or 'docker')"
+            config_digest=config_digest,
+            service_identity=service_identity,
         )
 
 
@@ -197,16 +234,21 @@ def stop_persistent_servers(
     success = True
     found = False
     for label, port in services:
-        container_name, container_checked = _docker.container_on_port_checked(port)
+        container_names, container_checked = _docker.containers_on_port_checked(port)
         if not container_checked:
             print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
             success = False
             continue
 
-        if container_name:
+        if container_names:
             found = True
-            print(f"  [{label}] stopping container {container_name}…", flush=True)
-            if _docker.stop_container(container_name):
+            for container_name in container_names:
+                print(f"  [{label}] stopping container {container_name}…", flush=True)
+                if not _docker.stop_container(container_name):
+                    print(f"  [{label}] docker stop failed — check `docker ps -a`",
+                          flush=True)
+                    success = False
+                    continue
                 # Remove the container so the next launch goes through a full
                 # `docker run` and picks up YAML config changes (without removal,
                 # `docker start` reuses the old container with its baked-in
@@ -225,10 +267,6 @@ def stop_persistent_servers(
                     print(f"  [{label}] stopped (rm failed — "
                           f"run `docker rm {container_name}` to apply config changes)",
                           flush=True)
-            else:
-                print(f"  [{label}] docker stop failed — check `docker ps -a`",
-                      flush=True)
-                success = False
             continue
 
         pid, pid_checked, listening = _docker.pid_on_port_checked(port)
@@ -316,16 +354,22 @@ def stop_persistent_servers(
 
 __all__ = [
     "DEFAULT_IMAGE",
+    "describe_launch_requested",
     "gpu_compute_major",
     "load_config",
+    "local_health_ok",
+    "local_service_identity_env",
+    "managed_service_matches",
     "prepare_nim",
     "prepare_or_exit",
     "prepare_requested",
     "prepare_vllm",
     "report_prepare_status",
     "resolve_model_cache",
+    "service_config_digest",
     "serve",
     "serve_nim",
     "setup_hf_env",
+    "source_config_digest",
     "stop_persistent_servers",
 ]
