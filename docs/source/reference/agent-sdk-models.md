@@ -51,23 +51,29 @@ A client profile names logical roles and declares adapters and endpoints:
 - `adapter` owns the model name, wire quirks, capabilities, default request
   extras, and reasoning-field normalization.
 - `endpoint` owns connectivity, timeouts, and environment-variable credentials.
-  Optional health settings control explicit SDK `health()` calls; they do not
-  cause consumer workers to poll endpoints at startup.
+  `endpoint.readiness` and `endpoint.health_path` control explicit SDK
+  `health()` calls and launcher preflight probes; they do not cause consumer
+  workers to poll endpoints at startup. Setting `endpoint.readiness` to `none`
+  disables those explicit health requests.
 - Optional `deployment` metadata selects the processes a shared model-server
-  orchestrator manages. Consumer profiles omit it: their endpoints are operated
-  outside the sample, whether locally or remotely. Existing explicit `reused`
-  and `external` entries remain supported for compatibility.
+  orchestrator manages. Consumer profiles may omit it, which classifies the
+  endpoint as external to that orchestrator. A loopback endpoint commonly
+  belongs to a separately launched shared model stack, while a remote endpoint
+  commonly belongs to a hosted provider. Existing explicit `reused` and
+  `external` entries remain supported for compatibility.
 
 (deployment-profiles)=
 Workers may load JSON or YAML. For compatibility, the loader accepts a direct
-role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
-and `kind: preset:<name>`. The public role-spec classes also retain their legacy
-flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form with `adapter`,
-`endpoint`, and `deployment` objects. Only the worker-side loader accepts omitted
-`deployment` metadata. Launcher credentials are explicit: endpoint credentials
-use `api_key_env`, while credentials needed by a managed service itself use
-`deployment.credentials`.
+role mapping, legacy flat entries, `health_check: true` or
+`health_check: false`, and `kind: preset:<name>`. The public role-spec classes
+also retain their legacy flat constructors and read-only flat properties.
+Profiles shared with the stdlib-only launcher must use the wrapped nested JSON
+form with `adapter` and `endpoint` objects; `deployment` remains optional and
+omitted entries are classified as external. An orchestrator that needs
+deployment-aware preflight must load the profile explicitly and pass the
+resolved deployment to `preflight()`. Launcher credentials are explicit:
+endpoint credentials use `api_key_env`, while credentials needed by a managed
+service itself use `deployment.credentials`.
 
 ## Request failures
 

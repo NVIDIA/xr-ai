@@ -41,7 +41,6 @@ import socket
 import sys
 import threading
 import time
-import urllib.request
 import wave
 from pathlib import Path
 
@@ -55,6 +54,7 @@ from xr_ai_launcher import (
     write_artifact_manifest,
 )
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import local_health_ok, local_service_identity_env
 
 _DEFAULT_PORT = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
@@ -570,11 +570,7 @@ def _build_app(cfg: dict, _model_cache: Path):
 
 def _health_url_ok(health_url: str) -> bool:
     """Return True if *health_url* answers successfully."""
-    try:
-        with urllib.request.urlopen(health_url, timeout=2) as response:
-            return response.status == 200
-    except Exception:
-        return False
+    return local_health_ok(health_url, timeout=2)
 
 
 def _probe_host(bind_host: str) -> str:
@@ -810,10 +806,13 @@ def run() -> None:
         f"(startup timeout: {startup_timeout_s:g}s)…",
         flush=True,
     )
-    child_env = os.environ | {
-        "XR_AI_VLLM_MANAGED": "1",
-        "XR_AI_VLLM_PORT": str(port),
-    }
+    child_env = local_service_identity_env(ns.config, "pocket_tts_server")
+    child_env.update(
+        {
+            "XR_AI_VLLM_MANAGED": "1",
+            "XR_AI_VLLM_PORT": str(port),
+        }
+    )
     child_env.pop(_PROCESS_GROUP_ENV, None)
     child_env.pop(_READY_PROCESS_MAY_EXIT_ENV, None)
     if process_group := _ensure_owned_process_group():

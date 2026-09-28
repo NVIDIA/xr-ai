@@ -25,6 +25,7 @@ dependencies = [
     "pyyaml>=6.0",
     "xr-ai-launcher",
     "xr-ai-logging",
+    "xr-ai-vllm",
 ]
 
 [tool.uv.sources]
@@ -37,6 +38,7 @@ dependencies = [
 lightning     = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-vllm    = { path = "../../utils/xr-ai-vllm", editable = true }
 
 [project.scripts]
 stt_server = "stt_server.__main__:run"

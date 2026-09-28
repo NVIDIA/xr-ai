@@ -33,7 +33,6 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.request
 import warnings
 from contextlib import suppress
 from pathlib import Path
@@ -59,6 +58,7 @@ from xr_ai_launcher import (
     write_artifact_manifest,
 )
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import local_health_ok, local_service_identity_env
 
 _DEFAULT_PORT              = 8103
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
@@ -288,11 +288,7 @@ def _health_ok(port: int) -> bool:
 
 def _health_url_ok(health_url: str) -> bool:
     """Return True if *health_url* answers successfully."""
-    try:
-        with urllib.request.urlopen(health_url, timeout=2) as r:
-            return r.status == 200
-    except Exception:
-        return False
+    return local_health_ok(health_url, timeout=2)
 
 
 async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> None:
@@ -401,6 +397,8 @@ def _start_persistent_server(
     cmd: list[str],
     health_url: str,
     startup_timeout_s: float,
+    *,
+    env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     """Start the detached server and return it once its health check passes."""
     process: subprocess.Popen | None = None
@@ -421,7 +419,10 @@ def _start_persistent_server(
     try:
         for sig in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[sig] = signal.signal(sig, _abort_startup)
-        process = subprocess.Popen(cmd, start_new_session=True)
+        popen_kwargs: dict[str, object] = {"start_new_session": True}
+        if env is not None:
+            popen_kwargs["env"] = env
+        process = subprocess.Popen(cmd, **popen_kwargs)
         if pending_signal is not None:
             raise SystemExit(128 + pending_signal)
         _wait_until_healthy(process, health_url, startup_timeout_s)
@@ -546,8 +547,14 @@ def run() -> None:
         f"(startup timeout: {startup_timeout_s:g}s)…",
         flush=True,
     )
+    child_env = local_service_identity_env(ns.config, "stt_server")
     try:
-        process = _start_persistent_server(cmd, health_url, startup_timeout_s)
+        process = _start_persistent_server(
+            cmd,
+            health_url,
+            startup_timeout_s,
+            env=child_env,
+        )
     except (RuntimeError, TimeoutError) as exc:
         raise SystemExit(f"[stt_server] {exc}") from exc
 

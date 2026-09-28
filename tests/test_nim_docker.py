@@ -45,6 +45,29 @@ class TestBuildNimRunArgv:
         assert first != second
         assert "nvapi" not in first and "nvapi" not in second
 
+    def test_source_config_digest_is_informational_only(self, tmp_path):
+        first_kwargs = self._base_kwargs(tmp_path)
+        first_kwargs["config_digest"] = "source-one"
+        second_kwargs = self._base_kwargs(tmp_path)
+        second_kwargs["config_digest"] = "source-two"
+
+        first_argv = build_nim_run_argv(**first_kwargs)
+        second_argv = build_nim_run_argv(**second_kwargs)
+        first_labels = [
+            first_argv[index + 1]
+            for index, value in enumerate(first_argv)
+            if value == "--label"
+        ]
+        second_labels = [
+            second_argv[index + 1]
+            for index, value in enumerate(second_argv)
+            if value == "--label"
+        ]
+
+        assert self._fingerprint(first_argv) == self._fingerprint(second_argv)
+        assert f"{_docker._SOURCE_CONFIG_LABEL}=source-one" in first_labels
+        assert f"{_docker._SOURCE_CONFIG_LABEL}=source-two" in second_labels
+
     def _env_flags(self, argv: list[str]) -> list[str]:
         return [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
 

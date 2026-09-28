@@ -455,6 +455,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyyaml>=6.0`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `pocket_tts_server` → `pocket_tts_server.__main__:run`
@@ -491,6 +492,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyyaml>=6.0`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `stt_server` → `stt_server.__main__:run`
@@ -790,6 +792,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
   - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
+  - `jsonschema>=4.23,<5`
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
   - `numpy>=1.24`
@@ -905,9 +908,9 @@ Keep non-obvious fan-out in the same change:
 |---|---|
 | `agent-sdk/xr-ai-hub/` API or IPC types | [Agent SDK](docs/source/components/agent-sdk.md), [hub reference](docs/source/reference/agent-sdk-hub.md), and affected sample workers |
 | `services/device-io-hub/` configuration | Its reference YAML and every sample `device_io_hub.yaml` |
-| `utils/xr-ai-launcher/` process API | [Process model](docs/source/components/launcher-and-process-model.md) and sample orchestrators |
-| `utils/xr-ai-vllm/` API or `vllm_backend` / `vllm_image` keys | Every vLLM service wrapper and YAML, every per-profile sample copy, and [AI services](docs/source/components/ai-services.md) |
-| Model-service command, port, model, or container name | Service and sample configuration, model-server orchestration and cleanup, this operational table, and [AI services](docs/source/components/ai-services.md) |
+| `utils/xr-ai-launcher/` `Process`, `Parallel`, `PreparationSpace`, `run_stack`, `preflight`, `rerun_deferred_checks`, or artifact-helper API | [Process model](docs/source/components/launcher-and-process-model.md), sample orchestrators, `xr-ai-vllm` lifecycle and identity helpers, STT/Pocket/NIM managed-service identity consumers, and DeviceIOHub, scene, and voice-service preparation consumers |
+| `utils/xr-ai-vllm/` `serve`, `serve_nim`, `managed_service_matches`, service identity, or `vllm_backend` / `vllm_image` keys | `xr-ai-launcher` `Process.ownership_probe` integrations, every vLLM service wrapper and YAML, STT/Pocket/NIM ownership probes, every per-profile sample copy, and [AI services](docs/source/components/ai-services.md) |
+| Service command, port, model, or container name | Service and sample configuration, affected `requirements.json` contracts, model-server orchestration and cleanup, this operational table, and [AI services](docs/source/components/ai-services.md) |
 | CloudXR configuration or native-profile helpers | xr-render configuration and orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency or project metadata | Regenerate this map and the affected project's gitignored `uv.lock` |

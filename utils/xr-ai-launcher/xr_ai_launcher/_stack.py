@@ -46,7 +46,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Callable, Mapping, Sequence, Union
 
 from ._credentials import load_credentials
 
@@ -90,14 +90,15 @@ class Process:
 
     ``own`` starts the process and stops it with the stack. ``persist`` starts
     it but leaves it running at shutdown. ``reuse`` assumes the process is
-    already running and neither starts nor stops it.
+    already running and neither starts nor stops it. When called separately,
+    preflight requires a deployment readiness endpoint for reused processes.
     """
 
     port:                int | None = None
     """Optional service port metadata.
 
-    The launcher stores but does not inspect this value or stop persistent
-    services by port.
+    Callable preflight uses this port for validation. Model-server cleanup uses
+    it to identify the selected service instance.
     """
 
     quiet_native_output: bool = False
@@ -106,6 +107,19 @@ class Process:
     Use this for processes that interleave native C/C++ output with Python
     loguru records. All output remains available in the per-process log file.
     """
+
+    ownership_probe: Callable[[Mapping[str, str]], bool] | None = None
+    """Prove an occupied port belongs to the configured managed service.
+
+    The callback receives the service environment used by launch and identity
+    checks, before launcher-only process-group and readiness markers are added.
+    It returns true only after establishing configuration compatibility and
+    readiness, and may raise ``OwnershipProbeMismatch`` with targeted evidence
+    and remediation when a managed service has a different identity.
+    """
+
+    needs_docker: bool = False
+    """Make contract-declared container checks apply to this owned process."""
 
 
 @dataclass(frozen=True)
@@ -220,35 +234,13 @@ def _spawn(
         cmd += ["--config", str((base / proc.config).resolve())]
     cmd += ["--ready-file", str(ready_file)]
 
-    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env = _effective_process_env(proc)
     # The child can record this launcher's dedicated session without creating
     # a nested session that would escape _shutdown's SIGKILL escalation.
     env[_PROCESS_GROUP_OWNER_ENV] = proc.command
     env.pop(_READY_PROCESS_MAY_EXIT_ENV, None)
     if ready_process_may_exit:
         env[_READY_PROCESS_MAY_EXIT_ENV] = "1"
-    if proc.gpu is not None:
-        env["CUDA_VISIBLE_DEVICES"] = proc.gpu
-
-    # Keep a host system cuDNN on LD_LIBRARY_PATH from shadowing the
-    # venv-bundled cuDNN each project's PyTorch was compiled against — without
-    # this, GPU services (e.g. the NeMo STT server) abort at torch import with
-    # a "cuDNN version incompatibility" RuntimeError.
-    cleaned, dropped = _strip_conflicting_cudnn(env.get("LD_LIBRARY_PATH"))
-    if dropped:
-        if cleaned is None:
-            env.pop("LD_LIBRARY_PATH", None)
-        else:
-            env["LD_LIBRARY_PATH"] = cleaned
-        key = os.pathsep.join(dropped)
-        if key not in _warned_cudnn_ld:
-            _warned_cudnn_ld.add(key)
-            log.warning(
-                "Removed cuDNN dir(s) from LD_LIBRARY_PATH so the venv-bundled "
-                "cuDNN (which PyTorch was compiled against) is used instead: %s",
-                key,
-            )
-
     # start_new_session=True puts uv + its children (e.g. device_io_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
     # processes don't survive as orphans when uv exits without forwarding signals.
@@ -263,6 +255,31 @@ def _spawn(
             daemon=True,
         ).start()
     return p
+
+
+def _effective_process_env(proc: Process) -> dict[str, str]:
+    """Build the inherited environment shared by probes and launch."""
+
+    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    if proc.gpu is not None:
+        env["CUDA_VISIBLE_DEVICES"] = proc.gpu
+    # A host cuDNN can shadow the venv copy and make GPU services abort during
+    # torch import with a cuDNN version-mismatch error.
+    cleaned, dropped = _strip_conflicting_cudnn(env.get("LD_LIBRARY_PATH"))
+    if cleaned is None:
+        env.pop("LD_LIBRARY_PATH", None)
+    elif dropped:
+        env["LD_LIBRARY_PATH"] = cleaned
+    if dropped:
+        key = os.pathsep.join(dropped)
+        if key not in _warned_cudnn_ld:
+            _warned_cudnn_ld.add(key)
+            log.warning(
+                "Removed cuDNN dir(s) from LD_LIBRARY_PATH so the venv-bundled "
+                "cuDNN (which PyTorch was compiled against) is used instead: %s",
+                key,
+            )
+    return env
 
 
 # ── readiness wait ─────────────────────────────────────────────────────────────

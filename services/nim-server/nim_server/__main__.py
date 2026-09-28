@@ -38,6 +38,7 @@ from xr_ai_vllm import (
     prepare_or_exit,
     prepare_requested,
     serve_nim,
+    source_config_digest,
 )
 
 _DEFAULT_NIM_CACHE = "../../models/nim"
@@ -96,6 +97,8 @@ def run() -> None:
         cuda_visible_devices=str(cuda_devices) if cuda_devices is not None else None,
         extra_env=extra_env,
         ready_file=ready_file,
+        config_digest=source_config_digest(),
+        service_identity="nim_server",
     )
 
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import threading
 import time
 from pathlib import Path
@@ -117,6 +118,27 @@ class TestBuildRunArgv:
         labels = [argv[index + 1] for index, value in enumerate(argv) if value == "--label"]
         assert "xr-ai-vllm.port=8100" in labels
         assert any(label.startswith(f"{_CONFIG_LABEL}=") for label in labels)
+
+    def test_source_config_digest_is_informational_only(self, tmp_path):
+        first_kwargs = self._base_kwargs(tmp_path)
+        first_kwargs["config_digest"] = "source-one"
+        second_kwargs = self._base_kwargs(tmp_path)
+        second_kwargs["config_digest"] = "source-two"
+
+        def labels(argv: list[str]) -> dict[str, str]:
+            return {
+                value.split("=", 1)[0]: value.split("=", 1)[1]
+                for index, item in enumerate(argv)
+                if item == "--label"
+                for value in (argv[index + 1],)
+            }
+
+        first = labels(build_run_argv(**first_kwargs))
+        second = labels(build_run_argv(**second_kwargs))
+
+        assert first[_CONFIG_LABEL] == second[_CONFIG_LABEL]
+        assert first[_docker._SOURCE_CONFIG_LABEL] == "source-one"
+        assert second[_docker._SOURCE_CONFIG_LABEL] == "source-two"
 
     def test_configuration_fingerprint_changes_with_vllm_arguments(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
@@ -539,6 +561,54 @@ class TestContainerHelpers:
         ):
             assert not container_running("some-name")
 
+    def test_container_discovery_returns_every_labelled_holder(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value="first\nsecond\n",
+        ) as check_output:
+            assert _docker.containers_on_port_checked(
+                8100, timeout=0.25
+            ) == (("first", "second"), True)
+        assert check_output.call_args.kwargs["timeout"] == 0.25
+
+    def test_container_discovery_timeout_is_unverified(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            side_effect=_docker.subprocess.TimeoutExpired("docker", 0.25),
+        ):
+            assert _docker.containers_on_port_checked(
+                8100, timeout=0.25
+            ) == ((), False)
+
+    def test_container_ownership_snapshot_reads_identity_atomically(self):
+        raw = json.dumps({
+            "Id": "a" * 64,
+            "State": {"Running": True},
+            "Config": {"Labels": {
+                _docker._CONFIG_LABEL: "effective",
+                _docker._SERVICE_LABEL: "vlm_server",
+            }},
+        })
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value=raw,
+        ) as check_output:
+            snapshot, checked = _docker.container_ownership_snapshot_checked(
+                "some-name", timeout=0.25
+            )
+
+        assert checked
+        assert snapshot == _docker.ContainerOwnershipSnapshot(
+            container_id="a" * 64,
+            running=True,
+            config_label="effective",
+            service_label="vlm_server",
+        )
+        assert check_output.call_args.args[0] == [
+            "docker", "inspect", "--format", "{{json .}}", "some-name",
+        ]
+        assert check_output.call_args.kwargs["timeout"] == 0.25
+
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [("true\n", True), ("false\n", False), ("unknown\n", None)],
@@ -680,8 +750,8 @@ class TestRun:
         kwargs = _run_kwargs(tmp_path)
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
-            patch("xr_ai_vllm._docker.container_on_port_checked",
-                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.containers_on_port_checked",
+                  return_value=((), True)),
             patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
             patch("xr_ai_vllm._docker.container_exists", return_value=False),
@@ -711,8 +781,8 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
-            patch("xr_ai_vllm._docker.container_on_port_checked",
-                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.containers_on_port_checked",
+                  return_value=((), True)),
             patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
             patch("xr_ai_vllm._docker.container_exists", side_effect=lambda _name: state["exists"]),
@@ -748,8 +818,8 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
-            patch("xr_ai_vllm._docker.container_on_port_checked",
-                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.containers_on_port_checked",
+                  return_value=((), True)),
             patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", side_effect=lambda _name: state["exists"]),
@@ -775,8 +845,8 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
-            patch("xr_ai_vllm._docker.container_on_port_checked",
-                  return_value=(None, True)),
+            patch("xr_ai_vllm._docker.containers_on_port_checked",
+                  return_value=((), True)),
             patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
@@ -813,8 +883,8 @@ class TestRun:
 
         with (
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
-            patch("xr_ai_vllm._docker.container_on_port_checked",
-                  return_value=("xr-ai-vllm-test", True)),
+            patch("xr_ai_vllm._docker.containers_on_port_checked",
+                  return_value=(("xr-ai-vllm-test",), True)),
             patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
@@ -854,6 +924,20 @@ class TestRun:
 class TestRunContainer:
     """Lifecycle branches of the shared run_container flow (no docker daemon)."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_signal_handlers(self):
+        get_handler = signal.getsignal
+        set_handler = signal.signal
+        original = {
+            signum: get_handler(signum)
+            for signum in (signal.SIGINT, signal.SIGTERM)
+        }
+        try:
+            yield
+        finally:
+            for signum, handler in original.items():
+                set_handler(signum, handler)
+
     class _FakeStreamer:
         log_path = None
 
@@ -880,7 +964,7 @@ class TestRunContainer:
     def _common_stubs(self, monkeypatch, d) -> dict:
         captured: dict = {}
         monkeypatch.setattr(d, "_docker_available", lambda: True)
-        monkeypatch.setattr(d, "container_on_port_checked", lambda port: (None, True))
+        monkeypatch.setattr(d, "containers_on_port_checked", lambda port: ((), True))
         monkeypatch.setattr(d, "evict_local_listener", lambda port, log_prefix: None)
         monkeypatch.setattr(d, "container_label", lambda name, label: None)
         monkeypatch.setattr(d, "start_container", lambda name: True)
@@ -941,8 +1025,8 @@ class TestRunContainer:
         monkeypatch.setattr(_docker, "container_running", lambda name: True)
         monkeypatch.setattr(
             _docker,
-            "container_on_port_checked",
-            lambda port: ("xr-ai-test-ctr", True),
+            "containers_on_port_checked",
+            lambda port: (("xr-ai-test-ctr",), True),
         )
         handlers: dict = {}
         monkeypatch.setattr(_docker.signal, "getsignal", lambda sig: None)
@@ -1112,8 +1196,8 @@ class TestRunContainer:
     def test_own_container_on_port_is_not_evicted(self, monkeypatch, tmp_path):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(
-            _docker, "container_on_port_checked",
-            lambda port: ("xr-ai-test-ctr", True),
+            _docker, "containers_on_port_checked",
+            lambda port: (("xr-ai-test-ctr",), True),
         )
         monkeypatch.setattr(_docker, "container_exists", lambda name: True)
         monkeypatch.setattr(_docker, "container_running", lambda name: True)
@@ -1130,8 +1214,8 @@ class TestRunContainer:
     def test_unchecked_port_inspection_skips_eviction(self, monkeypatch, tmp_path):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(
-            _docker, "container_on_port_checked",
-            lambda port: (None, False),
+            _docker, "containers_on_port_checked",
+            lambda port: ((), False),
         )
         monkeypatch.setattr(_docker, "container_exists", lambda name: True)
         monkeypatch.setattr(_docker, "container_running", lambda name: True)
@@ -1190,8 +1274,8 @@ class TestRunContainer:
         # stopped and removed, then our container launched.
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(
-            _docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
+            _docker, "containers_on_port_checked",
+            lambda port: (("old-vllm", "old-nim"), True),
         )
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
@@ -1221,8 +1305,10 @@ class TestRunContainer:
         kwargs = self._kwargs(tmp_path)
         _docker.run_container(**kwargs)
         assert evicted == [
-            ("stop", "xr-ai-nim-cosmos3-reasoner"),
-            ("rm", "xr-ai-nim-cosmos3-reasoner"),
+            ("stop", "old-vllm"),
+            ("rm", "old-vllm"),
+            ("stop", "old-nim"),
+            ("rm", "old-nim"),
         ]
         assert popen_argvs == [["docker", "run", "some-image"]]
 
@@ -1618,8 +1704,8 @@ class TestPipEviction:
 
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            _pip._docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
+            _pip._docker, "containers_on_port_checked",
+            lambda port: (("old-vllm", "old-nim"), True),
         )
         monkeypatch.setattr(
             _pip._docker, "stop_container",
@@ -1647,6 +1733,8 @@ class TestPipEviction:
             ready_file=None,
         )
         assert evicted == [
-            ("stop", "xr-ai-nim-cosmos3-reasoner"),
-            ("rm", "xr-ai-nim-cosmos3-reasoner"),
+            ("stop", "old-vllm"),
+            ("rm", "old-vllm"),
+            ("stop", "old-nim"),
+            ("rm", "old-nim"),
         ]

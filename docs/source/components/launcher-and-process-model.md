@@ -30,18 +30,39 @@ processes that use their own internal defaults.
 Samples that support interchangeable local and hosted models may set
 `models_config` in the worker YAML. The worker SDK's `load_models_config()`
 accepts omitted `deployment` metadata and defaults it to external ownership.
-Consumer samples declare only application processes and let workers connect to
-the configured endpoints; their launchers do not read model profiles.
+Consumer samples declare only application processes; their launchers do not read
+worker model profiles automatically.
 
-Launcher profile loaders require the wrapped JSON form with `adapter`,
-`endpoint`, and `deployment` objects for each model. `load_model_deployment()`
-reads the profile selected by the worker YAML, while `load_deployment_profile()`
-reads a profile path directly. Both use only the standard library and expose
-deployment metadata and credential requirements. The shared `model-servers`
-sample uses the direct loader and managed entries to select servers. Legacy
-explicit reused and external deployment entries remain accepted. Refer to
+The launcher profile loaders require the wrapped JSON form with `adapter` and
+`endpoint` objects for each model, while `deployment` remains optional.
+`load_model_deployment()` reads the profile selected by the worker YAML, and
+`load_deployment_profile()` reads a profile path directly. Calling either loader
+explicitly lets an orchestrator pass resolved deployment metadata and credential
+requirements to preflight. The shared `model-servers` sample uses the direct
+loader and managed entries to select servers. Refer to
 {ref}`model profile formats <deployment-profiles>` for the worker and launcher
 requirements.
+
+## Declaring the process sequence
+
+The orchestrator declares the process sequence in code:
+
+```python
+_BASE = Path(__file__).resolve().parent   # sample root
+
+PROCESSES = [
+    Process("hub",    "../../services/device-io-hub", "device_io_hub",
+            config="yaml/device_io_hub.yaml"),
+    Process("worker", "worker",               "my_agent_worker",
+            config="yaml/my_agent_worker.yaml"),
+    # Optional shared components (add as needed):
+    # Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
+    #         config="yaml/cloudxr_runtime.yaml"),
+]
+
+def run() -> None:
+    run_stack(PROCESSES, _BASE)
+```
 
 ## Service artifact preparation
 
@@ -64,24 +85,105 @@ fresh downloads; other artifacts follow their service-specific cache checks.
 Preparation failures include the service name. The `[prepare]` status lines are
 human-readable progress output.
 
-The orchestrator declares the process sequence in code:
+## Dependency contracts and preflight
 
-```python
-_BASE = Path(__file__).resolve().parent   # sample root
+A sample can declare host and endpoint prerequisites in `requirements.json`
+beside its orchestrator. The
+[`requirements.json` JSON Schema](https://github.com/NVIDIA/xr-ai/blob/main/utils/xr-ai-launcher/requirements.schema.json)
+defines the machine-readable format. Every field is optional:
 
-PROCESSES = [
-    Process("hub",    "../../services/device-io-hub", "device_io_hub",
-            config="yaml/device_io_hub.yaml"),
-    Process("worker", "worker",               "my_agent_worker",
-            config="yaml/my_agent_worker.yaml"),
-    # Optional shared components — add as needed:
-    # Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
-    #         config="yaml/cloudxr_runtime.yaml"),
-]
+| Field | Value | Check |
+|---|---|---|
+| `$schema` | String | Optional JSON Schema identifier used by editors and validators |
+| `os` | String or list of strings | Operating system name |
+| `arch` | String, list, or `{allowed, unless_env_present?, unless_env_truthy?, unless_config?}` | Machine architecture, with optional custom-binary environment or configuration overrides |
+| `python`, `node` | Version range or `{version, unless_env_truthy?}` | Installed runtime version |
+| `cuda` | Boolean or version range | Available CUDA driver capability |
+| `nvidia_driver`, `docker` | Minimum version or `{version, unless_env_truthy?}` | Installed driver or Docker version |
+| `nvidia_container_toolkit` | Boolean | NVIDIA Docker runtime availability |
+| `vulkan`, `nvenc` | Boolean | Usable Vulkan device or NVIDIA encoder |
+| `disk_gb_free` | `{config_keys, runtime_gb, preparation}` | Runtime headroom and optional preparation-space checks for launcher-owned process caches |
+| `ports` | List of `{port, name?, proto?, health?, config_key?, enabled_config_key?, unless_env_truthy?, bind_host?, bind_config_key?}` objects | Availability or expected endpoint health for TCP and UDP ports |
+| `env` | List of `{name, required, docs?}` objects | Required or recommended environment credentials |
+| `commands` | List of executable names or `{name, unless_env_truthy?}` objects | Commands available on `PATH` |
 
-def run() -> None:
-    run_stack(PROCESSES, _BASE)
-```
+For each owned process, a disk policy selects the first configured key from that
+process's YAML, expands environment variables and `~`, and resolves a relative
+value from the YAML's directory. Missing configured cache keys are contract
+errors. Runtime checks group cache paths by backing filesystem and apply the
+largest declared headroom once per filesystem. The model-server contract
+reserves 5 GB for manifests, temporary files, logs, and runtime cache growth
+after its artifacts are present.
+
+When `preparation` is true, callers supply
+`PreparationSpace(process, cache_path, remaining_bytes)` entries for every
+effective cache target after applying service-specific environment and
+configuration precedence. A process may have multiple target paths. Preflight
+groups them by backing filesystem and adds their remaining artifact bytes to
+that filesystem's runtime headroom; zero remaining bytes means the caller
+verified that the selected artifacts are fully prepared. Without inventory for
+an owned process, preparation capacity is reported with `status: "deferred"`,
+`ok: null`, and `skipped: true`. Deferred results do not fail the overall
+report.
+
+A port `name` that matches a `Process.name` lets preflight apply that process's
+ownership rule. When the process does not declare `Process.port`, an explicit
+`config_key` takes precedence; preflight then checks an `endpoint` URL in the
+process YAML and finally falls back to the contract's declared `port`.
+`enabled_config_key` omits a disabled listener, and `bind_config_key` reads its
+bind address; `bind_host` supplies a fixed address when no configuration key is
+needed. `unless_env_truthy` omits a version, command, or port only when the
+named environment value is `true`, `yes`, `on`, or `1`. The architecture rule
+also supports `unless_env_present`, which omits the requirement when the
+variable has a nonempty value. The optional `health` value is an HTTP path such
+as `/health`.
+
+Profiles add `requirements.<profile>.json` beside the base contract. Objects
+merge recursively in selection order; arrays and scalar values replace the base
+value. Unknown fields and invalid values fail contract loading.
+
+Call `preflight()` to resolve the contract against a set of processes and an
+optional `ModelDeployment`. `base` resolves relative process and caller-supplied
+preparation paths, `force_expensive` makes a missing local container image an
+immediate probe failure, and `preparation_space` carries the selected-artifact
+inventory described above. Invalid contracts, configuration values, and
+process-to-inventory associations raise `ContractError`; invalid model profiles
+raise `ValueError`, and unreadable process configuration discovered from the
+process list can raise `OSError`. Otherwise, preflight returns a
+`PreflightResult` without printing. The result classifies services as owned,
+reused, or external:
+
+- An owned service needs its local commands, devices, disk, and configured
+  ports. An occupied port is accepted only when the process's ownership probe
+  verifies configuration compatibility and readiness. A successful health
+  response alone is insufficient.
+- A reused service must answer at the endpoint selected by the model deployment
+  profile. Local GPU, Docker, disk, and bind-port requirements do not apply to
+  that service.
+- An external service is checked at its configured endpoint when the profile
+  enables health readiness. Credential values remain redacted. External services
+  do not trigger model-side local requirements, whether their endpoint is
+  loopback or remote.
+
+Cheap checks cover versions, commands, credentials, disk, ports, and endpoint
+health. Expensive GPU-container, NVENC, and Vulkan probes run directly after
+applicable cheap checks pass; failed cheap checks leave them visibly blocked. If
+the container GPU probe cannot run before its local image is prepared, it is
+deferred. After preparation, call `rerun_deferred_checks(result)` to replace
+that result without repeating the completed checks. The caller decides how to
+report the returned `PreflightResult` and whether to continue to preparation or
+launch.
+
+Set `Process.ownership_probe` to a callable that receives the environment
+preflight would use for the child process.
+`managed_service_matches(..., project=...)` provides the standard model-service
+probe. For Docker services, `project` is required so the probe can run
+`uv run --quiet --offline --no-sync --project <project> <entrypoint> --config <config> --describe-launch`
+and calculate the expected effective launch identity without starting or
+stopping the service. A missing project, failed or malformed description, Docker
+inspection error, timeout, or ambiguous set of labelled containers leaves
+ownership unverified. A definite service or effective-identity mismatch raises
+`OwnershipProbeMismatch` with the configured remediation.
 
 ## Rules
 
@@ -176,17 +278,16 @@ its IPC receive loop is active.
 
 `Process.launch_mode` controls spawn and shutdown behaviour:
 
-- `"own"` (default) — the launcher spawns this process and kills it on
-  shutdown.
-- `"persist"` — the launcher spawns this process but leaves it running on
-  shutdown. Use for heavy model servers that need to survive stack restarts
-  (e.g. vLLM containers). Cleanup is the caller's responsibility. The optional
-  `port` field is metadata; `model-servers` uses it to select cleanup targets,
-  while generic `run_stack` does not inspect it.
-- `"reuse"` — the launcher does **not** spawn this process; it is assumed to be
-  already running (e.g. started by `model-servers`). The entry in the process
-  list documents the dependency; the launcher skips it entirely and does not
-  kill it on shutdown.
+- `"own"` (default): the launcher spawns this process and kills it on shutdown.
+- `"persist"`: the launcher spawns this process but leaves it running on
+  shutdown. Use this mode for heavy model servers that need to survive stack
+  restarts (for example, vLLM containers). Cleanup is the caller's
+  responsibility. The optional `port` field supplies service metadata to
+  preflight and model-server cleanup.
+- `"reuse"`: the launcher assumes this process is already running (for example,
+  when started by `model-servers`) and skips it. The entry documents the
+  dependency and can be passed to `preflight()` to require readiness before
+  launching the stack.
 
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
 abort during startup (Ctrl-C, or a process exiting before it signals ready)
@@ -213,12 +314,12 @@ sub-project without dragging in a heavy dependency chain. Their public names,
 signatures, types, defaults, fields, and method behavior are generated in the
 {doc}`Python API reference </reference/python/index>`.
 
-**`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
-`Parallel`, and `run_stack` API described above, plus helpers for CloudXR
-environment setup, credential loading, GPU detection, artifact manifests,
-preparation status, and preparation error handling. Intentionally stdlib-only so
-it can be added to any sample without pulling in the dependency chain of the
-processes it manages.
+**`xr-ai-launcher`**: process management for the xr-ai stack: the `Process`,
+`Parallel`, and `run_stack` API described above, dependency-contract and
+preflight APIs, plus helpers for CloudXR environment setup, credential loading,
+GPU detection, artifact manifests, preparation status, and preparation error
+handling. Intentionally stdlib-only so it can be added to any sample without
+pulling in the dependency chain of the processes it manages.
 
 **`xr-ai-logging`** — shared loguru setup for the monorepo. Every process calls
 `setup_logging()` once at startup to get a unified logging stack: a stderr sink
@@ -240,12 +341,12 @@ and the participant-joined greeting hook. Workers feed STT transcripts via
 `feed` and register handlers for the events it emits (query, stop, phrase-only,
 drop, participant-joined).
 
-**`xr-ai-vllm`** — pluggable vLLM backend for inference services. Each
+**`xr-ai-vllm`**: pluggable vLLM backend for inference services. Each
 vLLM-backed service can host vllm via `pip` (the pip-installed `vllm` CLI in the
 wrapper's venv, the default) or `docker` (the image selected by `vllm_image`),
 chosen per-server via `vllm_backend: pip|docker` in the service YAML. Both paths
 honor identical configuration keys; only the runtime hosting vllm differs.
 Services can also use the package to prepare vLLM or NIM images and model
-artifacts without starting a server. Its only runtime dependency is the
-stdlib-only `xr-ai-launcher` package, so the docker path stays light even when
-pip vllm is not installed.
+artifacts without starting a server and verify persistent launch identity before
+reuse. Its only runtime dependency is the stdlib-only `xr-ai-launcher` package,
+so the docker path stays light even when pip vllm is not installed.

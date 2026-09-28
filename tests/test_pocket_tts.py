@@ -88,6 +88,15 @@ def _load_main_module():
     return module
 
 
+def test_health_url_uses_shared_proxy_free_probe(monkeypatch) -> None:
+    module = _load_main_module()
+    probe = Mock(return_value=True)
+    monkeypatch.setattr(module, "local_health_ok", probe)
+
+    assert module._health_url_ok("http://127.0.0.1:8105/health")
+    probe.assert_called_once_with("http://127.0.0.1:8105/health", timeout=2)
+
+
 class _FakeTensor:
     def __init__(self, values) -> None:
         self._values = np.asarray(values)
@@ -1112,8 +1121,8 @@ async def test_managed_reuse_and_process_group_cleanup(
 
         monkeypatch.setattr(
             xr_ai_vllm._docker,
-            "container_on_port_checked",
-            lambda _port: (None, True),
+            "containers_on_port_checked",
+            lambda _port: ((), True),
         )
         listener_pid, inspected, listening = xr_ai_vllm._docker.pid_on_port_checked(port)
         assert inspected and listening and listener_pid is not None

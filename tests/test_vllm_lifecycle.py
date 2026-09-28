@@ -151,7 +151,10 @@ class TestHealthOk:
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.status = 200
-        with patch("xr_ai_vllm._lifecycle.urllib.request.urlopen", return_value=mock_resp):
+        with patch(
+            "xr_ai_vllm._lifecycle._LOCAL_HEALTH_OPENER.open",
+            return_value=mock_resp,
+        ):
             assert health_ok("http://127.0.0.1:8100/health")
 
     def test_returns_false_on_non_200(self):
@@ -159,12 +162,15 @@ class TestHealthOk:
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.status = 503
-        with patch("xr_ai_vllm._lifecycle.urllib.request.urlopen", return_value=mock_resp):
+        with patch(
+            "xr_ai_vllm._lifecycle._LOCAL_HEALTH_OPENER.open",
+            return_value=mock_resp,
+        ):
             assert not health_ok("http://127.0.0.1:8100/health")
 
     def test_returns_false_on_connection_error(self):
         with patch(
-            "xr_ai_vllm._lifecycle.urllib.request.urlopen",
+            "xr_ai_vllm._lifecycle._LOCAL_HEALTH_OPENER.open",
             side_effect=OSError("connection refused"),
         ):
             assert not health_ok("http://127.0.0.1:8100/health")

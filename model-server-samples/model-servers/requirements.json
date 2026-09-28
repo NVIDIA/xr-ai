@@ -1,0 +1,30 @@
+{
+  "$schema": "../../utils/xr-ai-launcher/requirements.schema.json",
+  "os": "linux",
+  "arch": [
+    "x86_64",
+    "aarch64"
+  ],
+  "python": ">=3.11,<3.13",
+  "nvidia_driver": "580",
+  "docker": "24",
+  "nvidia_container_toolkit": true,
+  "disk_gb_free": {
+    "config_keys": [
+      "model_cache",
+      "nim_cache"
+    ],
+    "runtime_gb": 5,
+    "preparation": true
+  },
+  "env": [
+    {
+      "name": "HF_TOKEN",
+      "required": false,
+      "docs": "https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html#huggingface-token"
+    }
+  ],
+  "commands": [
+    "uv"
+  ]
+}

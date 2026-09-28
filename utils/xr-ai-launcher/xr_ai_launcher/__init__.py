@@ -52,7 +52,28 @@ from ._credentials import (
     warn_if_missing,
 )
 from ._gpu import GPUInventoryError, detect_gpu_config
-from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
+from ._models import (
+    EndpointProbe,
+    ModelDeployment,
+    Ownership,
+    load_deployment_profile,
+    load_model_deployment,
+)
+from ._preflight import (
+    CheckResult,
+    CheckStatus,
+    ContractError,
+    OwnershipProbeMismatch,
+    PreflightResult,
+    PreparationSpace,
+    ResolvedService,
+    Tier,
+    configuration_error,
+    load_contract,
+    preflight,
+    report_preflight,
+    rerun_deferred_checks,
+)
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
@@ -64,7 +85,13 @@ __all__ = [
     "ensure_credentials", "load_credentials", "require_credentials", "warn_if_missing",
     "read_config_scalar",
     "GPUInventoryError", "detect_gpu_config",
-    "ModelDeployment", "load_deployment_profile", "load_model_deployment",
+    "EndpointProbe", "ModelDeployment", "Ownership", "load_deployment_profile",
+    "load_model_deployment",
+    "CheckResult", "CheckStatus", "ContractError", "OwnershipProbeMismatch",
+    "PreparationSpace", "PreflightResult",
+    "ResolvedService", "Tier",
+    "configuration_error", "load_contract", "preflight", "report_preflight",
+    "rerun_deferred_checks",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",
 ]
