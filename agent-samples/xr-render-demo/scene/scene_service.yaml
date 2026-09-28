@@ -4,6 +4,9 @@
 # Sample-local scene process reference configuration.
 # LOVR_BIN in the environment takes priority over lovr_bin.
 # lovr_bin: /home/you/hub/lovr/build/bin/lovr
+# Automatic downloads use ${XDG_CACHE_HOME:-~/.cache}/xr-ai/lovr/<version>.
+# Set an exact replacement directory with:
+# lovr_cache_dir: ~/.cache/xr-ai/custom-lovr
 
 xr_app_dir: ./lovr
 endpoint: tcp://0.0.0.0:8320

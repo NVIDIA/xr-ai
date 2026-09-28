@@ -32,7 +32,13 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import load_config, serve_nim
+from xr_ai_vllm import (
+    load_config,
+    prepare_nim,
+    prepare_or_exit,
+    prepare_requested,
+    serve_nim,
+)
 
 _DEFAULT_NIM_CACHE = "../../models/nim"
 
@@ -64,6 +70,22 @@ def run() -> None:
     if not nim_cache.is_absolute():
         nim_cache = (yaml_dir / nim_cache).resolve()
 
+    extra_env = {str(k): str(v) for k, v in (cfg.get("env") or {}).items()}
+    if prepare_requested():
+        prepare_or_exit(
+            "nim_server",
+            lambda: prepare_nim(
+                image=image,
+                container_name=container_name,
+                nim_cache=nim_cache,
+                cuda_visible_devices=(
+                    str(cuda_devices) if cuda_devices is not None else None
+                ),
+                extra_env=extra_env,
+            ),
+        )
+        return
+
     serve_nim(
         image=image,
         container_name=container_name,
@@ -72,7 +94,7 @@ def run() -> None:
         grpc_port=grpc_port,
         nim_cache=nim_cache,
         cuda_visible_devices=str(cuda_devices) if cuda_devices is not None else None,
-        extra_env={str(k): str(v) for k, v in (cfg.get("env") or {}).items()},
+        extra_env=extra_env,
         ready_file=ready_file,
     )
 

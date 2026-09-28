@@ -31,6 +31,9 @@ Config keys
 """
 import argparse
 import asyncio
+import hashlib
+import importlib.metadata
+import importlib.util
 import io
 import math
 import os
@@ -45,6 +48,12 @@ from pathlib import Path
 import anyio
 import yaml
 from loguru import logger
+from xr_ai_launcher import (
+    prepare_or_exit,
+    read_artifact_manifest,
+    report_prepare_status,
+    write_artifact_manifest,
+)
 from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT = 8105
@@ -55,6 +64,7 @@ _LAUNCHER_GROUP_OWNER = "pocket_tts_server"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 _REUSE_HEALTH_FAILURE_LIMIT = 3
 _SUPPORTED_VOICES = frozenset({"bill_boerst"})
+_VOICE_REVISION = "e81d79e8194ad4c7ce879c87a4258ef20cbf2487"
 
 
 class _SynthesisCancelled(RuntimeError):
@@ -94,6 +104,93 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
         p = (yaml_dir / p).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _hf_cache_path(hub_cache: Path, uri: str) -> Path:
+    try:
+        if not uri.startswith("hf://"):
+            raise ValueError
+        repo_owner, repo_name, revision_path = uri.removeprefix("hf://").split("/", 2)
+        filename, revision = revision_path.rsplit("@", 1)
+        if not all((repo_owner, repo_name, filename, revision)):
+            raise ValueError
+    except ValueError as exc:
+        raise RuntimeError(
+            "Pocket TTS artifact URI must pin a revision as "
+            f"hf://owner/repository/path@revision: {uri!r}"
+        ) from exc
+    repo_cache = f"models--{repo_owner}--{repo_name}"
+    return hub_cache / repo_cache / "snapshots" / revision / filename
+
+
+def _pocket_artifact_paths(
+    hub_cache: Path,
+    language: str,
+    voice: str,
+) -> tuple[Path, Path, Path, Path]:
+    spec = importlib.util.find_spec("pocket_tts")
+    locations = spec.submodule_search_locations if spec is not None else None
+    if not locations:
+        raise RuntimeError("cannot locate the installed pocket_tts package")
+    config_path = Path(next(iter(locations))) / "config" / f"{language}.yaml"
+    try:
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        gated = str(config["weights_path"])
+        fallback = str(config["weights_path_without_voice_cloning"])
+        tokenizer = str(config["flow_lm"]["lookup_table"]["tokenizer_path"])
+    except (OSError, KeyError, TypeError, yaml.YAMLError) as exc:
+        raise RuntimeError(
+            f"cannot resolve Pocket TTS artifacts from {config_path}: {exc}"
+        ) from exc
+    voice_embedding = (
+        "hf://kyutai/pocket-tts-without-voice-cloning/"
+        f"languages/{language}/embeddings/{voice}.safetensors@{_VOICE_REVISION}"
+    )
+    return (
+        _hf_cache_path(hub_cache, gated),
+        _hf_cache_path(hub_cache, fallback),
+        _hf_cache_path(hub_cache, tokenizer),
+        _hf_cache_path(hub_cache, voice_embedding),
+    )
+
+
+def _pocket_version() -> str:
+    try:
+        return importlib.metadata.version("pocket-tts")
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise RuntimeError("cannot determine the installed pocket-tts version") from exc
+
+
+def _pocket_auth_identity() -> str:
+    from huggingface_hub import get_token
+
+    token = get_token()
+    return hashlib.sha256(token.encode()).hexdigest()[:20] if token else "anonymous"
+
+
+def _pocket_marker(
+    pocket_cache: Path,
+    *,
+    version: str,
+    hub_cache: Path,
+    language: str,
+    voice: str,
+    auth_identity: str,
+    selection: str,
+) -> Path:
+    identity = "\0".join(
+        (
+            "pocket-tts",
+            version,
+            str(hub_cache),
+            language,
+            voice,
+            auth_identity,
+            selection,
+        )
+    )
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
+    return pocket_cache / f".xr-ai-prepare-{digest}"
 
 
 class _PocketTTSBackend:
@@ -157,6 +254,11 @@ class _PocketTTSBackend:
     @property
     def ready(self) -> bool:
         return self._model is not None
+
+    @property
+    def has_voice_cloning(self) -> bool:
+        self._ensure_loaded()
+        return bool(self._model.has_voice_cloning)
 
     @property
     def sample_rate(self) -> int:
@@ -240,6 +342,77 @@ class _PocketTTSBackend:
             wf.setframerate(self.sample_rate)
             wf.writeframes(pcm)
         return buf.getvalue()
+
+
+def _prepare(cfg: dict, yaml_dir: Path) -> None:
+    voice = cfg.get("voice")
+    if not voice:
+        raise ValueError("'voice' is required in config")
+    language = str(cfg.get("language", "english"))
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+    pocket_cache = model_cache / "pocket"
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_XET_CACHE", str(pocket_cache / "xet"))
+    hf_home_value = os.environ.setdefault(
+        "HF_HOME", str(pocket_cache / "huggingface")
+    )
+    hf_home = Path(
+        os.path.expandvars(os.path.expanduser(hf_home_value))
+    ).resolve()
+    hub_cache_value = os.environ.get(
+        "HF_HUB_CACHE",
+        os.environ.get("HUGGINGFACE_HUB_CACHE", str(hf_home / "hub")),
+    )
+    hub_cache = Path(
+        os.path.expandvars(os.path.expanduser(hub_cache_value))
+    ).resolve()
+
+    gated, fallback, tokenizer, voice_embedding = _pocket_artifact_paths(
+        hub_cache, language, str(voice)
+    )
+    marker_args = {
+        "version": _pocket_version(),
+        "hub_cache": hub_cache,
+        "language": language,
+        "voice": str(voice),
+        "auth_identity": _pocket_auth_identity(),
+    }
+    for selection in ("gated", "fallback"):
+        marker = _pocket_marker(
+            pocket_cache,
+            selection=selection,
+            **marker_args,
+        )
+        manifest = read_artifact_manifest(marker, expected_root=hub_cache)
+        if manifest is not None and all(size > 0 for _, size in manifest.files):
+            report_prepare_status(
+                f"Pocket TTS {language}/{voice}", "cached", manifest.size
+            )
+            return
+
+    report_prepare_status(
+        f"Pocket TTS {language}/{voice}", "downloading", None
+    )
+    backend = _PocketTTSBackend(str(voice), language, device="cpu")
+    selection = "gated" if backend.has_voice_cloning else "fallback"
+    model = gated if selection == "gated" else fallback
+    owned = (model, tokenizer, voice_embedding)
+    missing = [
+        str(path)
+        for path in owned
+        if not path.is_file() or path.stat().st_size <= 0
+    ]
+    if missing:
+        raise RuntimeError(
+            "Pocket TTS loaded without required cached artifacts: "
+            + ", ".join(missing)
+        )
+    marker = _pocket_marker(
+        pocket_cache,
+        selection=selection,
+        **marker_args,
+    )
+    write_artifact_manifest(marker, hub_cache, owned)
 
 
 def _build_app(cfg: dict, _model_cache: Path):
@@ -577,6 +750,7 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     p.add_argument("--_serve",     action="store_true",
                    help=argparse.SUPPRESS)
     ns, _ = p.parse_known_args()
@@ -587,6 +761,10 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if ns.prepare:
+        prepare_or_exit("pocket_tts_server", lambda: _prepare(cfg, yaml_dir))
+        return
 
     if ns._serve:
         try:

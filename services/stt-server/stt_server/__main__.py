@@ -24,6 +24,7 @@ Config keys
 """
 import argparse
 import asyncio
+import hashlib
 import math
 import os
 import signal
@@ -50,6 +51,13 @@ warnings.filterwarnings(
 
 import yaml
 from loguru import logger
+from xr_ai_launcher import (
+    prepare_or_exit,
+    read_artifact_manifest,
+    repair_hf_snapshot,
+    report_prepare_status,
+    write_artifact_manifest,
+)
 from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT              = 8103
@@ -80,6 +88,78 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
         p = (yaml_dir / p).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _hf_hub_cache(hf_home: Path) -> Path:
+    value = os.environ.get(
+        "HF_HUB_CACHE",
+        os.environ.get("HUGGINGFACE_HUB_CACHE", str(hf_home / "hub")),
+    )
+    return Path(os.path.expandvars(os.path.expanduser(value))).resolve()
+
+
+def _prepare(cfg: dict, yaml_dir: Path) -> None:
+    model_name = cfg.get("model")
+    if not model_name:
+        raise ValueError("'model' is required in config")
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
+    hf_home = Path(
+        os.path.expandvars(
+            os.path.expanduser(
+                os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
+            )
+        )
+    ).resolve()
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+
+    from huggingface_hub import snapshot_download
+
+    hub_cache = _hf_hub_cache(hf_home)
+    identity = f"stt\0{hub_cache}\0{model_name}"
+    marker = model_cache / ".xr-ai-prepare" / (
+        "hf-stt-" + hashlib.sha256(identity.encode()).hexdigest()[:20]
+    )
+    repair = marker.is_file()
+    manifest = read_artifact_manifest(marker)
+    expected_parent = (
+        hub_cache
+        / ("models--" + str(model_name).replace("/", "--"))
+        / "snapshots"
+    ).resolve()
+    if manifest is not None and manifest.root.resolve().parent == expected_parent:
+        report_prepare_status(
+            f"Hugging Face model {model_name}", "cached", manifest.size
+        )
+        return
+    report_prepare_status(
+        f"Hugging Face model {model_name}", "downloading", None
+    )
+    if repair:
+        cached = repair_hf_snapshot(
+            str(model_name),
+            hub_cache,
+        )
+    else:
+        cached = Path(
+            snapshot_download(
+                repo_id=str(model_name),
+                revision=None,
+                cache_dir=hub_cache,
+                force_download=False,
+            )
+        )
+    if cached.resolve().parent != expected_parent:
+        raise RuntimeError(
+            f"Hugging Face model {model_name} returned an invalid snapshot path: "
+            f"{cached}"
+        )
+    write_artifact_manifest(
+        marker,
+        cached,
+        (child for child in cached.rglob("*") if child.is_file()),
+    )
 
 
 class _AsrBackend:
@@ -415,6 +495,7 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     p.add_argument("--_serve",     action="store_true",
                    help=argparse.SUPPRESS)  # internal: actual server mode
     ns, _ = p.parse_known_args()
@@ -425,6 +506,10 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if ns.prepare:
+        prepare_or_exit("stt_server", lambda: _prepare(cfg, yaml_dir))
+        return
 
     if ns._serve:
         # Persistent server subprocess — loads model and serves until killed.

@@ -9,12 +9,15 @@ build-backend = "hatchling.build"
 name = "xr-ai-vllm"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
-# Intentionally no runtime dependencies — stdlib only.
+# Intentionally depends only on the stdlib-only launcher utility.
 # Dispatches vLLM hosting to either the pip-installed `vllm` CLI in the caller's
-# venv, or the NGC `nvcr.io/nvidia/vllm:<tag>` docker container.  Adding deps
-# here would defeat the docker mode (whose point is to avoid pulling vllm into
-# the wrapper's venv).
-dependencies = []
+# venv, or the NGC `nvcr.io/nvidia/vllm:<tag>` docker container. Adding
+# third-party serving dependencies here would pull them into docker-only
+# wrapper environments.
+dependencies = ["xr-ai-launcher"]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../xr-ai-launcher", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_vllm"]

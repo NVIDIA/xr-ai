@@ -27,8 +27,14 @@ DEFAULT_CONFIG_NAME = "device_io_hub.yaml"
 LIVEKIT_API_KEY_ENV = "LIVEKIT_API_KEY"
 LIVEKIT_API_SECRET_ENV = "LIVEKIT_API_SECRET"
 
-# Clears web_client_dir when set; /token, /cert, /rtc stay up.
+# Disables static web-client serving and preparation; /token, /cert, /rtc stay up.
 NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
+
+
+@dataclasses.dataclass(frozen=True)
+class DeviceIOHubArtifactConfig:
+    web_client_dir: str = ""
+    web_xr_vendor_build_script: str = ""
 
 
 def _web_client_disabled() -> bool:
@@ -52,14 +58,7 @@ def _apply_env_credentials(data: dict) -> None:
             data[key] = data[key].strip()
 
 
-def load_config() -> LiveKitConnectorConfig:
-    """
-    Parse --config from argv, load the YAML file if it exists, and return
-    a fully populated LiveKitConnectorConfig.
-
-    If no --config flag is given and no device_io_hub.yaml exists in CWD,
-    returns non-secret defaults with LiveKit credentials from the environment.
-    """
+def _load_config_data() -> dict:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
     args, _ = parser.parse_known_args()
@@ -71,23 +70,49 @@ def load_config() -> LiveKitConnectorConfig:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         logger.debug("No {} found — using defaults", DEFAULT_CONFIG_NAME)
         data: dict = {"enable_web_server": False, "web_client_dir": ""}
-        _apply_env_credentials(data)
-        return LiveKitConnectorConfig(**data)
-
-    logger.info("Loading config from {}", config_path)
+    else:
+        logger.info("Loading config from {}", config_path)
+        with config_path.open() as f:
+            data = yaml.safe_load(f) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"Configuration in {config_path} must be a mapping")
     base = config_path.parent
-
-    with config_path.open() as f:
-        data: dict = yaml.safe_load(f) or {}
-    _apply_env_credentials(data)
 
     if _web_client_disabled():
         data["web_client_dir"] = ""
+        data["web_xr_vendor_build_script"] = ""
 
     # Resolve any relative path fields relative to the YAML file's directory.
-    for key in ("web_client_dir", "cert_file", "key_file"):
+    for key in (
+        "web_client_dir",
+        "web_xr_vendor_build_script",
+        "cert_file",
+        "key_file",
+    ):
         if data.get(key):
             data[key] = _resolve_path(data[key], base)
+    return data
+
+
+def load_artifact_config() -> DeviceIOHubArtifactConfig:
+    """Load artifact paths without requiring runtime credentials."""
+    data = _load_config_data()
+    return DeviceIOHubArtifactConfig(
+        web_client_dir=data.get("web_client_dir", ""),
+        web_xr_vendor_build_script=data.get("web_xr_vendor_build_script", ""),
+    )
+
+
+def load_config() -> LiveKitConnectorConfig:
+    """
+    Parse --config from argv, load the YAML file if it exists, and return
+    a fully populated LiveKitConnectorConfig.
+
+    If no --config flag is given and no device_io_hub.yaml exists in CWD,
+    returns non-secret defaults with LiveKit credentials from the environment.
+    """
+    data = _load_config_data()
+    _apply_env_credentials(data)
 
     if "web_server_extra_sans" in data:
         sans = data["web_server_extra_sans"]

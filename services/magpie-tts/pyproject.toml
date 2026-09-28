@@ -24,6 +24,7 @@ dependencies = [
     "huggingface-hub>=0.32.0",
     "hf-xet>=1.1.2,<2.0.0",
     "pyyaml>=6.0",
+    "xr-ai-launcher",
     "xr-ai-logging",
 ]
 
@@ -33,6 +34,7 @@ dependencies = [
 # upstream tag (it builds from the same Lightning AI mono-repo as
 # `pytorch-lightning`).  Drop this source once PyPI lifts the quarantine.
 lightning     = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
