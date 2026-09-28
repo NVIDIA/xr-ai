@@ -175,18 +175,44 @@ or `nim_cache` in the service YAML. For a deferred result, collect the service
 preparation inventory and rerun preflight before preparing artifacts.
 
 (preflight-port)=
-### Preflight reports an owned port conflict
+### Preflight reports an owned port conflict or inspection failure
 
-**Cause:** another process is listening on a TCP or UDP port that the selected
-stack owns. A successful response on an owned service's health path does not
-grant the launcher permission to adopt it.
+**Cause:** an `occupied` result means another process has a visible TCP listener
+or UDP socket on a port that the selected stack owns. A `could not inspect`
+result identifies an invalid or unresolvable bind host, a missing or failed
+Linux iproute2 `ss` command, a timeout, or output the launcher could not parse.
+A warning about the host ephemeral range means an owned service port is not
+reserved from automatic allocation, or the kernel policy could not be read.
+A successful health response alone does not grant the launcher permission to
+adopt a service. For ownership fallback behavior and inspection limitations,
+refer to {doc}`the launcher model </components/launcher-and-process-model>`.
 
-**Fix:** inspect the reported port, stop the conflicting process, or assign the
-XR AI service a different port in its YAML:
+**Fix:** use the reported reason to select the recovery:
+
+- For an invalid or unresolvable bind host, correct `bind_host` or the service
+  setting named by `bind_config_key` so that it resolves to a local address.
+- If `ss` is missing, install iproute2 and rerun preflight.
+- If `ss` failed, timed out, or reported an error, run it from the same login
+  session and correct the reported runtime or permission problem.
+- For output the launcher could not parse, capture the raw `ss` row and the
+  output of `ss -V` when reporting the compatibility problem.
+- For a warning about a verified managed service, repair socket inspection and
+  rerun preflight to clear the warning.
+- For an unreserved ephemeral-range port, read the current
+  `net.ipv4.ip_local_reserved_ports` value and merge the reported port into it.
+  Preserve every existing entry because writing the setting replaces the whole
+  list. The reservation does not release a connection already using the port.
+- If the ephemeral policy could not be inspected, read
+  `/proc/sys/net/ipv4/ip_local_port_range` and
+  `/proc/sys/net/ipv4/ip_local_reserved_ports`, or inspect both with `sysctl`,
+  then correct the reported access or value problem.
+
+For an occupied port, inspect the reported port, stop the conflicting process,
+or assign the XR AI service a different port in its YAML:
 
 ```bash
 ss -ltnp
-ss -lunp
+ss -aunp
 ```
 
 Keep endpoint URLs and client configuration synchronized with any port change.

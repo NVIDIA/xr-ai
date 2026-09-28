@@ -516,7 +516,7 @@ human-readable progress output.</p>
 <h2>Dependency contracts and preflight<a class="headerlink" href="#dependency-contracts-and-preflight" title="Link to this heading">#</a></h2>
 <p>A sample can declare host and endpoint prerequisites in <code class="docutils literal notranslate"><span class="pre">requirements.json</span></code>
 beside its orchestrator. The
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/bcd839f3495a3dc8e015051fd76a38989bef36a9/utils/xr-ai-launcher/requirements.schema.json"><code class="docutils literal notranslate"><span class="pre">requirements.json</span></code> JSON Schema</a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/927be5c4f292679829bfb5ce10e61b158fb4b698/utils/xr-ai-launcher/requirements.schema.json"><code class="docutils literal notranslate"><span class="pre">requirements.json</span></code> JSON Schema</a>
 defines the machine-readable format. Every field is optional:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -631,6 +631,28 @@ enables health readiness. Credential values remain redacted. External services
 do not trigger model-side local requirements, whether their endpoint is
 loopback or remote.</p></li>
 </ul>
+<p>Owned-port preflight uses the Linux iproute2 <code class="docutils literal notranslate"><span class="pre">ss</span></code> command to inspect TCP
+listeners and all UDP sockets. When <code class="docutils literal notranslate"><span class="pre">ss</span></code> is missing, fails, or prints
+unparseable output, an ownership probe that verifies the expected managed
+service turns the failure into a warning. A timeout or an invalid or
+unresolvable bind host always fails.</p>
+<p>A passing inspection does not guarantee that the service can bind. The TCP
+check can miss a socket that is bound but not listening or a connected socket
+that holds the port, and sockets in another network namespace may not be
+visible. The service’s own bind at launch is authoritative. For observed IPv6
+sockets, <code class="docutils literal notranslate"><span class="pre">ss</span></code> renders a dual-stack wildcard as <code class="docutils literal notranslate"><span class="pre">*</span></code> and an IPv6-only wildcard as
+<code class="docutils literal notranslate"><span class="pre">[::]</span></code>; an IPv6-only socket does not block an IPv4 bind. An IPv6 target is
+checked against observed IPv6 sockets only.</p>
+<p>Preflight also compares every resolved owned TCP and UDP port with the host’s
+<code class="docutils literal notranslate"><span class="pre">ip_local_port_range</span></code> and <code class="docutils literal notranslate"><span class="pre">ip_local_reserved_ports</span></code>. An unreserved service port
+inside the inclusive ephemeral range produces a warning because the kernel can
+automatically select it for a connection before the service binds. A reservation
+prevents future automatic selection; it does not release an existing connection
+that already holds the port. Refer to the
+<a class="reference external" href="https://docs.kernel.org/networking/ip-sysctl.html#ip-variables">Linux IP sysctl documentation</a>
+for the kernel contract.</p>
+<p>If either kernel setting is unreadable or malformed, preflight emits one
+nonblocking warning because it cannot determine the policy.</p>
 <p>Cheap checks cover versions, commands, credentials, disk, ports, and endpoint
 health. Expensive GPU-container, NVENC, and Vulkan probes run directly after
 applicable cheap checks pass; failed cheap checks leave them visibly blocked. If

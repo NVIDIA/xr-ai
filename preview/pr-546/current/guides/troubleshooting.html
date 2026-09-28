@@ -564,15 +564,41 @@ artifacts or other files, or move the affected cache by changing <code class="do
 or <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code> in the service YAML. For a deferred result, collect the service
 preparation inventory and rerun preflight before preparing artifacts.</p>
 </section>
-<section id="preflight-reports-an-owned-port-conflict">
-<span id="preflight-port"></span><h3>Preflight reports an owned port conflict<a class="headerlink" href="#preflight-reports-an-owned-port-conflict" title="Link to this heading">#</a></h3>
-<p><strong>Cause:</strong> another process is listening on a TCP or UDP port that the selected
-stack owns. A successful response on an owned service’s health path does not
-grant the launcher permission to adopt it.</p>
-<p><strong>Fix:</strong> inspect the reported port, stop the conflicting process, or assign the
-XR AI service a different port in its YAML:</p>
+<section id="preflight-reports-an-owned-port-conflict-or-inspection-failure">
+<span id="preflight-port"></span><h3>Preflight reports an owned port conflict or inspection failure<a class="headerlink" href="#preflight-reports-an-owned-port-conflict-or-inspection-failure" title="Link to this heading">#</a></h3>
+<p><strong>Cause:</strong> an <code class="docutils literal notranslate"><span class="pre">occupied</span></code> result means another process has a visible TCP listener
+or UDP socket on a port that the selected stack owns. A <code class="docutils literal notranslate"><span class="pre">could</span> <span class="pre">not</span> <span class="pre">inspect</span></code>
+result identifies an invalid or unresolvable bind host, a missing or failed
+Linux iproute2 <code class="docutils literal notranslate"><span class="pre">ss</span></code> command, a timeout, or output the launcher could not parse.
+A warning about the host ephemeral range means an owned service port is not
+reserved from automatic allocation, or the kernel policy could not be read.
+A successful health response alone does not grant the launcher permission to
+adopt a service. For ownership fallback behavior and inspection limitations,
+refer to <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">the launcher model</span></a>.</p>
+<p><strong>Fix:</strong> use the reported reason to select the recovery:</p>
+<ul class="simple">
+<li><p>For an invalid or unresolvable bind host, correct <code class="docutils literal notranslate"><span class="pre">bind_host</span></code> or the service
+setting named by <code class="docutils literal notranslate"><span class="pre">bind_config_key</span></code> so that it resolves to a local address.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">ss</span></code> is missing, install iproute2 and rerun preflight.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">ss</span></code> failed, timed out, or reported an error, run it from the same login
+session and correct the reported runtime or permission problem.</p></li>
+<li><p>For output the launcher could not parse, capture the raw <code class="docutils literal notranslate"><span class="pre">ss</span></code> row and the
+output of <code class="docutils literal notranslate"><span class="pre">ss</span> <span class="pre">-V</span></code> when reporting the compatibility problem.</p></li>
+<li><p>For a warning about a verified managed service, repair socket inspection and
+rerun preflight to clear the warning.</p></li>
+<li><p>For an unreserved ephemeral-range port, read the current
+<code class="docutils literal notranslate"><span class="pre">net.ipv4.ip_local_reserved_ports</span></code> value and merge the reported port into it.
+Preserve every existing entry because writing the setting replaces the whole
+list. The reservation does not release a connection already using the port.</p></li>
+<li><p>If the ephemeral policy could not be inspected, read
+<code class="docutils literal notranslate"><span class="pre">/proc/sys/net/ipv4/ip_local_port_range</span></code> and
+<code class="docutils literal notranslate"><span class="pre">/proc/sys/net/ipv4/ip_local_reserved_ports</span></code>, or inspect both with <code class="docutils literal notranslate"><span class="pre">sysctl</span></code>,
+then correct the reported access or value problem.</p></li>
+</ul>
+<p>For an occupied port, inspect the reported port, stop the conflicting process,
+or assign the XR AI service a different port in its YAML:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ss<span class="w"> </span>-ltnp
-ss<span class="w"> </span>-lunp
+ss<span class="w"> </span>-aunp
 </pre></div>
 </div>
 <p>Keep endpoint URLs and client configuration synchronized with any port change.</p>
@@ -1134,7 +1160,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-that-nvenc-is-unavailable">Preflight reports that NVENC is unavailable</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-an-old-or-unavailable-node-js-runtime">Preflight reports an old or unavailable Node.js runtime</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-insufficient-cache-space">Preflight reports insufficient cache space</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-an-owned-port-conflict">Preflight reports an owned port conflict</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-an-owned-port-conflict-or-inspection-failure">Preflight reports an owned port conflict or inspection failure</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-that-a-reused-model-service-is-unavailable">Preflight reports that a reused model service is unavailable</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-that-an-external-service-is-unavailable">Preflight reports that an external service is unavailable</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preflight-reports-a-missing-credential">Preflight reports a missing credential</a></li>

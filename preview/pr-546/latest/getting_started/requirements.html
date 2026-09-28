@@ -490,27 +490,31 @@ NVDEC.</p>
 <td><p>latest</p></td>
 <td><p>dependency manager used by all samples</p></td>
 </tr>
-<tr class="row-odd"><td><p>NVIDIA driver</p></td>
+<tr class="row-odd"><td><p>iproute2</p></td>
+<td><p>Distribution package providing <code class="docutils literal notranslate"><span class="pre">ss</span></code></p></td>
+<td><p>required for preflight checks of launcher-owned TCP and UDP ports</p></td>
+</tr>
+<tr class="row-even"><td><p>NVIDIA driver</p></td>
 <td><p>580+</p></td>
 <td><p>required for CUDA 13 model containers and DeviceIOHub hardware codecs</p></td>
 </tr>
-<tr class="row-even"><td><p>Docker</p></td>
+<tr class="row-odd"><td><p>Docker</p></td>
 <td><p>24+</p></td>
 <td><p>required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub</p></td>
 </tr>
-<tr class="row-odd"><td><p>NVIDIA Container Toolkit</p></td>
+<tr class="row-even"><td><p>NVIDIA Container Toolkit</p></td>
 <td><p>latest</p></td>
 <td><p>required, with the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime registered in Docker; refer to <a class="reference internal" href="#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>Node.js</p></td>
+<tr class="row-odd"><td><p>Node.js</p></td>
 <td><p>20.19.0+ with npm</p></td>
 <td><p>required to prepare xr-render-demo’s default WebRTC vendor bundle</p></td>
 </tr>
-<tr class="row-odd"><td><p>FFmpeg</p></td>
+<tr class="row-even"><td><p>FFmpeg</p></td>
 <td><p>Distribution package with <code class="docutils literal notranslate"><span class="pre">h264_nvenc</span></code> support</p></td>
 <td><p>required by the <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> and <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> functional NVENC probes</p></td>
 </tr>
-<tr class="row-even"><td><p>Vulkan tools</p></td>
+<tr class="row-odd"><td><p>Vulkan tools</p></td>
 <td><p>Distribution package providing <code class="docutils literal notranslate"><span class="pre">vulkaninfo</span></code></p></td>
 <td><p>required by xr-render-demo’s functional Vulkan probe</p></td>
 </tr>

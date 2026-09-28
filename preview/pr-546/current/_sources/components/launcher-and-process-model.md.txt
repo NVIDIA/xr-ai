@@ -165,6 +165,32 @@ reused, or external:
   do not trigger model-side local requirements, whether their endpoint is
   loopback or remote.
 
+Owned-port preflight uses the Linux iproute2 `ss` command to inspect TCP
+listeners and all UDP sockets. When `ss` is missing, fails, or prints
+unparseable output, an ownership probe that verifies the expected managed
+service turns the failure into a warning. A timeout or an invalid or
+unresolvable bind host always fails.
+
+A passing inspection does not guarantee that the service can bind. The TCP
+check can miss a socket that is bound but not listening or a connected socket
+that holds the port, and sockets in another network namespace may not be
+visible. The service's own bind at launch is authoritative. For observed IPv6
+sockets, `ss` renders a dual-stack wildcard as `*` and an IPv6-only wildcard as
+`[::]`; an IPv6-only socket does not block an IPv4 bind. An IPv6 target is
+checked against observed IPv6 sockets only.
+
+Preflight also compares every resolved owned TCP and UDP port with the host's
+`ip_local_port_range` and `ip_local_reserved_ports`. An unreserved service port
+inside the inclusive ephemeral range produces a warning because the kernel can
+automatically select it for a connection before the service binds. A reservation
+prevents future automatic selection; it does not release an existing connection
+that already holds the port. Refer to the
+[Linux IP sysctl documentation](https://docs.kernel.org/networking/ip-sysctl.html#ip-variables)
+for the kernel contract.
+
+If either kernel setting is unreadable or malformed, preflight emits one
+nonblocking warning because it cannot determine the policy.
+
 Cheap checks cover versions, commands, credentials, disk, ports, and endpoint
 health. Expensive GPU-container, NVENC, and Vulkan probes run directly after
 applicable cheap checks pass; failed cheap checks leave them visibly blocked. If
