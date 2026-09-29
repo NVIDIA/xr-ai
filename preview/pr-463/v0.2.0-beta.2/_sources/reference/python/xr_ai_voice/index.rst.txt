@@ -88,6 +88,14 @@ Package Contents
 
 
 
+   .. py:method:: release_all() -> None
+      :async:
+
+
+      Cancel and release every participant without stopping future input.
+
+
+
    .. py:method:: release(participant_id: str) -> None
       :async:
 
@@ -261,6 +269,22 @@ Package Contents
       :type:  int | None
 
       Optional originating input timestamp propagated to TTS.
+
+
+
+   .. py:attribute:: kind
+      :type:  Literal['response', 'acknowledgement', 'progress', 'result', 'alert']
+      :value: 'response'
+
+
+      Semantic role used by optional multi-producer aggregation.
+
+
+
+   .. py:attribute:: turn_id
+      :type:  str | None
+
+      Logical user turn shared by its acknowledgement, progress, and result.
 
 
 

@@ -444,12 +444,46 @@ agent says “Recording started.” and then stays silent during recording. Say
 <p>Command help is spoken once on connection. After each finished recording, the
 agent says “Recording ended.” followed by the same command help.
 Outside recording, an active guide answers questions using its step-specific
-instructions and tools. Without an active guide, unsupported queries receive
-the original guide-command hint; there is no general chat or idle visual Q&amp;A.
+instructions and tools. Without an active guide, the shared conversation front
+end answers ordinary questions and routes present-camera questions to streamed
+visual inference. It can also delegate SOP-specific questions to the existing
+guide engine, which retains its explicit command requirements.
 Guide responses and monitoring pause during
 recording and resume afterward. Disconnecting still finalizes an open packet.
 JPEG sampling, narration format, captioning, manual guide generation,
 and guide-step execution remain unchanged.</p>
+<section id="conversation-routing-and-focus">
+<h3>Conversation routing and focus<a class="headerlink" href="#conversation-routing-and-focus" title="Link to this heading">#</a></h3>
+<p>The worker reuses <code class="docutils literal notranslate"><span class="pre">ConversationFrontEnd</span></code> and <code class="docutils literal notranslate"><span class="pre">QuickConversation</span></code> from
+<code class="docutils literal notranslate"><span class="pre">xr-ai-sample-agents[front-end]</span></code>. Idle turns use one top-level model decision
+with thinking disabled. Visual answers use a fresh frame, do not run the SOP
+caption prompt, and stream without a preliminary acknowledgement.</p>
+<p>Exact recording and guide commands bypass model routing. The sample serializes
+recording controls outside cancellable conversation tasks, so another utterance
+cannot cancel a pending start or finalization. Recording narration stays in the
+shared capture transcript; it produces no conversational reply and does not
+enter conversation history. Recording still confirms its start and end.</p>
+<p>An active guide holds participant-local focus: ordinary follow-up questions go
+directly to its existing step-specific agent. Recording pauses that guide;
+stopping recording resumes it. Stopping or finishing the guide releases focus.
+Interrupting speech cancels foreground answers, not recording or guide state.
+Departure clears conversation history and still finalizes any recording.</p>
+<p>The shared front end retains up to four completed conversational exchanges and
+receives a bounded, read-only SOP status projection. Explicit commands bypass
+that conversational history; the engine remains the source of guide state.
+Speech uses the shared voice aggregator with participant and turn identities.
+Guide approval, content-hash pinning, observation prompts, timer checks, and
+explicit step advancement are unchanged.</p>
+<p>The isolated route corpus checks idle routing and exact command bypass without
+executing commands. With the configured language model already running, run
+from <code class="docutils literal notranslate"><span class="pre">agent-samples/workflow-recorder/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/routes.py
+</pre></div>
+</div>
+<p>This evaluates model routing, not audible latency or camera accuracy. The CPU
+tests separately exercise recording silence, guide focus, superseded answers,
+disconnects, and capture finalization through the composed runtime.</p>
+</section>
 <section id="shared-media-capture">
 <h3>Shared media capture<a class="headerlink" href="#shared-media-capture" title="Link to this heading">#</a></h3>
 <p>The sample launches main’s <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> service in explicit, raw mode.
@@ -762,6 +796,7 @@ reuse the ignored caches rather than downloading them again.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-recorder-controls">Workflow recorder controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-routing-and-focus">Conversation routing and focus</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-media-capture">Shared media capture</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#guide-validation-and-snapshots">Guide validation and snapshots</a></li>
 </ul>
