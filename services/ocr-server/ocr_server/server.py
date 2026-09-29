@@ -19,7 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MODEL_ID = "nvidia/nemotron-ocr-v2"
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
-MAX_IMAGE_PIXELS = 20_000_000
+# Upstream pads full-resolution FP16 RGB on CUDA before resizing. Cap that
+# square (about 114 MiB for the padded tensor), not just the decoded area.
+MAX_PADDED_IMAGE_PIXELS = 20_000_000
 
 
 class ImageInput(BaseModel):
@@ -46,8 +48,8 @@ def decode_image(url: str) -> Image.Image:
         if len(data) > MAX_IMAGE_BYTES:
             raise HTTPException(413, "Image exceeds 10 MiB")
         with Image.open(io.BytesIO(data)) as image:
-            if image.width * image.height > MAX_IMAGE_PIXELS:
-                raise HTTPException(413, "Image exceeds 20 million pixels")
+            if max(image.size) ** 2 > MAX_PADDED_IMAGE_PIXELS:
+                raise HTTPException(413, "Image padded-square area exceeds 20 million pixels")
             if image.format not in {"PNG", "JPEG"}:
                 raise HTTPException(422, "Only PNG and JPEG images are supported")
             return image.convert("RGB")

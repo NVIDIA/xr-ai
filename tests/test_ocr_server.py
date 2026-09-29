@@ -30,9 +30,9 @@ sys.modules[spec.name] = server
 spec.loader.exec_module(server)
 
 
-def image_url():
+def image_url(size=(16, 12)):
     buffer = io.BytesIO()
-    Image.new("RGB", (16, 12), "white").save(buffer, "PNG")
+    Image.new("RGB", size, "white").save(buffer, "PNG")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
@@ -128,9 +128,45 @@ def test_reject_invalid_images(url):
 
 
 def test_image_limits(monkeypatch):
-    monkeypatch.setattr(server, "MAX_IMAGE_PIXELS", 10)
+    monkeypatch.setattr(server, "MAX_PADDED_IMAGE_PIXELS", 10)
     with pytest.raises(HTTPException) as exc:
         server.decode_image(image_url())
+    assert exc.value.status_code == 413
+
+
+@pytest.mark.parametrize("size", [(100_000, 1), (1, 100_000), (4473, 1), (1, 4473)])
+async def test_thin_image_rejected_before_conversion_or_model(size, monkeypatch):
+    url = image_url(size)
+    # These inputs satisfy the old byte-count and decoded-area checks.
+    assert len(base64.b64decode(url.partition(",")[2])) < server.MAX_IMAGE_BYTES
+    assert size[0] * size[1] < server.MAX_PADDED_IMAGE_PIXELS
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("oversized padded image reached conversion or model inference")
+
+    monkeypatch.setattr(Image.Image, "convert", unexpected_call)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=unexpected_call))
+    app = server.build_app(loader=lambda: unexpected_call)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+            result = await client.post("/v1/ocr", json={"input": [{"type": "image_url", "url": url}]})
+    assert result.status_code == 413
+    assert "padded-square" in result.json()["detail"]
+
+
+@pytest.mark.parametrize("size", [(4472, 1), (1, 4472), (1920, 1080)])
+def test_images_within_padded_limit_are_accepted(size):
+    with server.decode_image(image_url(size)) as image:
+        assert image.size == size
+        assert image.mode == "RGB"
+
+
+def test_exact_padded_area_boundary(monkeypatch):
+    monkeypatch.setattr(server, "MAX_PADDED_IMAGE_PIXELS", 16 ** 2)
+    with server.decode_image(image_url((16, 16))) as image:
+        assert image.size == (16, 16)
+    with pytest.raises(HTTPException) as exc:
+        server.decode_image(image_url((17, 1)))
     assert exc.value.status_code == 413
 
 
