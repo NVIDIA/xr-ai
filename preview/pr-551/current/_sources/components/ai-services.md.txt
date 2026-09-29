@@ -49,7 +49,7 @@ Both shared model-server samples provide multilingual Nemotron OCR v2 on port
 `8112`. The regular sample downloads NVIDIA's pinned Hugging Face source and
 `v2_multilingual` weights and runs inference locally. Its launcher builds a
 Python 3.12, PyTorch 2.9.1, CUDA 13 image because the upstream implementation
-requires a compiled CUDA extension. Docker and NVIDIA Container Toolkit are
+requires a compiled CUDA extension. Docker, NVIDIA Container Toolkit,
 and a CUDA 13-compatible NVIDIA driver are required; a host CUDA toolkit is
 not. The first build takes several minutes.
 The model remains loaded across requests. Refer to the
@@ -85,7 +85,14 @@ Word, sentence, and paragraph grouping are available; backend recognition result
 need not be identical.
 
 The Hugging Face server accepts one image per request, at most 10 MiB encoded
-image bytes and 20 million decoded pixels. It serializes inference and rejects
+image bytes and 20 million pixels after full-resolution square padding:
+`max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
+This check runs before RGB conversion or inference because upstream pads the
+image on CUDA before resizing; lowering `infer_length` does not reduce that
+allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
+this is not a bound on total inference memory. Oversized inputs receive HTTP
+413; callers must downsample or tile them first.
+The server serializes inference and rejects
 overlapping requests with HTTP 503 rather than growing a GPU request queue.
 Its detector length is configured server-wide in `ocr_server.yaml` (640 or
 1024). NIM does not expose this Hugging Face detector setting.
