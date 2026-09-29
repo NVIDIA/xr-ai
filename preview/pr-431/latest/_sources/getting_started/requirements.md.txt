@@ -33,7 +33,7 @@ NVDEC.
 | Requirement | Version | Notes |
 |---|---|---|
 | OS | Linux | Ubuntu 22.04 or 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
-| Python | 3.11 through 3.14 | tested and currently allowed; supporting other versions requires updating `requires-python` and CI |
+| Python | 3.11 through 3.14 | the non-GPU test suite covers this range; CloudXR runtime, OpenXR service, and Magpie TTS stop at 3.13, and each project's `requires-python` declaration is authoritative |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
