@@ -34,7 +34,7 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
 )
 
-from ._workflow_spec import Step, Workflow
+from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
 from .catalog import CatalogGuide, GuideCatalog
 from .events import PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, RECORDING_COMMAND, USER_QUERY_TOPIC
 from .recorder import RecorderAgent
@@ -56,23 +56,8 @@ _CONTROL = re.compile(
 )
 
 
-class _CurrentViewRequest(StrictRequest):
-    question: str = Field(min_length=1, max_length=500)
-
-
 class _NowResult(BaseModel):
     epoch_us: int
-
-
-class _TimerRequest(StrictRequest):
-    started_at_us: int = Field(gt=0)
-    duration_s: int = Field(gt=0)
-
-
-class _TimerResult(BaseModel):
-    elapsed_s: int
-    remaining_s: int
-    expired: bool
 
 
 class _CommitRequest(StrictRequest):

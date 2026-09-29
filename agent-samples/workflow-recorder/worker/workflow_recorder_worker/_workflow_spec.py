@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import copy
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_tools.types import StrictRequest
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]*$")
 _TYPES = frozenset({"boolean", "integer", "number", "string"})
@@ -53,6 +56,23 @@ _TRIGGER_KEYS = frozenset({"function", "interval_s", "arguments", "result_field"
 _POLICY_KEYS = frozenset({"prompt", "tools"})
 _EVIDENCE_KEYS = frozenset({"pattern", "consecutive", "commit"})
 _MESSAGE_KEYS = frozenset({"enter", "complete", "skip"})
+
+
+class _CurrentViewRequest(StrictRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question: str = Field(min_length=1, max_length=500)
+
+
+class _TimerRequest(StrictRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    started_at_us: int = Field(gt=0)
+    duration_s: int = Field(gt=0)
+
+
+class _TimerResult(BaseModel):
+    elapsed_s: int
+    remaining_s: int
+    expired: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +164,12 @@ class Workflow:
 
 
 def load_workflow(path: Path) -> Workflow:
-    root = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")) or {}, "workflow")
+    return parse_workflow(path.read_bytes())
+
+
+def parse_workflow(content: bytes | str) -> Workflow:
+    """Validate one captured guide snapshot without rereading its source file."""
+    root = _mapping(yaml.safe_load(content) or {}, "workflow")
     _only(root, _ROOT_KEYS, "workflow")
     if root.get("schema_version") != 1:
         raise ValueError("schema_version must be 1")
@@ -241,6 +266,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     result_field = trigger_raw.get("result_field")
     if result_field is not None and (not isinstance(result_field, str) or not result_field):
         raise ValueError(f"steps.{step_id}.trigger.result_field must be a non-empty string")
+    _validate_trigger(function, arguments, result_field, fields, step_id)
 
     agent = _policy(raw.get("agent"), f"steps.{step_id}.agent")
     voice = _policy(raw.get("voice"), f"steps.{step_id}.voice")
@@ -277,6 +303,30 @@ def _policy(value: Any, label: str) -> Policy:
     if unknown:
         raise ValueError(f"{label} references unsupported tools: {sorted(unknown)}")
     return Policy(_required_text(raw.get("prompt"), f"{label}.prompt"), tools)
+
+
+def _validate_trigger(
+    function: str, arguments: dict[str, Any], result_field: str | None,
+    fields: dict[str, StateField], step_id: str,
+) -> None:
+    request = _CurrentViewRequest if function == "current_view" else _TimerRequest
+    result_fields = {"text"} if function == "current_view" else set(_TimerResult.model_fields)
+    if result_field is not None and result_field not in result_fields:
+        raise ValueError(f"step {step_id!r} trigger {function!r} has no result field {result_field!r}")
+    resolved = dict(arguments)
+    for key, value in arguments.items():
+        if isinstance(value, str) and value.startswith("$state.") and key in request.model_fields:
+            state_field = fields[value.removeprefix("$state.")]
+            expected = "string" if request.model_fields[key].annotation is str else "integer"
+            if state_field.type != expected:
+                raise ValueError(f"step {step_id!r} trigger argument {key!r} requires {expected} state")
+            # Values may be assigned by a preceding step (timer starts commonly
+            # initialize to zero). Validate shape now and actual values at runtime.
+            resolved[key] = "state value" if expected == "string" else 1
+    try:
+        request.model_validate(resolved)
+    except ValueError as exc:
+        raise ValueError(f"step {step_id!r} invalid {function} trigger arguments: {exc}") from exc
 
 
 def _evidence(value: Any, step_id: str, writes: tuple[str, ...], fields: dict[str, StateField]) -> Evidence | None:
@@ -380,6 +430,6 @@ def _positive_number(value: Any, label: str) -> float:
         result = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{label} must be positive") from exc
-    if result <= 0:
+    if not math.isfinite(result) or result <= 0:
         raise ValueError(f"{label} must be positive")
     return result

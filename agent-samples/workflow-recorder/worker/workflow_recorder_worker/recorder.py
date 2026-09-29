@@ -9,6 +9,7 @@ import asyncio
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -84,6 +85,7 @@ class _Session:
     previous_caption: dict[str, str] | None = None
     activities: list[_Activity] = field(default_factory=list)
     tasks: list[asyncio.Task[None]] = field(default_factory=list)
+    pending_writes: set[asyncio.Task[Any]] = field(default_factory=set)
     frame_ready: asyncio.Event = field(default_factory=asyncio.Event)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     active: bool = True
@@ -210,6 +212,7 @@ class RecorderAgent(Agent):
         self._capture_fps = capture_fps
         self._caption_interval_s = caption_interval_s
         self._sessions: dict[str, _Session] = {}
+        self._finalizers: dict[str, asyncio.Task[None]] = {}
         self._sessions_lock = asyncio.Lock()
         self._stopped = False
 
@@ -280,9 +283,39 @@ class RecorderAgent(Agent):
 
         self._stopped = True
         async with self._sessions_lock:
-            participants = tuple(self._sessions)
-        for participant_id in participants:
-            await self._close(participant_id, status="complete")
+            participants = tuple(self._sessions.keys() | self._finalizers.keys())
+        results = await asyncio.gather(
+            *(self._close(pid, status="complete") for pid in participants),
+            return_exceptions=True,
+        )
+        errors = [result for result in results if isinstance(result, BaseException)]
+        if errors:
+            raise BaseExceptionGroup("recording finalization failed", errors)
+        self._finalizers.clear()
+
+    async def _write(self, state: _Session, function: Callable[..., Any], *args: Any) -> Any:
+        # Cancelling to_thread's awaiter cannot stop its filesystem operation.
+        # Keep the actual task alive so finalization can drain it before sealing.
+        task = asyncio.create_task(asyncio.to_thread(function, *args))
+        state.pending_writes.add(task)
+        try:
+            result = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            raise
+        except BaseException:
+            state.pending_writes.discard(task)
+            raise
+        else:
+            state.pending_writes.discard(task)
+            return result
+
+    async def _drain_writes(self, state: _Session) -> None:
+        pending = tuple(state.pending_writes)
+        results = await asyncio.gather(*pending, return_exceptions=True)
+        state.pending_writes.difference_update(pending)
+        errors = [result for result in results if isinstance(result, BaseException)]
+        if errors:
+            raise BaseExceptionGroup("recording filesystem writes failed", errors)
 
     async def _capture_loop(self, state: _Session) -> None:
         while True:
@@ -309,7 +342,7 @@ class RecorderAgent(Agent):
         if not isinstance(image, bytes):
             raise TypeError(f"captured frame resolved to unsupported input: {type(image).__name__}")
         relative = f"frames/frame_{frame_id:06d}_{frame.timestamp_us}.jpg"
-        await asyncio.to_thread((state.directory / relative).write_bytes, image)
+        await self._write(state, (state.directory / relative).write_bytes, image)
         record = {
             "frame_id": frame_id,
             "timestamp_us": frame.timestamp_us,
@@ -333,7 +366,8 @@ class RecorderAgent(Agent):
                 height=frame.height,
                 image=frame.image,
             )
-            await asyncio.to_thread(
+            await self._write(
+                state,
                 _append_jsonl,
                 state.directory / "frames" / "index.jsonl",
                 record,
@@ -410,7 +444,8 @@ class RecorderAgent(Agent):
                 "frame_path": frame.path,
                 **caption,
             }
-            await asyncio.to_thread(
+            await self._write(
+                state,
                 _append_jsonl,
                 state.directory / "captions.jsonl",
                 record,
@@ -459,7 +494,8 @@ class RecorderAgent(Agent):
 
     async def _write_views(self, state: _Session) -> None:
         await self._write_packet(state)
-        await asyncio.to_thread(
+        await self._write(
+            state,
             _atomic_text,
             state.directory / "summary.md",
             self._summary(state),
@@ -502,7 +538,8 @@ class RecorderAgent(Agent):
             "hierarchy": [asdict(activity) for activity in state.activities],
             "discovered_guides": list(self._guide_catalog.items),
         }
-        await asyncio.to_thread(
+        await self._write(
+            state,
             _atomic_json,
             state.directory / "packet.json",
             packet,
@@ -560,7 +597,8 @@ class RecorderAgent(Agent):
         async with state.lock:
             if not state.active:
                 return
-            await asyncio.to_thread(
+            await self._write(
+                state,
                 _append_jsonl,
                 state.directory / "errors.jsonl",
                 {"timestamp_us": _now_us(), "kind": kind, "message": message},
@@ -568,12 +606,26 @@ class RecorderAgent(Agent):
 
     async def _close(self, participant_id: str, *, status: str) -> None:
         async with self._sessions_lock:
-            state = self._sessions.pop(participant_id, None)
-        if state is None:
-            return
+            state = self._sessions.get(participant_id)
+            finalizer = self._finalizers.get(participant_id)
+            if finalizer is None and state is None:
+                return
+            if state is not None and (finalizer is None or finalizer.done()):
+                finalizer = asyncio.create_task(
+                    self._finalize(state, status=status),
+                    name=f"workflow-finalize:{participant_id}",
+                    context=nemo_relay.fork_asyncio_context(),
+                )
+                self._finalizers[participant_id] = finalizer
+        assert finalizer is not None
+        await asyncio.shield(finalizer)
+
+    async def _finalize(self, state: _Session, *, status: str) -> None:
+        participant_id = state.participant_id
         state.ended_at = _iso(_now_us())
         stop = state.capture_tools.get("stop_recording")
         assert stop is not None
+        stop_error: Exception | None = None
         try:
             await stop.execute(EmptyRequest())
             state.media_status = "stop_requested"
@@ -582,19 +634,22 @@ class RecorderAgent(Agent):
             # packet; capture also finalizes on departure and service shutdown.
             state.media_status = "stop_failed"
             logger.warning("media capture stop failed pid={!r}: {}", participant_id, exc)
-            await self._error(state, "media_capture_stop", str(exc))
+            stop_error = exc
         for task in state.tasks:
             task.cancel()
         if state.tasks:
             await asyncio.gather(*state.tasks, return_exceptions=True)
+        await self._drain_writes(state)
+        if stop_error is not None:
+            await self._error(state, "media_capture_stop", str(stop_error))
         # Departure or service shutdown may finalize capture even if sending
         # stop failed because the voice transport has already closed.
         await self._wait_for_media(state)
         try:
             if state.media_manifest is None:
                 raise ValueError("capture manifest unavailable; narration was not exported")
-            state.transcript_count = await asyncio.to_thread(
-                _export_narration, Path(state.media_manifest), state.directory / "transcript.jsonl",
+            state.transcript_count = await self._write(
+                state, _export_narration, Path(state.media_manifest), state.directory / "transcript.jsonl",
             )
             state.narration_status = "complete" if state.media_status == "complete" else "incomplete"
         except (OSError, ValueError, KeyError, TypeError, AttributeError, OverflowError) as exc:
@@ -607,12 +662,16 @@ class RecorderAgent(Agent):
             state.active = False
             state.status = status
             await self._write_packet(state, status=status)
-            await asyncio.to_thread(
+            await self._write(
+                state,
                 _atomic_text,
                 state.directory / "summary.md",
                 self._summary(state),
             )
         self._current_frame.release(participant_id)
+        async with self._sessions_lock:
+            if self._sessions.get(participant_id) is state:
+                self._sessions.pop(participant_id)
         logger.info(
             "recording finalized pid={!r} status={} session={}",
             participant_id,

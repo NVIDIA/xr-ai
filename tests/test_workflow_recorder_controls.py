@@ -9,6 +9,7 @@ import asyncio
 import io
 import json
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -433,9 +434,12 @@ async def test_shutdown_stops_each_participants_capture_once(demo):
     await demo.recorder.stop()
     await demo.recorder.stop()
     messages = [call.args[0] for call in demo.capture_endpoint.send_return_data.await_args_list]
-    assert [(message.participant_id, message.topic) for message in messages] == [
+    assert [(message.participant_id, message.topic) for message in messages[:2]] == [
         ("user", CAPTURE_START_TOPIC), ("other", CAPTURE_START_TOPIC),
-        ("user", CAPTURE_STOP_TOPIC), ("other", CAPTURE_STOP_TOPIC),
+    ]
+    # Participant finalizers are drained concurrently; stop ordering is not a contract.
+    assert sorted((message.participant_id, message.topic) for message in messages[2:]) == [
+        ("other", CAPTURE_STOP_TOPIC), ("user", CAPTURE_STOP_TOPIC),
     ]
 
 
@@ -614,3 +618,72 @@ async def test_delayed_control_transcript_is_not_recorded(demo):
 )
 def test_recording_commands_do_not_match_guide_selectors_or_narration(text):
     assert RECORDING_COMMAND.fullmatch(text) is None
+
+
+@pytest.mark.asyncio
+async def test_cancelled_finalization_is_drained_by_shutdown(demo, monkeypatch):
+    await demo.recorder.start_recording("user")
+    state = demo.recorder._sessions["user"]
+    waiting, release = asyncio.Event(), asyncio.Event()
+    original = demo.recorder._wait_for_media
+
+    async def blocked_wait(session):
+        waiting.set()
+        await release.wait()
+        await original(session)
+
+    monkeypatch.setattr(demo.recorder, "_wait_for_media", blocked_wait)
+    finishing = asyncio.create_task(demo.recorder.finish_recording("user"))
+    await asyncio.wait_for(waiting.wait(), 2)
+    finishing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await finishing
+    assert demo.recorder.is_recording("user")
+    await demo.recorder.start_recording("user")
+    assert demo.recorder._sessions["user"] is state
+    shutdown = asyncio.create_task(demo.recorder.stop())
+    try:
+        await asyncio.sleep(0.02)
+        assert not shutdown.done(), "shutdown lost ownership of the unfinished recording"
+    finally:
+        release.set()
+        await asyncio.wait_for(shutdown, 2)
+    packet = json.loads((state.directory / "packet.json").read_text())
+    assert packet["status"] == packet["narration_status"] == "complete"
+    assert not demo.recorder.is_recording("user")
+    messages = [call.args[0] for call in demo.capture_endpoint.send_return_data.await_args_list]
+    assert [message.topic for message in messages].count(CAPTURE_STOP_TOPIC) == 1
+    assert not demo.recorder._finalizers
+
+
+@pytest.mark.asyncio
+async def test_finalization_drains_cancelled_filesystem_writes(demo, monkeypatch):
+    import workflow_recorder_worker.recorder as module
+
+    await demo.recorder.start_recording("user")
+    state = demo.recorder._sessions["user"]
+    entered, release, completed = threading.Event(), threading.Event(), threading.Event()
+    original = module._atomic_json
+
+    def delayed_write(path, payload):
+        if path == state.directory / "packet.json" and payload["status"] == "recording":
+            entered.set()
+            assert release.wait(5)
+            original(path, payload)
+            completed.set()
+        else:
+            original(path, payload)
+
+    monkeypatch.setattr(module, "_atomic_json", delayed_write)
+    writing = asyncio.create_task(demo.recorder._write_packet(state))
+    state.tasks.append(writing)
+    assert await asyncio.to_thread(entered.wait, 2)
+    finishing = asyncio.create_task(demo.recorder.finish_recording("user"))
+    try:
+        await asyncio.sleep(0.05)
+        assert not finishing.done(), "finalization raced a still-running filesystem thread"
+    finally:
+        release.set()
+        await asyncio.wait_for(finishing, 2)
+        assert await asyncio.to_thread(completed.wait, 2)
+    assert json.loads((state.directory / "packet.json").read_text())["status"] == "complete"

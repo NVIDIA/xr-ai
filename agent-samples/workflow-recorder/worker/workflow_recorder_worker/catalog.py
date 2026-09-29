@@ -15,7 +15,7 @@ from typing import Any
 
 from loguru import logger
 
-from ._workflow_spec import Workflow, load_workflow
+from ._workflow_spec import Workflow, parse_workflow
 
 _SUFFIXES = (".guide.yaml", ".guide.yml")
 _MAX_GUIDE_BYTES = 1_000_000
@@ -187,7 +187,9 @@ class GuideCatalog:
             workflow: Workflow | None = None
             error: str | None = None
             try:
-                workflow = load_workflow(path)
+                if len(content) > _MAX_GUIDE_BYTES:
+                    raise ValueError(f"guide exceeds {_MAX_GUIDE_BYTES} bytes")
+                workflow = parse_workflow(content)
             except Exception as exc:
                 error = str(exc)
             guides.append(

@@ -85,12 +85,32 @@ If finalization times out, inspect the capture service log and its eventual
 manifest before starting another recording. Disconnect and service shutdown
 also finalize media.
 
+Recorder shutdown retains and drains in-progress finalization even if the
+request or disconnect handler is cancelled. Outstanding filesystem operations
+finish before the final packet and summary are written.
+
 Raw capture requires NVENC but does not require FFmpeg. Neither raw capture
 nor SOP packet creation automatically generates a guide. The existing
 recording-to-guide authoring skill still consumes the packet and its JPEGs.
 All guides, packets, and media bundles remain local and gitignored. Automatic
 media retention is disabled in this sample so source evidence is not removed
 while an SOP packet still refers to it; remove unwanted recordings manually.
+
+### Guide validation and snapshots
+
+Guide loading validates trigger arguments against the same request models used
+at execution. `current_view` requires a question of 1 to 500 characters and
+accepts no result selector other than `text`. `clock__timer` requires positive
+integer `started_at_us` and `duration_s` arguments; its optional result selector
+is `elapsed_s`, `remaining_s`, or `expired`. Unknown arguments are rejected.
+State references must name a declared, visible field of the required type;
+their actual values are validated when the trigger executes. Trigger intervals
+must be finite and positive. Invalid guides remain visible as invalid catalog
+entries and cannot start.
+
+Each catalog generation hashes and parses the same captured file contents.
+Edits discovered afterward produce a new generation and do not change the
+guide or approval status pinned to a running session.
 
 ## DeviceIOHub rename
 
