@@ -80,7 +80,15 @@ uv run --project agent-samples/common/shared-agents --with pyyaml \
 uv run --project agent-samples/common/shared-agents --with pyyaml \
   python agent-samples/common/shared-agents/eval/routes.py \
   --corpus agent-samples/common/shared-agents/eval/routes_challenge.yaml
+uv run --project agent-samples/common/shared-agents --with pyyaml \
+  python agent-samples/common/shared-agents/eval/routes.py \
+  --corpus agent-samples/common/shared-agents/eval/routes_synthetic.yaml
 ```
 
-These checks measure first-tier decisions and model-call latency. They do not
-replace complete-turn runtime tests or live audio and application-effect checks.
+The synthetic corpus registers several imaginary applications at once. It
+checks overlapping domains, contextual follow-ups, and whether underspecified
+requests get a clarification question rather than an arbitrary delegation.
+These checks measure idle-turn decisions and model-call latency. Focus capture,
+release, participant isolation, and spoken-result history are covered by
+`tests/test_sample_front_end.py`; neither layer replaces live audio and
+application-effect checks.

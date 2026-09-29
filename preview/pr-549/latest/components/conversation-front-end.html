@@ -496,10 +496,18 @@ run:</p>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/common/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/common/shared-agents/eval/routes.py<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--corpus<span class="w"> </span>agent-samples/common/shared-agents/eval/routes_challenge.yaml
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/common/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/common/shared-agents/eval/routes.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--corpus<span class="w"> </span>agent-samples/common/shared-agents/eval/routes_synthetic.yaml
 </pre></div>
 </div>
-<p>These checks measure first-tier decisions and model-call latency. They do not
-replace complete-turn runtime tests or live audio and application-effect checks.</p>
+<p>The synthetic corpus registers several imaginary applications at once. It
+checks overlapping domains, contextual follow-ups, and whether underspecified
+requests get a clarification question rather than an arbitrary delegation.
+These checks measure idle-turn decisions and model-call latency. Focus capture,
+release, participant isolation, and spoken-result history are covered by
+<code class="docutils literal notranslate"><span class="pre">tests/test_sample_front_end.py</span></code>; neither layer replaces live audio and
+application-effect checks.</p>
 </section>
 </section>
 
