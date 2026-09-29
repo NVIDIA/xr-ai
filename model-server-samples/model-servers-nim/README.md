@@ -6,7 +6,8 @@
 # Shared model servers with NVIDIA NIM
 
 This independent sample launches shared NVIDIA NIM models with Magpie TTS,
-using the existing NIM launcher, Magpie HTTP service, and sample-local adapters.
+including multilingual Nemotron OCR v2, using the existing NIM launcher,
+Magpie HTTP service, and sample-local adapters.
 Existing agent samples keep their original `models.json` and dependencies. Spark
 uses the original NeMo STT service because Parakeet NIM lacks an ARM64 image.
 Refer to the [sample guide](https://nvidia.github.io/xr-ai/latest/reference/model-servers-nim.html)

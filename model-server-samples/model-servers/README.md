@@ -7,7 +7,8 @@
 
 This sample starts the reusable inference services consumed by the agent
 samples. The default deployment includes Parakeet STT, Pocket TTS, Nemotron-3
-Nano Omni, Cosmos3 Nano Reasoner, and the Nemotron embedding model.
+Nano Omni, Cosmos3 Nano Reasoner, the Nemotron embedding model, and multilingual
+Nemotron OCR v2 using local Hugging Face inference.
 
 The launcher waits for every selected service to become healthy. It then prints
 the `All processes ready` banner and exits, while the services remain running

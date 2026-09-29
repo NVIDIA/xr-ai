@@ -17,8 +17,11 @@ The launcher waits for readiness, then exits with the model servers running.
 | LLM and agent LLM | Nemotron 3 Nano Omni 30B A3B Reasoning | HTTP `localhost:8108` |
 | VLM | Cosmos3 Nano Reasoner | HTTP `localhost:8100` |
 | Embedding | Llama Nemotron Embed 1B v2 | HTTP `localhost:8109` |
+| OCR | Nemotron OCR v2 multilingual | HTTP `localhost:8112` |
 
-All client endpoints preserve the original `model-servers` HTTP contracts,
+OCR directly exposes `/v1/ocr` and `/v1/health/ready`, shared with the
+Hugging Face server. Refer to {ref}`ocr-serving` for client usage and limits.
+The other client endpoints preserve the original `model-servers` HTTP contracts,
 including `/health`, the `llm`, `vlm`, and `embed` aliases, multipart WAV
 transcription, and Pocket-compatible speech responses. TTS uses the shared
 `services/magpie-nim-tts` HTTP wrapper; the remaining adapters live in this
@@ -50,6 +53,7 @@ Native NIM endpoints are separate from the client ports:
 | Nemotron Omni | HTTP `8118` |
 | Cosmos | HTTP `8110` |
 | Embeddings | HTTP `8119` |
+| OCR | HTTP `8112` (also the client port) |
 
 Spark retains the original HTTP STT service directly on port `8103`.
 
@@ -240,6 +244,15 @@ repeated-launch reuse, and full shutdown. This includes real speech, image
 streaming, function calls, and embeddings. Cold-cache startup, sustained
 concurrent load, and full restart qualification remain outstanding; dual Ada
 and Spark still need complete stack validation on their target machines.
+Adding OCR leaves these existing budgets unchanged. OCR uses GPU 1 on dual Ada
+and GPU 0 on Blackwell and Spark, with one multilingual engine and batch size
+one. Allow approximately 3 GiB additional discrete-GPU startup memory, plus
+input-dependent working buffers. This reduces dual Ada's estimated GPU 1
+headroom to roughly 2 GB; validate concurrent workloads on that machine before
+deployment. The pinned OCR image has both AMD64 and ARM64 manifests, but that
+does not qualify the combined Spark stack. The earlier whole-stack tests above
+predate OCR.
+
 The defaults are allocation estimates, not a claim of full hardware qualification. Refer to the
 [model-server customization guide](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html)
 for the shared lifecycle and profiling workflow.

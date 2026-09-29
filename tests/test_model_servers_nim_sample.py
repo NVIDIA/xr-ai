@@ -29,7 +29,7 @@ HARDWARE = ("96G_blackwell", "dual_48G_ada", "spark")
 @pytest.mark.parametrize("hardware", HARDWARE)
 def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_path):
     processes, credentials, profile = sample._build_processes(hardware)
-    assert len(processes) == (9 if hardware == "spark" else 10)
+    assert len(processes) == (10 if hardware == "spark" else 11)
     assert all(process.launch_mode == "persist" for process in processes)
     for process in processes:
         if process.name in {"stt-nim", "tts-nim"}:
@@ -49,7 +49,7 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
     sample._export_models(profile, destination)
     assert profile.read_bytes() == original
     config = load_models_config(destination)
-    assert set(config.entries) == {"stt", "tts", "llm", "agent_llm", "vlm", "embedding"}
+    assert set(config.entries) == {"stt", "tts", "llm", "agent_llm", "vlm", "embedding", "ocr"}
     assert config.llm("llm") == config.llm("agent_llm")
     assert all(spec.deployment.ownership == "reused" for spec in config.entries.values())
     assert all(not spec.deployment.credentials for spec in config.entries.values())
@@ -171,7 +171,7 @@ def test_stop_does_not_need_gpu_detection_or_credentials(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--stop"])
     sample.run()
     assert len(stopped) == len({port for _, port in stopped})
-    assert {port for _, port in stopped} == {8100, 8103, 8105, 8108, 8109, 8110, 8118, 8119, 9010, 9011}
+    assert {port for _, port in stopped} == {8100, 8103, 8105, 8108, 8109, 8110, 8112, 8118, 8119, 9010, 9011}
 
 
 class Backend:

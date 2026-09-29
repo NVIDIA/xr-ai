@@ -36,6 +36,7 @@ _SERVICES = {
         "../../services/nim-server", "nim_server", "nim_embedding_server.yaml",
     ),
     "embedding": ("compatibility-adapter", "nim_model_adapter", "embedding_adapter.yaml"),
+    "ocr-nim": ("../../services/nim-server", "nim_server", "nim_ocr_server.yaml"),
     "llm-nim": ("../../services/nim-server", "nim_server", "nim_llm_server.yaml"),
     "llm-adapter": ("compatibility-adapter", "nim_model_adapter", "llm_adapter.yaml"),
     "vlm-nim": ("../../services/nim-server", "nim_server", "nim_vlm_server.yaml"),

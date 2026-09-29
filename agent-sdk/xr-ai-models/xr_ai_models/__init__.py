@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unified service protocols and OpenAI-compatible clients for XR AI models.
+"""Unified typed service protocols and model clients for XR AI.
 
 Repository code talks to the typed ``*Service`` protocols. The concrete
-``OpenAICompat*`` clients cover every in-tree backend and external
-OpenAI-compatible endpoints.
+``OpenAICompat*`` clients cover chat, embeddings, and HTTP speech;
+OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.
 """
 from ._protocols import (
     Capabilities,
@@ -16,6 +16,8 @@ from ._protocols import (
     ImageInput,
     ImagePart,
     LLMService,
+    OCRService,
+    OCRSpan,
     STTService,
     TextPart,
     ToolCall,
@@ -42,6 +44,7 @@ from ._config import (
     LLMSpec,
     ModelKind,
     ModelsConfig,
+    OCRSpec,
     Spec,
     STTSpec,
     TTSSpec,
@@ -49,7 +52,7 @@ from ._config import (
     load_models_config,
     load_models_config_from_dict,
 )
-from ._factory import make_embedding, make_llm, make_stt, make_tts, make_vlm
+from ._factory import make_embedding, make_llm, make_ocr, make_stt, make_tts, make_vlm
 from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
@@ -61,6 +64,10 @@ __all__ = [
     "ImageInput",
     "ImagePart",
     "LLMService",
+    "OCRService",
+    "OCRSpan",
+    "OCRSpec",
+    "make_ocr",
     "STTService",
     "TextPart",
     "ToolCall",

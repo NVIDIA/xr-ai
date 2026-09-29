@@ -56,9 +56,9 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     processes, credentials = _model_servers._build_processes("default")
 
     assert [process.name for process in processes] == [
-        "stt", "tts", "omni", "vlm", "embedding",
+        "stt", "tts", "ocr", "omni", "vlm", "embedding",
     ]
-    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8103, 8105, 8112, 8108, 8100, 8109]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -124,6 +124,7 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("ocr", 8112),
     }
 
 
@@ -135,9 +136,9 @@ def test_nim_profile_mixes_nim_containers_and_local_servers(
     processes, credentials = _model_servers._build_processes("vlm_llm_nim")
 
     assert [process.name for process in processes] == [
-        "llm-nim", "vlm-nim", "stt", "tts", "embedding",
+        "llm-nim", "vlm-nim", "stt", "tts", "ocr", "embedding",
     ]
-    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8109]
+    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8112, 8109]
     assert credentials == ("NGC_API_KEY",)
 
 
@@ -343,6 +344,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("ocr", 8112),
     }
 
 

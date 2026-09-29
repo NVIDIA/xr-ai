@@ -37,12 +37,12 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat", "riva_grpc")
-    assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
+    assert get_args(ModelKind) == ("openai_compat", "riva_grpc", "nemotron_ocr")
+    assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding", "ocr"}
     assert LLMSpec in get_args(Spec)
 
 
-def test_nine_presets_registered() -> None:
+def test_presets_registered() -> None:
     assert set(available_presets()) == {
         "cosmos3_nano_reasoner",
         "cosmos_vlm",
@@ -53,6 +53,7 @@ def test_nine_presets_registered() -> None:
         "parakeet_stt",
         "pocket_tts",
         "nemotron_embedding",
+        "nemotron_ocr",
     }
 
 
