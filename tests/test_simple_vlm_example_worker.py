@@ -20,7 +20,7 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
-from xr_ai_models import ChatResponse, VLMService
+from xr_ai_models import ChatResponse, ToolCall, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
@@ -542,6 +542,17 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     config = load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml")
     ready_file = tmp_path / "ready"
     stt = _Service()
+    class _RoutingModel(_Service):
+        async def chat(self, _messages, **_kwargs):
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=[ToolCall(id="view-1", name="current_view", arguments="{}")],
+                finish_reason="tool_calls",
+                raw={},
+            )
+
+    llm = _RoutingModel()
     vlm = _Service()
     tts = _Service()
     transport = _Transport()
@@ -557,6 +568,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
+    monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
@@ -638,7 +650,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert system_prompt == "Answer with one word."
     assert max_tokens == 4
     assert timeout == 120.0
-    assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
+    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint

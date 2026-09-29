@@ -6,8 +6,8 @@
 # Simple VLM example
 
 The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers spoken or typed questions about each participant's
-latest camera frame and streams the answer to both Pocket TTS and the
+the repository. It answers ordinary conversation directly, uses the latest
+camera frame only when a question needs it, and streams the answer to both Pocket TTS and the
 `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
@@ -17,13 +17,15 @@ sample's design and operational details.
 The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and shared endpoints for
-Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+Parakeet STT, Nemotron Omni, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
 the shared model-server stack.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
-`UserQuery`. `SimpleVlmAgent` selects the participant's current image with
-`CurrentFrameTool`, passes its opaque reference to
+`UserQuery`. `SimpleVlmAgent` keeps four completed exchanges per participant.
+The shared `QuickConversation` chooses a direct conversational answer or the
+current-view tool in one no-thinking model call. For current-view requests it
+selects an image with `CurrentFrameTool`, passes its opaque reference to
 `StreamingImageQueryTool`, and publishes response chunks to voice output.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
@@ -31,7 +33,8 @@ telemetry, and the sample has no MCP path.
 A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent's cached
 frames and tasks. This is the reference composition for a single foreground
-streaming image query.
+streaming image query and ordinary conversation. It has no application route,
+so every turn uses the generic conversation capability.
 
 ## Source map
 

@@ -2,18 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-simple-vlm-example orchestrator — vision Q&A over voice or text.
+simple-vlm-example orchestrator — conversation and vision Q&A over voice or text.
 
 Pipeline
 --------
 Audio in (mic)     → STT → text query ─┐
-Text in (data ch.) ─────→ text query ──┴→ latest video frame → VLM stream
-                                                      │
-                             sentence-batched TTS  ←──┴──→ data channel reply
+Text in (data ch.) ─────→ text query ──┴→ conversation model
+                                          ├→ direct answer
+                                          └→ current frame → VLM stream
+                                                   │
+                             sentence-batched TTS ←┴→ data channel reply
 
 Model deployment
 ----------------
-STT, VLM, and TTS are reused from services started outside this sample. The
+STT, LLM, VLM, and TTS are reused from services started outside this sample. The
 sample launches its hub and worker, plus optional capture, and never starts or
 stops model servers.
 
@@ -42,7 +44,7 @@ _CAPTURE_PROCESS = Process(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Vision question answering over voice or text.",
+        description="Conversation and vision question answering over voice or text.",
     )
     parser.add_argument(
         "--capture",

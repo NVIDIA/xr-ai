@@ -1,0 +1,131 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: challenge_preference_recall
+  image: blank
+  route: direct
+  history:
+    - user: I prefer chamomile in the evening.
+      assistant: I'll remember that you prefer chamomile in the evening.
+  query: Which tea did I say I liked at night?
+  any_of: [chamomile]
+- name: challenge_reference_resolution
+  image: blank
+  route: direct
+  history:
+    - user: I am visiting Oslo next week.
+      assistant: Enjoy Oslo next week.
+  query: What country is that city in?
+  any_of: [Norway]
+- name: challenge_latest_correction
+  image: blank
+  route: direct
+  history:
+    - user: My meeting is on Tuesday.
+      assistant: Tuesday it is.
+    - user: Sorry, I changed it to Thursday.
+      assistant: Your meeting is on Thursday.
+  query: When is my meeting?
+  any_of: [Thursday]
+  none_of: [Tuesday]
+- name: challenge_app_context_name
+  image: blank
+  route: direct
+  app_context: The virtual room contains an object named Beacon.
+  query: What is the virtual object named?
+  any_of: [Beacon]
+- name: challenge_app_action_no_tool
+  image: blank
+  route: direct
+  app_context: A virtual shelf is available.
+  query: Rotate the virtual shelf for me.
+  any_of: [can't, cannot, unable, "not able"]
+  none_of: [rotated, done, "clearer view"]
+- name: challenge_app_context_not_camera
+  image: blue_square
+  route: direct
+  app_context: The virtual room contains a blue box.
+  query: Is there a virtual box in the room?
+  any_of: [box]
+- name: challenge_general_animal
+  image: red_square
+  route: direct
+  query: What kind of animal is a platypus?
+  any_of: [mammal]
+- name: challenge_general_math
+  image: open_sign
+  route: direct
+  query: What is twice eleven?
+  any_of: ['22', twenty-two]
+- name: challenge_visible_color
+  image: red_square
+  route: current_view
+  query: Which color is the shape I am seeing?
+  any_of: [red]
+- name: challenge_visible_shape
+  image: blue_square
+  route: current_view
+  query: What shape is this blue thing?
+  any_of: [square]
+- name: challenge_visible_text
+  image: closed_sign
+  route: current_view
+  query: Read the word on this sign.
+  any_of: [closed]
+- name: challenge_visible_object_count
+  image: red_left_blue_right
+  route: current_view
+  query: How many colored shapes are here?
+  any_of: [two, '2']
+- name: challenge_current_over_previous
+  image: closed_sign
+  route: current_view
+  history:
+    - user: What did that sign say?
+      assistant: It said OPEN.
+  query: What does it say now?
+  any_of: [closed]
+  none_of: [open]
+- name: challenge_current_other_side
+  image: red_left_blue_right
+  route: current_view
+  history:
+    - user: What shape is on the right?
+      assistant: A blue circle is on the right.
+  query: What's on the left now?
+  any_of: [square]
+- name: challenge_visible_quoted_command
+  image: open_sign
+  route: current_view
+  query: The page says "open the app". What word is actually visible in front of me?
+  any_of: [open]
+- name: challenge_no_invented_person
+  image: blank
+  route: current_view
+  query: Is someone visible in this view?
+  any_of: ["no", "not"]
+- name: challenge_deictic_question
+  image: red_left_blue_right
+  route: current_view
+  query: What are these two things?
+  any_of: [shape, square, circle]
+- name: challenge_nonvisual_followup
+  image: blue_square
+  route: direct
+  history:
+    - user: I have a 40 minute commute.
+      assistant: Your commute takes 40 minutes.
+  query: Is that more than half an hour?
+  any_of: ["yes"]
+- name: challenge_app_timer_no_tool
+  image: blank
+  route: direct
+  app_context: The tea guide has a timer running.
+  query: Reset that timer to zero for me.
+  any_of: [can't, cannot, unable, "not able"]
+  none_of: ["I reset", done, "clearer view"]
+- name: challenge_knowledge_visual_word
+  image: open_sign
+  route: direct
+  query: What does the word "photosynthesis" mean?
+  any_of: [plant, light]
