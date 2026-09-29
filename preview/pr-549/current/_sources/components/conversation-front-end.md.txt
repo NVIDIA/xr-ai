@@ -70,16 +70,16 @@ routing accuracy and total completion time. Compare the same corpus with Nano
 Omni and Lightning, including bounded thinking where it improves the
 accuracy-latency tradeoff. Keep held-out cases separate from prompt tuning.
 
-The isolated first-tier corpus lives in `agent-samples/shared-agents/eval/`.
+The isolated first-tier corpus lives in `agent-samples/common/shared-agents/eval/`.
 From the repository root, with the shared language endpoint already serving,
 run:
 
 ```bash
-uv run --project agent-samples/shared-agents --with pyyaml \
-  python agent-samples/shared-agents/eval/routes.py
-uv run --project agent-samples/shared-agents --with pyyaml \
-  python agent-samples/shared-agents/eval/routes.py \
-  --corpus agent-samples/shared-agents/eval/routes_challenge.yaml
+uv run --project agent-samples/common/shared-agents --with pyyaml \
+  python agent-samples/common/shared-agents/eval/routes.py
+uv run --project agent-samples/common/shared-agents --with pyyaml \
+  python agent-samples/common/shared-agents/eval/routes.py \
+  --corpus agent-samples/common/shared-agents/eval/routes_challenge.yaml
 ```
 
 These checks measure first-tier decisions and model-call latency. They do not

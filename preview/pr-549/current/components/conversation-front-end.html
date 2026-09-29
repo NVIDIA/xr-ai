@@ -488,14 +488,14 @@ and multiple participants. Measure time to first audible response as well as
 routing accuracy and total completion time. Compare the same corpus with Nano
 Omni and Lightning, including bounded thinking where it improves the
 accuracy-latency tradeoff. Keep held-out cases separate from prompt tuning.</p>
-<p>The isolated first-tier corpus lives in <code class="docutils literal notranslate"><span class="pre">agent-samples/shared-agents/eval/</span></code>.
+<p>The isolated first-tier corpus lives in <code class="docutils literal notranslate"><span class="pre">agent-samples/common/shared-agents/eval/</span></code>.
 From the repository root, with the shared language endpoint already serving,
 run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>python<span class="w"> </span>agent-samples/shared-agents/eval/routes.py
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>python<span class="w"> </span>agent-samples/shared-agents/eval/routes.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--corpus<span class="w"> </span>agent-samples/shared-agents/eval/routes_challenge.yaml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/common/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/common/shared-agents/eval/routes.py
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/common/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>agent-samples/common/shared-agents/eval/routes.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--corpus<span class="w"> </span>agent-samples/common/shared-agents/eval/routes_challenge.yaml
 </pre></div>
 </div>
 <p>These checks measure first-tier decisions and model-call latency. They do not
