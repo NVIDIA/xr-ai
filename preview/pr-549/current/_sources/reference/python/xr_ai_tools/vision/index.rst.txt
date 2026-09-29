@@ -1,0 +1,162 @@
+xr_ai_tools.vision
+==================
+
+.. py:module:: xr_ai_tools.vision
+
+.. autoapi-nested-parse::
+
+   VLM tools over single images, image collections, and timed video frames.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.vision.ImageQueryRequest
+   xr_ai_tools.vision.MultiImageQueryRequest
+   xr_ai_tools.vision.VideoQueryRequest
+   xr_ai_tools.vision.ImageQueryResult
+   xr_ai_tools.vision.ImageQueryChunk
+   xr_ai_tools.vision.ImageQueryTool
+   xr_ai_tools.vision.MultiImageQueryTool
+   xr_ai_tools.vision.VideoQueryTool
+   xr_ai_tools.vision.StreamingImageQueryTool
+
+
+Module Contents
+---------------
+
+.. py:class:: ImageQueryRequest
+
+
+
+   An image reference and the question to answer from it.
+
+
+   .. py:attribute:: image
+      :type:  xr_ai_tools.image.ImageReference
+
+      Image selected by another tool or caller.
+
+
+
+   .. py:attribute:: query
+      :type:  str
+
+      Question to answer from the image.
+
+
+
+.. py:class:: MultiImageQueryRequest
+
+
+
+   An ordered image collection and one question spanning the images.
+
+
+   .. py:attribute:: images
+      :type:  list[xr_ai_tools.image.ImageReference]
+
+      Ordered images selected by other tools or the caller.
+
+
+
+   .. py:attribute:: query
+      :type:  str
+
+      Question to answer from the images.
+
+
+
+.. py:class:: VideoQueryRequest
+
+
+
+   Chronological image frames and a temporal question about them.
+
+
+   .. py:attribute:: frames
+      :type:  list[xr_ai_tools.image.TimedImage]
+
+      Chronologically ordered image frames with Unix timestamps.
+
+
+
+   .. py:attribute:: query
+      :type:  str
+
+      Question to answer from the timed frames.
+
+
+
+   .. py:method:: validate_timeline() -> VideoQueryRequest
+
+      Require frames to be supplied in chronological order.
+
+
+
+.. py:class:: ImageQueryResult
+
+
+
+   A complete VLM answer and visual-input availability state.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Complete answer text.
+
+
+
+   .. py:attribute:: available
+      :type:  bool
+
+      Whether the supplied visual input produced a usable answer.
+
+
+
+.. py:class:: ImageQueryChunk
+
+
+
+   One incremental text fragment from a streaming VLM answer.
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Partial fragment of the streamed answer text.
+
+
+
+.. py:class:: ImageQueryTool(*, images: xr_ai_tools.image.ImageRegistry, vlm: xr_ai_models.VLMService, system_prompt: str = '')
+
+
+
+   Answer a question about one caller-selected image.
+
+
+.. py:class:: MultiImageQueryTool(*, images: xr_ai_tools.image.ImageRegistry, vlm: xr_ai_models.VLMService, system_prompt: str = '')
+
+
+
+   Answer one question across an ordered image collection.
+
+
+.. py:class:: VideoQueryTool(*, images: xr_ai_tools.image.ImageRegistry, vlm: xr_ai_models.VLMService, system_prompt: str = '')
+
+
+
+   Answer one temporal question across timestamped image frames.
+
+
+.. py:class:: StreamingImageQueryTool(*, images: xr_ai_tools.image.ImageRegistry, vlm: xr_ai_models.VLMService, system_prompt: str = '')
+
+
+
+   Stream an answer about one caller-selected image.
+
+
