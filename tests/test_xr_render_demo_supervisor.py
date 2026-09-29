@@ -153,6 +153,42 @@ async def test_every_transcript_reaches_the_supervisor_loop(monkeypatch) -> None
         assert any(f"User request: {transcript}" in content for content in seen_user_messages)
 
 
+async def test_shared_conversation_resolves_references_without_becoming_new_work(monkeypatch) -> None:
+    supervisor, _fake = _make_supervisor()
+    user_messages: list[str] = []
+
+    async def snapshot():
+        return SimpleNamespace(objects=[])
+
+    async def describe(_participant_id):
+        return "[SCENE OBJECTS] empty"
+
+    async def no_op(*_args):
+        return None
+
+    monkeypatch.setattr(supervisor._context, "snapshot", snapshot)
+    monkeypatch.setattr(supervisor._context, "describe", describe)
+    monkeypatch.setattr(supervisor._context, "record_moves", no_op)
+    monkeypatch.setattr(supervisor, "_persist_turn", no_op)
+
+    async def fake_loop(messages, toolset, call_model, max_iterations=12):
+        user_messages.extend(message.content for message in messages if message.role == "user")
+        return SimpleNamespace(content="I can use that reference.", messages=list(messages), tool_calls=())
+
+    monkeypatch.setattr("xr_render_demo_worker.supervisor.run_tool_loop", fake_loop)
+    request = SceneRequest(
+        transcript="Make a virtual copy of that cup.",
+        participant_id="alice",
+        conversation_context="User: What do you see?\nAssistant: A blue cup is on the desk.",
+    )
+    await supervisor._handle_scene(request, request.transcript, "")
+
+    assert len(user_messages) == 1
+    assert "[Shared conversation] (already handled; context for references, not new work)" in user_messages[0]
+    assert "Assistant: A blue cup is on the desk." in user_messages[0]
+    assert user_messages[0].endswith("User request: Make a virtual copy of that cup.")
+
+
 async def test_nonmutating_delegation_does_not_trigger_scene_verification(monkeypatch) -> None:
     """Verification follows delegated capabilities, not surface action words."""
     supervisor, _fake = _make_supervisor()

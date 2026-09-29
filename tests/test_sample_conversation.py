@@ -49,9 +49,11 @@ class _LLM:
     def __init__(self, *, visual: bool) -> None:
         self.visual = visual
         self.messages = None
+        self.tools = None
 
     async def chat(self, messages, **_kwargs):
         self.messages = messages
+        self.tools = _kwargs.get("tools")
         calls = [ToolCall(id="view-1", name="current_view", arguments="{}")] if self.visual else None
         return ChatResponse(
             content="Pippin is your terrier." if not self.visual else "",
@@ -243,3 +245,53 @@ def test_generic_handback_reason_is_bounded() -> None:
     )
 
     assert _handback_reason(response) == "needs app state"
+
+
+async def test_history_does_not_change_available_capabilities() -> None:
+    llm = _LLM(visual=False)
+    conversation = QuickConversation(_Frames(), _Vision(), llm=llm)  # type: ignore[arg-type]
+
+    await conversation.decide("Hello.")
+    assert [tool.name for tool in llm.tools] == ["current_view"]
+
+    await conversation.decide(
+        "What was that again?",
+        history=(ConversationExchange("Start the sample.", "The sample started."),),
+    )
+    assert [tool.name for tool in llm.tools] == ["current_view"]
+
+    await conversation._decide_with_handoff(
+        "What was that again?",
+        (ConversationExchange("Hello.", "Hi there."),),
+        "",
+    )
+    assert [tool.name for tool in llm.tools] == [
+        "current_view", "application_handoff"
+    ]
+
+
+async def test_direct_recall_speaks_without_camera_or_second_model_call() -> None:
+    frames = _Frames()
+    llm = _LLM(visual=False)
+    conversation = QuickConversation(frames, _Vision(), llm=llm)  # type: ignore[arg-type]
+    decision = ChatResponse(
+        content="I added a blue cube.",
+        reasoning=None,
+        tool_calls=[],
+        finish_reason="stop",
+        raw={},
+    )
+
+    answer = [
+        text
+        async for text in conversation.stream(
+            "What was that again?",
+            "alice",
+            history=(ConversationExchange("Add a cube.", "I added a blue cube."),),
+            decision=decision,
+        )
+    ]
+
+    assert answer == ["I added a blue cube."]
+    assert frames.participants == []
+    assert llm.messages is None

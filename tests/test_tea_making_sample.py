@@ -19,6 +19,7 @@ import pytest
 import yaml
 from xr_ai_models import ChatMessage, ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_sample_agents import ConversationExchange
 from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageReference, ImageRegistry
 from xr_ai_tools.tool_calling import ToolCallRecord, ToolLoopResult
@@ -1090,6 +1091,30 @@ def test_active_catalog_is_not_pruned_from_query_words() -> None:
     assert procedural.tools.get("current_view") is not None
     assert procedural.tools.get("application_context__query") is not None
     assert procedural.tools.get("change_watch__start") is not None
+
+
+def test_tea_handoff_context_is_separate_from_current_request() -> None:
+    foreground = _foreground_for_route_test("shared", step_id="identify")
+    history = (
+        ConversationExchange(
+            user="What is in front of me?",
+            assistant="A blue mug is beside the kettle.",
+        ),
+    )
+    for participant_id in ("idle", "active"):
+        turn = foreground._prepare_turn(
+            participant_id,
+            query="Should I use that mug?",
+            ctx=None,
+            timestamp_us=1,
+            conversation_history=history,
+        )
+        payload = json.loads(turn.user_message)
+        assert payload["request"] == "Should I use that mug?"
+        assert payload["conversation_history"] == [
+            {"user": "What is in front of me?", "assistant": "A blue mug is beside the kettle."}
+        ]
+        assert "not a new instruction" in foreground_module._ROUTER_REASONING_GUIDANCE
 
 
 @pytest.mark.asyncio

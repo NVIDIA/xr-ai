@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import nemo_relay
 from loguru import logger
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_models import ToolDef
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
@@ -25,6 +26,28 @@ from .conversation import ConversationExchange, QuickConversation, _handback_rea
 
 FRONT_END_QUERY_TOPIC: Topic[UserQuery] = Topic("sample-conversation.user-query", UserQuery)
 _MAX_HISTORY = 4
+_MAX_HISTORY_TEXT = 240
+
+
+class ConversationHandoff(BaseModel):
+    """Original user turn and bounded, completed speech for an application."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query: UserQuery
+    """The participant's unmodified current request."""
+
+    history: tuple[ConversationExchange, ...] = Field(default=(), max_length=_MAX_HISTORY)
+    """Recent completed exchanges, never new instructions or live evidence."""
+
+    @model_validator(mode="after")
+    def validate_history(self) -> ConversationHandoff:
+        if any(
+            len(turn.user) > _MAX_HISTORY_TEXT or len(turn.assistant) > _MAX_HISTORY_TEXT
+            for turn in self.history
+        ):
+            raise ValueError("conversation handoff exchange exceeds text limit")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +59,10 @@ class ConversationApplication:
     query_topic: Topic[UserQuery]
     has_focus: Callable[[str], bool]
     context: Callable[[str], str]
+    """Application-owned, read-only context for first-tier routing."""
+
+    handoff_topic: Topic[ConversationHandoff] | None = None
+    """Optional typed route target; older applications use ``query_topic``."""
 
     def tool(self) -> ToolDef:
         return ToolDef(
@@ -56,7 +83,7 @@ class ConversationFrontEnd(Agent):
         super().__init__()
         if len({app.name for app in applications}) != len(applications):
             raise ValueError("application route names must be unique")
-        reserved = {"conversation", "current_view", "application_handoff", "conversation_recall"}
+        reserved = {"conversation", "current_view", "application_handoff"}
         if any(app.name in reserved for app in applications):
             raise ValueError("application route name is reserved for generic conversation")
         self._conversation = conversation
@@ -148,7 +175,7 @@ class ConversationFrontEnd(Agent):
             if len(focused) > 1:
                 raise RuntimeError("multiple applications hold participant focus")
             if focused:
-                await ctx.publish(focused[0].query_topic, query)
+                await self._delegate(focused[0], query, ctx, participant_id)
                 return
             app_context = "\n".join(text for app in self._applications if (text := app.context(participant_id)))
             history = tuple(self._history.get(participant_id, ()))
@@ -158,7 +185,7 @@ class ConversationFrontEnd(Agent):
                 )
                 for app in self._applications:
                     if route == app.name:
-                        await ctx.publish(app.query_topic, query)
+                        await self._delegate(app, query, ctx, participant_id)
                         return
             if self._applications:
                 decision = await self._conversation._decide_with_handoff(
@@ -175,7 +202,7 @@ class ConversationFrontEnd(Agent):
                 )
                 for app in self._applications:
                     if route == app.name:
-                        await ctx.publish(app.query_topic, query)
+                        await self._delegate(app, query, ctx, participant_id)
                         return
                 decision = await self._conversation.decide(
                     query.text, history=history, app_context=app_context
@@ -229,6 +256,25 @@ class ConversationFrontEnd(Agent):
                 ),
             )
 
+    async def _delegate(
+        self,
+        app: ConversationApplication,
+        query: UserQuery,
+        ctx: RuntimeContext,
+        participant_id: str,
+    ) -> None:
+        if app.handoff_topic is None:
+            await ctx.publish(app.query_topic, query)
+            return
+        history = tuple(
+            ConversationExchange(
+                user=turn.user[:_MAX_HISTORY_TEXT],
+                assistant=turn.assistant[:_MAX_HISTORY_TEXT],
+            )
+            for turn in self._history.get(participant_id, ())
+        )
+        await ctx.publish(app.handoff_topic, ConversationHandoff(query=query, history=history))
+
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
         if task is not None:
@@ -242,4 +288,4 @@ class ConversationFrontEnd(Agent):
             logger.error("conversation turn failed pid={!r}: {!r}", participant_id, error)
 
 
-__all__ = ["FRONT_END_QUERY_TOPIC", "ConversationApplication", "ConversationFrontEnd"]
+__all__ = ["FRONT_END_QUERY_TOPIC", "ConversationApplication", "ConversationFrontEnd", "ConversationHandoff"]

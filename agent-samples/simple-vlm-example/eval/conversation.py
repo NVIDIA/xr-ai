@@ -76,7 +76,7 @@ async def main() -> None:
     if not cases:
         raise SystemExit("no conversation evaluation cases selected")
     for case in cases:
-        for field in ("any_of", "none_of"):
+        for field in ("any_of", "all_of", "none_of"):
             if any(not isinstance(term, str) for term in case.get(field, ())):
                 raise ValueError(f"{case['name']}: {field} must contain quoted strings")
 
@@ -122,7 +122,9 @@ async def main() -> None:
             route = "current_view" if frame.calls else "direct"
             ok = route == case["route"] and bool(answer) and (
                 not expected or any(term.casefold() in normalized for term in expected)
-            ) and not any(term.casefold() in normalized for term in forbidden)
+            ) and all(term.casefold() in normalized for term in case.get("all_of", ())) and not any(
+                term.casefold() in normalized for term in forbidden
+            )
             passed += ok
             print(
                 f"{'PASS' if ok else 'FAIL'} {case['name']} "

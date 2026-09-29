@@ -22,6 +22,80 @@ applications:
     Read or change the participant's calendar events and availability.
 
 cases:
+  - name: recorded_new_list_after_visual_dialogue
+    catalog: [tea_guide]
+    context: Tea-making guidance is idle.
+    history:
+      - user: What am I looking at?
+        assistant: You are looking at a ceiling.
+      - user: What do you see?
+        assistant: A person resting beside a pillow.
+    query: Tell me five countries and their capitals.
+    route: direct
+    none_of: [ceiling, pillow]
+  - name: recorded_new_list_question_after_visual_dialogue
+    catalog: [tea_guide]
+    context: Tea-making guidance is idle.
+    history:
+      - user: What am I looking at?
+        assistant: You are looking at a ceiling.
+      - user: What do you see?
+        assistant: A person resting beside a pillow.
+    query: Can you tell me five countries and their capitals?
+    route: direct
+    none_of: [ceiling, pillow]
+  - name: new_facts_after_visual_dialogue
+    catalog: [tea_guide, home_control]
+    context: Tea-making guidance is idle.
+    history:
+      - user: What am I looking at?
+        assistant: You are looking at a ceiling.
+      - user: What do you see?
+        assistant: A person resting beside a pillow.
+    query: Tell me the capitals of France, Mexico, and Chile.
+    route: direct
+    all_of: [Paris, Mexico City, Santiago]
+    none_of: [ceiling, pillow]
+  - name: new_fact_list_question_after_visual_dialogue
+    catalog: [tea_guide, home_control]
+    context: Tea-making guidance is idle.
+    history:
+      - user: What am I looking at?
+        assistant: You are looking at a ceiling.
+      - user: What do you see?
+        assistant: A person resting beside a pillow.
+    query: Can you tell me the capitals of France, Mexico, and Chile?
+    route: direct
+    all_of: [Paris, Mexico City, Santiago]
+    none_of: [ceiling, pillow]
+  - name: scoped_country_recap_excludes_unrelated_identity
+    catalog: [trip_planner, calendar]
+    history:
+      - user: Do you have a home country?
+        assistant: I do not have a country; I am an AI.
+      - user: What is the capital of Argentina?
+        assistant: Buenos Aires.
+      - user: What is the capital of Kenya?
+        assistant: Nairobi.
+      - user: What is the capital of Norway?
+        assistant: Oslo.
+    query: Repeat those three countries and their capitals.
+    route: direct
+    all_of: [Argentina, Buenos Aires, Kenya, Nairobi, Norway, Oslo]
+    none_of: [I am an AI, do not have a country]
+  - name: scoped_schedule_recap_excludes_visual_answer
+    catalog: [calendar, home_control]
+    history:
+      - user: What color is the sign?
+        assistant: The sign is orange.
+      - user: When did we say the review would be?
+        assistant: We said Tuesday.
+      - user: And the demo?
+        assistant: We said Friday.
+    query: Remind me of the two days we discussed.
+    route: direct
+    all_of: [Tuesday, Friday]
+    none_of: [orange]
   - name: three_app_scene_action
     catalog: [xr_scene, tea_guide, home_control]
     query: Move the holographic table two feet left.
@@ -264,3 +338,63 @@ cases:
       - user: Tell me again.
         assistant: I can create virtual shapes.
     route: home_control
+  - name: repeat_xr_spoken_result
+    catalog: [xr_scene, home_control]
+    query: What was that again?
+    history:
+      - user: Add a blue cube to my XR scene.
+        assistant: I added a blue cube beside the virtual table.
+    route: direct
+    answer_contains: blue cube
+  - name: repeat_xr_result_explicitly
+    catalog: [xr_scene, home_control]
+    query: Could you repeat what you said?
+    history:
+      - user: Add a blue cube to my XR scene.
+        assistant: I added a blue cube beside the virtual table.
+    route: direct
+    answer_contains: blue cube
+  - name: repeat_after_trip_result
+    catalog: [trip_planner, calendar]
+    query: What did you just say?
+    history:
+      - user: Where did we put the museum visit?
+        assistant: The museum visit is the second stop on your itinerary.
+    route: direct
+    answer_contains: second stop
+  - name: paraphrase_after_home_result
+    catalog: [home_control, calendar]
+    query: Can you explain that again?
+    history:
+      - user: Is the bedroom light on?
+        assistant: The bedroom light is off.
+    route: direct
+    answer_contains: "off"
+  - name: fresh_xr_state_after_spoken_result
+    catalog: [xr_scene, home_control]
+    query: Where is that virtual cube now?
+    history:
+      - user: Add a blue cube to my XR scene.
+        assistant: I added a blue cube beside the virtual table.
+    route: xr_scene
+  - name: xr_action_after_general_conversation
+    catalog: [xr_scene, home_control]
+    query: Put it beside the virtual table.
+    history:
+      - user: What shape should I use for a die?
+        assistant: A cube has six faces and works well as a die.
+    route: xr_scene
+  - name: fresh_home_state_after_spoken_result
+    catalog: [home_control, calendar]
+    query: Is that bedroom light still off?
+    history:
+      - user: Is the bedroom light on?
+        assistant: The bedroom light is off.
+    route: home_control
+  - name: visual_attribute_not_in_last_answer
+    catalog: [xr_scene, home_control]
+    query: What color is the physical cup now?
+    history:
+      - user: What is on my desk?
+        assistant: There is a cup next to your keyboard.
+    route: current_view

@@ -186,10 +186,17 @@ class SceneSupervisor:
         evidence = MutationEvidence()
         current_mutation_evidence.set(evidence)
         before = await self._context.snapshot()
+        shared_conversation = (
+            "[Shared conversation] (already handled; context for references, not new work)\n"
+            f"{request.conversation_context}\n\n"
+            if request.conversation_context
+            else ""
+        )
         user_message = (
             f"Active participant: {request.participant_id}\n"
             f"Utterance timestamp: {request.timestamp_us}\n"
             f"{await self._context.describe(request.participant_id)}\n\n"
+            f"{shared_conversation}"
             f"{conversation}"
             f"User request: {transcript}"
         )

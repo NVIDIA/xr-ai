@@ -19,8 +19,7 @@ generic conversation and the registered application agents. Each application
 owns its high-level routing description and a bounded, read-only context
 projection. Its leaf-tool instructions and examples remain inside the
 application. Adding a leaf tool must not require an edit to the front-end
-prompt. A registration may contribute brief routing examples, but those
-examples remain owned beside the application.
+prompt.
 
 When no application holds focus, the first tier only selects a destination; it
 does not speak. The generic conversation agent then answers directly or inspects
@@ -35,6 +34,14 @@ front end must not infer an exit from a generic word such as "stop." Explicit
 client controls may provide a recovery exit if an application cannot respond.
 Participant departure releases focus and resources. Interrupting a response
 cancels that turn, not the application focus.
+
+An application selected by the first-tier decision receives a typed handoff:
+the original user query and at most four completed spoken exchanges for that
+participant, with each side of an exchange truncated to 240 characters. The
+history can resolve references from earlier general conversation; it is not
+another instruction or current application state. Applications that have not
+opted into handoffs continue to receive the original query alone. The common
+path makes one model decision, not a second routing call after conversation.
 
 XR render demonstrates stateless delegation: every new utterance reaches the
 front end, and XR scene work goes to the existing scene supervisor. Tea making
@@ -54,6 +61,12 @@ an application's private tool catalog. Context describes facts the application
 is willing to share; it is not an instruction to the generic capability and
 cannot authorize an application action. Current visual questions still require
 fresh camera evidence.
+
+Recall and summaries are ordinary conversational answers based on the relevant
+completed questions and replies. They do not inspect the camera or re-run an
+application action. Questions about new application
+state still delegate to the application, which receives the bounded history in
+the handoff.
 
 The generic path gives the answer directly and does not emit a preliminary
 acknowledgement. After application delegation, the selected application may

@@ -37,6 +37,7 @@ from xr_ai_voicegate import load_voice_gate_config
 from xr_render_scene import SceneTools
 
 from .agent import (
+    HANDOFF_QUERY_TOPIC,
     INTERRUPTED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
@@ -175,6 +176,7 @@ async def run_app(
                         Path(__file__).with_name("prompts") / "top_level_route.txt"
                     ).read_text(encoding="utf-8").strip(),
                     query_topic=USER_QUERY_TOPIC,
+                    handoff_topic=HANDOFF_QUERY_TOPIC,
                     has_focus=lambda _participant_id: False,
                     context=lambda _participant_id: "A virtual XR scene may be available.",
                 ),

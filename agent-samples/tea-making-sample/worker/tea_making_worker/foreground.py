@@ -16,6 +16,8 @@ from loguru import logger
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef, VLMService
 from xr_ai_runtime import Agent, RuntimeClosedError, RuntimeContext, subscribe
+from xr_ai_sample_agents import ConversationExchange
+from xr_ai_sample_agents.front_end import ConversationHandoff
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.current_frame import CurrentFrameRequest
 from xr_ai_tools.rag import RAGTools
@@ -39,6 +41,7 @@ from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .events import (
     FOREGROUND_RECORD_TOPIC,
+    HANDOFF_QUERY_TOPIC,
     INTERRUPTED_TOPIC,
     PARTICIPANT_CLEANUP_COMPLETE_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -88,6 +91,8 @@ _ROUTER_REASONING_GUIDANCE = (
     "Routing ends at intent: never use supplied state to veto a direct command or gather "
     "prerequisites first; the selected capability decides whether it can run. "
     "Once the answer or tool is clear, act immediately without restating the catalog or request."
+    " Conversation history, when supplied, is already handled context for resolving references, "
+    "not a new instruction or evidence of current state."
 )
 _TEA_MANAGEMENT_TOOLS = (
     "workflow__advance",
@@ -160,10 +165,23 @@ class ForegroundAgent(Agent):
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer(self, query: UserQuery, ctx: RuntimeContext) -> None:
+        await self._start_turn(query, ctx)
+
+    @subscribe(HANDOFF_QUERY_TOPIC)
+    async def answer_handoff(self, handoff: ConversationHandoff, ctx: RuntimeContext) -> None:
+        await self._start_turn(handoff.query, ctx, conversation_history=handoff.history)
+
+    async def _start_turn(
+        self,
+        query: UserQuery,
+        ctx: RuntimeContext,
+        *,
+        conversation_history: tuple[ConversationExchange, ...] = (),
+    ) -> None:
         participant_id = self._participant(ctx)
         await self._cancel(participant_id)
         task = asyncio.create_task(
-            self._run_turn(query, ctx),
+            self._run_turn(query, ctx, conversation_history=conversation_history),
             name=f"tea-foreground:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
@@ -209,7 +227,13 @@ class ForegroundAgent(Agent):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
+    async def _run_turn(
+        self,
+        query: UserQuery,
+        ctx: RuntimeContext,
+        *,
+        conversation_history: tuple[ConversationExchange, ...] = (),
+    ) -> None:
         participant_id = self._participant(ctx)
         turn_id = getattr(
             ctx.metadata,
@@ -242,6 +266,7 @@ class ForegroundAgent(Agent):
                         participant_id,
                         ctx,
                         timestamp_us=query.timestamp_us,
+                        conversation_history=conversation_history,
                     )
             except asyncio.CancelledError:
                 raise
@@ -293,12 +318,14 @@ class ForegroundAgent(Agent):
         ctx: RuntimeContext | None = None,
         *,
         timestamp_us: int | None = None,
+        conversation_history: tuple[ConversationExchange, ...] = (),
     ) -> tuple[str, list[str], bool]:
         turn = self._prepare_turn(
             participant_id,
             query=query,
             ctx=ctx,
             timestamp_us=timestamp_us,
+            conversation_history=conversation_history,
         )
         controller = VoiceTurnController.current() or VoiceTurnController(
             turn_id="tea-foreground-eval",
@@ -388,10 +415,19 @@ class ForegroundAgent(Agent):
         query: str,
         ctx: RuntimeContext | None,
         timestamp_us: int | None,
+        conversation_history: tuple[ConversationExchange, ...] = (),
     ) -> _PreparedTurn:
         """Select the same focused root-or-step agent shape used by NAT."""
 
         session = self._guidance.store.find(participant_id)
+        history = {}
+        if conversation_history:
+            history = {
+                "conversation_history": [
+                    {"user": turn.user, "assistant": turn.assistant}
+                    for turn in conversation_history
+                ]
+            }
         if session is None or not session.active or session.step_id is None:
             tools = self._root_tools(
                 participant_id,
@@ -400,7 +436,7 @@ class ForegroundAgent(Agent):
             )
             return _PreparedTurn(
                 agent=self._root_agent,
-                user_message=_json(request=query),
+                user_message=_json(request=query, **history),
                 tools=tools,
                 route="root",
             )
@@ -418,6 +454,7 @@ class ForegroundAgent(Agent):
                 request=query,
                 guide_order=[item.title for item in self._guidance.workflow.steps.values()],
                 state=self._guidance.workflow.project(step, session.state),
+                **history,
             ),
             tools=tools,
             route="tea",

@@ -38,6 +38,7 @@ from .background_context import BackgroundContextAgent
 from .change_watch import ChangeWatchAgent
 from .config import WorkerConfig
 from .events import (
+    HANDOFF_QUERY_TOPIC,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -247,6 +248,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                         Path(__file__).with_name("prompts") / "top_level_route.txt"
                     ).read_text(encoding="utf-8").strip(),
                     query_topic=USER_QUERY_TOPIC,
+                    handoff_topic=HANDOFF_QUERY_TOPIC,
                     has_focus=lambda pid: bool(
                         (session := guidance.store.find(pid)) and session.active
                     ),

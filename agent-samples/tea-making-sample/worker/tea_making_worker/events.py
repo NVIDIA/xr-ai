@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import Topic
+from xr_ai_sample_agents.front_end import ConversationHandoff
 from xr_ai_voice import (
     UserQuery,
     VoiceInterrupted,
@@ -93,6 +94,7 @@ class ParticipantCleanupComplete(_Event):
 
 
 USER_QUERY_TOPIC = Topic("tea-making.user-query", UserQuery)
+HANDOFF_QUERY_TOPIC = Topic("tea-making.conversation-handoff", ConversationHandoff)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "tea-making.participant-joined",
     VoiceParticipantJoined,
@@ -122,6 +124,7 @@ __all__ = [
     "BACKGROUND_FACT_TOPIC",
     "CHANGE_WATCH_RECORD_TOPIC",
     "FOREGROUND_RECORD_TOPIC",
+    "HANDOFF_QUERY_TOPIC",
     "GUIDANCE_NOTICE_TOPIC",
     "GUIDANCE_RECORD_TOPIC",
     "INTERRUPTED_TOPIC",

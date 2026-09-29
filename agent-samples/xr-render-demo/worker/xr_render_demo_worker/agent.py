@@ -12,6 +12,7 @@ import nemo_relay
 from loguru import logger
 from xr_ai_models import LLMService
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
+from xr_ai_sample_agents.front_end import ConversationHandoff
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
@@ -25,6 +26,7 @@ from xr_ai_voice._coordination import _acknowledge_if_needed
 from .models import SceneRequest
 
 USER_QUERY_TOPIC: Topic[UserQuery] = Topic("xr-render.user-query", UserQuery)
+HANDOFF_QUERY_TOPIC: Topic[ConversationHandoff] = Topic("xr-render.conversation-handoff", ConversationHandoff)
 PARTICIPANT_LEFT_TOPIC: Topic[VoiceParticipantLeft] = Topic("xr-render.participant-left", VoiceParticipantLeft)
 INTERRUPTED_TOPIC: Topic[VoiceInterrupted] = Topic("xr-render.interrupted", VoiceInterrupted)
 
@@ -48,6 +50,22 @@ class RenderAgent(Agent):
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer_user(self, query: UserQuery, ctx: RuntimeContext) -> None:
+        await self._start_turn(query, ctx)
+
+    @subscribe(HANDOFF_QUERY_TOPIC)
+    async def answer_handoff(self, handoff: ConversationHandoff, ctx: RuntimeContext) -> None:
+        history = "\n".join(
+            f"User: {turn.user}\nAssistant: {turn.assistant}" for turn in handoff.history
+        )
+        await self._start_turn(handoff.query, ctx, conversation_context=history)
+
+    async def _start_turn(
+        self,
+        query: UserQuery,
+        ctx: RuntimeContext,
+        *,
+        conversation_context: str = "",
+    ) -> None:
         if self._stopped:
             return
         participant_id = ctx.metadata.participant_id
@@ -58,7 +76,7 @@ class RenderAgent(Agent):
         # scope stack; mutating it after the subscriber returns corrupts
         # concurrent trace lifecycles.
         task = asyncio.create_task(
-            self._run_turn(query, ctx),
+            self._run_turn(query, ctx, conversation_context=conversation_context),
             name=f"xr-render:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
@@ -88,7 +106,13 @@ class RenderAgent(Agent):
         for pid in list(self._tasks):
             await self._cancel(pid)
 
-    async def _run_turn(self, query: UserQuery, ctx: RuntimeContext) -> None:
+    async def _run_turn(
+        self,
+        query: UserQuery,
+        ctx: RuntimeContext,
+        *,
+        conversation_context: str = "",
+    ) -> None:
         participant_id = ctx.metadata.participant_id
         turn_id = getattr(
             ctx.metadata,
@@ -123,6 +147,7 @@ class RenderAgent(Agent):
                         participant_id=participant_id,
                         timestamp_us=query.timestamp_us,
                         trace_id=turn_id,
+                        conversation_context=conversation_context,
                     )
                 )
             text = reply.response
@@ -171,5 +196,6 @@ __all__ = [
     "INTERRUPTED_TOPIC",
     "PARTICIPANT_LEFT_TOPIC",
     "USER_QUERY_TOPIC",
+    "HANDOFF_QUERY_TOPIC",
     "RenderAgent",
 ]

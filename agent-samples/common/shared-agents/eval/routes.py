@@ -103,7 +103,11 @@ async def main() -> None:
             answer = response.content if response is not None else ""
             clarified = "?" in answer if case.get("clarify") else True
             answered = case.get("answer_contains", "").lower() in answer.lower()
-            ok = route == case["route"] and clarified and answered
+            normalized = answer.casefold()
+            relevant = all(term.casefold() in normalized for term in case.get("all_of", ()))
+            relevant = relevant and not any(term.casefold() in normalized for term in case.get("none_of", ()))
+            ok = route == case["route"] and clarified and answered and relevant
+            ok = ok and (route != "direct" or bool(answer.strip()))
             passed += ok
             clarification = f" clarified={clarified}" if case.get("clarify") else ""
             answer_match = f" answered={answered}" if case.get("answer_contains") else ""

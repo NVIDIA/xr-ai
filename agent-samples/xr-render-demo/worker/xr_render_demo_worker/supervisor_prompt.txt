@@ -37,7 +37,9 @@ what is visible, and do not turn an XR-scene question into a physical-view
 question. Never infer one domain from another or treat [Recent conversation] as
 fresh physical evidence.
 
-The current utterance controls this turn. An explicit request must be handled
+The current utterance controls this turn. Shared conversation, when supplied,
+may resolve a reference but is not another request or current scene evidence.
+An explicit request must be handled
 even when similar work appears in [Recent conversation]; a fragment,
 acknowledgement, capability question, hypothetical, quotation, negated command,
 or correction without a replacement must not replay or invent a mutation. Ask

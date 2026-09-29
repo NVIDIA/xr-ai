@@ -33,7 +33,8 @@ _CURRENT_VIEW_TOOL = ToolDef(
         "This is only the present "
         "view, never a past observation. Never call for general "
         "knowledge, arithmetic, conversation recall, reported speech, application "
-        "context or actions."
+        "context or actions. A request to repeat a spoken reply, even with an unnamed "
+        "referent, needs a direct answer from conversation history, not this tool."
     ),
     parameters={"type": "object", "properties": {}, "additionalProperties": False},
 )
@@ -56,6 +57,8 @@ _APPLICATION_HANDBACK_TOOL = ToolDef(
 _MAX_HISTORY_EXCHANGES = 4
 _MAX_HISTORY_TEXT = 240
 _MAX_APP_CONTEXT = 600
+
+
 @dataclass(frozen=True, slots=True)
 class ConversationExchange:
     """One completed exchange supplied by the conversation entry point."""

@@ -12,6 +12,8 @@ class SceneRequest(BaseModel):
     participant_id: str = ""
     timestamp_us: int = 0
     trace_id: str = ""
+    conversation_context: str = Field(default="", max_length=2500)
+    """Completed shared conversation for reference resolution, not new work."""
 
 
 class SceneReply(BaseModel):

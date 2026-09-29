@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
+from xr_ai_sample_agents import ConversationExchange
 from xr_ai_sample_agents.front_end import (
     FRONT_END_QUERY_TOPIC,
     ConversationApplication,
     ConversationFrontEnd,
+    ConversationHandoff,
 )
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -23,6 +26,27 @@ from xr_ai_voice import (
 
 _APP_QUERY_TOPIC = Topic("test-conversation.app-query", UserQuery)
 _SECOND_APP_QUERY_TOPIC = Topic("test-conversation.second-app-query", UserQuery)
+_HANDOFF_QUERY_TOPIC = Topic("test-conversation.handoff-query", ConversationHandoff)
+
+
+def test_handoff_rejects_unbounded_history() -> None:
+    query = UserQuery(text="Go.", timestamp_us=1)
+    with pytest.raises(ValueError, match="text limit"):
+        ConversationHandoff(query=query, history=(ConversationExchange("u" * 241, "a"),))
+    with pytest.raises(ValueError):
+        ConversationHandoff(query=query, history=(ConversationExchange("u", "a"),) * 5)
+
+
+def test_application_cannot_reuse_a_generic_tool_name() -> None:
+    application = ConversationApplication(
+        name="current_view",
+        description="Conflicting route.",
+        query_topic=_APP_QUERY_TOPIC,
+        has_focus=lambda _pid: False,
+        context=lambda _pid: "",
+    )
+    with pytest.raises(ValueError, match="reserved"):
+        ConversationFrontEnd(_Conversation([]), applications=(application,))  # type: ignore[arg-type]
 
 
 class _Conversation:
@@ -127,6 +151,22 @@ class _ProgressApplication(Agent):
         await ctx.publish(
             VOICE_CONTRIBUTION_TOPIC,
             VoiceOutput(text=f"Finished: {query.text}", kind="result", turn_id=ctx.metadata.correlation_id),
+        )
+
+
+class _HandoffApplication(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.handoffs: list[tuple[str, ConversationHandoff]] = []
+
+    @subscribe(_HANDOFF_QUERY_TOPIC)
+    async def answer(self, handoff: ConversationHandoff, ctx: RuntimeContext) -> None:
+        participant_id = ctx.metadata.participant_id
+        assert participant_id is not None
+        self.handoffs.append((participant_id, handoff))
+        await ctx.publish(
+            VOICE_CONTRIBUTION_TOPIC,
+            VoiceOutput(text="Done in the app.", kind="result", turn_id=ctx.metadata.correlation_id),
         )
 
 
@@ -497,4 +537,53 @@ async def test_conversation_returns_app_request_to_router() -> None:
         assert [text for _pid, text in app.queries] == ["Make it blue."]
         await _wait_until(lambda: len(speech.outputs) == 1)
         assert speech.outputs[0].text == "App answered: Make it blue."
+    await front.stop()
+
+
+async def test_general_conversation_handoff_preserves_bounded_spoken_context() -> None:
+    conversation = _Conversation(["direct"] * 5 + ["xr_scene"])
+    runtime = AgentRuntime()
+    front = runtime.register(
+        "conversation",
+        ConversationFrontEnd(
+            conversation,  # type: ignore[arg-type]
+            applications=(
+                ConversationApplication(
+                    name="xr_scene",
+                    description="Handle virtual scene actions.",
+                    query_topic=_SECOND_APP_QUERY_TOPIC,
+                    handoff_topic=_HANDOFF_QUERY_TOPIC,
+                    has_focus=lambda _pid: False,
+                    context=lambda _pid: "Virtual scene is available.",
+                ),
+            ),
+        ),
+    )
+    app = runtime.register("app", _HandoffApplication())
+    speech = runtime.register("speech", _SpeechBridge())
+    async with runtime:
+        for index in range(5):
+            await runtime.publish(
+                FRONT_END_QUERY_TOPIC,
+                UserQuery(text=f"General turn {index}: " + "u" * 300, timestamp_us=index + 1),
+                participant_id="alice",
+            )
+            await _wait_until(lambda: len(speech.outputs) == index + 1)
+        await runtime.publish(
+            FRONT_END_QUERY_TOPIC,
+            UserQuery(text="Put that shape in the virtual scene.", timestamp_us=6),
+            participant_id="alice",
+        )
+        await _wait_until(lambda: len(app.handoffs) == 1)
+        participant_id, handoff = app.handoffs[0]
+        assert participant_id == "alice"
+        assert handoff.query.text == "Put that shape in the virtual scene."
+        assert handoff.query.timestamp_us == 6
+        assert len(handoff.history) == 4
+        assert handoff.history[0].user.startswith("General turn 1:")
+        assert all(len(turn.user) <= 240 and len(turn.assistant) <= 240 for turn in handoff.history)
+        assert len(conversation.routing) == 6
+        assert len(conversation.decisions) == 5
+        await _wait_until(lambda: front._history["alice"][-1].assistant == "Done in the app.")
+        assert front._history["alice"][-1].assistant == "Done in the app."
     await front.stop()

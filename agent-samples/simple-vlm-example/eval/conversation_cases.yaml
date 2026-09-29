@@ -41,6 +41,25 @@
   any_of: ['12', twelve]
   none_of: [pineapple]
 
+- name: repeat_last_spoken_result
+  image: blank
+  route: direct
+  history:
+    - user: Which city did I mention?
+      assistant: You mentioned Lisbon.
+  query: What was that again?
+  any_of: [Lisbon]
+
+- name: repeat_last_visual_answer_without_new_view
+  image: red_square
+  route: direct
+  history:
+    - user: What color was the square?
+      assistant: The square was green.
+  query: Can you say that again?
+  any_of: [green]
+  none_of: [red]
+
 - name: app_context_object_name
   image: blank
   route: direct
@@ -192,3 +211,31 @@
       assistant: The guide suggested five minutes.
   query: Remind me of that duration.
   any_of: [five, '5']
+
+- name: new_math_after_visual_answer
+  image: blank
+  route: direct
+  history:
+    - user: What do you see above me?
+      assistant: A ceiling light.
+    - user: What is on the sofa?
+      assistant: A striped cushion.
+  query: What are three consecutive integers starting at 17?
+  all_of: ['17', '18', '19']
+  none_of: [ceiling, cushion]
+
+- name: scoped_recap_uses_questions_and_answers
+  image: blank
+  route: direct
+  history:
+    - user: Where do you live?
+      assistant: I am an AI and do not live anywhere.
+    - user: What is the capital of Sweden?
+      assistant: Stockholm.
+    - user: What is the capital of Portugal?
+      assistant: Lisbon.
+    - user: What is the capital of Egypt?
+      assistant: Cairo.
+  query: Remind me of those three countries and capitals.
+  all_of: [Sweden, Stockholm, Portugal, Lisbon, Egypt, Cairo]
+  none_of: [I am an AI, live anywhere]

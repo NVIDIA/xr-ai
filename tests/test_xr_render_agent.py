@@ -18,6 +18,8 @@ from xr_ai_runtime import (
     RuntimeContext,
     subscribe,
 )
+from xr_ai_sample_agents import ConversationExchange
+from xr_ai_sample_agents.front_end import ConversationHandoff
 from xr_ai_tools import Tool
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -37,6 +39,7 @@ _WORKER_DIR = (
 sys.path.insert(0, str(_WORKER_DIR))
 
 from xr_render_demo_worker.agent import (  # noqa: E402
+    HANDOFF_QUERY_TOPIC,
     INTERRUPTED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
@@ -69,8 +72,10 @@ class _QuickSupervisor:
 
     def __init__(self, reply: str = "hello") -> None:
         self.reply = reply
+        self.requests: list[SceneRequest] = []
 
     async def handle(self, request: SceneRequest) -> SceneReply:
+        self.requests.append(request)
         return SceneReply(response=self.reply)
 
 
@@ -191,6 +196,36 @@ async def test_render_agent_publishes_voice_output() -> None:
     assert chunks[0].response_id is None
     assert chunks[0].kind == "result"
     assert chunks[0].turn_id is not None
+
+
+async def test_render_handoff_keeps_original_request_separate_from_prior_conversation() -> None:
+    supervisor = _QuickSupervisor()
+    output = _VoiceRecorder()
+    runtime = AgentRuntime()
+    runtime.register("xr-render", RenderAgent(supervisor))
+    runtime.register("test-output", output)
+
+    async with runtime:
+        await runtime.publish(
+            HANDOFF_QUERY_TOPIC,
+            ConversationHandoff(
+                query=UserQuery(text="Make a virtual version of that cup.", timestamp_us=7),
+                history=(
+                    ConversationExchange(
+                        user="What do you see?",
+                        assistant="A blue cup is on the table.",
+                    ),
+                ),
+            ),
+            participant_id="alice",
+            source="conversation",
+        )
+        await asyncio.wait_for(output.final.wait(), 1.0)
+
+    assert len(supervisor.requests) == 1
+    assert supervisor.requests[0].transcript == "Make a virtual version of that cup."
+    assert "A blue cup is on the table." in supervisor.requests[0].conversation_context
+    assert output.events[0][1].participant_id == "alice"
 
 
 async def test_render_agent_supersedes_a_participant_turn() -> None:
