@@ -21,14 +21,18 @@ derived from project metadata.
 
 ## Python version
 
-Repository Python projects conventionally require Python 3.11 through 3.14. A
-project may declare a different range when its dependencies require it. The generated
-inventory records each declaration, while `.github/workflows/lock-check.yml`
-runs `uv lock` on every project to prove its complete declared range resolves.
+Most repository Python projects require Python 3.11 through 3.14. CloudXR
+runtime, OpenXR service, and Magpie TTS stop at Python 3.13 because their
+native dependencies do not publish Python 3.14 wheels. The generated inventory
+records each declaration, while `.github/workflows/lock-check.yml` runs
+`uv lock` on every project to check constraint resolution across its complete
+declared range. Lock resolution does not prove that installable artifacts exist
+for every interpreter and platform.
 
-The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 through 3.14.
-Loosening the repository-wide upper bound requires a coordinated qualification
-change, even when an individual dependency publishes newer Python wheels.
+The non-GPU pytest matrix in `.github/workflows/tests.yml` covers Python 3.11
+through 3.14. GPU qualification remains on Python 3.12. Loosening a project's
+upper bound requires coordinated qualification, even when an individual
+dependency publishes newer Python wheels.
 
 ## Dependency qualification
 
@@ -233,7 +237,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `importlib-resources>=6.5`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -265,7 +268,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
-- Python: `>=3.11,<3.15`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -356,7 +359,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
-- Python: `>=3.11,<3.15`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -424,7 +427,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
-- Python: `>=3.11,<3.15`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -789,6 +792,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
   - `numpy>=1.24`
+  - `audioop-lts; python_version >= '3.13'`
   - `Pillow>=10.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`
@@ -799,7 +803,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
 
-- Python: `>=3.11,<3.15`
+- Python: `>=3.11,<3.14`
 - Build dependencies: none
 - Runtime dependencies: none
 - Optional dependency groups:
