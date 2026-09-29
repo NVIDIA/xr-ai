@@ -305,6 +305,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Guides</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
@@ -323,7 +324,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -335,6 +338,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -423,8 +427,10 @@
 -->
 <section id="spdx-license-headers">
 <h1>SPDX license headers<a class="headerlink" href="#spdx-license-headers" title="Link to this heading">#</a></h1>
-<p>The hard rule lives in <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>: every new source file gets the SPDX
-header at the top. This file documents comment-style choices and edge cases.</p>
+<p>The hard rule lives in <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>: every new repository source file gets the
+SPDX header at the top. Application-owned files under the top-level <code class="docutils literal notranslate"><span class="pre">apps/</span></code>
+directory are outside this policy. This file documents comment-style choices
+and edge cases.</p>
 <section id="the-header">
 <h2>The header<a class="headerlink" href="#the-header" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SPDX</span><span class="o">-</span><span class="n">FileCopyrightText</span><span class="p">:</span> <span class="n">Copyright</span> <span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="mi">2026</span> <span class="n">NVIDIA</span> <span class="n">CORPORATION</span> <span class="o">&amp;</span> <span class="n">AFFILIATES</span><span class="o">.</span> <span class="n">All</span> <span class="n">rights</span> <span class="n">reserved</span><span class="o">.</span>
@@ -465,17 +471,20 @@ the header by hand in such files.</p>
 </section>
 <section id="files-to-skip">
 <h2>Files to skip<a class="headerlink" href="#files-to-skip" title="Link to this heading">#</a></h2>
-<p>Skip files that can’t carry comments or aren’t ours to license: <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code>,
-<code class="docutils literal notranslate"><span class="pre">*.json</span></code>, <code class="docutils literal notranslate"><span class="pre">*.resolved</span></code>, Gradle <code class="docutils literal notranslate"><span class="pre">*.lockfile</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
+<p>Skip application-owned files under <code class="docutils literal notranslate"><span class="pre">apps/</span></code>, files that can’t carry comments,
+and files that aren’t ours to license: <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code>, <code class="docutils literal notranslate"><span class="pre">*.json</span></code>, <code class="docutils literal notranslate"><span class="pre">*.resolved</span></code>,
+Gradle <code class="docutils literal notranslate"><span class="pre">*.lockfile</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
 Xcode-managed files (<code class="docutils literal notranslate"><span class="pre">*.pbxproj</span></code>, <code class="docutils literal notranslate"><span class="pre">*.xcworkspacedata</span></code>), and third-party Gradle
-wrapper files (<code class="docutils literal notranslate"><span class="pre">gradlew</span></code>, <code class="docutils literal notranslate"><span class="pre">gradlew.bat</span></code>, <code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>).</p>
+wrapper files (<code class="docutils literal notranslate"><span class="pre">gradlew</span></code>, <code class="docutils literal notranslate"><span class="pre">gradlew.bat</span></code>,
+<code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>).</p>
 </section>
 <section id="enforcement">
 <h2>Enforcement<a class="headerlink" href="#enforcement" title="Link to this heading">#</a></h2>
 <p>Enforced locally by <code class="docutils literal notranslate"><span class="pre">.github/scripts/check_spdx_headers.py</span></code>, wired into
 <code class="docutils literal notranslate"><span class="pre">.pre-commit-config.yaml</span></code>. Run <code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span></code> once after cloning to
-enable it; <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">.github/scripts/check_spdx_headers.py</span></code> audits the whole
-tree at any time. The same check runs in CI as a backstop:
+enable it. From a clean checkout, run
+<code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">.github/scripts/check_spdx_headers.py</span></code> to audit the repository-owned
+source tree. The same check runs in CI as a backstop:
 <code class="docutils literal notranslate"><span class="pre">.github/workflows/spdx.yml</span></code>.</p>
 </section>
 </section>

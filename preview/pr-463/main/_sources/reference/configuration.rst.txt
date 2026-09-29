@@ -5,7 +5,8 @@ Sample configuration reference
 ==============================
 
 This reference is generated directly from configuration files under each
-installed top-level sample's ``yaml/`` directory and from configuration files
+installed top-level sample's ``yaml/`` directory in ``agent-samples/`` or
+``model-server-samples/``, and from configuration files
 beside a direct capability subproject. Adding a file in either location enrolls
 it automatically. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
@@ -18,8 +19,8 @@ workflows remain in the handwritten guides.
 
 To change a sample parameter:
 
-1. Start in ``agent-samples/<sample>/`` and find the owning file in that
-   sample's README or published guide.
+1. Start in ``agent-samples/<sample>/`` or ``model-server-samples/<sample>/``
+   and find the owning file in that sample's README or published guide.
 2. Edit the checked-in YAML or JSON value, preserving its documented type.
    Resolve relative paths from the file that declares them unless the sample
    guide documents different precedence.

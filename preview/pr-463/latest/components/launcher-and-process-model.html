@@ -305,6 +305,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
@@ -323,7 +324,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -335,6 +338,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -456,10 +460,19 @@ directory. A capability sub-project may keep its configuration beside that
 project, such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo/scene/scene_service.yaml</span></code>. Omit <code class="docutils literal notranslate"><span class="pre">config=</span></code> for
 processes that use their own internal defaults.</p>
 <p>Samples that support interchangeable local and hosted models may set
-<code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML. <code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code> reads the selected
-structured JSON profile using only the standard library and exposes its
-managed, reused, or external service ownership to the orchestrator. The same
-file is loaded by the worker through <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML. The worker SDK’s <code class="docutils literal notranslate"><span class="pre">load_models_config()</span></code>
+accepts omitted <code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata and defaults it to external ownership.
+Consumer samples declare only application processes and let workers connect to
+the configured endpoints; their launchers do not read model profiles.</p>
+<p>Launcher profile loaders require the wrapped JSON form with <code class="docutils literal notranslate"><span class="pre">adapter</span></code>,
+<code class="docutils literal notranslate"><span class="pre">endpoint</span></code>, and <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects for each model. <code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code>
+reads the profile selected by the worker YAML, while <code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code>
+reads a profile path directly. Both use only the standard library and expose
+deployment metadata and credential requirements. The shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>
+sample uses the direct loader and managed entries to select servers. Legacy
+explicit reused and external deployment entries remain accepted. Refer to
+<a class="reference internal" href="../reference/agent-sdk-models.html#deployment-profiles"><span class="std std-ref">model profile formats</span></a> for the worker and launcher
+requirements.</p>
 <p>The orchestrator declares the process sequence in code:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 

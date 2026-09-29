@@ -66,10 +66,16 @@ How clients, DeviceIOHub, agents, models, services, and the launcher fit togethe
 The server runtime, agent SDK, AI services, and the launcher.
 :::
 
-:::{grid-item-card} 📦 Build a sample
+:::{grid-item-card} 📦 Build your application
+:link: guides/building-your-app
+:link-type: doc
+Start from the reference application and choose the SDK layers your app needs.
+:::
+
+:::{grid-item-card} 🧱 Add a sample
 :link: guides/adding-a-sample
 :link-type: doc
-Wire your own agent worker into the stack.
+Prepare an application for contribution to the repository's sample collection.
 :::
 
 ::::

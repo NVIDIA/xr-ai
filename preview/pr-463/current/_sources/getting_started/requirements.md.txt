@@ -37,7 +37,7 @@ NVDEC.
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 580+ | required for CUDA 13 model containers and DeviceIOHub hardware codecs |
 | Docker | 24+ | required by the checked-in model-server profiles, which use vLLM containers from NGC and Docker Hub |
-| NVIDIA Container Toolkit | latest | required: configures the `nvidia` runtime that gives Docker access to the GPU |
+| NVIDIA Container Toolkit | latest | required, with the `nvidia` runtime registered in Docker; refer to {ref}`docker-host-setup` |
 | Node.js | 20.19.0+ with npm | required for xr-render-demo's default WebRTC profile: the orchestrator builds the web vendor bundle on first run |
 
 `uv` handles all Python dependencies per-sample — no global `pip install` or
@@ -47,23 +47,94 @@ virtual-environment setup needed. If you do not have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The NVIDIA Container Toolkit install is one-time per host. Follow the official
-install guide and run the CDI and runtime-configuration steps from there:
+(docker-access-and-nvidia-runtime-including-dgx-spark)=
+(docker-host-setup)=
+### Docker access and NVIDIA runtime
 
-> https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+Complete these checks on the model-server host before launching a stack. They
+also apply to DGX Spark: having Docker and the NVIDIA Container Toolkit installed
+does not guarantee that your login can access Docker or that its `nvidia` runtime
+is registered.
 
-Quick smoke-test once installed:
+#### Docker access
+
+Run this command without `sudo`, in the same login session that will launch
+`model_servers`:
+
+```bash
+docker ps
+```
+
+The command must succeed; an empty container list is valid. If it reports
+permission denied for `/var/run/docker.sock`, add your user to the Docker group:
+
+```bash
+sudo usermod -aG docker "$USER"
+```
+
+Log out completely and log back in, or disconnect and reconnect your SSH
+session, then retry `docker ps` without `sudo`. If the session still has not
+picked up the new group membership, reboot the host. Opening another terminal
+in the same desktop session does not refresh its group membership.
+
+For an immediate alternative after adding your user to the group, run
+`newgrp docker` to start a shell with the updated group. Run `docker ps` and
+launch `model_servers` from that shell; existing terminals and applications
+keep their previous group membership.
+
+The `docker` group grants root-level privileges; refer to
+[Docker's Linux post-installation instructions](https://docs.docker.com/engine/install/linux-postinstall/)
+for group creation if needed and access details.
+
+#### NVIDIA runtime
+
+Check Docker's registered runtimes without `sudo`:
+
+```bash
+docker info --format '{{json .Runtimes}}'
+```
+
+The command must succeed. If it lists `nvidia`, continue to the GPU smoke test
+below without reconfiguring or restarting Docker. If `nvidia` is absent, check
+that the toolkit is installed:
+
+```bash
+nvidia-ctk --version
+```
+
+If the toolkit command is missing, follow the Ubuntu installation steps in the
+[NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+Installing the toolkit and registering its runtime in Docker are separate steps.
+
+When `nvidia` is absent, register it and restart Docker. Schedule this restart
+when other container workloads can be interrupted:
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker info --format '{{json .Runtimes}}'
+```
+
+The final command must succeed without `sudo` and list an `nvidia` runtime.
+The model-server wrappers explicitly request that runtime; installing the
+toolkit alone is insufficient.
+
+Verify GPU access from a container, also without `sudo`:
 
 ```bash
 docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
   nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
 ```
 
+The output must list the host GPU. After these checks pass, follow the
+{doc}`model-server quickstart <quickstart>`. For cleanup errors or an unknown
+runtime, refer to {doc}`/guides/troubleshooting`.
+
 ## GPU-profile prerequisites
 
 Install before `uv sync` for these targets:
 
-- **DGX Spark** (`agent-samples/model-servers/yaml/spark/`): `sudo apt install python3-dev`
+- **DGX Spark** (`model-server-samples/model-servers/yaml/spark/`): `sudo apt install python3-dev`
 
 All GPU profiles default to `vllm_backend: docker`, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to `vllm_backend: pip`, refer to the
@@ -115,30 +186,44 @@ setups:
 
 ## Running on other GPUs
 
-A profile (`agent-samples/model-servers/yaml/<profile>/`) is a convenience preset
-that pins two knobs per model server so the stack fits a known configuration:
+A profile (`model-server-samples/model-servers/yaml/<profile>/`) is a convenience preset
+that pins the memory policy for each model server so the stack fits a known
+configuration:
 
 - `cuda_visible_devices` — which physical GPU each server runs on (for example,
   the `dual_48G_ada` profile places some servers on GPU `0` and others on GPU `1`).
-- `gpu_memory_utilization` — the fraction of that GPU's VRAM the server may use.
-  Several servers share one GPU, so each takes a slice (for example, `0.43`), and
-  the slices on a given GPU must sum to less than `1.0`.
+- `gpu_memory_utilization` — the fraction used to size the KV cache automatically
+  when `kv_cache_memory_bytes` is absent. When explicit cache bytes are present,
+  vLLM still uses the fraction for its initial free-memory admission check, but
+  it does not size or cap the cache with that fraction.
+- `kv_cache_memory_bytes` — an optional fixed KV-cache allocation. The bundled
+  profiles set it for Cosmos and Nemotron Omni to make resident cache capacity
+  deterministic. This intentionally bounds capacity; it is not a cap on the
+  model server's total GPU memory use.
 
 To run on a GPU that is not one of the presets, copy the closest profile directory
 and adjust those knobs to your hardware:
 
 1. Set `cuda_visible_devices` in each server's YAML to your GPU index, or spread
    the servers across the GPUs you have.
-2. Tune `gpu_memory_utilization` per server so the slices on each GPU fit its VRAM.
-   Lower the values if a server fails to start with an out-of-memory error; raise
-   them if you have spare VRAM.
-3. On lower-VRAM GPUs, run fewer models concurrently, or lower `max_model_len` on
-   the LLM and VLM servers to reduce the KV-cache footprint.
+2. For a server without explicit cache bytes, tune `gpu_memory_utilization` so
+   the automatically sized allocations fit alongside the colocated services.
+   For a server with explicit cache bytes, tune `kv_cache_memory_bytes` to the
+   required resident token capacity and keep `gpu_memory_utilization` as an
+   admission threshold appropriate for the target GPU.
+3. Check vLLM's startup log for the resulting GPU KV-cache token capacity and
+   maximum concurrency. `max_num_seqs` is a scheduling limit, not a guarantee
+   that every admitted sequence can simultaneously occupy `max_model_len`
+   tokens; requests beyond resident capacity can queue, preempt, or recompute.
+4. If you change `max_model_len`, recalculate the fixed cache so at least one
+   maximum-length request fits, increase it for the desired resident
+   concurrency, and cold-start the full profile on the target hardware. On
+   lower-memory GPUs, running fewer models concurrently may also be necessary.
 
 Then select the reviewed profile explicitly:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers \
+uv run --project model-server-samples/model-servers model_servers \
   --gpu-profile <profile-directory-name>
 ```
 

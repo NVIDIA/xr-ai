@@ -33,6 +33,10 @@ conversational introduction rather than an exhaustive capability reference.
 
 ## Model servers (shared AI services)
 
+Before the first launch, complete {ref}`docker-host-setup`, including on DGX
+Spark. Docker must be accessible without `sudo` from the launch session, and
+the `nvidia` runtime must be registered.
+
 `model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `simple-vlm-example`,
@@ -42,7 +46,7 @@ whenever you want to pre-warm models:
 From the repository root, enter the model-server sample directory:
 
 ```bash
-cd agent-samples/model-servers
+cd model-server-samples/model-servers
 ```
 
 :::{important}
@@ -113,7 +117,7 @@ repository defaults first:
 
 ```bash
 cd agent-samples/simple-vlm-example
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 The command may download model weights on its first run. Refer to the
@@ -133,8 +137,9 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-Only the DeviceIOHub and worker start. Worker readiness probes all three reused
-services and includes a short 1280x720 streaming VLM warmup.
+Only DeviceIOHub and the worker start. For the worker's startup warmup, refer
+to {doc}`/reference/simple-vlm-example`. For readiness and required deployment
+order, refer to {ref}`consumer-model-readiness`.
 The hub prints:
 
 ```
@@ -183,8 +188,7 @@ To use compatible services at different locations, edit their endpoints in
 
 ```json
 {
-  "endpoint": {"base_url": "https://your-vlm.example.com"},
-  "deployment": {"ownership": "reused", "service": "vlm"}
+  "endpoint": {"base_url": "https://your-vlm.example.com"}
 }
 ```
 
@@ -209,7 +213,7 @@ Start the shared `model-servers` stack, which includes Pocket TTS:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then start the
@@ -257,7 +261,7 @@ Start the shared model services, including Pocket TTS:
 
 ```bash
 cd agent-samples/tea-making-sample
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then launch the
@@ -325,7 +329,7 @@ own model services.
 
 ```bash
 cd agent-samples/xr-render-demo
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 This exits immediately once all configured services are ready. Weights stay
@@ -404,10 +408,10 @@ The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 To stop the model servers when done:
 
 ```bash
-uv run --project ../model-servers model_servers --stop
+uv run --project ../../model-server-samples/model-servers model_servers --stop
 ```
 
-XR Render uses the fixed reuse-only endpoints in `yaml/models.json`; it does
+XR Render uses the configured shared endpoints in `yaml/models.json`; it does
 not select or own model deployment profiles.
 
 ## Hub only (standalone)

@@ -16,6 +16,7 @@ Submodules
    :maxdepth: 1
 
    /reference/python/xr_ai_tools/async_tools/index
+   /reference/python/xr_ai_tools/capture/index
    /reference/python/xr_ai_tools/current_frame/index
    /reference/python/xr_ai_tools/image/index
    /reference/python/xr_ai_tools/image_polygon/index

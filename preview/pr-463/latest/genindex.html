@@ -298,6 +298,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/documentation-style.html">Documentation style</a></li>
@@ -316,7 +317,9 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -328,6 +331,7 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
@@ -460,10 +464,10 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EndpointSpec.api_key_env">api_key_env (xr_ai_models.EndpointSpec attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall.arguments">arguments (xr_ai_models.ToolCall attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/marker_tracking/index.html#xr_ai_tools.marker_tracking.MarkerType.ARUCO">ARUCO (xr_ai_tools.marker_tracking.MarkerType attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatVLM.ask_image">ask_image() (xr_ai_models.OpenAICompatVLM method)</a>
@@ -491,6 +495,8 @@
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AgentPresence.attached">attached (xr_ai_hub.AgentPresence attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.attributes">attributes (xr_ai_hub.FileMessage attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.AUDIO">AUDIO (xr_ai_hub.Subscribe attribute)</a>
 </li>
@@ -552,6 +558,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.VLMService.capabilities">(xr_ai_models.VLMService attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_tools/capture/index.html#xr_ai_tools.capture.CaptureTools">CaptureTools (class in xr_ai_tools.capture)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Category">Category (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AudioChunk.channels">channels (xr_ai_hub.AudioChunk attribute)</a>
@@ -679,6 +687,8 @@
       <ul>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.DataMessage.data">(xr_ai_hub.DataMessage attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.data">(xr_ai_hub.FileMessage attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameData.data">(xr_ai_hub.FrameData attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.SlotView.data">(xr_ai_hub.SlotView attribute)</a>
@@ -694,12 +704,14 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.decode">decode() (in module xr_ai_hub)</a>
 </li>
-      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.default_extras">default_extras (xr_ai_models.AdapterSpec attribute)</a>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.DEFAULT">DEFAULT (xr_ai_hub.Subscribe attribute)</a>
 </li>
-      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.DEFAULT_IMAGE">DEFAULT_IMAGE (in module xr_ai_vllm)</a>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.default_extras">default_extras (xr_ai_models.AdapterSpec attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.DEFAULT_IMAGE">DEFAULT_IMAGE (in module xr_ai_vllm)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EmbeddingSpec.deployment">deployment (xr_ai_models.EmbeddingSpec attribute)</a>
 
       <ul>
@@ -808,6 +820,12 @@
         <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.feed">(xr_ai_voicegate.VoiceGate method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.FILE">FILE (xr_ai_hub.Subscribe attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.FILE_MESSAGE">FILE_MESSAGE (xr_ai_hub.MsgType attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage">FileMessage (class in xr_ai_hub)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.fill_polygon_magenta">fill_polygon_magenta() (in module xr_ai_tools.image_polygon)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceOutput.final">final (xr_ai_voice.VoiceOutput attribute)</a>
@@ -826,6 +844,8 @@
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.forget">forget() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.format_phrase_help">format_phrase_help() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.forward">forward (xr_ai_tools.tracking.HeadPose attribute)</a>
@@ -834,8 +854,6 @@
         <li><a href="reference/python/xr_ai_tools/types/index.html#xr_ai_tools.types.SpatialFrame.forward">(xr_ai_tools.types.SpatialFrame attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.SampleFramesResult.frame_budget">frame_budget (xr_ai_tools.video_memory.SampleFramesResult attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.FRAME_DATA">FRAME_DATA (xr_ai_hub.MsgType attribute)</a>
@@ -992,6 +1010,12 @@
         <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryRequest.image">(xr_ai_tools.vision.ImageQueryRequest attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.IMAGE_CAPTURE_CANCEL">IMAGE_CAPTURE_CANCEL (xr_ai_hub.MsgType attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.IMAGE_CAPTURE_DATA">IMAGE_CAPTURE_DATA (xr_ai_hub.MsgType attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.IMAGE_CAPTURE_REQUEST">IMAGE_CAPTURE_REQUEST (xr_ai_hub.MsgType attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/current_frame/index.html#xr_ai_tools.current_frame.ImageFrame">ImageFrame (class in xr_ai_tools.current_frame)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ImageInput">ImageInput (in module xr_ai_models)</a>
@@ -1004,10 +1028,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.ImagePolygonFillResult">ImagePolygonFillResult (class in xr_ai_tools.image_polygon)</a>
 </li>
-      <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.ImagePolygonFillTool">ImagePolygonFillTool (class in xr_ai_tools.image_polygon)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.ImagePolygonFillTool">ImagePolygonFillTool (class in xr_ai_tools.image_polygon)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryChunk">ImageQueryChunk (class in xr_ai_tools.vision)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryRequest">ImageQueryRequest (class in xr_ai_tools.vision)</a>
@@ -1184,6 +1208,8 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.midpoint">midpoint() (in module xr_ai_tools.spatial)</a>
 </li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.mime_type">mime_type (xr_ai_hub.FileMessage attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VadConfig.min_speech">min_speech (xr_ai_voice.VadConfig attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.model_name">model_name (xr_ai_models.AdapterSpec attribute)</a>
@@ -1217,6 +1243,8 @@
         <li><a href="reference/python/xr_ai_tools/index.html#module-xr_ai_tools">xr_ai_tools</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/async_tools/index.html#module-xr_ai_tools.async_tools">xr_ai_tools.async_tools</a>
+</li>
+        <li><a href="reference/python/xr_ai_tools/capture/index.html#module-xr_ai_tools.capture">xr_ai_tools.capture</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/current_frame/index.html#module-xr_ai_tools.current_frame">xr_ai_tools.current_frame</a>
 </li>
@@ -1269,9 +1297,11 @@
 <h2 id="N">N</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.name">name (xr_ai_launcher.Process attribute)</a>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.name">name (xr_ai_hub.FileMessage attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.name">(xr_ai_launcher.Process attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall.name">(xr_ai_models.ToolCall attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef.name">(xr_ai_models.ToolDef attribute)</a>
@@ -1310,6 +1340,8 @@
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.on_data">on_data() (xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.on_drop">on_drop() (xr_ai_voicegate.VoiceGate method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.on_file">on_file() (xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.on_frame">on_frame() (xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
@@ -1370,6 +1402,8 @@
       <ul>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.DataMessage.participant_id">(xr_ai_hub.DataMessage attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.participant_id">(xr_ai_hub.FileMessage attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameData.participant_id">(xr_ai_hub.FrameData attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameRequest.participant_id">(xr_ai_hub.FrameRequest attribute)</a>
@@ -1397,16 +1431,24 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.participant_joined">participant_joined() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.participant_session_id">participant_session_id (xr_ai_hub.FileMessage attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ParticipantEvent.participant_session_id">(xr_ai_hub.ParticipantEvent attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/python/xr_ai_tools/capture/index.html#xr_ai_tools.capture.CaptureTools.participant_tools">participant_tools() (xr_ai_tools.capture.CaptureTools method)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ParticipantEvent">ParticipantEvent (class in xr_ai_hub)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.ListRecordedParticipantsResult.participants">participants (xr_ai_tools.video_memory.ListRecordedParticipantsResult attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.participants">participants() (xr_ai_hub.LiveFrameSource method)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ControlMessage.payload">payload (xr_ai_hub.ControlMessage attribute)</a>
 
       <ul>
@@ -1441,6 +1483,8 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.DataMessage.pts_us">(xr_ai_hub.DataMessage attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.pts_us">(xr_ai_hub.FileMessage attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameData.pts_us">(xr_ai_hub.FrameData attribute)</a>
 </li>
@@ -1513,6 +1557,8 @@
         <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.VideoHealthResult.ready">(xr_ai_tools.video_memory.VideoHealthResult attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.REALTIME">REALTIME (xr_ai_hub.Subscribe attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Capabilities.reasoning">reasoning (xr_ai_models.Capabilities attribute)</a>
 
       <ul>
@@ -1569,10 +1615,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry.resolve">resolve() (xr_ai_tools.image.ImageRegistry method)</a>
 </li>
-      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.resolve_model_cache">resolve_model_cache() (in module xr_ai_vllm)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.resolve_model_cache">resolve_model_cache() (in module xr_ai_vllm)</a>
+</li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceOutput.response_id">response_id (xr_ai_voice.VoiceOutput attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrieveResult.results">results (xr_ai_tools.rag.RetrieveResult attribute)</a>
@@ -1951,10 +1997,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolCallResult">ToolCallResult (class in xr_ai_tools.tool_calling)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef">ToolDef (class in xr_ai_models)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.ToolInvocationResult">ToolInvocationResult (class in xr_ai_tools)</a>
 
       <ul>
@@ -1994,6 +2040,8 @@
       <ul>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.DataMessage.topic">(xr_ai_hub.DataMessage attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.topic">(xr_ai_hub.FileMessage attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent.topic">(xr_ai_web_events.WebEvent attribute)</a>
 </li>
       </ul></li>
@@ -2032,6 +2080,8 @@
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.TranscriptStatsRequest">TranscriptStatsRequest (class in xr_ai_tools.text_memory)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.TranscriptStatsResult">TranscriptStatsResult (class in xr_ai_tools.text_memory)</a>
+</li>
+      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.transfer_id">transfer_id (xr_ai_hub.FileMessage attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.ts">ts (xr_ai_tools.tracking.HeadPose attribute)</a>
 </li>
@@ -2269,6 +2319,13 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_tools/async_tools/index.html#module-xr_ai_tools.async_tools">module</a>
+</li>
+      </ul></li>
+      <li>
+    xr_ai_tools.capture
+
+      <ul>
+        <li><a href="reference/python/xr_ai_tools/capture/index.html#module-xr_ai_tools.capture">module</a>
 </li>
       </ul></li>
       <li>

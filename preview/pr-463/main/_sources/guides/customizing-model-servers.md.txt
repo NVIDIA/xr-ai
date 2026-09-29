@@ -11,7 +11,7 @@ sample connects to them. Model-server customization has two separate parts:
 1. A `model-servers` deployment profile declares which shared services the
    operator starts and owns.
 2. Each sample's active models JSON declares compatible client adapters and
-   endpoints, with deployment ownership set to `reused`.
+   endpoints. Consumer entries do not need a `deployment` object.
 
 Samples do not start or stop model services. Keep that ownership boundary when
 adapting a sample: customize the shared stack first, start it, and then point
@@ -21,8 +21,8 @@ the sample at the resulting endpoints.
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Deployment profile | `agent-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
-| Hardware profile | `agent-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
+| Deployment profile | `model-server-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
+| Hardware profile | `model-server-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
 | Sample models JSON | `agent-samples/<sample>/yaml/models*.json` | The roles that worker consumes and the endpoints it reuses |
 | Sample worker YAML | `agent-samples/<sample>/yaml/<worker>.yaml` | Application behavior such as prompts, voice gating, timeouts, and capability-service endpoints |
 
@@ -45,14 +45,14 @@ service, but is not integrated into the persistent model stack.
 Copy the closest profile under a new name:
 
 ```bash
-cp agent-samples/model-servers/yaml/models.default.json \
-  agent-samples/model-servers/yaml/models.my-stack.json
+cp model-server-samples/model-servers/yaml/models.default.json \
+  model-server-samples/model-servers/yaml/models.my-stack.json
 ```
 
 Run it by filename stem:
 
 ```bash
-uv run --project agent-samples/model-servers \
+uv run --project model-server-samples/model-servers \
   model_servers --models my-stack
 ```
 
@@ -81,7 +81,7 @@ The profile must retain the wrapped JSON shape:
 Within the shared profile, `managed` means `model-servers` owns that service.
 Roles may share a service; for example, `llm` and `agent_llm` can both name
 `omni`. A service name must have a corresponding row in `_MODEL_SERVICES` in
-`agent-samples/model-servers/main.py`.
+`model-server-samples/model-servers/main.py`.
 
 ## Customize a hardware-specific server
 
@@ -133,14 +133,17 @@ comments say so.
 Do not copy a complete model-server profile into a sample. It can omit roles
 the sample needs, and its `managed` ownership belongs only in the shared stack.
 Copy or update the relevant role entries in the sample's active models JSON,
-then change their ownership to `reused`.
+omitting their `deployment` objects. Keep adapter settings and endpoint
+credentials needed by the client; server-only credentials stay in the shared
+stack's deployment profile.
 
 For the shipped `vlm_llm_nim` stack:
 
 1. Copy its `llm` entry when the sample needs language or tool calling.
 2. Copy its `vlm` entry when the sample needs vision.
-3. Change `deployment.ownership` from `managed` to `reused` in every copied
-   entry. Keep `llm-nim` on port 8110 and `vlm-nim` on port 8100.
+3. Remove the `deployment` object and endpoint `readiness` and `health_path`
+   settings from the copied LLM and VLM entries. Keep the LLM endpoint on port
+   8110 and the VLM endpoint on port 8100. The server profile keeps its settings.
 4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
 5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
    stack provides intentional replacements.
@@ -168,33 +171,47 @@ For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
       "video": true
     }
   },
-  "endpoint": {
-    "base_url": "http://localhost:8100",
-    "readiness": "health",
-    "health_path": "/v1/health/ready"
-  },
-  "deployment": {
-    "ownership": "reused",
-    "service": "vlm-nim"
-  }
+  "endpoint": {"base_url": "http://localhost:8100"}
 }
 ```
 
-Current sample launchers declare their model dependencies as reuse-only, so
-they do not spawn model processes. The worker constructs the client from its
-models JSON and checks endpoint readiness. Starting or stopping the sample
-therefore never changes the shared NIM container.
-
-The `nim_llm_server.yaml` and `nim_vlm_server.yaml` files repeat the copy and
-ownership instructions beside each GPU-specific container configuration.
+Sample launchers declare only their application processes; model endpoints
+are specified in the client profile. Starting or stopping the sample never
+changes the shared NIM container. For startup ordering, refer to
+{ref}`consumer-model-readiness`.
 
 ## Use an endpoint at another address
 
 If an operator already runs a compatible service elsewhere, no model-server
-change is required. Update the sample entry's `endpoint.base_url` and keep
-ownership `reused` when the endpoint belongs to an operator-managed XR AI
-stack. Use `external` for a hosted API or another endpoint with no corresponding
-launcher process:
+change is required. Update the sample entry's `endpoint.base_url`. Both
+operator-managed XR AI services and hosted APIs use client entries without
+`deployment`. Worker model clients do not need health polling settings; the
+RAG embedding exception is described below. A hosted endpoint may also need a
+credential:
+
+```json
+{
+  "endpoint": {
+    "base_url": "https://integrate.api.nvidia.com",
+    "api_key_env": "NGC_API_KEY"
+  }
+}
+```
+
+Do not put the credential value in JSON. Export it or use the credential store.
+Refer to {doc}`/getting_started/credentials` for credential options.
+
+(rag-embedding-health)=
+## RAG embedding health
+
+Tea making's RAG service reads the `embedding` role from the same
+`yaml/models.local.json` profile as the worker. Unlike worker model clients,
+it explicitly calls embedding `health()` before building its index and when
+reporting RAG readiness. Preserve health settings for this role when changing
+its endpoint.
+
+For a hosted embedding provider without a health route, set `readiness: none`
+in the embedding entry's `endpoint` object:
 
 ```json
 {
@@ -202,13 +219,15 @@ launcher process:
     "base_url": "https://integrate.api.nvidia.com",
     "api_key_env": "NGC_API_KEY",
     "readiness": "none"
-  },
-  "deployment": {"ownership": "external"}
+  }
 }
 ```
 
-Do not put the credential value in JSON. Export it or use the credential store.
-Refer to {doc}`/getting_started/credentials` for credential options.
+This skips the health request; actual embedding requests still use the configured
+adapter and credentials. If the provider exposes a supported health route,
+use `readiness: health` and set `health_path` to that route instead, for example
+`/v1/health/ready`. Omitting these settings defaults to probing `/health`, which
+can prevent RAG startup even when embedding inference works.
 
 ## Riva speech boundary
 
@@ -224,7 +243,7 @@ endpoint-only customization.
 Before committing a custom profile:
 
 ```bash
-jq empty agent-samples/model-servers/yaml/models.my-stack.json
+jq empty model-server-samples/model-servers/yaml/models.my-stack.json
 
 uv run --project tests pytest -q \
   tests/test_model_servers.py \
@@ -238,8 +257,8 @@ before launching it. After changing an image, checkpoint, or launch setting,
 stop the old stack once so it cannot continue serving stale configuration:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --stop
-uv run --project agent-samples/model-servers \
+uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers \
   model_servers --models my-stack
 ```
 

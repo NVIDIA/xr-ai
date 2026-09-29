@@ -37,10 +37,14 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-`VoiceAgent` owns model readiness, hub transport, VAD and STT, voice gating, typed
-text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
+`VoiceAgent` owns application readiness, hub transport, VAD and STT, voice gating,
+typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
+
+For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
+For deployment order and migration of existing applications, refer to
+{ref}`consumer-model-readiness`.
 
 Each non-empty final STT result is queued for publication on
 `VOICE_TRANSCRIPT_TOPIC` before wake-phrase filtering. Accepted speech and
@@ -68,6 +72,14 @@ stream share `response_id` and end with `final=True`. Output is serialized per
 participant; `interrupt=True` flushes queued hub audio and replaces active
 speech. Without aggregation, producer identity is part of the stream key so
 independent agents cannot merge accidentally.
+
+Each running `VoiceAgent` remembers its 1,024 most recently closed stream keys.
+Output that reuses one of those keys is ignored, and the runtime logs one
+warning for that participant, producer, and `response_id`. Streams close by
+finalization, cancellation, or eviction; waiting does not reopen a retained
+key. Use one identifier per inbound query, such as
+`ctx.metadata.message_id`, or omit `response_id` when publishing a finite
+response in one `VoiceOutput`.
 
 `text_topic` controls the completed-response data echo and defaults to
 `agent.response`. Set it to an empty string when the application owns its own
