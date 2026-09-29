@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from xr_ai_sample_agents.front_end import FRONT_END_QUERY_TOPIC
 from xr_ai_voicegate import VoiceGateConfig
 
 
@@ -46,6 +47,7 @@ async def test_sample_does_not_register_model_health_probes(
         for constructor in (
             "SceneTools", "TrackingTools", "TextMemoryTools", "ImageRegistry",
             "CurrentFrameTool", "SceneSupervisor", "RenderAgent",
+            "StreamingImageQueryTool",
         ):
             monkeypatch.setattr(app, constructor, Mock())
         monkeypatch.setattr(app, "close_clients", AsyncMock())
@@ -63,6 +65,8 @@ async def test_sample_does_not_register_model_health_probes(
     with pytest.raises(WiringComplete):
         await app.run_app(config)
     probes = options.get("probes", {})
+    if sample in {"tea-making-sample", "xr-render-demo"}:
+        assert options["query_topic"] is FRONT_END_QUERY_TOPIC
     assert set(probes) == expected_probes
     for probe in probes.values():
         assert await probe() is True

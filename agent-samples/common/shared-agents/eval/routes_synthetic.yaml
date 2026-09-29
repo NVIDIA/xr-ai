@@ -1,0 +1,266 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Synthetic customer applications test routing without implementing those domains.
+# Every case is an idle turn: foreground capture is exercised by the runtime tests.
+applications:
+  xr_scene: >-
+    Handle the participant's editable virtual XR scene: virtual objects, scene
+    state, spatial relationships, and recorded scene observations. Do not use
+    for the live physical camera view.
+  tea_guide: >-
+    Guide an active tea-making workflow, including its steps, ingredients,
+    timers, and background monitoring. A started guide owns follow-up turns
+    until the participant leaves it.
+  home_control: >-
+    Read or change connected home devices such as lights, thermostats, and
+    speakers. This app does not own general knowledge about a home.
+  trip_planner: >-
+    Plan and revise the participant's itinerary, reservations, and travel
+    preferences. A planning session can own follow-up turns until exited.
+  calendar: >-
+    Read or change the participant's calendar events and availability.
+
+cases:
+  - name: three_app_scene_action
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Move the holographic table two feet left.
+    route: xr_scene
+  - name: three_app_tea_start
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Guide me through brewing oolong one step at a time.
+    route: tea_guide
+  - name: three_app_home_action
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Turn off the kitchen pendant lights.
+    route: home_control
+  - name: three_app_physical_view
+    catalog: [xr_scene, tea_guide, home_control]
+    query: What is in front of my camera right now?
+    route: current_view
+  - name: three_app_general
+    catalog: [xr_scene, tea_guide, home_control]
+    query: How many days are in a leap year?
+    route: direct
+  - name: real_vs_virtual_lamp
+    catalog: [xr_scene, home_control]
+    query: Make the virtual lamp bigger.
+    route: xr_scene
+  - name: connected_vs_virtual_lamp
+    catalog: [xr_scene, home_control]
+    query: Dim the connected living-room lamp to 40 percent.
+    route: home_control
+  - name: camera_vs_connected_lamp
+    catalog: [xr_scene, home_control]
+    query: Is the lamp I am looking at blue?
+    route: current_view
+  - name: quoted_device_command
+    catalog: [xr_scene, home_control]
+    query: This label says "turn off the lamp". What does the label say?
+    route: current_view
+  - name: hypothetical_scene_action
+    catalog: [xr_scene, home_control]
+    query: If I added a cube to an XR scene, how many faces would it have?
+    route: direct
+  - name: tea_vs_home_kettle
+    catalog: [tea_guide, home_control]
+    query: Is the water ready for the next step of my tea recipe?
+    route: tea_guide
+  - name: home_kettle_device
+    catalog: [tea_guide, home_control]
+    query: Set the smart kettle to 80 degrees Celsius.
+    route: home_control
+  - name: tea_background_change
+    catalog: [tea_guide, home_control]
+    query: Did the kettle change since you last watched it for my tea?
+    route: tea_guide
+  - name: tea_idle_visual
+    catalog: [tea_guide, home_control]
+    query: What color is this mug in my hand?
+    route: current_view
+  - name: tea_idle_general
+    catalog: [tea_guide, home_control]
+    query: What is the difference between green and black tea?
+    route: direct
+  - name: trip_start
+    catalog: [trip_planner, calendar, home_control]
+    query: Help me plan a three-day trip to Seattle.
+    route: trip_planner
+  - name: trip_itinerary_status
+    catalog: [trip_planner, calendar, home_control]
+    query: What hotel did we put on my itinerary?
+    route: trip_planner
+  - name: calendar_free_time
+    catalog: [trip_planner, calendar, home_control]
+    query: Am I free next Tuesday afternoon?
+    route: calendar
+  - name: calendar_add_event
+    catalog: [trip_planner, calendar, home_control]
+    query: Put a dentist appointment on my calendar for Friday at two.
+    route: calendar
+  - name: trip_hypothetical
+    catalog: [trip_planner, calendar, home_control]
+    query: Why do people visit Seattle in spring?
+    route: direct
+  - name: travel_document_view
+    catalog: [trip_planner, calendar, home_control]
+    query: Read the departure time on this paper ticket.
+    route: current_view
+  - name: travel_document_booking
+    catalog: [trip_planner, calendar, home_control]
+    query: What time is the flight in my saved trip itinerary?
+    route: trip_planner
+  - name: all_apps_scene
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: Remove the red hologram from my XR scene.
+    route: xr_scene
+  - name: all_apps_tea
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: What is the next instruction in my tea walkthrough?
+    route: tea_guide
+  - name: all_apps_home
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: Is my bedroom thermostat on?
+    route: home_control
+  - name: all_apps_trip
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: Replace the museum stop in my itinerary with the aquarium.
+    route: trip_planner
+  - name: all_apps_calendar
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: Move my Wednesday meeting to Thursday morning.
+    route: calendar
+  - name: all_apps_live_view
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: What can you see on the desk right now?
+    route: current_view
+  - name: all_apps_recall
+    catalog: [xr_scene, tea_guide, home_control, trip_planner, calendar]
+    query: What name did I tell you to call me?
+    history:
+      - user: Please call me Morgan.
+        assistant: Sure, Morgan.
+    route: direct
+  - name: scene_followup_after_app
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Make that one taller.
+    history:
+      - user: Add a virtual cylinder beside the desk.
+        assistant: I added a cylinder to the XR scene.
+    route: xr_scene
+  - name: view_followup_after_app
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Is the one next to it blue?
+    history:
+      - user: What is on the physical desk?
+        assistant: There is a notebook and a mug.
+    route: current_view
+  - name: trip_followup_after_plan
+    catalog: [trip_planner, calendar]
+    query: Swap the second stop for the science museum.
+    history:
+      - user: Plan a day trip downtown.
+        assistant: I put three stops on your itinerary.
+    route: trip_planner
+  - name: calendar_followup_after_event
+    catalog: [trip_planner, calendar]
+    query: Move that appointment to 3 pm.
+    history:
+      - user: Add a dental appointment to my calendar.
+        assistant: Added it for Friday at 2 pm.
+    route: calendar
+  - name: context_trip_is_idle
+    catalog: [trip_planner, calendar]
+    context: "Trip planner is available but no planning session is active."
+    query: What was the purpose of the meeting I just mentioned?
+    history:
+      - user: I have a budget review meeting tomorrow.
+        assistant: A budget review is tomorrow.
+    route: direct
+  - name: context_calendar_state
+    catalog: [trip_planner, calendar]
+    context: "Calendar contains a dentist appointment on Friday at 2 pm."
+    query: When is my dentist appointment?
+    route: calendar
+  - name: quoted_instruction_not_action
+    catalog: [trip_planner, calendar, home_control]
+    query: My friend said "book a hotel". Did they ask you to book it?
+    route: direct
+  - name: ambiguous_object_without_domain
+    catalog: [xr_scene, tea_guide, home_control]
+    query: Can you move that thing over there?
+    route: direct
+    clarify: true
+  - name: ambiguous_real_or_virtual_light
+    catalog: [xr_scene, home_control]
+    query: Turn that light down.
+    route: direct
+    clarify: true
+  - name: ambiguous_timer_owner
+    catalog: [tea_guide, calendar, home_control]
+    query: Is the timer done?
+    route: direct
+    clarify: true
+  - name: ambiguous_trip_or_calendar_change
+    catalog: [trip_planner, calendar]
+    query: Move that to Thursday.
+    route: direct
+    clarify: true
+  - name: explicit_scene_inspection
+    catalog: [xr_scene, home_control]
+    query: Look at the virtual scene and tell me whether the red cube is behind the chair.
+    route: xr_scene
+  - name: explicit_home_device_inspection
+    catalog: [xr_scene, home_control]
+    query: Check the connected lamp status, not just how it looks on camera.
+    route: home_control
+  - name: explicit_present_camera_inspection
+    catalog: [xr_scene, home_control]
+    query: From my live camera, is the physical lamp on my desk lit?
+    route: current_view
+  - name: repeated_app_reply_new_knowledge
+    catalog: [xr_scene, home_control]
+    query: What is the capital of France?
+    history:
+      - user: What can you do with the scene?
+        assistant: I can add or recolor virtual objects.
+      - user: And what else?
+        assistant: I can add or recolor virtual objects.
+      - user: Hello?
+        assistant: I can add or recolor virtual objects.
+      - user: Are you there?
+        assistant: I can add or recolor virtual objects.
+    route: direct
+    answer_contains: Paris
+  - name: repeated_tea_reply_new_math
+    catalog: [tea_guide, home_control]
+    query: What is seven times eight?
+    history:
+      - user: What does the guide do?
+        assistant: I can guide your brewing steps.
+      - user: Anything else?
+        assistant: I can guide your brewing steps.
+      - user: Hello?
+        assistant: I can guide your brewing steps.
+    route: direct
+    answer_contains: "56"
+  - name: repeated_app_reply_live_view
+    catalog: [xr_scene, tea_guide, home_control]
+    query: What do you see on the physical table now?
+    history:
+      - user: Tell me what the scene editor offers.
+        assistant: I can create virtual shapes.
+      - user: Repeat that.
+        assistant: I can create virtual shapes.
+      - user: Hello?
+        assistant: I can create virtual shapes.
+    route: current_view
+  - name: repeated_app_reply_new_action
+    catalog: [xr_scene, home_control]
+    query: Switch off the connected bedroom lamp.
+    history:
+      - user: What can the scene editor do?
+        assistant: I can create virtual shapes.
+      - user: Tell me again.
+        assistant: I can create virtual shapes.
+    route: home_control

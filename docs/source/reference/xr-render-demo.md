@@ -267,21 +267,32 @@ voice.output topic (final response)
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
 render-agent task without waiting on its cleanup in the media processor. Each
-turn publishes one complete `voice.output` message; a superseded turn is
-cancelled before its reply is published, so no partial stream is left open.
+XR scene turns publish a complete result; generic current-view turns stream
+through voice aggregation. Superseded turns are cancelled, and the voice
+runtime closes or interrupts their output.
 
 ## Agent runtime and voice topology
 
 ```
 VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
-           → typed hub text ingress ────────────┴→ xr-render.user-query topic
-  → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
+           → typed hub text ingress ────────────┴→ conversation front end
+                ├→ ordinary chat/current physical view → generic conversation
+                └→ XR scene or recorded-video turn → RenderAgent
+                       → SceneSupervisor → five focused subagents
+                → voice aggregation → voice.output topic
   → VoiceAgent → private media-session TTS → hub return audio
 ```
 
 Pipecat is an internal implementation detail of `xr-ai-voice`; application
 input, participant-scoped agent execution, and voice output use public SDK contracts.
+The front end makes one no-thinking top-level decision per turn; XR never
+holds focus, so a later turn is routed afresh. Simple current-view questions
+use the generic VLM path without a preliminary acknowledgement or scene
+supervisor pass. Scene turns retain the existing supervisor and subagent
+prompts. A short XR availability projection and recent spoken results help
+generic follow-ups; neither grants scene-action authority. See
+{doc}`/components/conversation-front-end` for the shared contract.
 An XR start failure sends `render.failed` (with the reason) on the data
 channel and speaks a short failure notice through `voice.output`.
 
@@ -290,7 +301,7 @@ channel and speaks a short failure notice through `voice.output`.
 `SceneSupervisor` coordinates five focused subagent tools (placement,
 appearance, object, vision, memory) over `xr_ai_tools.tool_calling.run_tool_loop`.
 Each subagent runs its own inner tool loop against the scene and tracking
-services. On each accepted `xr-render.user-query` event:
+services. On each XR-delegated `xr-render.user-query` event:
 
 1. **Recent conversation** is recalled from `TextMemoryTools` and injected
    as context so the model understands references like "fix that" or "undo".

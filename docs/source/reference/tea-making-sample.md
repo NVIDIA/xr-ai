@@ -86,7 +86,10 @@ camera frames ────────────────> ParticipantImage
 accepted speech or typed query         ├─> GuidanceAgent observation loop
               │                       ├─> ChangeWatchAgent
               v                       └─> VideoLogAgent
-        ForegroundAgent
+    ConversationFrontEnd
+       ├─ idle, ordinary/visual ──> QuickConversation
+       └─ tea turn ───────────────> ForegroundAgent
+                                      (all turns while guidance is active)
               │
               ├─ idle ──> root tools: start workflow, inspect, retrieve,
               │                      query facts, control background agents
@@ -121,6 +124,7 @@ after the full intended utterance has reached the client.
 | Agent | Owns | Does not own |
 |---|---|---|
 | `ParticipantImageAgent` | Image registry, current-frame selection, participant cleanup | VLM prompts or workflow state |
+| `ConversationFrontEnd` | Idle top-level delegation, short spoken history, and direct delivery to the active tea guide | Tea steps or background tools |
 | `ForegroundAgent` | Deterministic root-versus-step routing and one bounded tool loop per query | Conversation history or workflow transitions |
 | `GuidanceAgent` | Workflow sessions, step observations, evidence, controlled state commits | Voice transport or persistence |
 | `BackgroundContextAgent` | A bounded participant-local set of recent background facts | Background scheduling |
@@ -199,6 +203,15 @@ fields, checked-in values, and adjacent YAML comments.
 
 ## Deterministic foreground routing
 
+When guidance is idle, the conversation front end chooses ordinary
+conversation, the current physical view, or the tea application in one
+no-thinking model call. It supplies a bounded workflow-status projection to
+generic conversation, without exposing the tea tool catalog. It sends every
+turn directly to `ForegroundAgent` while the workflow is active; a guide reset
+releases focus. The front end speaks no acknowledgement for generic turns.
+Tea's own prompt and tools decide whether a delegated command is actionable.
+See {doc}`/components/conversation-front-end` for the shared contract.
+
 Before calling the LLM, `ForegroundAgent` asks `GuidanceAgent` whether the
 participant has an active step.
 
@@ -221,14 +234,16 @@ assistant and explicit background-route instructions. Active tea behavior comes
 from the focused policies built from `workflow.yaml`; configuration overrides
 cannot replace the active-guide scope or workflow-control safeguards.
 
-There is exactly one model loop. The foreground agent does not ask one model to
-route to another agent, and background agents never capture a foreground turn.
+Within a delegated tea turn there is exactly one foreground model loop.
+The foreground agent does not ask one model to route to another agent, and
+background agents never capture a foreground turn.
 `current_view` is a direct-return exception within that loop: after the route is
 selected, `CurrentFrameTool` and `StreamingImageQueryTool` use the same streamed
 voice path as `simple-vlm-example`, without a second language-model pass over
 the visual answer.
-Each turn contains the system prompt, current query, and current workflow
-context—no accumulated conversation history.
+Each foreground turn contains the system prompt, current query, and current
+workflow context. The front end separately retains four completed spoken
+exchanges for generic follow-ups.
 
 Every visual tool in this sample sends exactly one image. The checked-in Omni
 wrapper does not expose multi-image request configuration, so this deployment

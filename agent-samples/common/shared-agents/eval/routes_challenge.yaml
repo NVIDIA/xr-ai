@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- sample: xr
+  name: holdout_scene_swap
+  query: Replace the virtual stool with a bench at the same spot.
+  route: xr_scene
+- sample: xr
+  name: holdout_scene_relative
+  query: Which hologram is nearest the doorway?
+  route: xr_scene
+- sample: xr
+  name: holdout_scene_undo
+  query: Undo my last edit to the XR objects.
+  route: xr_scene
+- sample: xr
+  name: holdout_recorded_person
+  query: Did anybody walk behind me thirty seconds ago?
+  route: xr_scene
+- sample: xr
+  name: holdout_current_person
+  query: Is anybody standing behind me now?
+  route: current_view
+- sample: xr
+  name: holdout_current_unnamed
+  query: Tell me what is over there.
+  route: current_view
+- sample: xr
+  name: holdout_general_comparison
+  query: Is a triangle a polygon?
+  route: direct
+- sample: xr
+  name: holdout_quote_not_edit
+  query: The note reads "delete the cube". What does it actually say?
+  route: current_view
+- sample: xr
+  name: holdout_visual_history_switch
+  query: Is the same scarf still on the chair?
+  history:
+    - user: What is on the chair?
+      assistant: A striped scarf is on the chair.
+  route: current_view
+- sample: xr
+  name: holdout_scene_followup
+  query: Move it upward a little.
+  history:
+    - user: Add a virtual lantern beside the sofa.
+      assistant: I added the lantern.
+  route: xr_scene
+- sample: tea
+  name: holdout_guide_begin
+  query: Help me brew this properly, one step at a time.
+  route: tea_guide
+- sample: tea
+  name: holdout_guide_status
+  query: What's left in the tea walkthrough?
+  route: tea_guide
+- sample: tea
+  name: holdout_temperature
+  query: Is the water hot enough for this tea yet?
+  route: tea_guide
+- sample: tea
+  name: holdout_background
+  query: Did the tea kettle change since you last checked it?
+  route: tea_guide
+- sample: tea
+  name: holdout_visual
+  query: What color is the mug I'm pointing at?
+  route: current_view
+- sample: tea
+  name: holdout_read_recipe
+  query: Read the text printed on this card.
+  route: current_view
+- sample: tea
+  name: holdout_general_math
+  query: What's half of 18?
+  route: direct
+- sample: tea
+  name: holdout_other_domain
+  query: What is a black hole?
+  route: direct
+- sample: tea
+  name: holdout_quoted_watch
+  query: My friend said "watch the kettle". Did they ask me or you?
+  route: direct
+- sample: tea
+  name: holdout_stop_tea
+  query: I'm done with the tea guide; return to regular chat.
+  route: direct

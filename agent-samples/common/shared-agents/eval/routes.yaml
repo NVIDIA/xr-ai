@@ -1,0 +1,143 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- sample: xr
+  name: xr_add_object
+  query: Put a small blue sphere on the virtual table.
+  route: xr_scene
+- sample: xr
+  name: xr_remove_object
+  query: Delete the holographic lamp.
+  route: xr_scene
+- sample: xr
+  name: xr_move_reference
+  query: Slide that virtual cube closer to the chair.
+  route: xr_scene
+- sample: xr
+  name: xr_scene_inventory
+  query: How many objects are in my XR scene right now?
+  route: xr_scene
+- sample: xr
+  name: xr_scene_spatial
+  query: Is the green cylinder behind the virtual couch?
+  route: xr_scene
+- sample: xr
+  name: xr_past_video
+  query: What was I holding a minute ago?
+  route: xr_scene
+- sample: xr
+  name: xr_physical_view
+  query: What do you see in front of me?
+  route: current_view
+- sample: xr
+  name: xr_physical_deictic
+  query: What color is this real cup in my hand?
+  route: current_view
+- sample: xr
+  name: xr_visible_text
+  query: Read the writing on the box I am looking at.
+  route: current_view
+- sample: xr
+  name: xr_nonvisual_history
+  query: What did I just call my dog?
+  history:
+    - user: My dog's name is Clover.
+      assistant: Clover is your dog's name.
+  route: direct
+- sample: xr
+  name: xr_general_knowledge
+  query: What is a torus in geometry?
+  route: direct
+- sample: xr
+  name: xr_visual_followup
+  query: And what color is the one beside it now?
+  history:
+    - user: What is that cup on the left?
+      assistant: It is a ceramic mug.
+  route: current_view
+- sample: xr
+  name: xr_scene_followup
+  query: Make that virtual object twice as large.
+  history:
+    - user: Add a red cone to the XR scene.
+      assistant: I added a red cone.
+  route: xr_scene
+- sample: xr
+  name: xr_quote
+  query: The sign says "add a cube". What color is the sign?
+  route: current_view
+- sample: xr
+  name: xr_hypothetical
+  query: If I were to add a cube, would it have six faces?
+  route: direct
+- sample: xr
+  name: xr_scene_question_not_action
+  query: Can I recolor objects in the virtual scene?
+  route: xr_scene
+- sample: tea
+  name: tea_start
+  query: Walk me through making a cup of tea.
+  route: tea_guide
+- sample: tea
+  name: tea_resume
+  query: Where am I in the brewing instructions?
+  route: tea_guide
+- sample: tea
+  name: tea_steep_time
+  query: How long should I steep this tea?
+  route: tea_guide
+- sample: tea
+  name: tea_timer
+  query: Has the steeping timer finished yet?
+  route: tea_guide
+- sample: tea
+  name: tea_watch
+  query: Keep an eye on the kettle while I get a mug.
+  route: tea_guide
+- sample: tea
+  name: tea_stop_watch
+  query: Stop watching the kettle.
+  route: tea_guide
+- sample: tea
+  name: tea_reset
+  query: Leave the tea guide and return to normal conversation.
+  route: tea_guide
+- sample: tea
+  name: tea_physical_view
+  query: What do you see around me?
+  route: current_view
+- sample: tea
+  name: tea_read_label
+  query: What does this package label say?
+  route: current_view
+- sample: tea
+  name: tea_kettle_visible
+  query: Is the kettle visible on the counter?
+  route: current_view
+- sample: tea
+  name: tea_general_question
+  query: What is the capital of Peru?
+  route: direct
+- sample: tea
+  name: tea_non_app_timer
+  query: How many seconds are in five minutes?
+  route: direct
+- sample: tea
+  name: tea_quoted_command
+  query: The recipe says "start a timer". What does that phrase mean?
+  route: tea_guide
+- sample: tea
+  name: tea_monitor_question
+  query: Are you still monitoring my tea?
+  route: tea_guide
+- sample: tea
+  name: tea_step_reference
+  query: Tell me the next step in this tea walkthrough.
+  route: tea_guide
+- sample: tea
+  name: tea_visual_followup
+  query: Is that cup still on the table?
+  history:
+    - user: What is on the table?
+      assistant: There is a white cup on the table.
+  route: current_view

@@ -15,8 +15,14 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
+from xr_ai_sample_agents.front_end import (
+    FRONT_END_QUERY_TOPIC,
+    ConversationApplication,
+    ConversationFrontEnd,
+    QuickConversation,
+)
 from xr_ai_tools.rag import RAGTools
-from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
 from xr_ai_voice import (
     HubVoiceTransport,
     VadConfig,
@@ -77,6 +83,17 @@ class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
             await self.release_all()
         else:
             await self.release(participant_id)
+
+
+class _TeaConversationFrontEnd(ConversationFrontEnd):
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def leave(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
+        if ctx.metadata.participant_id is not None:
+            await self.participant_left(ctx.metadata.participant_id)
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupt(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:
+        await self.interrupted(ctx.metadata.participant_id)
 
 
 @asynccontextmanager
@@ -144,7 +161,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     rag = RAGTools(config.rag_endpoint)
     transport = HubVoiceTransport()
     voice = VoiceAgent(
-        query_topic=USER_QUERY_TOPIC,
+        query_topic=FRONT_END_QUERY_TOPIC,
         stt=stt,
         tts=tts,
         vad=VadConfig(
@@ -208,6 +225,38 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             ),
             rag=rag,
             vlm_timeout_s=config.vlm_timeout_s,
+        ),
+    )
+    conversation = runtime.register(
+        "conversation",
+        _TeaConversationFrontEnd(
+            QuickConversation(
+                images.get_current_frame,
+                StreamingImageQueryTool(
+                    images=images.images,
+                    vlm=vlm,
+                    system_prompt=_CURRENT_VIEW_PROMPT,
+                ),
+                llm=llm,
+                timeout_s=config.vlm_timeout_s,
+            ),
+            applications=(
+                ConversationApplication(
+                    name="tea_guide",
+                    description=(
+                        Path(__file__).with_name("prompts") / "top_level_route.txt"
+                    ).read_text(encoding="utf-8").strip(),
+                    query_topic=USER_QUERY_TOPIC,
+                    has_focus=lambda pid: bool(
+                        (session := guidance.store.find(pid)) and session.active
+                    ),
+                    context=lambda pid: (
+                        f"Tea-making guidance: {guidance.store.status(session)}"
+                        if (session := guidance.store.find(pid)) is not None
+                        else "Tea-making guidance is available but idle."
+                    ),
+                ),
+            ),
         ),
     )
     change_watch = runtime.register(
@@ -279,6 +328,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                     await voice.run(runtime)
                 finally:
                     await foreground.stop()
+                    await conversation.stop()
                     await guidance.stop()
                     await change_watch.stop()
                     await transcript.stop()

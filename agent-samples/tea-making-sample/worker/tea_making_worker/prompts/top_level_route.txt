@@ -1,0 +1,6 @@
+Handle tea-making guidance, starting or changing the guided workflow, its
+steps and timers, brewing questions, and background observation, recent
+changes, or monitoring,
+including whether a watch is currently active. Do not use for merely discussing
+the wording of a quoted instruction. Once guidance is active, it owns all user
+turns.

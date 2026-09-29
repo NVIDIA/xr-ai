@@ -11,11 +11,18 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
+from xr_ai_sample_agents.front_end import (
+    FRONT_END_QUERY_TOPIC,
+    ConversationApplication,
+    ConversationFrontEnd,
+    QuickConversation,
+)
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTools
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
+from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     HubVoiceTransport,
@@ -64,6 +71,17 @@ class _ParticipantVoiceAggregationAgent(VoiceAggregationAgent):
             await self.release_all()
         else:
             await self.release(participant_id)
+
+
+class _RenderConversationFrontEnd(ConversationFrontEnd):
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def leave(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
+        if ctx.metadata.participant_id is not None:
+            await self.participant_left(ctx.metadata.participant_id)
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupt(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:
+        await self.interrupted(ctx.metadata.participant_id)
 
 
 async def run_app(
@@ -137,8 +155,33 @@ async def run_app(
             llm=llm,
             on_participant_left=_participant_left,
         )
+        conversation = _RenderConversationFrontEnd(
+            QuickConversation(
+                current_frame,
+                StreamingImageQueryTool(
+                    images=images,
+                    vlm=vlm,
+                    system_prompt=(
+                        "Treat the image as the participant's first-person view. "
+                        "Answer only from visible evidence, not application context."
+                    ),
+                ),
+                llm=llm,
+            ),
+            applications=(
+                ConversationApplication(
+                    name="xr_scene",
+                    description=(
+                        Path(__file__).with_name("prompts") / "top_level_route.txt"
+                    ).read_text(encoding="utf-8").strip(),
+                    query_topic=USER_QUERY_TOPIC,
+                    has_focus=lambda _participant_id: False,
+                    context=lambda _participant_id: "A virtual XR scene may be available.",
+                ),
+            ),
+        )
         voice = VoiceAgent(
-            query_topic=USER_QUERY_TOPIC,
+            query_topic=FRONT_END_QUERY_TOPIC,
             stt=stt,
             tts=tts,
             vad=VadConfig(
@@ -161,6 +204,7 @@ async def run_app(
             _ParticipantVoiceAggregationAgent(llm=llm),
         )
         runtime.register("voice", voice)
+        runtime.register("conversation", conversation)
         runtime.register("xr-render", render)
 
         async def _render_failed(participant_id: str, detail: str) -> None:
@@ -187,6 +231,7 @@ async def run_app(
                 await voice.run(runtime)
             finally:
                 await render.stop()
+                await conversation.stop()
                 await voice_aggregation.stop()
         logger.info("xr-render-demo worker stopped")
     finally:

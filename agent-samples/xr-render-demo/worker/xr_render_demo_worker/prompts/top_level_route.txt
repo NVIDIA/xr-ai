@@ -1,0 +1,6 @@
+Handle the virtual XR scene: creating, changing, placing, removing, or
+asking about virtual objects, spatial relations, tracking, or available XR
+operations. It also owns
+questions about past physical observations or recorded video; the generic
+camera capability sees only the present. Do not use for a present view of the
+participant's physical surroundings.
