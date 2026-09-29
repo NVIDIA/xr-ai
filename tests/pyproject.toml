@@ -17,6 +17,7 @@ dependencies = [
     "xr-ai-models[riva]",
     "xr-ai-tools[frames,image-editing,marker-tracking,services,vision]",
     "xr-ai-voice",
+    "xr-ai-sample-agents[front-end]",
     "xr-ai-web-events",
     "device-io-hub",
     "magpie-nim-tts",
@@ -51,6 +52,7 @@ xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                 
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
+xr-ai-sample-agents = { path = "../agent-samples/common/shared-agents", editable = true }
 xr-ai-web-events      = { path = "../agent-sdk/xr-ai-web-events",       editable = true }
 device-io-hub          = { path = "../services/device-io-hub",             editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }

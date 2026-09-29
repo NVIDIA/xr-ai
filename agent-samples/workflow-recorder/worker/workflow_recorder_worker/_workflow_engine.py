@@ -27,7 +27,7 @@ from xr_ai_tools.tool_calling import ToolLoopError, run_tool_loop
 from xr_ai_tools.types import EmptyRequest, StrictRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult, ImageQueryTool
 from xr_ai_voice import (
-    VOICE_OUTPUT_TOPIC,
+    VOICE_CONTRIBUTION_TOPIC,
     UserQuery,
     VoiceOutput,
     VoiceParticipantJoined,
@@ -130,6 +130,30 @@ class SopEngineAgent(Agent):
             raise RuntimeError("SOP engine is already bound to another runtime")
         self._runtime = runtime
 
+    def is_connected(self, participant_id: str) -> bool:
+        return participant_id in self._connected
+
+    @staticmethod
+    def is_control(text: str) -> bool:
+        return bool(RECORDING_COMMAND.fullmatch(text) or _CONTROL.fullmatch(text))
+
+    def has_focus(self, participant_id: str) -> bool:
+        return self._recorder.is_recording(participant_id) or participant_id in self._sessions
+
+    def conversation_context(self, participant_id: str) -> str:
+        if self._recorder.is_recording(participant_id):
+            return "Workflow recording is active; narration is silent."
+        session = self._sessions.get(participant_id)
+        if session is not None:
+            return f"SOP guide {session.workflow.name[:160]} is active. Current step: {session.step.title[:160]}."
+        return "Workflow recording and approved SOP guides are available but idle."
+
+    async def interrupted(self, participant_id: str | None) -> None:
+        """Cancel foreground answers without changing recording or guide state."""
+        participants = tuple(self._turns) if participant_id is None else (participant_id,)
+        for pid in participants:
+            await self._cancel(self._turns, pid)
+
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
         self,
@@ -175,30 +199,32 @@ class SopEngineAgent(Agent):
                     await self._cancel(self._monitors, participant_id)
                     await self._recorder.start_recording(participant_id)
                     if self._recorder.is_recording(participant_id):
-                        await self._say(participant_id, "Recording started.")
+                        await self._say(participant_id, "Recording started.", turn_id=ctx.metadata.correlation_id)
                 elif self._recorder.is_recording(participant_id):
                     await self._recorder.finish_recording(participant_id)
-                    await self._say(participant_id, "Recording ended. " + _COMMAND_HELP)
+                    await self._say(
+                        participant_id, "Recording ended. " + _COMMAND_HELP, turn_id=ctx.metadata.correlation_id,
+                    )
                     self._start_monitor(participant_id)
                 return
             if self._recorder.is_recording(participant_id):
                 return
-            await self._start_answer(query, participant_id)
+            await self._start_answer(query, participant_id, turn_id=ctx.metadata.correlation_id)
 
-    async def _say(self, participant_id: str, text: str) -> None:
+    async def _say(self, participant_id: str, text: str, *, turn_id: str | None = None) -> None:
         runtime = self._runtime
         if runtime is not None and runtime.running:
             await runtime.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text=text, interrupt=True),
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(text=text, interrupt=True, kind="result", turn_id=turn_id),
                 participant_id=participant_id,
                 source="sop-engine",
             )
 
-    async def _start_answer(self, query: UserQuery, participant_id: str) -> None:
+    async def _start_answer(self, query: UserQuery, participant_id: str, *, turn_id: str | None = None) -> None:
         await self._cancel(self._turns, participant_id)
         task = asyncio.create_task(
-            self._answer(query, participant_id),
+            self._answer(query, participant_id, turn_id=turn_id),
             name=f"sop-answer:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
@@ -217,7 +243,7 @@ class SopEngineAgent(Agent):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _answer(self, query: UserQuery, participant_id: str) -> None:
+    async def _answer(self, query: UserQuery, participant_id: str, *, turn_id: str | None = None) -> None:
         try:
             response = await self._route(query.text, participant_id)
         except asyncio.CancelledError:
@@ -230,8 +256,10 @@ class SopEngineAgent(Agent):
             return
         try:
             await runtime.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(text=response, interrupt=True, timestamp_us=query.timestamp_us),
+                VOICE_CONTRIBUTION_TOPIC,
+                VoiceOutput(
+                    text=response, interrupt=True, timestamp_us=query.timestamp_us, kind="result", turn_id=turn_id,
+                ),
                 participant_id=participant_id,
                 source="sop-engine",
             )
@@ -621,7 +649,7 @@ class SopEngineAgent(Agent):
         for message in notices:
             try:
                 await runtime.publish(
-                    VOICE_OUTPUT_TOPIC,
+                    VOICE_CONTRIBUTION_TOPIC,
                     VoiceOutput(text=message),
                     participant_id=session.participant_id,
                     source="sop-engine",

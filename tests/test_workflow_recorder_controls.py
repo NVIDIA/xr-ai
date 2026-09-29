@@ -21,14 +21,17 @@ import pytest_asyncio
 from PIL import Image
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_START_TOPIC, CAPTURE_STOP_TOPIC, CAPTURE_STT_TOPIC, CAPTURE_TTS_TOPIC
-from xr_ai_models import load_models_config
+from xr_ai_models import ChatResponse, load_models_config
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_sample_agents.front_end import FRONT_END_QUERY_TOPIC, ConversationApplication, QuickConversation
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_voice import (
+    VOICE_CONTRIBUTION_TOPIC,
     VOICE_OUTPUT_TOPIC,
     VOICE_TRANSCRIPT_TOPIC,
     UserQuery,
+    VoiceAggregationAgent,
     VoiceOutput,
     VoiceParticipantJoined,
     VoiceParticipantLeft,
@@ -41,6 +44,7 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 from workflow_recorder_worker._workflow_engine import SopEngineAgent  # noqa: E402
 from workflow_recorder_worker.catalog import GuideCatalog  # noqa: E402
 from workflow_recorder_worker.config import load_config  # noqa: E402
+from workflow_recorder_worker.conversation import SopConversationFrontEnd  # noqa: E402
 from workflow_recorder_worker.events import (  # noqa: E402
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -117,14 +121,27 @@ class _Speech(Agent):
     def __init__(self):
         super().__init__()
         self.messages = []
+        self.outputs = []
+        self.contributions = []
+
+    @subscribe(VOICE_CONTRIBUTION_TOPIC)
+    async def contribution(self, message: VoiceOutput, ctx: RuntimeContext):
+        self.contributions.append(message)
 
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def output(self, message: VoiceOutput, ctx: RuntimeContext):
         self.messages.append((ctx.metadata.participant_id, message.text))
+        self.outputs.append(message)
+
+
+class _SpeechBridge(Agent):
+    @subscribe(VOICE_CONTRIBUTION_TOPIC)
+    async def deliver(self, message: VoiceOutput, ctx: RuntimeContext):
+        await ctx.publish(VOICE_OUTPUT_TOPIC, message)
 
 
 @pytest_asyncio.fixture
-async def demo(tmp_path):
+async def demo(tmp_path, request):
     catalog = GuideCatalog(tmp_path / "guides", tmp_path / "index.json", interval_s=1)
     frame = Mock()
 
@@ -179,19 +196,54 @@ async def demo(tmp_path):
     runtime.register("sop-engine", engine)
     runtime.register("speech", speech)
     engine.bind_runtime(runtime)
+    front = aggregation = None
+    llm = Mock(chat=AsyncMock(return_value=ChatResponse(
+        content="An ordinary answer.", reasoning=None, tool_calls=None, finish_reason="stop", raw={},
+    )))
+    vision = Mock()
+
+    async def visual_answer(_request):
+        yield SimpleNamespace(text="A blue cup.")
+
+    vision.stream = Mock(side_effect=visual_answer)
+    if getattr(request, "param", False):
+        aggregation = runtime.register("aggregation", VoiceAggregationAgent(
+            llm=llm, coalesce_window_s=0, minimum_playback_s=0, maximum_playback_s=0.001,
+        ))
+        front = runtime.register("conversation", SopConversationFrontEnd(
+            QuickConversation(frame, vision, llm=llm),
+            application=ConversationApplication(
+                name="sop_guide",
+                description=(_SAMPLE / "worker/workflow_recorder_worker/prompts/top_level_route.txt").read_text(),
+                query_topic=USER_QUERY_TOPIC, has_focus=engine.has_focus, context=engine.conversation_context,
+            ),
+            engine=engine, recorder=recorder, aggregation=aggregation,
+        ))
+    else:
+        runtime.register("speech-bridge", _SpeechBridge())
 
     async def publish(topic, event, pid="user"):
         await runtime.publish(topic, event, participant_id=pid, source="test")
 
     async def say(text, pid="user"):
+        before = len(speech.contributions)
         timestamp = time.time_ns() // 1000
         # VoiceAgent forwards the final STT to main's capture before publishing
         # the runtime transcript. The SOP recorder no longer subscribes to it.
         await capture_endpoint.send_return_data(DataMessage(pid, CAPTURE_STT_TOPIC, timestamp, text.encode()))
         await publish(VOICE_TRANSCRIPT_TOPIC, VoiceTranscript(text=text, timestamp_us=timestamp), pid)
-        await publish(USER_QUERY_TOPIC, UserQuery(text=text, timestamp_us=timestamp), pid)
+        await publish(
+            FRONT_END_QUERY_TOPIC if front else USER_QUERY_TOPIC, UserQuery(text=text, timestamp_us=timestamp), pid,
+        )
+        if front and (turn := front._tasks.get(pid)):
+            await turn
         if turn := engine._turns.get(pid):
             await turn
+        if aggregation:
+            turn_ids = {output.turn_id for output in speech.contributions[before:] if output.final and output.turn_id}
+            async with asyncio.timeout(2):
+                while not turn_ids.issubset({output.turn_id for output in speech.outputs if output.final}):
+                    await asyncio.sleep(0.001)
 
     async with runtime:
         try:
@@ -199,9 +251,15 @@ async def demo(tmp_path):
                 recorder=recorder, engine=engine, speech=speech.messages,
                 publish=publish, say=say, root=tmp_path / "sessions", frame=frame,
                 capture_endpoint=capture_endpoint,
+                front=front, aggregation=aggregation, llm=llm, vision=vision, catalog=catalog,
+                outputs=speech.outputs,
             )
         finally:
+            if front:
+                await front.stop()
             await engine.stop()
+            if aggregation:
+                await aggregation.stop()
             await recorder.stop()
 
 

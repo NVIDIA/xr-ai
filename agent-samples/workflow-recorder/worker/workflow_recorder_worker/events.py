@@ -6,11 +6,12 @@
 import re
 
 from xr_ai_runtime import Topic
-from xr_ai_voice import UserQuery, VoiceParticipantJoined, VoiceParticipantLeft
+from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceParticipantJoined, VoiceParticipantLeft
 
 RECORDING_COMMAND = re.compile(r"\s*(start|stop)\s+recording\s*[.!?]?\s*", re.IGNORECASE)
 
 USER_QUERY_TOPIC = Topic("workflow-recorder.user-query", UserQuery)
+INTERRUPTED_TOPIC = Topic("workflow-recorder.interrupted", VoiceInterrupted)
 PARTICIPANT_JOINED_TOPIC = Topic(
     "workflow-recorder.participant-joined",
     VoiceParticipantJoined,

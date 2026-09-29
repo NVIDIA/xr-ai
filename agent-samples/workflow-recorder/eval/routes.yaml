@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: record_start
+  query: Start recording.
+  route: control
+- name: record_stop
+  query: Stop recording!
+  route: control
+- name: list_guides
+  query: list guides
+  route: control
+- name: start_guide
+  query: start guide inspect valve
+  route: control
+- name: guide_next
+  query: next
+  route: control
+- name: guide_exit
+  query: stop guide
+  route: control
+- name: general_question
+  query: How many sides does a hexagon have?
+  route: direct
+- name: greeting
+  query: Good morning
+  route: direct
+- name: present_scene
+  query: What is in front of me right now?
+  route: current_view
+- name: present_text
+  query: Read the label on this bottle.
+  route: current_view
+- name: quoted_control
+  query: The sign says start recording. What color is the sign?
+  route: current_view
+- name: negated_recording
+  query: Do not start recording. How many minutes are in an hour?
+  route: direct
+- name: guide_capabilities
+  query: Which SOP guides can I follow?
+  route: sop_guide
+- name: recording_help
+  query: How do I record a demonstration?
+  route: sop_guide

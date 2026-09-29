@@ -23,12 +23,52 @@ agent says "Recording started." and then stays silent during recording. Say
 Command help is spoken once on connection. After each finished recording, the
 agent says "Recording ended." followed by the same command help.
 Outside recording, an active guide answers questions using its step-specific
-instructions and tools. Without an active guide, unsupported queries receive
-the original guide-command hint; there is no general chat or idle visual Q&A.
+instructions and tools. Without an active guide, the shared conversation front
+end answers ordinary questions and routes present-camera questions to streamed
+visual inference. It can also delegate SOP-specific questions to the existing
+guide engine, which retains its explicit command requirements.
 Guide responses and monitoring pause during
 recording and resume afterward. Disconnecting still finalizes an open packet.
 JPEG sampling, narration format, captioning, manual guide generation,
 and guide-step execution remain unchanged.
+
+### Conversation routing and focus
+
+The worker reuses `ConversationFrontEnd` and `QuickConversation` from
+`xr-ai-sample-agents[front-end]`. Idle turns use one top-level model decision
+with thinking disabled. Visual answers use a fresh frame, do not run the SOP
+caption prompt, and stream without a preliminary acknowledgement.
+
+Exact recording and guide commands bypass model routing. The sample serializes
+recording controls outside cancellable conversation tasks, so another utterance
+cannot cancel a pending start or finalization. Recording narration stays in the
+shared capture transcript; it produces no conversational reply and does not
+enter conversation history. Recording still confirms its start and end.
+
+An active guide holds participant-local focus: ordinary follow-up questions go
+directly to its existing step-specific agent. Recording pauses that guide;
+stopping recording resumes it. Stopping or finishing the guide releases focus.
+Interrupting speech cancels foreground answers, not recording or guide state.
+Departure clears conversation history and still finalizes any recording.
+
+The shared front end retains up to four completed conversational exchanges and
+receives a bounded, read-only SOP status projection. Explicit commands bypass
+that conversational history; the engine remains the source of guide state.
+Speech uses the shared voice aggregator with participant and turn identities.
+Guide approval, content-hash pinning, observation prompts, timer checks, and
+explicit step advancement are unchanged.
+
+The isolated route corpus checks idle routing and exact command bypass without
+executing commands. With the configured language model already running, run
+from `agent-samples/workflow-recorder/`:
+
+```bash
+uv run --project worker python eval/routes.py
+```
+
+This evaluates model routing, not audible latency or camera accuracy. The CPU
+tests separately exercise recording silence, guide focus, superseded answers,
+disconnects, and capture finalization through the composed runtime.
 
 ### Shared media capture
 
