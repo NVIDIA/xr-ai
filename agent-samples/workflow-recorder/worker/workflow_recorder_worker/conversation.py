@@ -50,6 +50,9 @@ class SopConversationFrontEnd(ConversationFrontEnd):
             await self.interrupted(participant_id)
             await self._engine.interrupted(participant_id)
             await self._aggregation.release(participant_id)
+            # Departure can run while any of the cleanup awaits are suspended.
+            if not self._engine.is_connected(participant_id):
+                return
             if control:
                 # Finalization cannot be cancelled by the next routed query.
                 await self._engine.user_query(query, ctx)
@@ -60,8 +63,10 @@ class SopConversationFrontEnd(ConversationFrontEnd):
     async def leave(self, _event: VoiceParticipantLeft, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is not None:
-            await self.participant_left(participant_id)
-            await self._aggregation.release(participant_id)
+            # Keep the same lock across reconnects and queued input deliveries.
+            async with self._input_locks.setdefault(participant_id, asyncio.Lock()):
+                await self.participant_left(participant_id)
+                await self._aggregation.release(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupt(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:

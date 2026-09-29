@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock, Mock
 
+import pytest
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_sample_agents.front_end import (
@@ -18,6 +20,7 @@ from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
     VOICE_OUTPUT_TOPIC,
     UserQuery,
+    VoiceAggregationAgent,
     VoiceOutput,
 )
 
@@ -116,6 +119,57 @@ async def _wait_until(predicate) -> None:
     async with asyncio.timeout(2):
         while not predicate():
             await asyncio.sleep(0.001)
+
+
+@pytest.mark.parametrize("wait_for_delivery", [False, True])
+async def test_failed_visual_stream_interrupts_and_remembers_only_recovery(wait_for_delivery) -> None:
+    partial_delivered = asyncio.Event()
+    outputs = []
+
+    class Speech(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+            outputs.append(output)
+            if output.text == "An unfinished visual claim":
+                partial_delivered.set()
+
+    class FailingConversation(_Conversation):
+        async def stream(self, request, participant_id, **kwargs):
+            if kwargs["decision"].tool_calls:
+                yield "An unfinished visual claim"
+                if wait_for_delivery:
+                    await partial_delivered.wait()
+                raise RuntimeError("visual inference disconnected")
+            yield "A direct answer."
+
+    runtime = AgentRuntime()
+    conversation = FailingConversation(["current_view", "direct"])
+    front = runtime.register("conversation", ConversationFrontEnd(conversation))
+    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
+        llm=Mock(chat=AsyncMock()), coalesce_window_s=0,
+        minimum_playback_s=0, maximum_playback_s=0.001,
+        # Keep the real 15-second stream timeout: recovery must not wait for it.
+    ))
+    runtime.register("speech", Speech())
+    async with runtime:
+        try:
+            await runtime.publish(
+                FRONT_END_QUERY_TOPIC, UserQuery(text="What is visible?", timestamp_us=1), participant_id="alice",
+            )
+            recovery = "I couldn't complete that request. Please try again."
+            await _wait_until(lambda: any(output.text == recovery for output in outputs))
+            await _wait_until(lambda: bool(front._history.get("alice")))
+            assert [exchange.assistant for exchange in front._history["alice"]] == [recovery]
+            assert outputs[-1].interrupt and outputs[-1].final
+            assert not front._pending and not front._spoken
+            await runtime.publish(
+                FRONT_END_QUERY_TOPIC, UserQuery(text="Try something else", timestamp_us=2), participant_id="alice",
+            )
+            await _wait_until(lambda: len(front._history["alice"]) == 2)
+            assert conversation.decisions[-1][1][-1].assistant == recovery
+        finally:
+            await front.stop()
+            await aggregation.stop()
 
 
 async def test_focused_app_bypasses_router_and_releases_on_exit() -> None:

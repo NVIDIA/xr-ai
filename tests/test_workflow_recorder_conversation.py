@@ -70,6 +70,53 @@ class TestConversationIntegration:
         assert demo.speech[-1][1] == "No valid guides are available yet."
         demo.llm.chat.assert_not_awaited()
 
+    @pytest.mark.parametrize("cleanup", ["conversation", "engine", "aggregation"])
+    async def test_departure_cannot_restart_a_suspended_dispatch(self, demo, monkeypatch, cleanup):
+        await self.connect(demo)
+        entered, resume = asyncio.Event(), asyncio.Event()
+        owner, name = {
+            "conversation": (demo.front, "interrupted"),
+            "engine": (demo.engine, "interrupted"),
+            "aggregation": (demo.aggregation, "release"),
+        }[cleanup]
+        original = getattr(owner, name)
+        calls = 0
+
+        async def blocked_cleanup(participant_id):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                entered.set()
+                await resume.wait()
+            await original(participant_id)
+
+        monkeypatch.setattr(owner, name, blocked_cleanup)
+        dispatch = asyncio.create_task(
+            demo.publish(FRONT_END_QUERY_TOPIC, UserQuery(text="Hello", timestamp_us=1)),
+            context=nemo_relay.fork_asyncio_context(),
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        departure = asyncio.create_task(
+            demo.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft()), context=nemo_relay.fork_asyncio_context(),
+        )
+        try:
+            async with asyncio.timeout(2):
+                while demo.engine.is_connected("user"):
+                    await asyncio.sleep(0)
+        finally:
+            resume.set()
+            await asyncio.wait_for(asyncio.gather(dispatch, departure), 2)
+        # Drain a wrongly-created task too, so the old implementation fails
+        # deterministically rather than escaping into fixture teardown.
+        if task := demo.front._tasks.get("user"):
+            await task
+        demo.llm.chat.assert_not_awaited()
+        assert "user" not in demo.front._tasks
+        assert not demo.front._pending and not demo.front._history and not demo.front._spoken
+        await self.connect(demo)
+        await demo.say("Hello after reconnect")
+        demo.llm.chat.assert_awaited_once()
+
     async def test_idle_app_delegation_does_not_invent_recording_commands(self, demo):
         await self.connect(demo)
         demo.llm.chat.return_value = ChatResponse(

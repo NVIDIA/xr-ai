@@ -96,6 +96,9 @@ class ConversationFrontEnd(Agent):
         key = (participant_id, output.turn_id)
         if key not in self._pending:
             return
+        if output.interrupt:
+            # A replacement result supersedes any partial answer for this turn.
+            self._spoken.pop(key, None)
         if output.text:
             self._spoken.setdefault(key, []).append(output.text)
         if not output.final:
@@ -205,6 +208,9 @@ class ConversationFrontEnd(Agent):
                 VOICE_CONTRIBUTION_TOPIC,
                 VoiceOutput(
                     text="I couldn't complete that request. Please try again.",
+                    # Preempt a failed visual stream instead of waiting for the
+                    # aggregator's idle timeout to close it as a successful result.
+                    interrupt=True,
                     timestamp_us=query.timestamp_us,
                     kind="result",
                     turn_id=turn_id,
