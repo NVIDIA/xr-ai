@@ -6,9 +6,9 @@
 # Workflow recorder prototype
 
 This sample records a connected participant's camera on request at a
-configurable sampling rate, saves final speech transcripts, and produces
+configurable sampling rate, derives user narration from shared capture transcripts, and produces
 periodic frame-linked visual captions with an Activity → Phase summary. A
-session starts with `start recording` and is finalized with `finish recording`.
+session starts with `start recording` and is finalized with `stop recording`.
 Refer to the [recording controls](https://nvidia.github.io/xr-ai/latest/reference/migrations.html#workflow-recorder-controls)
 for connection, silence, and repeat-recording behavior.
 
@@ -28,6 +28,7 @@ files before starting the sample:
 | File | Common changes |
 |---|---|
 | `yaml/workflow_recorder_worker.yaml` | Recording and caption intervals, artifact and guide directories, frame freshness, and VAD settings |
+| `yaml/media_capture.yaml` | Shared video and audio capture, output directory, and retention |
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
@@ -51,7 +52,7 @@ Run all commands from `agent-samples/workflow-recorder/`. Start the shared
 models first:
 
 ```bash
-uv run --project ../model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -69,11 +70,10 @@ uv run main.py
 ```
 
 Open the authenticated URL printed by DeviceIOHub, allow camera and microphone
-access, and connect. Say `start recording` to record and `finish recording` to
-finish. The default sampling rate is 2
-FPS and the default caption interval is five seconds; both are configured in
-`yaml/workflow_recorder_worker.yaml`. This prototype has no retention policy,
-so remove old session folders when their frame data is no longer needed.
+access, and connect. Say `start recording` to record and `stop recording` to
+finish. Refer to the
+[recording outputs](https://nvidia.github.io/xr-ai/latest/reference/migrations.html#workflow-recorder-controls)
+for the SOP packet and its associated shared media capture.
 
 To generate a guide manually, point Codex or another skill-aware coding agent
 at `skills/recording-to-guide/` and a completed session packet. The skill writes

@@ -42,7 +42,7 @@ from .recorder import RecorderAgent
 _POLL_INTERVAL_S = 0.25
 _MAX_TOOL_ROUNDS = 3
 _COMMAND_HELP = (
-    "To begin recording a workflow, say start recording, and say finish recording when you are done. "
+    "To begin recording a workflow, say start recording, and say stop recording when you are done. "
     "Say list guides, or say start guide followed by a guide ID."
 )
 _CONTROL = re.compile(

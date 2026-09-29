@@ -16,7 +16,7 @@ Apple platforms to `client-sdk-swift` 2.16.0, and native C++ to
 ## Workflow recorder controls
 
 The workflow-recorder sample no longer starts recording on connection. Say
-`start recording` to start a packet and `finish recording` to finalize it. The
+`start recording` to start a packet and `stop recording` to finalize it. The
 agent says "Recording started." and then stays silent during recording. Say
 `start recording` again to record another packet without disconnecting.
 
@@ -27,8 +27,70 @@ instructions and tools. Without an active guide, unsupported queries receive
 the original guide-command hint; there is no general chat or idle visual Q&A.
 Guide responses and monitoring pause during
 recording and resume afterward. Disconnecting still finalizes an open packet.
-Frame capture, transcripts, captions, packet format, manual guide generation,
-and guide-step execution are otherwise unchanged.
+JPEG sampling, narration format, captioning, manual guide generation,
+and guide-step execution remain unchanged.
+
+### Shared media capture
+
+The sample launches main's `device_io_capture` service in explicit, raw mode.
+Its existing voice commands invoke participant-bound `CaptureTools` start and
+stop tools; connecting alone does not record media. Model servers remain
+externally managed under `model-server-samples/model-servers`.
+
+Two complementary outputs are retained locally:
+
+- `artifacts/sessions/<session-id>/packet.json` indexes the existing SOP input:
+  JPEGs sampled at 2 FPS, narration transcripts, captions generated every five
+  seconds, and the activity and phase summary. Those defaults remain in
+  `yaml/workflow_recorder_worker.yaml`.
+- `artifacts/captures/<session-id>/<capture-bundle>/manifest.json` indexes
+  main's video, bidirectional audio, speech transcripts, and event timeline.
+  `yaml/media_capture.yaml` owns that service's sampling rate, output root, and
+  retention. The worker reads the same configuration to locate each namespace.
+
+The packet's additional `media_capture.directory` field points to its media
+namespace. Each shared capture manifest contains `sop_session_id` and
+`sop_packet` in its metadata, linking back to the SOP packet. Existing packets
+without this field remain usable for guide authoring.
+
+Main's capture transcript is the source of truth for narration. On stop, the
+sample reads the file named by the capture manifest's `transcript` field and
+exports a compatible `transcript.jsonl` beside the SOP packet. The export keeps
+`source: user` entries, excludes empty text and exact `start recording` and
+`stop recording` commands, and maps `pts_us` to `timestamp_us` and an ISO
+`timestamp`. Narration receives consecutive `transcript_id` values in source
+order; repeated utterances are preserved. Agent speech remains only in the
+original capture transcript, which is not modified.
+
+The SOP sample no longer records runtime transcript events separately. During
+recording, `narration_status` is `pending` and the packet's transcript count is
+zero. The derived narration file and final count become available at
+finalization. An empty successful recording produces an empty narration file.
+Missing or malformed source transcripts produce `narration_status: failed`
+and `status: incomplete`, with details in `errors.jsonl`. Readable narration
+from an incomplete media bundle is retained with `narration_status: incomplete`.
+
+Shared capture finalization is asynchronous. After sending stop, the sample
+waits up to ten seconds for the capture manifest before announcing that
+recording ended. This lets the previous capture finish before another starts.
+The packet's `media_capture.control_status` records `start_requested` during
+recording and `complete` only after reading a complete capture manifest;
+`media_capture.manifest` then identifies that file. `start_failed` and
+`stop_failed` indicate a local command-send failure, while
+`finalization_failed` indicates a timeout, unreadable manifest, or incomplete
+capture. Those failures are logged, and finalization errors are also saved in
+the packet's `errors.jsonl`; they do not discard its images and captions. If
+no finalized transcript is available, the SOP packet is marked incomplete.
+If finalization times out, inspect the capture service log and its eventual
+manifest before starting another recording. Disconnect and service shutdown
+also finalize media.
+
+Raw capture requires NVENC but does not require FFmpeg. Neither raw capture
+nor SOP packet creation automatically generates a guide. The existing
+recording-to-guide authoring skill still consumes the packet and its JPEGs.
+All guides, packets, and media bundles remain local and gitignored. Automatic
+media retention is disabled in this sample so source evidence is not removed
+while an SOP packet still refers to it; remove unwanted recordings manually.
 
 ## DeviceIOHub rename
 

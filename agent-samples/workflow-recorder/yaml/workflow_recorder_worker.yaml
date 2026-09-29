@@ -3,6 +3,8 @@
 
 models_config: models.json
 voice_gate_yaml: voice_gate.yaml
+# Same capture configuration used by the launcher; its out_dir locates media bundles.
+media_capture_config: media_capture.yaml
 
 # Paths resolve relative to this YAML file.
 artifacts_dir: ../artifacts

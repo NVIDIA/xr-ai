@@ -8,7 +8,7 @@ import re
 from xr_ai_runtime import Topic
 from xr_ai_voice import UserQuery, VoiceParticipantJoined, VoiceParticipantLeft
 
-RECORDING_COMMAND = re.compile(r"\s*(start|finish)\s+recording\s*[.!?]?\s*", re.IGNORECASE)
+RECORDING_COMMAND = re.compile(r"\s*(start|stop)\s+recording\s*[.!?]?\s*", re.IGNORECASE)
 
 USER_QUERY_TOPIC = Topic("workflow-recorder.user-query", UserQuery)
 PARTICIPANT_JOINED_TOPIC = Topic(

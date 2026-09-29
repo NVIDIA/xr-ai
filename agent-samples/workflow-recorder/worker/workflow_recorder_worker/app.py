@@ -55,6 +55,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     recorder = RecorderAgent(
         sessions_dir=config.artifacts_dir / "sessions",
+        capture_endpoint=transport.endpoint,
+        media_capture_dir=config.media_capture_dir,
         current_frame=current_frame,
         images=images,
         query_image=query_image,

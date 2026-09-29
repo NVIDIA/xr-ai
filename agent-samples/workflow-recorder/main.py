@@ -18,28 +18,10 @@ PROCESSES = [
         config="yaml/device_io_hub.yaml",
     ),
     Process(
-        "stt",
-        "../../services/stt-server",
-        "stt_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "omni",
-        "../../services/nemotron-omni-llm",
-        "nemotron_omni_llm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "vlm",
-        "../../services/vlm-server",
-        "vlm_server",
-        launch_mode="reuse",
-    ),
-    Process(
-        "tts",
-        "../../services/pocket-tts",
-        "pocket_tts_server",
-        launch_mode="reuse",
+        "capture",
+        "../../services/device-io-hub",
+        "device_io_capture",
+        config="yaml/media_capture.yaml",
     ),
     Process(
         "worker",

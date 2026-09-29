@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+hub_sub_addr: ipc:///tmp/xr_hub_pub
+hub_push_addr: ipc:///tmp/xr_hub_in
+
+# Relative to this YAML. Each SOP packet owns a namespace beneath this root.
+out_dir: ../artifacts/captures
+profile: raw
+# Record only between the sample's start recording and stop recording commands.
+session_mode: explicit
+
+# Shared video capture is independent of the SOP's 2 FPS JPEG sampling.
+sample_fps: 30.0
+bitrate: 6000000
+gpu_id: 0
+frame_queue_size: 2
+encoder_workers: 2
+audio_sample_rate: 48000
+
+# Preserve source evidence until the user removes it, like the SOP packets.
+max_total_bytes: 0

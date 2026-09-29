@@ -20,6 +20,7 @@ class WorkerConfig:
     voice_gate_yaml: Path
     artifacts_dir: Path
     guides_dir: Path
+    media_capture_dir: Path
     caption_prompt: str
     capture_fps: float
     caption_interval_s: float
@@ -33,7 +34,7 @@ class WorkerConfig:
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
-    path = Path(raw)
+    path = Path(raw).expanduser()
     if config_path is not None and not path.is_absolute():
         path = config_path.parent / path
     return path.resolve()
@@ -55,11 +56,17 @@ def load_config(path: Path | None) -> WorkerConfig:
         data = loaded
     idle_timeout = float(data.get("idle_timeout_secs", 0))
     prompt_path = _PACKAGE / "prompts" / "caption.txt"
+    capture_path = _resolve(path, str(data.get("media_capture_config", "media_capture.yaml")))
+    capture = yaml.safe_load(capture_path.read_text(encoding="utf-8"))
+    if not isinstance(capture, dict) or capture.get("session_mode") != "explicit":
+        raise ValueError("workflow recorder requires explicit media capture sessions")
+    capture_dir = _resolve(capture_path, str(capture["out_dir"]))
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.json"))),
         voice_gate_yaml=_resolve(path, str(data.get("voice_gate_yaml", "voice_gate.yaml"))),
         artifacts_dir=_resolve(path, str(data.get("artifacts_dir", "../artifacts"))),
         guides_dir=_resolve(path, str(data.get("guides_dir", "../guides"))),
+        media_capture_dir=capture_dir,
         caption_prompt=str(data.get("caption_prompt") or prompt_path.read_text(encoding="utf-8")).strip(),
         capture_fps=_positive(data, "capture_fps", 2.0),
         caption_interval_s=_positive(data, "caption_interval_s", 5.0),
