@@ -500,12 +500,30 @@ no finalized transcript is available, the SOP packet is marked incomplete.
 If finalization times out, inspect the capture service log and its eventual
 manifest before starting another recording. Disconnect and service shutdown
 also finalize media.</p>
+<p>Recorder shutdown retains and drains in-progress finalization even if the
+request or disconnect handler is cancelled. Outstanding filesystem operations
+finish before the final packet and summary are written.</p>
 <p>Raw capture requires NVENC but does not require FFmpeg. Neither raw capture
 nor SOP packet creation automatically generates a guide. The existing
 recording-to-guide authoring skill still consumes the packet and its JPEGs.
 All guides, packets, and media bundles remain local and gitignored. Automatic
 media retention is disabled in this sample so source evidence is not removed
 while an SOP packet still refers to it; remove unwanted recordings manually.</p>
+</section>
+<section id="guide-validation-and-snapshots">
+<h3>Guide validation and snapshots<a class="headerlink" href="#guide-validation-and-snapshots" title="Link to this heading">#</a></h3>
+<p>Guide loading validates trigger arguments against the same request models used
+at execution. <code class="docutils literal notranslate"><span class="pre">current_view</span></code> requires a question of 1 to 500 characters and
+accepts no result selector other than <code class="docutils literal notranslate"><span class="pre">text</span></code>. <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> requires positive
+integer <code class="docutils literal notranslate"><span class="pre">started_at_us</span></code> and <code class="docutils literal notranslate"><span class="pre">duration_s</span></code> arguments; its optional result selector
+is <code class="docutils literal notranslate"><span class="pre">elapsed_s</span></code>, <code class="docutils literal notranslate"><span class="pre">remaining_s</span></code>, or <code class="docutils literal notranslate"><span class="pre">expired</span></code>. Unknown arguments are rejected.
+State references must name a declared, visible field of the required type;
+their actual values are validated when the trigger executes. Trigger intervals
+must be finite and positive. Invalid guides remain visible as invalid catalog
+entries and cannot start.</p>
+<p>Each catalog generation hashes and parses the same captured file contents.
+Edits discovered afterward produce a new generation and do not change the
+guide or approval status pinned to a running session.</p>
 </section>
 </section>
 <section id="deviceiohub-rename">
@@ -745,6 +763,7 @@ reuse the ignored caches rather than downloading them again.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-recorder-controls">Workflow recorder controls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-media-capture">Shared media capture</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#guide-validation-and-snapshots">Guide validation and snapshots</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
