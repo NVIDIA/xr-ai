@@ -4,10 +4,10 @@
 name: lock-check
 
 # Runs `uv lock` on every repository-owned pyproject.toml outside `apps/` to
-# prove that each project's declared dependencies resolve across the full
-# `requires-python` range stated in that pyproject. uv resolves universally
-# across the range, so a single `uv lock` per project covers every supported
-# interpreter without needing a Python-version matrix here.
+# prove that each project's declared dependency constraints resolve across the
+# full `requires-python` range stated in that pyproject. uv resolves universally
+# across the range, so a single `uv lock` checks constraint consistency without
+# installing an artifact for every interpreter and platform.
 #
 # The root uv.toml limits package-index candidates to the last repository-wide
 # qualification point. This is the repo-wide check on Python-version +
