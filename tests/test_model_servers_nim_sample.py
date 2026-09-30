@@ -39,7 +39,13 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
             assert process.project == "../../services/magpie-nim-tts"
             assert process.command == "magpie_nim_tts"
     assert len({process.port for process in processes}) == len(processes)
-    assert [p.name for p in processes][-4:] == ["llm-nim", "llm-adapter", "vlm-nim", "vlm-adapter"]
+    assert [p.name for p in processes][-5:] == [
+        "llm-nim", "llm-adapter", "vlm-nim", "vlm-adapter", "ocr-nim",
+    ]
+    names = [p.name for p in processes]
+    for adapter, backend in sample._BACKENDS.items():
+        if adapter in names:
+            assert names.index(backend) < names.index(adapter)
     expected_credentials = {"NGC_API_KEY", "HF_TOKEN"} if hardware == "spark" else {"NGC_API_KEY"}
     assert set(credentials) == expected_credentials
     assert all((BASE / p.project / "pyproject.toml").is_file() for p in processes)

@@ -50,15 +50,16 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
+@pytest.mark.parametrize("hardware", ["96G_blackwell", "dual_48G_ada", "spark"])
+def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, hardware: str) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: hardware)
 
     processes, credentials = _model_servers._build_processes("default")
 
     assert [process.name for process in processes] == [
-        "stt", "tts", "ocr", "omni", "vlm", "embedding",
+        "stt", "tts", "omni", "vlm", "embedding", "ocr",
     ]
-    assert [process.port for process in processes] == [8103, 8105, 8112, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109, 8112]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -128,17 +129,18 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
     }
 
 
+@pytest.mark.parametrize("hardware", ["96G_blackwell", "dual_48G_ada", "spark"])
 def test_nim_profile_mixes_nim_containers_and_local_servers(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, hardware: str,
 ) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: hardware)
 
     processes, credentials = _model_servers._build_processes("vlm_llm_nim")
 
     assert [process.name for process in processes] == [
-        "llm-nim", "vlm-nim", "stt", "tts", "ocr", "embedding",
+        "llm-nim", "vlm-nim", "stt", "tts", "embedding", "ocr",
     ]
-    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8112, 8109]
+    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8109, 8112]
     assert credentials == ("NGC_API_KEY",)
 
 

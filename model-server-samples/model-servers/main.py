@@ -15,10 +15,10 @@ containers. Shipped profiles (yaml/models.<name>.json):
   default
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
     tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
-    ocr        — Nemotron OCR v2 multilingual       port 8112  (Hugging Face)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
+    ocr        — Nemotron OCR v2 multilingual       port 8112  (Hugging Face)
 
   vlm_llm_nim
     stt + tts + ocr + embedding local; the LLM and VLM as self-hosted NIM containers
@@ -78,6 +78,7 @@ def _gpu_profile_name(value: str) -> str:
 # VRAM while LLM/VLM NIMs grab most of their GPU's free VRAM for KV cache);
 # agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
+# OCR is the smallest checkpoint and starts last, after embeddings.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server"),
     "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server"),
@@ -85,7 +86,6 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
-    "ocr":       ("../../services/ocr-server", "ocr_server", "ocr_server"),
     "agent-llm": (
         "../../services/nemotron3-nano-llm",
         "nemotron3_nano_llm_server",
@@ -102,6 +102,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "embedding_server",
         "embedding_server",
     ),
+    "ocr":       ("../../services/ocr-server", "ocr_server", "ocr_server"),
 }
 
 

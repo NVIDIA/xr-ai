@@ -24,8 +24,9 @@ from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 
 _BASE = Path(__file__).resolve().parent
 
-# Fixed-size services start before the two language models so their runtime
-# allocations are visible to the language models' memory profilers.
+# Speech and embedding services start before the two language models so their
+# runtime allocations are visible to the language models' memory profilers.
+# OCR is the smallest checkpoint and starts last.
 _SERVICES = {
     "stt": ("../../services/stt-server", "stt_server", "stt_server.yaml"),
     "stt-nim": ("riva-server", "nim_riva_server", "nim_stt_server.yaml"),
@@ -36,11 +37,11 @@ _SERVICES = {
         "../../services/nim-server", "nim_server", "nim_embedding_server.yaml",
     ),
     "embedding": ("compatibility-adapter", "nim_model_adapter", "embedding_adapter.yaml"),
-    "ocr-nim": ("../../services/nim-server", "nim_server", "nim_ocr_server.yaml"),
     "llm-nim": ("../../services/nim-server", "nim_server", "nim_llm_server.yaml"),
     "llm-adapter": ("compatibility-adapter", "nim_model_adapter", "llm_adapter.yaml"),
     "vlm-nim": ("../../services/nim-server", "nim_server", "nim_vlm_server.yaml"),
     "vlm-adapter": ("compatibility-adapter", "nim_model_adapter", "vlm_adapter.yaml"),
+    "ocr-nim": ("../../services/nim-server", "nim_server", "nim_ocr_server.yaml"),
 }
 _BACKENDS = {
     "stt-adapter": "stt-nim", "tts-adapter": "tts-nim",
