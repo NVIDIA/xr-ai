@@ -443,8 +443,11 @@ projection. Its leaf-tool instructions and examples remain inside the
 application. Adding a leaf tool must not require an edit to the front-end
 prompt. A registration may contribute brief routing examples, but those
 examples remain owned beside the application.</p>
-<p>When no application holds focus, the front end may answer locally, inspect the
-current view, or delegate one turn to an application. A stateless application
+<p>When no application holds focus, the first tier only selects a destination; it
+does not speak. The generic conversation agent then answers directly or inspects
+the current view. If the request needs application work, it sends a brief,
+generic handback to the first-tier router, which chooses the application. The
+conversation agent does not see or select from the application catalog. A stateless application
 returns control after that turn; the next utterance is routed again. An
 application may instead claim focus for a participant. While it holds focus,
 ordinary utterances go directly to it without another top-level model call.
@@ -464,8 +467,9 @@ sample-owned inner prompts or tool ownership.</p>
 <section id="conversation-and-voice">
 <h2>Conversation and voice<a class="headerlink" href="#conversation-and-voice" title="Link to this heading">#</a></h2>
 <p>The front end keeps the spoken conversation across generic and application
-turns. The generic capability receives recent turns and a small application
-context projection so follow-up questions remain meaningful without exposing
+turns. The router receives recent turns and a small application context
+projection to resolve references. The generic capability also receives recent
+turns and that projection so follow-up questions remain meaningful without exposing
 an application’s private tool catalog. Context describes facts the application
 is willing to share; it is not an instruction to the generic capability and
 cannot authorize an application action. Current visual questions still require
@@ -488,7 +492,7 @@ and multiple participants. Measure time to first audible response as well as
 routing accuracy and total completion time. Compare the same corpus with Nano
 Omni and Lightning, including bounded thinking where it improves the
 accuracy-latency tradeoff. Keep held-out cases separate from prompt tuning.</p>
-<p>The isolated first-tier corpus lives in <code class="docutils literal notranslate"><span class="pre">agent-samples/common/shared-agents/eval/</span></code>.
+<p>The isolated hierarchical-routing corpus lives in <code class="docutils literal notranslate"><span class="pre">agent-samples/common/shared-agents/eval/</span></code>.
 From the repository root, with the shared language endpoint already serving,
 run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/common/shared-agents<span class="w"> </span>--with<span class="w"> </span>pyyaml<span class="w"> </span><span class="se">\</span>
@@ -504,7 +508,7 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p>The synthetic corpus registers several imaginary applications at once. It
 checks overlapping domains, contextual follow-ups, and whether underspecified
 requests get a clarification question rather than an arbitrary delegation.
-These checks measure idle-turn decisions and model-call latency. Focus capture,
+These checks measure idle-turn decisions and decision latency. Focus capture,
 release, participant isolation, and spoken-result history are covered by
 <code class="docutils literal notranslate"><span class="pre">tests/test_sample_front_end.py</span></code>; neither layer replaces live audio and
 application-effect checks.</p>
