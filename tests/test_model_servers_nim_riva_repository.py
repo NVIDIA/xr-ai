@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,13 @@ SPEC = importlib.util.spec_from_file_location("sample_riva_server", BASE / "riva
 assert SPEC and SPEC.loader
 server = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(server)
+
+
+def test_riva_launcher_declares_yaml_dependency():
+    # The test environment also provides PyYAML, masking missing launcher dependencies.
+    project = tomllib.loads((BASE / "riva-server/pyproject.toml").read_text())
+    assert "pyyaml>=6.0" in project["project"]["dependencies"]
+
 
 _FAKE_NIM = r"""
 import gzip, io, json, os, tarfile, time
