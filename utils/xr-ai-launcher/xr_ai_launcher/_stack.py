@@ -33,7 +33,9 @@ the IPC socket connects, after the HTTP server starts listening, etc.
 """
 from __future__ import annotations
 
+import argparse
 import glob
+import json
 import logging
 import os
 import re
@@ -46,9 +48,10 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Callable, Sequence, Union
 
 from ._credentials import load_credentials
+from ._preflight import _flatten, preflight
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -96,8 +99,8 @@ class Process:
     port:                int | None = None
     """Optional service port metadata.
 
-    The launcher stores but does not inspect this value or stop persistent
-    services by port.
+    Dependency preflight inspects this port when a requirements contract is
+    present. The launcher does not stop persistent services by port.
     """
 
     quiet_native_output: bool = False
@@ -106,6 +109,9 @@ class Process:
     Use this for processes that interleave native C/C++ output with Python
     loguru records. All output remains available in the per-process log file.
     """
+
+    prepare: bool = False
+    """Run this service's ``--prepare`` mode before starting the stack."""
 
 
 @dataclass(frozen=True)
@@ -204,9 +210,10 @@ def _strip_conflicting_cudnn(ld_library_path: str | None) -> tuple[str | None, l
 def _spawn(
     proc: Process,
     base: Path,
-    ready_file: Path,
+    ready_file: Path | None,
     *,
     ready_process_may_exit: bool = False,
+    prepare: bool = False,
 ) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
@@ -218,7 +225,7 @@ def _spawn(
 
     if proc.config is not None:
         cmd += ["--config", str((base / proc.config).resolve())]
-    cmd += ["--ready-file", str(ready_file)]
+    cmd += ["--prepare"] if prepare else ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     # The child can record this launcher's dedicated session without creating
@@ -252,8 +259,11 @@ def _spawn(
     # start_new_session=True puts uv + its children (e.g. device_io_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
     # processes don't survive as orphans when uv exits without forwarding signals.
-    p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    output = None if prepare else subprocess.PIPE
+    p = subprocess.Popen(cmd, env=env, stdout=output, stderr=output,
                          start_new_session=True)
+    if prepare:
+        return p
     prefix = f"[{proc.name}]"
     for stream in (p.stdout, p.stderr):
         threading.Thread(
@@ -417,11 +427,23 @@ def _print_ready_banner(names: list[str]) -> None:
 
 # ── public API ─────────────────────────────────────────────────────────────────
 
+def add_launch_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add dependency checking and artifact preparation flags to *parser*."""
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--check", action="store_true", help="Check dependencies and exit.")
+    modes.add_argument("--prepare", action="store_true", help="Prepare artifacts and exit.")
+    parser.add_argument("--json", action="store_true", help="Print --check results as JSON.")
+
+
 def run_stack(
     processes: Sequence[Union[Process, Parallel]],
     base: Path,
     *,
     exit_after_ready: bool = False,
+    options: argparse.Namespace | None = None,
+    credentials: Sequence[str] = (),
+    prepare_sample: Callable[[], None] | None = None,
+    before_launch: Callable[[], None] | None = None,
 ) -> None:
     """
     Start *processes* in declaration order, waiting for each item to signal
@@ -435,6 +457,17 @@ def run_stack(
     it must ``Path(ready_file).touch()`` to signal the launcher.  Progress
     is printed every five seconds so model-loading or CloudXR start-up
     remains visible.
+
+    Dependencies are checked before opted-in services prepare their artifacts.
+    *options* carries flags from :func:`add_launch_arguments`; ``None`` means
+    normal launch. ``--check`` returns after reporting, and ``--prepare`` returns
+    after preparation. *credentials* names additional required environment
+    variables. *prepare_sample* prepares sample-owned artifacts. For normal
+    startup, *before_launch* runs after checks and before preparation so callers
+    can free resources held by unselected services. ``--check`` and ``--prepare``
+    skip it.
+    A failed check exits 1, ``--json`` alone exits 2, and interrupted preparation
+    exits 130.
 
     After all processes are ready the launcher monitors them: if any exits,
     all others are terminated and the launcher exits.  Pass
@@ -462,13 +495,55 @@ def run_stack(
             run_stack(PROCESSES, _BASE)
     """
     load_credentials()
+    checking = bool(getattr(options, "check", False))
+    preparing = bool(getattr(options, "prepare", False))
+    as_json = bool(getattr(options, "json", False))
+    if as_json and not checking:
+        print("--json requires --check", file=sys.stderr)
+        raise SystemExit(2)
+    checks = preflight(processes, base, credentials=credentials, runtime=not preparing)
+    if as_json:
+        print(json.dumps(checks))
+    else:
+        for result in checks:
+            if checking or not result["ok"]:
+                print(f"[{'ok' if result['ok'] else 'FAIL'}] {result['name']}: "
+                      f"{result['detected']}; required: {result['required']}"
+                      + (f"; fix: {result['remediation']}" if not result['ok'] else ""))
+    if any(not result["ok"] for result in checks):
+        raise SystemExit(1)
+    if checking:
+        return
+    if before_launch is not None and not preparing:
+        before_launch()
+    flat = _flatten(processes)
+    original_term = signal.signal(signal.SIGTERM, signal.default_int_handler)
+    try:
+        for proc in flat:
+            if not proc.prepare or proc.launch_mode == "reuse":
+                continue
+            print(f"[{proc.name}] Preparing artifacts", flush=True)
+            child = _spawn(proc, base, None, prepare=True)
+            try:
+                if child.wait() != 0:
+                    raise SystemExit(f"{proc.name}: preparation failed; see output above")
+            finally:
+                _shutdown({proc.name: child})
+        if prepare_sample is not None:
+            prepare_sample()
+    except KeyboardInterrupt:
+        print("\nAborting preparation.", flush=True)
+        raise SystemExit(130) from None
+    finally:
+        signal.signal(signal.SIGTERM, original_term)
+    if preparing:
+        return
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.
     _no_kill: set[str] = {
         p.name
-        for item in processes
-        for p in (item.processes if isinstance(item, Parallel) else [item])
+        for p in flat
         if p.launch_mode in ("persist", "reuse")
     }
 

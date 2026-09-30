@@ -400,7 +400,6 @@ def test_cli_selects_requested_profile(
 ) -> None:
     selected: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
@@ -417,7 +416,6 @@ def test_cli_selects_requested_profile(
 def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     selected: list[tuple[str, str | None]] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers,
@@ -478,11 +476,16 @@ def test_selected_service_config_must_declare_http_port(
         _model_servers._build_processes(str(profile), "custom")
 
 
-def test_cli_reports_gpu_inventory_error_without_traceback(
+@pytest.mark.parametrize(("failure", "gpu_advice"), [
+    (_model_servers.GPUInventoryError("GPU memory telemetry unavailable"), True),
+    (ValueError("unknown model profile"), False),
+])
+def test_cli_reports_configuration_error_without_traceback(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    failure: Exception, gpu_advice: bool,
 ) -> None:
     def fail_inventory(*_args, **_kwargs):
-        raise _model_servers.GPUInventoryError("GPU memory telemetry unavailable")
+        raise failure
 
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_build_processes", fail_inventory)
@@ -493,8 +496,8 @@ def test_cli_reports_gpu_inventory_error_without_traceback(
 
     assert error.value.code == 2
     stderr = capsys.readouterr().err
-    assert "model_servers: error: GPU memory telemetry unavailable" in stderr
-    assert "--gpu-profile NAME" in stderr
+    assert str(failure) in stderr
+    assert ("Use --gpu-profile NAME" in stderr) is gpu_advice
     assert "Traceback" not in stderr
 
 
@@ -531,24 +534,35 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
     )
 
 
-def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    required: list[str] = []
+@pytest.mark.parametrize(("ownership", "arguments", "expected"), [
+    ("external", [], [((), ("NGC_API_KEY",))]),
+    ("managed", ["--gpu-profile", "spark"], [(("vlm",), ("NGC_API_KEY", "HF_TOKEN"))]),
+    ("managed", ["--gpu-profile", "spark", "--allow-anonymous"],
+     ["HF_TOKEN", (("vlm",), ("NGC_API_KEY",))]),
+])
+def test_profile_credentials_skip_gpu_and_hf_when_not_needed(
+    tmp_path, monkeypatch, ownership, arguments, expected,
+) -> None:
+    profile = tmp_path / "hosted.json"
+    profile.write_text(json.dumps({"models": {"vision": {
+        "adapter": {"preset": "cosmos_vlm"},
+        "endpoint": {"base_url": "https://example.com/v1"},
+        "deployment": {"ownership": ownership, "service": "vlm",
+                       "credentials": ["NGC_API_KEY"]},
+    }}}), encoding="utf-8")
+    seen = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "warn_if_missing", seen.append)
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: pytest.fail("GPU detection"))
     monkeypatch.setattr(
-        _model_servers, "require_credentials",
-        lambda name, **kw: required.append(name),
+        _model_servers, "run_stack",
+        lambda processes, *_a, **kwargs: seen.append(
+            (tuple(process.name for process in processes), kwargs["credentials"]),
+        ),
     )
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
-    monkeypatch.setattr(
-        _model_servers, "_build_processes",
-        lambda _selection, _gpu_profile=None: ([], ("NGC_API_KEY",)),
-    )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
-
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", str(profile), *arguments])
     _model_servers.run()
-
-    assert required == ["HF_TOKEN", "NGC_API_KEY"]
+    assert seen == expected
 
 
 def test_cli_aborts_when_unselected_services_cannot_stop(
@@ -556,13 +570,16 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
 ) -> None:
     started: list[bool] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda _selection, _gpu_profile=None: ([], ()),
     )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
+    def run_stack(*_args, before_launch, **_kwargs):
+        before_launch()
+        started.append(True)
+
+    monkeypatch.setattr(_model_servers, "run_stack", run_stack)
     monkeypatch.setattr(sys, "argv", ["model_servers"])
 
     with pytest.raises(RuntimeError, match="could not stop persistent servers"):

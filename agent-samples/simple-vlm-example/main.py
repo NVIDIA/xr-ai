@@ -27,7 +27,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from xr_ai_launcher import Process, run_stack
+from xr_ai_launcher import Process, add_launch_arguments, run_stack
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -52,6 +52,7 @@ def _parser() -> argparse.ArgumentParser:
             "traffic"
         ),
     )
+    add_launch_arguments(parser)
     return parser
 
 
@@ -66,6 +67,7 @@ def _build_processes(*, capture: bool = False) -> list[Process]:
             "../../services/device-io-hub",
             "device_io_hub",
             config="yaml/device_io_hub.yaml",
+            prepare=True,
         ),
         Process(
             "worker",
@@ -85,7 +87,7 @@ PROCESSES = _build_processes()
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="simple-vlm-example")
-    run_stack(_build_processes(capture=args.capture), _BASE)
+    run_stack(_build_processes(capture=args.capture), _BASE, options=args)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def build_nim_run_argv(
     nim_cache: Path,
     cuda_visible_devices: str | None,
     extra_env: dict[str, str] | None,
+    prepare: bool = False,
 ) -> list[str]:
     """Build the foreground ``docker run …`` argv for a NIM container.
 
@@ -41,35 +43,40 @@ def build_nim_run_argv(
     argv builder, this uses bridge networking with explicit ``-p`` maps (see
     the inline comment); the port label and ``--runtime nvidia`` choices do
     mirror it. ``NGC_API_KEY`` is passed by name only, so the value stays off
-    the ps-visible argv; docker reads it from the wrapper's environment.
+    the ps-visible argv; docker reads it from the wrapper's environment. With
+    *prepare*, the container is ephemeral and has no name, labels, or published
+    ports so its caller can run a preparation entrypoint without serving.
     """
     argv: list[str] = ["docker", "run"]
-    argv += ["--name", container_name]
-    argv += ["--label", f"xr-ai-vllm.port={http_port}"]
-    # serve_nim exports NGC_API_KEY before building the argv; a rotated key
-    # must change the launch contract or a stopped container restarts with
-    # the expired key baked into its creation-time env.
-    fingerprint = _docker.launch_fingerprint({
-        "image": image,
-        "http_port": http_port,
-        "grpc_port": grpc_port,
-        "nim_cache": str(nim_cache),
-        "cuda_visible_devices": cuda_visible_devices,
-        "extra_env": extra_env or {},
-        "ngc_api_key_digest": _docker.credential_digest(
-            os.environ.get("NGC_API_KEY")
-        ),
-    })
-    argv += ["--label", f"{_docker._CONFIG_LABEL}={fingerprint}"]
+    if prepare:
+        argv.extend(["--rm", "--init"])
+    else:
+        argv += ["--name", container_name]
+        argv += ["--label", f"xr-ai-vllm.port={http_port}"]
+        # serve_nim exports NGC_API_KEY before building the argv; a rotated key
+        # must change the launch contract or a stopped container restarts with
+        # the expired key baked into its creation-time env.
+        fingerprint = _docker.launch_fingerprint({
+            "image": image,
+            "http_port": http_port,
+            "grpc_port": grpc_port,
+            "nim_cache": str(nim_cache),
+            "cuda_visible_devices": cuda_visible_devices,
+            "extra_env": extra_env or {},
+            "ngc_api_key_digest": _docker.credential_digest(
+                os.environ.get("NGC_API_KEY")
+            ),
+        })
+        argv += ["--label", f"{_docker._CONFIG_LABEL}={fingerprint}"]
     # Bridge networking with explicit -p maps to each family's documented
     # internal defaults. Env-var port overrides (NIM_HTTP_API_PORT) are
     # honored inconsistently across NIM images, and host networking makes the
     # image's internal default collide with whatever already owns that host
     # port.
-    if grpc_port is not None:
+    if not prepare and grpc_port is not None:
         # Riva speech NIM: gRPC on 50051, HTTP (health) on 9000.
         argv += ["-p", f"{grpc_port}:50051", "-p", f"{http_port}:9000"]
-    else:
+    elif not prepare:
         # LLM/VLM NIM: OpenAI API on 8000.
         argv += ["-p", f"{http_port}:8000"]
     argv += ["--ipc", "host"]
@@ -108,12 +115,16 @@ def serve_nim(
     cuda_visible_devices: str | None = None,
     extra_env: dict[str, str] | None = None,
     ready_file: Path | None = None,
+    prepare: bool = False,
 ) -> None:
     """Pull (if needed) and run a NIM container, blocking until stopped.
 
     Readiness is ``/v1/health/ready`` on *http_port*. First start includes
     the NGC engine download (multi-GB), so expect a long cold start; the
     mounted *nim_cache* makes subsequent starts fast.
+
+    When *prepare* is true, run the image's ``download-to-cache`` utility and
+    return without starting its server.
     """
     ngc_api_key = os.environ.get("NGC_API_KEY", "").strip()
     if not ngc_api_key:
@@ -157,7 +168,13 @@ def serve_nim(
         nim_cache=nim_cache,
         cuda_visible_devices=cuda_visible_devices,
         extra_env=extra_env,
+        prepare=prepare,
     )
+    if prepare:
+        argv[-1:-1] = ["--entrypoint", "download-to-cache"]
+        _docker._maybe_ngc_login(image)
+        subprocess.run(argv, check=True)
+        return
     _docker.run_container(
         argv=argv,
         image=image,

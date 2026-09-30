@@ -162,6 +162,7 @@ def run() -> None:
     command = json.loads(env.pop("XR_AI_RIVA_COMMAND"))
     contract = json.loads(env.pop("XR_AI_RIVA_CONTRACT"))
     env.pop("XR_AI_RIVA_BOOTSTRAP", None)
+    prepare_only = env.pop("XR_AI_RIVA_PREPARE_ONLY", "") == "1"
     gpu = subprocess.check_output([
         "nvidia-smi", "--query-gpu=name,compute_cap,driver_version", "--format=csv,noheader,nounits",
     ], text=True).strip()
@@ -171,6 +172,9 @@ def run() -> None:
     repository = prepare_repository(
         Path(env["NIM_CACHE_PATH"]) / "riva-repositories", contract, command, env,
     )
+    if prepare_only:
+        print(f"[riva-cache] Prepared compiled repository {repository}", flush=True)
+        return
     # Build and serve share a container, but must not share a workspace: an
     # RMIR left in the serving workspace forces riva-deploy -f to run again.
     env.update(NIM_WORKSPACE=tempfile.mkdtemp(prefix="riva-serve-"),

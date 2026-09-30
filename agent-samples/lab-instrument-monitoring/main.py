@@ -12,7 +12,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from xr_ai_launcher import Process, read_config_scalar, run_stack
+from xr_ai_launcher import Process, add_launch_arguments, read_config_scalar, run_stack
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -30,6 +30,7 @@ def _parser() -> argparse.ArgumentParser:
             "instead of loopback"
         ),
     )
+    add_launch_arguments(parser)
     return parser
 
 
@@ -87,6 +88,7 @@ def _build_processes(worker_config: Path = _WORKER_CONFIG) -> list[Process]:
             "../../services/device-io-hub",
             "device_io_hub",
             config="yaml/device_io_hub.yaml",
+            prepare=True,
         ),
         Process(
             "worker",
@@ -105,7 +107,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config), _BASE)
+        run_stack(_build_processes(worker_config), _BASE, options=args)
 
 
 if __name__ == "__main__":

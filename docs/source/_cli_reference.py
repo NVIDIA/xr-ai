@@ -188,6 +188,9 @@ def load_cli_catalog(repository_root: Path) -> tuple[CliCommand, ...]:
     """Discover installed commands from top-level sample projects without imports."""
 
     commands: list[CliCommand] = []
+    launch_arguments = _extract_arguments(
+        repository_root / "utils/xr-ai-launcher/xr_ai_launcher/_stack.py"
+    )
     project_paths = sorted(
         path
         for category in ("agent-samples", "model-server-samples")
@@ -204,12 +207,16 @@ def load_cli_catalog(repository_root: Path) -> tuple[CliCommand, ...]:
             tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
             module_doc = ast.get_docstring(tree, clean=True) or ""
             description = module_doc.splitlines()[0] if module_doc else program
+            arguments = _extract_arguments(module_path)
+            if any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                   and node.func.id == "add_launch_arguments" for node in ast.walk(tree)):
+                arguments += launch_arguments
             commands.append(
                 CliCommand(
                     program=program,
                     project_dir=project_path.parent.relative_to(repository_root),
                     description=description,
-                    arguments=_extract_arguments(module_path),
+                    arguments=arguments,
                 )
             )
     return tuple(commands)

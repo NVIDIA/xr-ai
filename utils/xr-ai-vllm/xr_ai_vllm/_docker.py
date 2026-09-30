@@ -686,6 +686,36 @@ def _append_post_mortem(
 # ── run flow ────────────────────────────────────────────────────────────────
 
 
+def prepare(
+    *,
+    image: str,
+    container_name: str,
+    model: str,
+    model_cache: Path,
+    hf_token: str | None,
+    extra_env: dict[str, str] | None,
+) -> None:
+    """Pull the vLLM image and download a model snapshot into its host cache."""
+    if hf_token:
+        os.environ["HF_TOKEN"] = hf_token
+    _maybe_ngc_login(image)
+    prepare_env = {**(extra_env or {}), "TQDM_POSITION": "-1"}
+    argv = build_run_argv(
+        image=image,
+        container_name=f"{container_name}-prepare-{os.getpid()}",
+        port=0,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=None,
+        extra_env=prepare_env,
+        extra_pip=None,
+        vllm_argv=["true"],
+        prefetch_model=model,
+    )
+    argv[2:2] = ["--rm", "--init"]
+    subprocess.run(argv, check=True)
+
+
 def run(
     *,
     image: str,

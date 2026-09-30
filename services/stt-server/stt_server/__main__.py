@@ -73,13 +73,26 @@ def _parse_startup_timeout(value: object) -> float:
     return timeout_s
 
 
-def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
-    raw = cfg.get("model_cache", "../../models")
-    p   = Path(raw)
-    if not p.is_absolute():
-        p = (yaml_dir / p).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _cache_env(cfg: dict, yaml_dir: Path) -> Path:
+    model_cache = Path(cfg.get("model_cache", "../../models"))
+    if not model_cache.is_absolute():
+        model_cache = (yaml_dir / model_cache).resolve()
+    model_cache.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
+    os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    return model_cache
+
+
+def _prepare(cfg: dict, yaml_dir: Path) -> None:
+    model_name = cfg.get("model")
+    if not model_name:
+        raise ValueError("'model' is required in config")
+    _cache_env(cfg, yaml_dir)
+
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(repo_id=str(model_name))
 
 
 class _AsrBackend:
@@ -227,12 +240,7 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     if cuda_vis is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
 
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
-
-    # Direct NeMo and HuggingFace to the shared model directory.
-    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
-    os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
-    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    model_cache = _cache_env(cfg, yaml_dir)
 
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
@@ -415,6 +423,7 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     p.add_argument("--_serve",     action="store_true",
                    help=argparse.SUPPRESS)  # internal: actual server mode
     ns, _ = p.parse_known_args()
@@ -425,6 +434,10 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if ns.prepare:
+        _prepare(cfg, yaml_dir)
+        return
 
     if ns._serve:
         # Persistent server subprocess — loads model and serves until killed.

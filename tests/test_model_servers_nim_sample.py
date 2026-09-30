@@ -154,7 +154,6 @@ def test_unknown_service_fails_before_launch(tmp_path):
 def test_dry_run_never_requests_credentials_or_touches_servers(monkeypatch):
     def forbidden(*args, **kwargs):
         pytest.fail("dry run attempted a runtime operation")
-    monkeypatch.setattr(sample, "require_credentials", forbidden)
     monkeypatch.setattr(sample, "run_stack", forbidden)
     monkeypatch.setattr(sample, "stop_persistent_servers", forbidden)
     monkeypatch.setattr(sample, "detect_gpu_config", forbidden)
@@ -165,7 +164,6 @@ def test_dry_run_never_requests_credentials_or_touches_servers(monkeypatch):
 def test_stop_does_not_need_gpu_detection_or_credentials(monkeypatch):
     stopped = []
     monkeypatch.setattr(sample, "pid_on_port_checked", lambda port: (None, True, False))
-    monkeypatch.setattr(sample, "require_credentials", lambda *args, **kwargs: pytest.fail("unexpected credentials"))
     monkeypatch.setattr(sample, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     monkeypatch.setattr(sample, "detect_gpu_config", lambda: pytest.fail("unexpected GPU detection"))
     monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--stop"])
@@ -307,9 +305,11 @@ def test_reduced_profile_stops_omitted_services_before_launch(
     monkeypatch.setattr(sample, "_known_ports", lambda: known)
     events = []
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "require_credentials", lambda *args, **kwargs: pytest.fail("no credentials needed"))
     monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: events.append(("stop", ports)) or True)
-    monkeypatch.setattr(sample, "run_stack", lambda *args, **kwargs: events.append(("launch", args[0])))
+    def run_stack(*args, before_launch, **kwargs):
+        before_launch()
+        events.append(("launch", args[0]))
+    monkeypatch.setattr(sample, "run_stack", run_stack)
     monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--gpu-profile", "96G_blackwell", "--models", str(profile)])
     sample.run()
     assert [event for event, _ in events] == ["stop", "launch"]
@@ -327,7 +327,10 @@ def test_failed_profile_cleanup_prevents_launch(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sample, "_known_ports", lambda: [("llm-nim", 8118)])
     monkeypatch.setattr(sample, "stop_persistent_servers", lambda ports: False)
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "run_stack", lambda *args, **kwargs: pytest.fail("launched despite failed cleanup"))
+    monkeypatch.setattr(
+        sample, "run_stack",
+        lambda *args, before_launch, **kwargs: before_launch(),
+    )
     monkeypatch.setattr(sys, "argv", ["model_servers_nim", "--gpu-profile", "96G_blackwell", "--models", str(profile)])
     with pytest.raises(SystemExit) as caught:
         sample.run()

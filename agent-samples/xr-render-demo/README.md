@@ -23,6 +23,10 @@ downloads the pinned LOVR build; on other platforms, set `LOVR_BIN` or
 `lovr_bin` to a compatible build. The first WebRTC run also creates the Web-XR
 vendor bundle. Later runs reuse those files.
 
+From `agent-samples/xr-render-demo/`, run `uv run xr_render_demo --check`
+to diagnose dependencies or `uv run xr_render_demo --prepare` to prepare
+artifacts before starting the demo.
+
 ## Configure
 
 Edit the sample-owned configuration before starting the demo; the launcher

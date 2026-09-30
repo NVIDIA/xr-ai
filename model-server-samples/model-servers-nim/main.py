@@ -12,11 +12,12 @@ from urllib.parse import urlsplit
 from xr_ai_launcher import (
     GPUInventoryError,
     Process,
+    add_launch_arguments,
     detect_gpu_config,
     load_deployment_profile,
     read_config_scalar,
-    require_credentials,
     run_stack,
+    warn_if_missing,
 )
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
@@ -94,6 +95,7 @@ def _build_processes(
         processes.append(Process(
             service, project, command, config=config, port=port,
             launch_mode="persist",
+            prepare=command in {"nim_riva_server", "nim_server", "stt_server"},
         ))
     return processes, deployment.required_credentials, profile
 
@@ -184,34 +186,45 @@ def run() -> None:
         "--allow-anonymous", action="store_true",
         help="Allow Hugging Face downloads without HF_TOKEN for local fallback services.",
     )
+    add_launch_arguments(parser)
     args = parser.parse_args()
+    if (args.check or args.prepare) and (args.stop or args.dry_run or args.export_models):
+        parser.error("--check/--prepare cannot be combined with another action")
     try:
         if args.stop:
             if not stop_persistent_servers(_known_ports()):
                 raise RuntimeError("one or more persistent model servers are still running")
             return
-        gpu_profile = args.gpu_profile or detect_gpu_config()
+        hosted = args.models is not None and "own" not in load_deployment_profile(args.models).services.values()
+        gpu_profile = args.gpu_profile or ("" if hosted else detect_gpu_config())
         processes, credentials, profile = _build_processes(gpu_profile, args.models)
         if args.export_models:
             _export_models(profile, args.export_models)
             print(f"Client models: {args.export_models.resolve()}")
             return
-        print(f"Hardware: {gpu_profile}; models: {profile}")
-        for process in processes:
-            print(f"  {process.name}: port {process.port}, config {process.config}")
+        if not args.json:
+            print(f"Hardware: {gpu_profile}; models: {profile}")
+            for process in processes:
+                print(f"  {process.name}: port {process.port}, config {process.config}")
         if args.dry_run:
             return
-        if not processes:
+        if not processes and not (args.check or args.prepare):
             raise ValueError("the deployment has no managed services to start")
         setup_logging("orchestrator", namespace="model-servers-nim")
-        for credential in credentials:
-            require_credentials(
-                credential,
-                allow_missing=credential == "HF_TOKEN" and args.allow_anonymous,
-            )
-        _stop_unselected_services(processes, profile)
-        run_stack(processes, _BASE, exit_after_ready=True)
+        if args.allow_anonymous and "HF_TOKEN" in credentials:
+            warn_if_missing("HF_TOKEN")
+        run_stack(
+            processes, _BASE, exit_after_ready=True, options=args,
+            credentials=tuple(name for name in credentials
+                              if name != "HF_TOKEN" or not args.allow_anonymous),
+            before_launch=lambda: _stop_unselected_services(processes, profile),
+        )
     except (GPUInventoryError, OSError, ValueError, RuntimeError) as exc:
+        if args.check and args.json:
+            print(json.dumps([dict(name="configuration", ok=False, detected=str(exc),
+                                   required="resolvable deployment and GPU profile",
+                                   remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
+            raise SystemExit(1) from exc
         parser.error(str(exc))
 
 

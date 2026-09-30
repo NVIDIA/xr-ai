@@ -44,6 +44,11 @@ def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
         == "1"
     )
 
+    _stack._spawn(process, tmp_path, None, prepare=True)
+    assert popen.call_args.args[0][-1] == "--prepare"
+    assert popen.call_args.kwargs["stdout"] is popen.call_args.kwargs["stderr"] is None
+    assert thread.start.call_count == 4
+
 
 class TestProcessDataclass:
     def test_defaults(self):

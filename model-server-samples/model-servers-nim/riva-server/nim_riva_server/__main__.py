@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import _docker, load_config
+from xr_ai_vllm import _docker, load_config, prepare_requested
 from xr_ai_vllm._nim import build_nim_run_argv
 
 _SCRIPT = Path(__file__).with_name("repository.py")
@@ -19,6 +19,7 @@ _CONTAINER_SCRIPT = "/opt/xr-ai/riva_repository.py"
 _RESERVED_ENV = {
     "NIM_CACHE_PATH", "NIM_EXPORT_PATH", "NIM_DISABLE_MODEL_DOWNLOAD", "NIM_WORKSPACE",
     "XR_AI_RIVA_CONTRACT", "XR_AI_RIVA_COMMAND", "XR_AI_RIVA_BOOTSTRAP",
+    "XR_AI_RIVA_PREPARE_ONLY",
 }
 
 
@@ -33,7 +34,9 @@ def _image_info(image: str) -> dict:
     return json.loads(result.stdout)[0]
 
 
-def _launch_args(cfg: dict, cache: Path, image: dict) -> list[str]:
+def _launch_args(
+    cfg: dict, cache: Path, image: dict, *, prepare: bool = False,
+) -> list[str]:
     env = {str(k): str(v) for k, v in cfg.get("env", {}).items()}
     reserved = env.keys() & _RESERVED_ENV
     if reserved:
@@ -55,18 +58,21 @@ def _launch_args(cfg: dict, cache: Path, image: dict) -> list[str]:
         # Apply bootstrap fixes to containers without invalidating compiled engines.
         "XR_AI_RIVA_BOOTSTRAP": hashlib.sha256(_SCRIPT.read_bytes()).hexdigest(),
     })
+    if prepare:
+        env["XR_AI_RIVA_PREPARE_ONLY"] = "1"
     args = build_nim_run_argv(
         image=image["Id"], container_name=str(cfg["container_name"]),
         http_port=int(cfg["http_port"]), grpc_port=int(cfg["grpc_port"]),
         nim_cache=cache, cuda_visible_devices=str(cfg.get("cuda_visible_devices", "all")),
-        extra_env=env,
+        extra_env=env, prepare=prepare,
     )
     # The shared lifecycle owns this container during both compilation and
     # serving, including --stop before a health endpoint is available.
     if args[-1] != image["Id"]:
         raise RuntimeError("NIM launch arguments must end with the image before adding the Riva entrypoint")
-    return args[:-1] + [
-        "--init", "--entrypoint", "python3",
+    init_args = [] if prepare else ["--init"]
+    return args[:-1] + init_args + [
+        "--entrypoint", "python3",
         "--mount", f"type=bind,src={_SCRIPT},dst={_CONTAINER_SCRIPT},readonly",
         args[-1], _CONTAINER_SCRIPT,
     ]
@@ -90,7 +96,11 @@ def run() -> None:
         if cache.stat().st_mode & 0o777 != 0o777:
             raise
     image = _image_info(str(cfg["image"]))
-    args = _launch_args(cfg, cache, image)
+    prepare = prepare_requested()
+    args = _launch_args(cfg, cache, image, prepare=prepare)
+    if prepare:
+        subprocess.run(args, check=True)
+        return
     port = int(cfg["http_port"])
     name = str(cfg["container_name"])
     _docker.run_container(

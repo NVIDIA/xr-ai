@@ -49,6 +49,7 @@ from . import _docker, _pip
 from ._config import (
     gpu_compute_major,
     load_config,
+    prepare_requested,
     resolve_model_cache,
     setup_hf_env,
 )
@@ -81,6 +82,7 @@ def serve(
     extra_pip: list[str] | None = None,
     ready_file: Path | None = None,
     spark_uma: bool = False,
+    prepare: bool = False,
 ) -> None:
     """Launch vLLM via *backend* (`"pip"` or `"docker"`).
 
@@ -118,7 +120,28 @@ def serve(
     a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
     Docker lifecycle option, preserving the one-field backend switch used by
     the service YAML files.
+
+    When *prepare* is true, download the model snapshot through the selected
+    backend and return without starting vLLM.
     """
+    if prepare:
+        if backend == "pip":
+            _pip.prepare(model)
+        elif backend == "docker":
+            _docker.prepare(
+                image=image,
+                container_name=container_name,
+                model=model,
+                model_cache=model_cache,
+                hf_token=hf_token,
+                extra_env=extra_env,
+            )
+        else:
+            raise ValueError(
+                f"unknown vllm_backend: {backend!r} (expected 'pip' or 'docker')"
+            )
+        return
+
     vllm_argv: list[str] = [
         "vllm", "serve", model,
         "--host", host,
@@ -304,6 +327,7 @@ __all__ = [
     "DEFAULT_IMAGE",
     "resolve_model_cache",
     "load_config",
+    "prepare_requested",
     "setup_hf_env",
     "gpu_compute_major",
 ]

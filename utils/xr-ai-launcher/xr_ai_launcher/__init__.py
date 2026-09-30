@@ -43,7 +43,7 @@ from ._credentials import (
 from ._gpu import GPUInventoryError, detect_gpu_config
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
 from ._processes import ManagedProcess
-from ._stack import Parallel, Process, run_stack
+from ._stack import Parallel, Process, add_launch_arguments, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
@@ -53,5 +53,5 @@ __all__ = [
     "GPUInventoryError", "detect_gpu_config",
     "ModelDeployment", "load_deployment_profile", "load_model_deployment",
     "ManagedProcess",
-    "Parallel", "Process", "run_stack",
+    "Parallel", "Process", "add_launch_arguments", "run_stack",
 ]

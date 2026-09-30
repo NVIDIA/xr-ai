@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import collections
 import signal
+import subprocess
 import sys
 import time
 from contextlib import AsyncExitStack
@@ -183,7 +184,16 @@ async def main(ready_file: Path | None = None) -> None:
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     ns, _ = p.parse_known_args()
+    if ns.prepare:
+        from device_io_hub.transport.livekit._docker import _LIVEKIT_IMAGE
+        cached = subprocess.run(["docker", "image", "inspect", _LIVEKIT_IMAGE],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        print(f"LiveKit: {'cached' if cached else 'downloading'}", flush=True)
+        if not cached:
+            subprocess.run(["docker", "pull", _LIVEKIT_IMAGE], check=True)
+        return
     try:
         asyncio.run(main(ready_file=ns.ready_file))
     except StartupError as e:

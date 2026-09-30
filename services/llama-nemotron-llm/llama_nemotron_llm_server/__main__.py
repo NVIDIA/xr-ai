@@ -38,6 +38,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     load_config,
+    prepare_requested,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -116,6 +117,7 @@ def run() -> None:
         hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
+        prepare=prepare_requested(),
     )
 
 

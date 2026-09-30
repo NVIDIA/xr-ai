@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-pip-installed vLLM backend.
+"""Prepare models and run vLLM from the pip-installed vLLM environment.
 
-Spawns ``vllm serve …`` from the wrapper's venv. Persistent mode puts vLLM in a
-new session group so the launcher's killpg() does not reach it; non-persistent
-mode shares the wrapper's session so SIGTERM propagates and vLLM exits with
-the wrapper.
+Persistent serving puts vLLM in a new session group so the launcher's killpg()
+does not reach it. Non-persistent serving shares the wrapper's session so
+SIGTERM propagates and vLLM exits with the wrapper.
 """
 from __future__ import annotations
 
@@ -20,6 +18,13 @@ from pathlib import Path
 from . import _docker, _lifecycle
 
 log = logging.getLogger(__name__)
+
+
+def prepare(model: str) -> None:
+    """Download a Hugging Face model snapshot into the configured cache."""
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(repo_id=model)
 
 
 def run(

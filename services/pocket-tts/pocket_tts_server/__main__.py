@@ -87,13 +87,25 @@ def _parse_startup_timeout(value: object) -> float:
     return timeout_s
 
 
-def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
-    raw = cfg.get("model_cache", "../../models")
-    p = Path(raw)
-    if not p.is_absolute():
-        p = (yaml_dir / p).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _cache_env(cfg: dict, yaml_dir: Path) -> Path:
+    model_cache = Path(cfg.get("model_cache", "../../models"))
+    if not model_cache.is_absolute():
+        model_cache = (yaml_dir / model_cache).resolve()
+    model_cache.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_XET_CACHE", str(model_cache / "pocket" / "xet"))
+    os.environ.setdefault("HF_HOME", str(model_cache / "pocket" / "huggingface"))
+    return model_cache
+
+
+def _prepare(cfg: dict, yaml_dir: Path) -> None:
+    voice = cfg.get("voice")
+    if not voice:
+        raise ValueError("'voice' is required in config")
+    _cache_env(cfg, yaml_dir)
+    _PocketTTSBackend(
+        str(voice), str(cfg.get("language", "english")), "cpu"
+    )._ensure_loaded()
 
 
 class _PocketTTSBackend:
@@ -517,13 +529,10 @@ async def _run(
         logger.error("'voice' is required in config")
         sys.exit(1)
 
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
     cuda_vis = cfg.get("cuda_visible_devices")
     if cuda_vis is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
-    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-    os.environ.setdefault("HF_XET_CACHE", str(model_cache / "pocket" / "xet"))
-    os.environ.setdefault("HF_HOME", str(model_cache / "pocket" / "huggingface"))
+    model_cache = _cache_env(cfg, yaml_dir)
     startup_timeout_s = _parse_startup_timeout(
         cfg.get("startup_timeout_s", _DEFAULT_STARTUP_TIMEOUT_S)
     )
@@ -577,6 +586,7 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--prepare", action="store_true")
     p.add_argument("--_serve",     action="store_true",
                    help=argparse.SUPPRESS)
     ns, _ = p.parse_known_args()
@@ -587,6 +597,10 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    if ns.prepare:
+        _prepare(cfg, yaml_dir)
+        return
 
     if ns._serve:
         try:

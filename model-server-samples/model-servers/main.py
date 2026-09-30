@@ -38,16 +38,18 @@ To stop all model servers:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
+import json
 from pathlib import Path
 
 from xr_ai_launcher import (
     GPUInventoryError,
     Process,
+    add_launch_arguments,
     detect_gpu_config,
     load_deployment_profile,
     read_config_scalar,
-    require_credentials,
     run_stack,
+    warn_if_missing,
 )
 from xr_ai_launcher._config import _resolve_config_variant
 from xr_ai_logging import setup_logging
@@ -131,6 +133,8 @@ def _build_processes(
     unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
+    if "own" not in deployment.services.values():
+        return [], deployment.required_credentials
 
     profile_name = gpu_profile or detect_gpu_config()
     config_dir = _BASE / "yaml" / profile_name
@@ -150,7 +154,7 @@ def _build_processes(
             raise ValueError(f"{config}: service config must declare port or http_port")
         processes.append(Process(
             service, project, command, config=config,
-            launch_mode="persist", port=port,
+            launch_mode="persist", port=port, prepare=True,
         ))
     return processes, deployment.required_credentials
 
@@ -219,7 +223,10 @@ def run() -> None:
         help="Use a named YAML GPU profile instead of automatic detection. "
              "Intended for explicitly reviewed custom hardware profiles.",
     )
+    add_launch_arguments(p)
     ns, _ = p.parse_known_args()
+    if ns.stop and (ns.check or ns.prepare):
+        p.error("--check/--prepare cannot be combined with --stop")
 
     if ns.stop:
         _stop_models()
@@ -227,21 +234,25 @@ def run() -> None:
 
     try:
         processes, credentials = _build_processes(ns.models, ns.gpu_profile)
-    except GPUInventoryError as exc:
+    except (GPUInventoryError, ValueError) as exc:
+        if ns.check and ns.json:
+            print(json.dumps([dict(name="configuration", ok=False, detected=str(exc),
+                                   required="resolvable deployment and GPU profile",
+                                   remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
+            raise SystemExit(1) from exc
         p.error(
-            f"{exc}\nUse --gpu-profile NAME to select an explicitly reviewed "
-            "custom YAML profile."
+            str(exc) + ("\nUse --gpu-profile NAME to select an explicitly reviewed "
+                        "custom YAML profile." if isinstance(exc, GPUInventoryError) else "")
         )
-    except ValueError as exc:
-        p.error(str(exc))
 
-    # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
-    # docs/source/getting_started/credentials.md.
-    require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
-    for credential in credentials:
-        require_credentials(credential)
-    _stop_unselected_services(processes)
-    run_stack(processes, _BASE, exit_after_ready=True)
+    if ns.allow_anonymous and processes:
+        warn_if_missing("HF_TOKEN")
+    run_stack(
+        processes, _BASE, exit_after_ready=True, options=ns,
+        # A missing HF_TOKEN silently stalls the multi-GB first-run download.
+        credentials=credentials + (() if ns.allow_anonymous or not processes else ("HF_TOKEN",)),
+        before_launch=lambda: _stop_unselected_services(processes),
+    )
 
 
 if __name__ == "__main__":

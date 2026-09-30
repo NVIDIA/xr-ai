@@ -1,0 +1,11 @@
+{
+  "nvidia_driver": 580,
+  "docker": 24,
+  "vulkan": true,
+  "lovr_config": "scene/scene_service.yaml",
+  "ports": [
+    {"name": "hub", "port": 7880, "proto": "tcp", "config_key": "lk_port_ws"},
+    {"name": "hub", "port": 7881, "proto": "tcp", "config_key": "lk_port_tcp"},
+    {"name": "hub", "port": 7882, "proto": "udp", "config_key": "lk_port_udp"}
+  ]
+}

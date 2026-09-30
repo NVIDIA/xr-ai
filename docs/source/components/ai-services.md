@@ -72,6 +72,9 @@ HF_HOME=models hf download nvidia/Cosmos3-Nano
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
 
+From `model-server-samples/model-servers/`, run `uv run model_servers --prepare`
+to prepare a profile using its configured caches.
+
 (migrating-model-caches-from-ai-services)=
 
 ## Migrating model caches from `ai-services/`

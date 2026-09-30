@@ -37,6 +37,7 @@ entry point.
 agent-samples/<name>/
 ├── pyproject.toml                  ← orchestrator project
 ├── main.py                         ← orchestrator (declare PROCESSES, call run_stack)
+├── requirements.json               ← host prerequisites and configured ports
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
@@ -49,6 +50,10 @@ agent-samples/<name>/
         ├── __main__.py             ← entry point: parse arguments and run
         └── …                       ← cohesive workflow, transport, and config modules
 ```
+
+Copy `requirements.json` from `simple-vlm-example` and adjust its process names
+and YAML port keys to match the sample. See
+{doc}`/components/launcher-and-process-model` for the checks and preparation phases.
 
 `yaml/models.json` names the logical models the worker needs (`llm`,
 `vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
@@ -173,9 +178,10 @@ Exact boilerplate — do not add logic here:
 How to run (from agent-samples/<name>/):
     uv sync && uv run <snake_name>
 """
+import argparse
 from pathlib import Path
 
-from xr_ai_launcher import Process, run_stack
+from xr_ai_launcher import Process, add_launch_arguments, run_stack
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -186,6 +192,7 @@ PROCESSES = [
         "../../services/device-io-hub",
         "device_io_hub",
         config="yaml/device_io_hub.yaml",
+        prepare=True,
     ),
     Process(
         "worker",
@@ -198,7 +205,10 @@ PROCESSES = [
 
 def run() -> None:
     setup_logging("orchestrator", namespace="<kebab-name>")
-    run_stack(PROCESSES, _BASE)
+    parser = argparse.ArgumentParser()
+    add_launch_arguments(parser)
+    args = parser.parse_args()
+    run_stack(PROCESSES, _BASE, options=args)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _CLI_REFERENCE = run_path(str(_ROOT / "docs" / "source" / "_cli_reference.py"))
 _extract_arguments = _CLI_REFERENCE["_extract_arguments"]
 load_cli_catalog = _CLI_REFERENCE["load_cli_catalog"]
+_LAUNCH_FLAGS = [("--check",), ("--prepare",), ("--json",)]
 
 
 def test_sample_command_catalog_matches_top_level_projects() -> None:
@@ -29,28 +30,28 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     }
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
         ("--expose-web-events",),
-    ]
+    ] + _LAUNCH_FLAGS
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
         ("--stop",),
         ("--models",),
         ("--allow-anonymous",),
         ("--gpu-profile",),
-    ]
+    ] + _LAUNCH_FLAGS
     assert commands["model_servers"].project_dir == Path("model-server-samples/model-servers")
     assert [argument.flags for argument in commands["model_servers_nim"].arguments] == [
         ("--stop",), ("--dry-run",), ("--export-models",), ("--gpu-profile",),
         ("--models",), ("--allow-anonymous",),
-    ]
+    ] + _LAUNCH_FLAGS
     assert commands["model_servers_nim"].project_dir == Path("model-server-samples/model-servers-nim")
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--capture",),
-    ]
+    ] + _LAUNCH_FLAGS
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
-    ]
+    ] + _LAUNCH_FLAGS
     assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
         ("--capture",),
-    ]
+    ] + _LAUNCH_FLAGS
 
 
 def test_catalog_builds_sample_directory_invocation() -> None:
@@ -58,7 +59,7 @@ def test_catalog_builds_sample_directory_invocation() -> None:
 
     assert commands["model_servers"].invocation == (
         "uv run model_servers [--stop] [--models NAME_OR_PATH] "
-        "[--allow-anonymous] [--gpu-profile NAME]"
+        "[--allow-anonymous] [--gpu-profile NAME] [--check] [--prepare] [--json]"
     )
 
 

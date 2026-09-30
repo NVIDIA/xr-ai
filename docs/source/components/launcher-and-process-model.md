@@ -31,7 +31,7 @@ Samples that support interchangeable local and hosted models may set
 `models_config` in the worker YAML. The worker SDK's `load_models_config()`
 accepts omitted `deployment` metadata and defaults it to external ownership.
 Consumer samples declare only application processes and let workers connect to
-the configured endpoints; their launchers do not read model profiles.
+the configured endpoints.
 
 Launcher profile loaders require the wrapped JSON form with `adapter`,
 `endpoint`, and `deployment` objects for each model. `load_model_deployment()`
@@ -61,6 +61,33 @@ PROCESSES = [
 def run() -> None:
     run_stack(PROCESSES, _BASE)
 ```
+
+## Checking dependencies and preparing artifacts
+
+Sample commands accept `--check` to report missing prerequisites without
+starting services. `--check --json` emits one JSON array of results with
+`name`, `ok`, `detected`, `required`, and `remediation` fields. Any failed
+check exits nonzero. Credentials are reported as set or missing, never printed.
+
+Normal startup checks dependencies, prepares artifacts, then launches services.
+`--prepare` stops after preparation. Services use their existing Hugging Face
+caches and Docker image storage; downloader output goes straight to the
+terminal. Reused services are not prepared. The xr-render sample also prepares
+LOVR and its web vendor bundle. `--prepare` skips port and Vulkan checks and
+does not stop unselected model services. Speech NIM preparation compiles
+engines on the GPU; run `--stop` first if other model servers are running.
+
+The sample's optional `requirements.json` declares driver and Docker minimums,
+the NVIDIA container runtime and Vulkan loader, LOVR configuration, free disk
+space, and listener ports. Port entries reference the process name and its YAML
+`config_key`, so configured ports are checked. Inspection uses `ss` and does
+not bind sockets. Samples without a contract check only credentials explicitly
+supplied to the launcher.
+
+For a configured model cache, the disk threshold applies to its filesystem when
+the cache is missing or empty. A nonempty cache bypasses the cold-download
+threshold; this does not assert that all selected artifacts are present. The
+check does not measure free space in Docker's separate image storage.
 
 ## Rules
 
@@ -161,7 +188,8 @@ its IPC receive loop is active.
   shutdown. Use for heavy model servers that need to survive stack restarts
   (e.g. vLLM containers). Cleanup is the caller's responsibility. The optional
   `port` field is metadata; `model-servers` uses it to select cleanup targets,
-  while generic `run_stack` does not inspect it.
+  and dependency preflight checks its availability. An occupied persistent port
+  passes the check; its wrapper decides whether to reuse the listener.
 - `"reuse"` — the launcher does **not** spawn this process; it is assumed to be
   already running (e.g. started by `model-servers`). The entry in the process
   list documents the dependency; the launcher skips it entirely and does not

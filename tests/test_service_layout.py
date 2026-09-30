@@ -228,9 +228,12 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     livekit_version_marker = vendor_dir / ".livekit-client-version"
     calls: list[list[str]] = []
     produce_livekit = True
+    node_version = "v20.19.0\n"
 
-    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
+    def fake_run(command: list[str], **_kwargs) -> subprocess.CompletedProcess:
         calls.append(command)
+        if command == ["node", "--version"]:
+            return subprocess.CompletedProcess(command, 0, node_version)
         if produce_livekit:
             (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
             version_marker.write_text("6.2.0\n")
@@ -242,7 +245,7 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     monkeypatch.setattr(sample.subprocess, "run", fake_run)
 
     sample._ensure_web_vendor()
-    assert calls == [[str(build_script)]]
+    assert calls == [["node", "--version"], [str(build_script)]]
 
     calls.clear()
     sample._ensure_web_vendor()
@@ -252,7 +255,10 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
     produce_livekit = False
     with pytest.raises(SystemExit, match="completed without producing"):
         sample._ensure_web_vendor()
-    assert calls == [[str(build_script)]]
+    assert calls == [["node", "--version"], [str(build_script)]]
+    node_version = "v18.0.0\n"
+    with pytest.raises(SystemExit, match="Node.js 20.19.0 or newer"):
+        sample._ensure_web_vendor()
 
 
 def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
@@ -284,8 +290,10 @@ def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
     livekit_version_marker.write_text("^2.20.0\n")
     calls: list[list[str]] = []
 
-    def fake_run(command: list[str], *, cwd: str) -> subprocess.CompletedProcess:
+    def fake_run(command: list[str], **_kwargs) -> subprocess.CompletedProcess:
         calls.append(command)
+        if command == ["node", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "v20.19.0\n")
         version_marker.write_text("6.2.0\n")
         livekit_version_marker.write_text("^2.21.0\n")
         return subprocess.CompletedProcess(command, 0)
@@ -296,7 +304,7 @@ def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
 
     sample._ensure_web_vendor()
 
-    assert calls == [[str(build_script)]]
+    assert calls == [["node", "--version"], [str(build_script)]]
     assert version_marker.read_text().strip() == "6.2.0"
 
     calls.clear()

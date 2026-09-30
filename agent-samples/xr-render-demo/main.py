@@ -59,6 +59,7 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_launcher import (
     Process,
+    add_launch_arguments,
     is_native_profile,
     read_device_profile,
     run_stack,
@@ -96,6 +97,7 @@ def _parser() -> argparse.ArgumentParser:
             "traffic"
         ),
     )
+    add_launch_arguments(parser)
     return parser
 
 
@@ -106,7 +108,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def _build_processes(*, capture: bool = False) -> list[Process]:
     processes = [
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
-                config="yaml/device_io_hub.yaml"),
+                config="yaml/device_io_hub.yaml", prepare=True),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",
@@ -265,10 +267,17 @@ def _ensure_web_vendor() -> None:
     ):
         return
 
-    if not shutil.which("npm"):
+    node_version = "unavailable"
+    try:
+        node_version = subprocess.run(["node", "--version"], capture_output=True,
+                                      text=True, check=True, timeout=5).stdout.strip()
+        version = tuple(int(part) for part in node_version.lstrip("v").split("."))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        version = ()
+    if version < (20, 19, 0) or not shutil.which("npm"):
         sys.exit(
-            "\n  xr-render-demo: web vendor bundle missing or stale and npm is "
-            "not on PATH.\n"
+            "\n  xr-render-demo: web vendor bundle missing or stale. Building it needs "
+            f"Node.js 20.19.0 or newer with npm (Node.js detected: {node_version}).\n"
             "  Install Node.js (https://nodejs.org), then re-run, or build manually:\n"
             f"    cd {build_sh.parent} && ./build.sh\n"
         )
@@ -316,16 +325,20 @@ def _ensure_web_vendor() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _prepare_sample() -> None:
+    if os.environ.get(_NO_WEB_CLIENT_ENV, "").strip().lower() not in {"1", "true", "yes", "on"}:
+        _ensure_web_vendor()
+    _ensure_lovr_bin()
+
+
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="xr-render-demo")
     if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
         os.environ[_NO_WEB_CLIENT_ENV] = "1"
         logger.info("native device profile: web client page disabled, skipping vendor build")
-    else:
-        _ensure_web_vendor()
-    _ensure_lovr_bin()
-    run_stack(_build_processes(capture=args.capture), _BASE)
+    run_stack(_build_processes(capture=args.capture), _BASE,
+              options=args, prepare_sample=_prepare_sample)
 
 
 if __name__ == "__main__":

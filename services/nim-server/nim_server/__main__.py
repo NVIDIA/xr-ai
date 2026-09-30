@@ -32,7 +32,7 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import load_config, serve_nim
+from xr_ai_vllm import load_config, prepare_requested, serve_nim
 
 _DEFAULT_NIM_CACHE = "../../models/nim"
 
@@ -74,6 +74,7 @@ def run() -> None:
         cuda_visible_devices=str(cuda_devices) if cuda_devices is not None else None,
         extra_env={str(k): str(v) for k, v in (cfg.get("env") or {}).items()},
         ready_file=ready_file,
+        prepare=prepare_requested(),
     )
 
 

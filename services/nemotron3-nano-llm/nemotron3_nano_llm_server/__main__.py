@@ -42,6 +42,7 @@ from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
+    prepare_requested,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -158,6 +159,7 @@ def run() -> None:
         cuda_visible_devices=cuda_devices,
         ready_file=ready_file,
         spark_uma=spark_uma,
+        prepare=prepare_requested(),
     )
 
 
