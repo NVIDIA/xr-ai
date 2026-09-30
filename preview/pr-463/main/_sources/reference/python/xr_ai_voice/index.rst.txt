@@ -201,11 +201,18 @@ Package Contents
    after those explicit probes, not availability of every model endpoint.
 
 
-   .. py:method:: run(runtime: xr_ai_runtime.AgentRuntime, *, source: str = 'voice') -> None
+   .. py:method:: run(runtime: xr_ai_runtime.AgentRuntime, *, source: str = 'voice', before_close: collections.abc.Callable[[], collections.abc.Awaitable[None]] | None = None) -> None
       :async:
 
 
       Run the owned voice session and bridge it to a running runtime.
+
+      After input and lifecycle delivery stop, await ``before_close`` before
+      closing the hub endpoint and model clients. Applications can use this
+      hook to drain work that still needs the return-data connection. It runs
+      on normal exit, failure, or cancellation after session entry. A pending
+      hook is drained before propagating cancellation; resources are still
+      closed if the hook raises. None preserves default cleanup.
 
 
 

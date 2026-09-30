@@ -683,10 +683,17 @@ after those explicit probes, not availability of every model endpoint.</p>
 <dd><em class="sig-param"><span class="n"><span class="pre">runtime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime" title="xr_ai_runtime.AgentRuntime"><span class="pre">xr_ai_runtime.AgentRuntime</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'voice'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">before_close</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAgent.run" title="Link to this definition">#</a></dt>
 <dd><p>Run the owned voice session and bridge it to a running runtime.</p>
+<p>After input and lifecycle delivery stop, await <code class="docutils literal notranslate"><span class="pre">before_close</span></code> before
+closing the hub endpoint and model clients. Applications can use this
+hook to drain work that still needs the return-data connection. It runs
+on normal exit, failure, or cancellation after session entry. A pending
+hook is drained before propagating cancellation; resources are still
+closed if the hook raises. None preserves default cleanup.</p>
 </dd></dl>
 
 <dl class="py method">
