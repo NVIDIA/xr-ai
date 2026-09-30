@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "xr-ai-vllm"
 version = "0.1.0"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 # Intentionally no runtime dependencies — stdlib only.
 # Dispatches vLLM hosting to either the pip-installed `vllm` CLI in the caller's
 # venv, or the NGC `nvcr.io/nvidia/vllm:<tag>` docker container.  Adding deps

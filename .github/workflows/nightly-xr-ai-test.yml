@@ -5,6 +5,8 @@ name: nightly XR AI test
 
 env:
   UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
+  # Keep every launcher-spawned project on the GPU-qualified interpreter.
+  UV_PYTHON: "3.12"
 
 # Runs the `gpu`-marked pytest suite on a self-hosted GPU runner — these
 # tests need real GPU / Docker / NVENC hardware, so they're filtered out of
