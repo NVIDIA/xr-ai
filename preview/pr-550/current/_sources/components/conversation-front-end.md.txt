@@ -62,9 +62,9 @@ is willing to share; it is not an instruction to the generic capability and
 cannot authorize an application action. Current visual questions still require
 fresh camera evidence.
 
-When history exists, the same first model call can select a generic recall
-response for requests to repeat the last spoken answer. This does not inspect
-the camera or re-run an application action. Questions about new application
+Recall and summaries are ordinary conversational answers based on the relevant
+completed questions and replies. They do not inspect the camera or re-run an
+application action. Questions about new application
 state still delegate to the application, which receives the bounded history in
 the handoff.
 
