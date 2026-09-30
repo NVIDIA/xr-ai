@@ -99,6 +99,8 @@ Its detector length is configured server-wide in `ocr_server.yaml` (640 or
 Neither service performs the experimental text-dense cropping or sharpening
 pipeline; preprocessing remains caller-owned.
 
+Both shared model-server samples load OCR last, after all other selected models,
+including embeddings. The existing non-OCR startup order is preserved.
 The regular stack places OCR on GPU 0 for all profiles. NIM places it on GPU 1
 on dual Ada and GPU 0 on Blackwell and Spark. Existing model allocations are
 unchanged. NVIDIA reports approximately 3 GiB startup memory for multilingual
