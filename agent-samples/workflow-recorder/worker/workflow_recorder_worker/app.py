@@ -128,16 +128,22 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     sop_engine.bind_runtime(runtime)
 
+    async def stop_workers() -> None:
+        await conversation.stop()
+        await sop_engine.stop()
+        await aggregation.stop()
+        await recorder.stop()
+        await catalog.stop()
+        images.clear()
+
     await catalog.start()
     logger.info("recording packets → {}", config.artifacts_dir / "sessions")
     logger.info("workflow guides → {}", config.guides_dir)
     async with runtime:
         try:
-            await voice.run(runtime)
+            # Capture stop uses voice's hub endpoint; the packet and narration
+            # must be finalized before that shared connection is closed.
+            await voice.run(runtime, before_close=stop_workers)
         finally:
-            await conversation.stop()
-            await sop_engine.stop()
-            await aggregation.stop()
-            await recorder.stop()
-            await catalog.stop()
-            images.clear()
+            # Also release workers if voice startup failed before the hook.
+            await stop_workers()

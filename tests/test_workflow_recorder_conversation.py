@@ -5,6 +5,8 @@
 
 import asyncio
 import json
+import sys
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -20,6 +22,163 @@ from xr_ai_runtime import Agent
 from xr_ai_sample_agents.front_end import FRONT_END_QUERY_TOPIC
 from xr_ai_tools.image import ImageReference
 from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceParticipantJoined, VoiceParticipantLeft
+
+
+@pytest.mark.parametrize("shutdown", ["exit", "cancel"])
+async def test_app_finalizes_recording_before_voice_transport_closes(monkeypatch, tmp_path, shutdown):
+    from device_io_hub.capture._service import CaptureService
+    from device_io_hub.capture.config import CaptureConfig
+    from workflow_recorder_worker import app
+    from workflow_recorder_worker.config import load_config
+    from xr_ai_hub._capture import CAPTURE_STOP_TOPIC
+    from xr_ai_voice import _session as session_module
+    from xr_ai_voice._types import VoiceQuery
+
+    config = replace(
+        load_config(_SAMPLE / "yaml/workflow_recorder_worker.yaml"),
+        artifacts_dir=tmp_path / "artifacts", guides_dir=tmp_path / "guides",
+        media_capture_dir=tmp_path / "captures",
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", SimpleNamespace())
+    capture = CaptureService(CaptureConfig(
+        out_dir=str(config.media_capture_dir), session_mode="explicit", max_total_bytes=0,
+    ))
+    commands = []
+    closed = False
+
+    async def send(message):
+        if closed:
+            raise RuntimeError("hub endpoint is closed")
+        commands.append(message.topic)
+        await capture._on_agent_data(message)
+
+    def close_transport():
+        nonlocal closed
+        closed = True
+
+    transport = Mock(
+        endpoint=Mock(send_return_data=AsyncMock(side_effect=send), mark_ready=AsyncMock()),
+        send_return_data=AsyncMock(side_effect=send),
+        shutdown=Mock(side_effect=close_transport), wait_until_started=AsyncMock(),
+    )
+    monkeypatch.setattr(app, "HubVoiceTransport", Mock(return_value=transport))
+    monkeypatch.setattr(app, "setup_logging", Mock())
+    for factory in ("make_llm", "make_stt", "make_tts", "make_vlm"):
+        monkeypatch.setattr(app, factory, Mock(return_value=Mock(close=AsyncMock())))
+    async def wait_for_frame(*_args, **_kwargs):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(app, "CurrentFrameTool", Mock(return_value=Mock(execute=AsyncMock(
+        side_effect=wait_for_frame,
+    ))))
+    # Bound a regression's missing-manifest wait; successful finalization does
+    # not rely on a shortened timeout or capture-service shutdown.
+    monkeypatch.setattr("workflow_recorder_worker.recorder._MEDIA_FINALIZE_TIMEOUT_S", 0.2)
+    recorded = asyncio.Event()
+    finish = asyncio.Event()
+    callbacks = {}
+
+    class Pipeline:
+        async def cancel(self):
+            finish.set()
+
+    def build_pipeline(**kwargs):
+        callbacks.update(kwargs)
+        return object(), Pipeline()
+
+    class Runner:
+        async def run(self, pipeline):
+            io = callbacks["io_processor"]
+            await io._on_participant_joined("user")
+            voice = io._input_sink.__self__
+            await asyncio.gather(*voice._lifecycle_tasks)
+            # Drive the real VoiceAgent input/transcript bridge. No departure
+            # event occurs: only this worker is shutting down.
+            await io._input_sink(VoiceQuery(participant_id="user", text="start recording", timestamp_us=1))
+            await callbacks["on_final_transcript"]("user", "Attach a wheel", time.time_ns() // 1000)
+            # Establish captured narration before requesting worker shutdown.
+            await voice._transcript_queue.join()
+            recorded.set()
+            await finish.wait()
+
+    monkeypatch.setattr(session_module, "_build_voice_pipeline", build_pipeline)
+    monkeypatch.setattr(session_module, "PipelineRunner", Runner)
+    # The pipeline is mocked, but the application, VoiceAgent.run, and session
+    # cleanup are real, including the transport close that caused the defect.
+    monkeypatch.setattr(session_module._VoiceIOProcessor, "enqueue_response", AsyncMock())
+    task = asyncio.create_task(app.run_app(config), context=nemo_relay.fork_asyncio_context())
+    try:
+        async with asyncio.timeout(2):
+            while not recorded.is_set():
+                if task.done():
+                    await task
+                await asyncio.sleep(0.001)
+        if shutdown == "cancel":
+            task.cancel()
+        else:
+            finish.set()
+        result, = await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
+        assert isinstance(result, asyncio.CancelledError) if shutdown == "cancel" else result is None
+        packet_path, = (config.artifacts_dir / "sessions").glob("*/packet.json")
+        packet = json.loads(packet_path.read_text())
+        assert packet["status"] == "complete"
+        assert packet["media_capture"]["control_status"] == "complete"
+        assert packet["narration_status"] == "complete"
+        assert packet["counts"]["transcripts"] == 1
+        rows = [json.loads(row) for row in (packet_path.parent / "transcript.jsonl").read_text().splitlines()]
+        assert [row["text"] for row in rows] == ["Attach a wheel"]
+        assert commands.count(CAPTURE_STOP_TOPIC) == 1
+        assert closed
+    finally:
+        finish.set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await capture.stop()
+
+
+@pytest.mark.parametrize("transition", [None, "next", "skip", "stop guide", "restart guide", "finish"])
+async def test_observation_completion_notices_do_not_survive_guide_transitions(demo, transition):
+    guide = yaml.safe_load((_SAMPLE / "skills/recording-to-guide/references/example.guide.yaml").read_text())
+    guide["task"]["status"] = "approved"
+    step = guide["steps"][0]
+    step["evidence"].pop("commit")
+    step["evidence"]["consecutive"] = 1
+    if transition == "finish":
+        step["next"] = None
+        guide["steps"] = [step]
+    demo.catalog._guides_dir.mkdir(parents=True, exist_ok=True)
+    (demo.catalog._guides_dir / "test.guide.yaml").write_text(yaml.safe_dump(guide))
+    await demo.catalog._scan()
+    await demo.engine._start("user", guide["task"]["id"])
+    session = demo.engine._sessions["user"]
+    demo.engine._trigger = AsyncMock(return_value=(True, "workspace clear"))
+    committed, resume = asyncio.Event(), asyncio.Event()
+
+    async def model_reply(*args, **kwargs):
+        if not session.notices:
+            return ChatResponse(content="", reasoning=None, finish_reason="tool_calls", raw={}, tool_calls=[
+                ToolCall(id="commit", name="workflow__commit", arguments=json.dumps({
+                    "updates": {"workspace_clear": True},
+                })),
+            ])
+        committed.set()
+        await resume.wait()
+        return ChatResponse(content="Done.", reasoning=None, finish_reason="stop", raw={}, tool_calls=None)
+
+    demo.engine._llm.chat.side_effect = model_reply
+    tick = asyncio.create_task(demo.engine._tick(session), context=nemo_relay.fork_asyncio_context())
+    try:
+        await asyncio.wait_for(committed.wait(), 2)
+        assert session.step.is_complete(session.state)
+        if transition:
+            await demo.engine._route("next" if transition == "finish" else transition, "user")
+        resume.set()
+        await asyncio.wait_for(tick, 2)
+        assert (step["messages"]["complete"] in [text for _, text in demo.speech]) is (transition is None)
+        assert not session.notices
+    finally:
+        resume.set()
+        await asyncio.gather(tick, return_exceptions=True)
 
 
 async def test_app_registers_shared_front_end_and_preserves_recording_voice_hook(monkeypatch, tmp_path):
@@ -40,13 +199,14 @@ async def test_app_registers_shared_front_end_and_preserves_recording_voice_hook
             super().__init__()
             self.options = kwargs
 
-        async def run(self, runtime):
+        async def run(self, runtime, *, before_close):
             assert self.options["query_topic"] is FRONT_END_QUERY_TOPIC
             assert self.options["interrupted_topic"] is INTERRUPTED_TOPIC
             assert self.options["stop_ack_enabled"]("user") is True
             assert self.options["interrupt_on_supersede"] is True
             assert "conversation" in runtime._agents
             assert "voice-aggregation" in runtime._agents
+            await before_close()
 
     monkeypatch.setattr(app, "VoiceAgent", Voice)
     await app.run_app(config)

@@ -340,6 +340,79 @@ def _voice_agent(session: _Session, **kwargs) -> VoiceAgent:
         )  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("exit_mode", ["return", "failure", "cancel", "hook_failure"])
+async def test_before_close_hook_runs_while_session_is_open(exit_mode) -> None:
+    session = _Session()
+    voice = _voice_agent(session)
+    runtime = AgentRuntime()
+    calls = []
+
+    async def run(handler, **options):
+        session.started.set()
+        if exit_mode == "cancel":
+            await asyncio.Event().wait()
+        if exit_mode == "failure":
+            raise ValueError("pipeline failed")
+
+    async def before_close():
+        assert not session.closed
+        assert voice._transcript_task is None
+        assert not voice._lifecycle_tasks
+        assert runtime.running
+        calls.append("hook")
+        if exit_mode == "hook_failure":
+            raise ValueError("hook failed")
+
+    session.run = run
+    async with runtime:
+        task = asyncio.create_task(voice.run(runtime, before_close=before_close))
+        await asyncio.wait_for(session.started.wait(), 1)
+        if exit_mode == "cancel":
+            task.cancel()
+        result, = await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 1)
+    if exit_mode == "cancel":
+        assert isinstance(result, asyncio.CancelledError)
+    elif exit_mode in ("failure", "hook_failure"):
+        assert isinstance(result, ValueError)
+    else:
+        assert result is None
+    assert calls == ["hook"]
+    assert session.closed
+    assert voice._runtime is None
+
+
+async def test_cancellation_during_before_close_drains_hook_before_closing_session() -> None:
+    session = _Session()
+    voice = _voice_agent(session)
+    runtime = AgentRuntime()
+    entered, finish = asyncio.Event(), asyncio.Event()
+    drained = False
+
+    async def run(handler, **options):
+        pass
+
+    async def before_close():
+        nonlocal drained
+        entered.set()
+        await finish.wait()
+        assert not session.closed
+        drained = True
+
+    session.run = run
+    async with runtime:
+        task = asyncio.create_task(voice.run(runtime, before_close=before_close))
+        await asyncio.wait_for(entered.wait(), 1)
+        try:
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done() and not session.closed
+        finally:
+            finish.set()
+            result, = await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 1)
+    assert isinstance(result, asyncio.CancelledError)
+    assert drained and session.closed
+
+
 async def test_voice_agent_publishes_to_configured_query_topic() -> None:
     session = _Session()
     recorder = _InputRecorder()

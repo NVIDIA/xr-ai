@@ -145,6 +145,8 @@ class ConversationFrontEnd(Agent):
         participant_id: str,
         turn_id: str,
     ) -> None:
+        streaming = False
+        fragments = 0
         try:
             focused = [app for app in self._applications if app.has_focus(participant_id)]
             if len(focused) > 1:
@@ -167,7 +169,6 @@ class ConversationFrontEnd(Agent):
                         await ctx.publish(app.query_topic, query)
                         return
             streaming = len(calls) == 1 and calls[0].name == "current_view"
-            fragments = 0
             async for chunk in self._conversation.stream(
                 query.text,
                 participant_id,
@@ -201,6 +202,20 @@ class ConversationFrontEnd(Agent):
                     ),
                 )
         except asyncio.CancelledError:
+            # Do not remember a partial answer as a completed exchange when
+            # the closing marker is delivered during cancellation cleanup.
+            self._pending.pop((participant_id, turn_id), None)
+            self._spoken.pop((participant_id, turn_id), None)
+            if streaming and fragments:
+                await ctx.publish(
+                    VOICE_CONTRIBUTION_TOPIC,
+                    VoiceOutput(
+                        response_id=turn_id,
+                        timestamp_us=query.timestamp_us,
+                        kind="result",
+                        turn_id=turn_id,
+                    ),
+                )
             raise
         except Exception:
             logger.opt(exception=True).error("conversation front end failed pid={!r}", participant_id)

@@ -172,6 +172,58 @@ async def test_failed_visual_stream_interrupts_and_remembers_only_recovery(wait_
             await aggregation.stop()
 
 
+@pytest.mark.parametrize("cancel", ["supersede", "interrupt", "leave", "stop"])
+async def test_cancelled_visual_stream_does_not_block_next_direct_answer(cancel) -> None:
+    outputs = []
+
+    class Speech(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+            outputs.append(output)
+
+    class PausedConversation(_Conversation):
+        async def stream(self, request, participant_id, **kwargs):
+            if kwargs["decision"].tool_calls:
+                yield "An unfinished visual answer"
+                await asyncio.Event().wait()
+            else:
+                yield "A direct answer."
+
+    runtime = AgentRuntime()
+    conversation = PausedConversation(["current_view", "direct"])
+    front = runtime.register("conversation", ConversationFrontEnd(conversation))
+    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
+        llm=Mock(chat=AsyncMock()), coalesce_window_s=0,
+        minimum_playback_s=0, maximum_playback_s=0.001,
+        # Keep the default 15-second timeout to detect abandoned streams.
+    ))
+    runtime.register("speech", Speech())
+    async with runtime:
+        try:
+            await runtime.publish(
+                FRONT_END_QUERY_TOPIC, UserQuery(text="What is visible?", timestamp_us=1), participant_id="alice",
+            )
+            await _wait_until(lambda: bool(outputs))
+            old_turn = outputs[0].turn_id
+            if cancel == "interrupt":
+                await front.interrupted("alice")
+            elif cancel == "leave":
+                await front.participant_left("alice")
+            elif cancel == "stop":
+                await front.stop()
+            await runtime.publish(
+                FRONT_END_QUERY_TOPIC, UserQuery(text="Hello", timestamp_us=2), participant_id="alice",
+            )
+            await _wait_until(lambda: any(output.text == "A direct answer." for output in outputs))
+            await _wait_until(lambda: bool(front._history.get("alice")))
+            assert any(output.turn_id == old_turn and output.final for output in outputs)
+            assert [exchange.assistant for exchange in front._history["alice"]] == ["A direct answer."]
+            assert not front._pending and not front._spoken
+        finally:
+            await front.stop()
+            await aggregation.stop()
+
+
 async def test_focused_app_bypasses_router_and_releases_on_exit() -> None:
     focus: dict[str, bool] = {}
     conversation = _Conversation(["tea_guide", "direct"])

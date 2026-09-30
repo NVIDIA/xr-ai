@@ -278,8 +278,22 @@ class VoiceAgent(Agent):
         ] | None = None
         self._transcript_task: asyncio.Task[None] | None = None
 
-    async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
-        """Run the owned voice session and bridge it to a running runtime."""
+    async def run(
+        self,
+        runtime: AgentRuntime,
+        *,
+        source: str = "voice",
+        before_close: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        """Run the owned voice session and bridge it to a running runtime.
+
+        After input and lifecycle delivery stop, await ``before_close`` before
+        closing the hub endpoint and model clients. Applications can use this
+        hook to drain work that still needs the return-data connection. It runs
+        on normal exit, failure, or cancellation after session entry. A pending
+        hook is drained before propagating cancellation; resources are still
+        closed if the hook raises. None preserves default cleanup.
+        """
 
         if self._runtime is not None:
             raise RuntimeError("voice agent is already running")
@@ -326,7 +340,16 @@ class VoiceAgent(Agent):
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
                 self._closed_streams.clear()
-                await self._session.close()
+                try:
+                    if before_close is not None:
+                        cleanup = asyncio.ensure_future(before_close())
+                        try:
+                            await asyncio.shield(cleanup)
+                        except asyncio.CancelledError:
+                            await cleanup
+                            raise
+                finally:
+                    await self._session.close()
         finally:
             self._runtime = None
             self._source = "voice"

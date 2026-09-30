@@ -346,6 +346,7 @@ class SopEngineAgent(Agent):
             session.revision += 1
             session.evidence_hits = 0
             session.next_tick = 0.0
+            session.notices.clear()
             if next_step is None:
                 message = session.workflow.complete_message
                 self._sessions.pop(participant_id, None)
@@ -356,10 +357,13 @@ class SopEngineAgent(Agent):
             return session.step.enter_message
 
     async def _reset(self, participant_id: str) -> str:
-        session = self._sessions.pop(participant_id, None)
+        session = self._sessions.get(participant_id)
         if session is None:
             return "No guide is active."
-        return f"{session.workflow.name} stopped."
+        async with session.lock:
+            session.notices.clear()
+            self._sessions.pop(participant_id, None)
+            return f"{session.workflow.name} stopped."
 
     async def _restart(self, participant_id: str) -> str:
         session = self._sessions.get(participant_id)
@@ -643,19 +647,21 @@ class SopEngineAgent(Agent):
         async with session.lock:
             notices = tuple(session.notices)
             session.notices.clear()
-        runtime = self._runtime
-        if runtime is None or not runtime.running:
-            return
-        for message in notices:
-            try:
-                await runtime.publish(
-                    VOICE_CONTRIBUTION_TOPIC,
-                    VoiceOutput(text=message),
-                    participant_id=session.participant_id,
-                    source="sop-engine",
-                )
-            except RuntimeClosedError:
+            runtime = self._runtime
+            if runtime is None or not runtime.running or self._sessions.get(session.participant_id) is not session:
                 return
+            # Transitions clear queued notices under this same lock. Keep it
+            # until publication so a drained notice cannot race a transition.
+            for message in notices:
+                try:
+                    await runtime.publish(
+                        VOICE_CONTRIBUTION_TOPIC,
+                        VoiceOutput(text=message),
+                        participant_id=session.participant_id,
+                        source="sop-engine",
+                    )
+                except RuntimeClosedError:
+                    return
 
     def _current(self, session: _Session, step: Step, revision: int) -> bool:
         return (
