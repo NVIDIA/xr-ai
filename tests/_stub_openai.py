@@ -31,6 +31,8 @@ class StubOpenAI:
         self._chat_status:    int = 200
         self._chat_response:  dict[str, Any] = dict(_DEFAULT_CHAT)
         self._stream_tokens:  list[str] = []
+        self._stream_chunks: list[dict[str, Any]] | None = None
+        self._stream_done = True
         self._transcribe_text: str = "stub-transcription"
         self._speech_bytes:    bytes = b"RIFF\x00\x00\x00\x00WAVEstub"
         self._embeddings: list[list[float]] = [[1.0, 0.0]]
@@ -61,6 +63,13 @@ class StubOpenAI:
 
     def set_stream_tokens(self, tokens: list[str]) -> None:
         self._stream_tokens = tokens
+        self._stream_chunks = None
+
+    def set_stream_chunks(
+        self, chunks: list[dict[str, Any]], *, include_done: bool = True,
+    ) -> None:
+        self._stream_chunks = chunks
+        self._stream_done = include_done
 
     def set_transcribe_text(self, text: str) -> None:
         self._transcribe_text = text
@@ -104,13 +113,20 @@ class StubOpenAI:
         if path == "/v1/chat/completions":
             body = json.loads(request.content) if request.content else {}
             if body.get("stream"):
-                sse_chunks = [
-                    "data: " + json.dumps({
-                        "choices": [{"delta": {"content": tok}}],
-                    }) + "\n\n"
-                    for tok in self._stream_tokens
-                ]
-                sse_chunks.append("data: [DONE]\n\n")
+                if self._stream_chunks is not None:
+                    sse_chunks = [
+                        "data: " + json.dumps(chunk) + "\n\n"
+                        for chunk in self._stream_chunks
+                    ]
+                else:
+                    sse_chunks = [
+                        "data: " + json.dumps({
+                            "choices": [{"delta": {"content": tok}}],
+                        }) + "\n\n"
+                        for tok in self._stream_tokens
+                    ]
+                if self._stream_done:
+                    sse_chunks.append("data: [DONE]\n\n")
                 return httpx.Response(
                     200,
                     content="".join(sse_chunks).encode(),
