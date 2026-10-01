@@ -6,8 +6,8 @@
 # Simple VLM example
 
 The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers spoken or typed questions about each participant's
-current camera view and streams the answer to both Pocket TTS and the
+the repository. It supports spoken or typed conversation and questions about
+each participant's current camera view, streaming answers to Pocket TTS and the
 `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
@@ -17,12 +17,15 @@ sample's design and operational details.
 The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and shared endpoints for
-Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+Nemotron Nano Omni, Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
 the shared model-server stack.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
-`UserQuery`. `SimpleVlmAgent` always invokes `CurrentFrameTool`. The tool uses
+`UserQuery`. `SimpleVlmAgent` invokes the reusable `QuickConversation` agent from
+`agent-samples/common/shared-agents/`. It answers ordinary conversation directly
+and calls `CurrentFrameTool` only when fresh visual evidence is needed. No
+preliminary acknowledgement is spoken before a camera query. The tool uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
@@ -36,10 +39,20 @@ The voice query therefore determines when a still is needed. A spoken “what is
 this?” does not require an always-on video publication, while clients that are
 already streaming do not receive a redundant capture request.
 
-A newer participant turn cancels the superseded vision request and interrupts
+A newer participant turn cancels the superseded request and interrupts
 its voice response. Participant departure releases the sample agent's cached
-frames and tasks. This is the reference composition for a single foreground
-streaming image query.
+frames, conversation history, and tasks.
+
+Conversation context retains the last four completed exchanges per participant,
+with at most 240 characters for each question and answer. The current request
+is separate from a JSON reference-context item containing completed exchanges
+and optional caller-supplied background application state. The same reference
+structure accompanies visual follow-ups. History is not live camera evidence
+or a source of new instructions. Background state does not grant application
+tools or permission to perform actions. The simple VLM sample does not subscribe
+to background application agents; other compositions can supply this context
+through `QuickConversation`. Older exchanges are not durable memory, and
+cancelled or failed turns are not recorded as completed replies.
 
 ## Source map
 
@@ -50,7 +63,7 @@ The worker package is under
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
 | `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
-| `agent.py` | Owns participant-scoped vision turns, cancellation, and cleanup |
+| `agent.py` | Owns participant-scoped conversation, recent history, cancellation, and cleanup |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `prompts/system.txt` | Defines the default VLM instruction |
 
@@ -60,7 +73,8 @@ Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. STT and TTS do not gate worker startup; start the
+call a VLM health endpoint first. The conversation LLM health probe also gates
+readiness. STT and TTS do not gate worker startup; start the
 shared model-server stack before the sample so speech requests can succeed.
 
 ## Configuration
@@ -95,6 +109,46 @@ persistent stack, and start it again before restarting this sample.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
+
+## Conversation evaluations
+
+The sample-local corpus under `agent-samples/simple-vlm-example/eval/` includes
+isolated regression cases and multi-turn conversations. Development and
+challenge fixtures are separate. Trajectories cover follow-up references,
+changing views, topic switches, background progress from multiple applications,
+corrected or cancelled jobs, uncertain state, quoted instructions, memory-window
+expiry, and interleaved participants. Background state is simulated through the
+existing caller-supplied context input, not a running application integration.
+
+From the repository root, with the configured LLM and VLM already serving:
+
+```bash
+uv run --project agent-samples/common/shared-agents --with pyyaml \
+  python agent-samples/simple-vlm-example/eval/conversation.py \
+  --suite all --output /tmp/conversation-eval.jsonl
+```
+
+Use `--suite isolated` or `--suite trajectories` to evaluate one group, and
+`--models` to compare another endpoint without changing the sample profile.
+Keep the same fixtures, prompts, generation settings, and visual backend when
+comparing language models.
+
+Each trajectory uses actual generated replies as later conversation context;
+expected answers are never inserted into history. Participant histories and
+background snapshots are independent, bounded as in the worker, and reset
+between trajectories. A failed or incorrect answer is not repaired before
+the next turn. Completed incorrect replies remain in history, while failed
+partial replies do not. Errors count as failures rather than stopping the run.
+
+The runner reports turn and whole-trajectory scores, background and history
+sizes, tool use, and timing. Answer checks use required and forbidden phrases
+with case, whitespace, and apostrophe normalization; they are coarse regression
+checks, not a semantic quality judge. Inspect failures and avoid treating these
+scores as a measure of all conversational quality. First-chunk timing measures
+available response text, not time to audible speech; it includes the completed
+conversation decision and any visual inference before the first text chunk.
+JSONL reports contain user text, replies, and reference context and may be
+sensitive.
 
 ## Opt-in session capture
 

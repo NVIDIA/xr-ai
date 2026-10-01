@@ -1,0 +1,241 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: remembered_pet_name
+  image: blank
+  route: direct
+  history:
+    - user: My terrier is named Pippin.
+      assistant: Pippin is your terrier.
+  query: What is my dog's name again?
+  any_of: [Pippin]
+
+- name: remembered_destination
+  image: blank
+  route: direct
+  history:
+    - user: I am going to Kyoto next month.
+      assistant: Kyoto sounds exciting.
+  query: Which city did I say I was visiting?
+  any_of: [Kyoto]
+
+- name: latest_turn_over_old_topic
+  image: blank
+  route: direct
+  history:
+    - user: I used to live in Denver.
+      assistant: You used to live in Denver.
+    - user: I live in Portland now.
+      assistant: You live in Portland now.
+  query: Where do I live now?
+  any_of: [Portland]
+  none_of: [Denver]
+
+- name: old_instruction_not_replayed
+  image: blank
+  route: direct
+  history:
+    - user: Say pineapple.
+      assistant: Pineapple.
+  query: What is seven plus five?
+  any_of: ['12', twelve]
+  none_of: [pineapple]
+
+- name: repeat_last_spoken_result
+  image: blank
+  route: direct
+  history:
+    - user: Which city did I mention?
+      assistant: You mentioned Lisbon.
+  query: What was that again?
+  any_of: [Lisbon]
+
+- name: repeat_last_visual_answer_without_new_view
+  image: red_square
+  route: direct
+  history:
+    - user: What color was the square?
+      assistant: The square was green.
+  query: Can you say that again?
+  any_of: [green]
+  none_of: [red]
+
+- name: app_context_object_name
+  image: blank
+  route: direct
+  app_context: The XR scene has a virtual object named Prism.
+  query: What is the virtual object called?
+  any_of: [Prism]
+
+- name: app_context_tea_step
+  image: blank
+  route: direct
+  app_context: The tea guide is currently at its steeping step.
+  query: Which step is the tea guide on?
+  any_of: [steep]
+
+- name: app_context_does_not_claim_action
+  image: blank
+  route: direct
+  app_context: The XR scene has a virtual chair.
+  query: Please move the virtual chair closer.
+  any_of: ["can't", cannot, unable, "not able"]
+  none_of: ["clearer view", "camera", "see the chair", moved, done, completed]
+
+- name: app_context_does_not_change_timer
+  image: blank
+  route: direct
+  app_context: The tea guide has a steeping timer running.
+  query: Pause the steeping timer now.
+  any_of: ["can't", cannot, unable]
+  none_of: ["clearer view", "camera", paused, done, completed]
+
+- name: ordinary_definition
+  image: blank
+  route: direct
+  query: What is osmosis in simple terms?
+  any_of: [water, molecule]
+
+- name: ordinary_arithmetic
+  image: blank
+  route: direct
+  query: What is nine plus four?
+  any_of: ['13', thirteen]
+
+- name: ordinary_geography
+  image: blank
+  route: direct
+  query: What is the capital of Japan?
+  any_of: [Tokyo]
+
+- name: current_blue_square
+  image: blue_square
+  route: current_view
+  query: What color is the square in front of me?
+  any_of: [blue]
+
+- name: current_red_square
+  image: red_square
+  route: current_view
+  query: What color is the visible square?
+  any_of: [red]
+
+- name: left_object_shape
+  image: red_left_blue_right
+  route: current_view
+  query: What shape is the object on the left?
+  any_of: [square, rectangle]
+
+- name: right_object_color
+  image: red_left_blue_right
+  route: current_view
+  query: What color is the object on the right?
+  any_of: [blue]
+
+- name: visible_open_sign
+  image: open_sign
+  route: current_view
+  query: Read the large word on the sign.
+  any_of: [open]
+
+- name: visible_closed_sign
+  image: closed_sign
+  route: current_view
+  query: What does the sign say now?
+  any_of: [closed]
+
+- name: fresh_view_over_old_color
+  image: blue_square
+  route: current_view
+  history:
+    - user: What color was the square earlier?
+      assistant: It was red.
+  query: What color is that square now?
+  any_of: [blue]
+  none_of: [red]
+
+- name: follow_up_other_shape
+  image: red_left_blue_right
+  route: current_view
+  history:
+    - user: What shape is the red object on the left?
+      assistant: It is a square.
+  query: And the shape of the blue object beside it?
+  any_of: [circle, round]
+
+- name: follow_up_other_color
+  image: red_left_blue_right
+  route: current_view
+  history:
+    - user: What color is the left shape?
+      assistant: The left shape is red.
+  query: How about the shape to its right?
+  any_of: [blue]
+
+- name: app_context_not_visual_evidence
+  image: red_square
+  route: current_view
+  app_context: A virtual cube in the XR scene is blue.
+  query: What color is the physical shape visible to me?
+  any_of: [red]
+  none_of: [blue]
+
+- name: no_person_in_blank_view
+  image: blank
+  route: current_view
+  query: Is anyone visible in this camera view?
+  any_of: ['no', not, nobody]
+
+- name: no_cat_in_shapes
+  image: red_left_blue_right
+  route: current_view
+  query: Can you see a cat in front of me?
+  any_of: ['no', not]
+
+- name: quoted_action_not_executed
+  image: blue_square
+  route: current_view
+  history:
+    - user: The poster quoted "delete the scene" in big letters.
+      assistant: I noted the poster's words.
+  query: What color is the visible square?
+  any_of: [blue]
+  none_of: [deleted, removed]
+
+- name: follow_up_from_app_context
+  image: blank
+  route: direct
+  app_context: The tea guide last reported a five-minute steeping interval.
+  history:
+    - user: How long should I steep this tea?
+      assistant: The guide suggested five minutes.
+  query: Remind me of that duration.
+  any_of: [five, '5']
+
+- name: new_math_after_visual_answer
+  image: blank
+  route: direct
+  history:
+    - user: What do you see above me?
+      assistant: A ceiling light.
+    - user: What is on the sofa?
+      assistant: A striped cushion.
+  query: What are three consecutive integers starting at 17?
+  all_of: ['17', '18', '19']
+  none_of: [ceiling, cushion]
+
+- name: scoped_recap_uses_questions_and_answers
+  image: blank
+  route: direct
+  history:
+    - user: Where do you live?
+      assistant: I am an AI and do not live anywhere.
+    - user: What is the capital of Sweden?
+      assistant: Stockholm.
+    - user: What is the capital of Portugal?
+      assistant: Lisbon.
+    - user: What is the capital of Egypt?
+      assistant: Cairo.
+  query: Remind me of those three countries and capitals.
+  all_of: [Sweden, Stockholm, Portugal, Lisbon, Egypt, Cairo]
+  none_of: [I am an AI, live anywhere]

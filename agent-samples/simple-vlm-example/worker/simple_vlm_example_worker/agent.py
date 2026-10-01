@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
 import nemo_relay
-from xr_ai_hub import FrameUnavailable
+from xr_ai_models import LLMService
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -18,8 +19,9 @@ from xr_ai_runtime import (
     Topic,
     subscribe,
 )
-from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
-from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
+from xr_ai_sample_agents import ConversationExchange, QuickConversation
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
@@ -37,7 +39,7 @@ INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
 
 
 class SimpleVlmAgent(Agent):
-    """Own streamed user turns and cancellation around a vision tool."""
+    """Own streamed conversation, recent history, and participant cancellation."""
 
     def __init__(
         self,
@@ -46,12 +48,16 @@ class SimpleVlmAgent(Agent):
             tuple[CurrentFrameTool, StreamingImageQueryTool],
         ],
         set_status: Callable[[str, str], Awaitable[None]],
+        *,
+        llm: LLMService | None = None,
     ) -> None:
         super().__init__()
         self._vision_factory = vision_factory
         self._set_status = set_status
+        self._llm = llm
         self._frames: CurrentFrameTool | None = None
-        self._vision: StreamingImageQueryTool | None = None
+        self._conversation: QuickConversation | None = None
+        self._history: dict[str, deque[ConversationExchange]] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @subscribe(USER_QUERY_TOPIC)
@@ -82,6 +88,7 @@ class SimpleVlmAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel(participant_id)
+        self._history.pop(participant_id, None)
         if self._frames is not None:
             self._frames.release(participant_id)
 
@@ -127,38 +134,29 @@ class SimpleVlmAgent(Agent):
         opened = False
         cancelled = False
         processing = False
+        chunks: list[str] = []
         try:
-            if self._vision is None or self._frames is None:
-                self._frames, self._vision = self._vision_factory()
-            try:
-                frame = await self._frames.execute(
-                    CurrentFrameRequest(participant_id=participant_id)
+            if self._conversation is None:
+                self._frames, vision = self._vision_factory()
+                self._conversation = QuickConversation(
+                    self._frames,
+                    vision,
+                    llm=self._llm,
                 )
-            except (FrameUnavailable, RuntimeError) as exc:
-                unavailable = _frame_unavailable_message(exc)
-                if unavailable is None:
-                    raise
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(
-                        text=unavailable,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=True,
-                        timestamp_us=request.timestamp_us,
-                    ),
-                )
-                opened = True
-                return
             await self._set_status("processing", participant_id)
             processing = True
-            stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=request.text))
+            stream = self._conversation.stream(
+                request.text,
+                participant_id,
+                history=tuple(self._history.get(participant_id, ())),
+            )
             try:
                 async for chunk in stream:
+                    chunks.append(chunk)
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
                         VoiceOutput(
-                            text=chunk.text,
+                            text=chunk,
                             response_id=response_id,
                             final=False,
                             interrupt=first,
@@ -171,6 +169,11 @@ class SimpleVlmAgent(Agent):
                 close = getattr(stream, "aclose", None)
                 if close is not None:
                     await close()
+            if answer := "".join(chunks).strip():
+                self._history.setdefault(
+                    participant_id,
+                    deque(maxlen=4),
+                ).append(ConversationExchange(user=request.text[:240], assistant=answer[:240]))
         except asyncio.CancelledError:
             cancelled = True
             raise
@@ -210,24 +213,6 @@ class SimpleVlmAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
-
-
-def _frame_unavailable_message(error: BaseException) -> str | None:
-    """Recover a camera error from native or Relay-scrubbed exceptions."""
-
-    relay_prefix = "internal error: FrameUnavailable:"
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        if isinstance(current, FrameUnavailable):
-            return str(current)
-        if isinstance(current, RuntimeError):
-            message = str(current)
-            if message.startswith(relay_prefix):
-                return message.removeprefix(relay_prefix).strip()
-        seen.add(id(current))
-        current = current.__cause__ or current.__context__
-    return None
 
 
 __all__ = [

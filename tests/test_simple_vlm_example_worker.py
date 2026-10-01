@@ -20,7 +20,7 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
-from xr_ai_models import ChatResponse, VLMService
+from xr_ai_models import ChatResponse, ToolCall, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
@@ -83,6 +83,17 @@ class _Service:
 
     async def close(self) -> None:
         self.close_calls += 1
+
+
+class _ConversationService(_Service):
+    async def chat(self, _messages, **_kwargs):
+        return ChatResponse(
+            content="",
+            reasoning=None,
+            tool_calls=[ToolCall(id="view-1", name="current_view", arguments="{}")],
+            finish_reason="tool_calls",
+            raw={},
+        )
 
 
 class _FlakyWarmupService(_Service):
@@ -418,6 +429,7 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         )
 
     assert closed.is_set()
+    assert agent._history == {}  # noqa: SLF001
 
 
 async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
@@ -525,6 +537,55 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     assert closed.is_set()
     assert len(published) == 1
     assert published[0].final is False
+    assert agent._history == {}  # noqa: SLF001
+
+
+async def test_conversation_history_stays_bounded_and_participant_scoped() -> None:
+    requests = []
+
+    class LLM:
+        async def chat(self, messages, **_kwargs):
+            requests.append(messages)
+            return ChatResponse(
+                content="Response " + messages[-1].content,
+                reasoning=None,
+                tool_calls=[],
+                finish_reason="stop",
+                raw={},
+            )
+
+    class Context:
+        def __init__(self, participant_id: str, turn: int) -> None:
+            self.metadata = SimpleNamespace(
+                participant_id=participant_id,
+                message_id=f"{participant_id}-{turn}",
+            )
+
+        async def publish(self, _topic, _output) -> None:
+            pass
+
+    agent = SimpleVlmAgent(
+        lambda: (_SelectedFrameTool(), _StreamingImageQueryTool()),  # type: ignore[return-value]
+        _ignore_status,
+        llm=LLM(),  # type: ignore[arg-type]
+    )
+    for turn in range(20):
+        for participant_id in ("alice", "bob"):
+            query = f"{participant_id} turn {turn}: " + "x" * 300
+            await agent._stream_response(  # noqa: SLF001
+                UserQuery(text=query, timestamp_us=turn),
+                Context(participant_id, turn),  # type: ignore[arg-type]
+            )
+
+    for participant_id, history in agent._history.items():  # noqa: SLF001
+        assert len(history) == 4
+        assert [exchange.user.split(":", 1)[0] for exchange in history] == [
+            f"{participant_id} turn {turn}" for turn in range(16, 20)
+        ]
+        assert all(len(exchange.user) == len(exchange.assistant) == 240 for exchange in history)
+    assert "alice" not in requests[-1][1].content
+    assert "bob" not in requests[-2][1].content
+    assert _StreamingImageQueryTool.instances[-1].requests == []
 
 
 async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
@@ -549,6 +610,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     config = load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml")
     ready_file = tmp_path / "ready"
     stt = _Service()
+    llm = _ConversationService()
     vlm = _Service()
     tts = _Service()
     transport = _Transport()
@@ -564,6 +626,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
+    monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
@@ -635,6 +698,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "publish:voice.output" not in {event["name"] for event in relay_events}
     assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 0
+    assert llm.health_calls == 1
     assert len(vlm.stream_calls) == 1
     warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
     assert len(warmup_images) == 1
@@ -646,6 +710,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert max_tokens == 4
     assert timeout == 120.0
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
+    assert llm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint

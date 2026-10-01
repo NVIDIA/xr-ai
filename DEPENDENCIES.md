@@ -529,6 +529,19 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Agent samples
 
+#### `xr-ai-sample-agents` — [`agent-samples/common/shared-agents/`](agent-samples/common/shared-agents/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `loguru>=0.7`
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+- Optional dependency groups: none
+- Commands: none
+
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
 - Python: `>=3.11,<3.15`
@@ -587,6 +600,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-sample-agents` → [`xr-ai-sample-agents`](agent-samples/common/shared-agents/) (local, editable)
   - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -772,6 +786,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-sample-agents` → [`xr-ai-sample-agents`](agent-samples/common/shared-agents/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)

@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-sample-agents"
+version = "0.1.0"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "loguru>=0.7",
+    "xr-ai-hub-client",
+    "xr-ai-models",
+    "xr-ai-tools[frames,vision]",
+]
+
+[tool.uv.sources]
+xr-ai-hub-client = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_sample_agents"]
