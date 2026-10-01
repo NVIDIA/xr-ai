@@ -132,6 +132,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups:
   - `riva`:
     - `nvidia-riva-client>=2.17`
+    - `urllib3>=2.8.0`
 - Commands: none
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
@@ -286,6 +287,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pyjwt>=2.15.1`
+  - `urllib3>=2.8.0`
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `pyzmq>=27.0`
@@ -311,6 +314,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
@@ -328,6 +333,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
@@ -363,6 +370,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
@@ -384,6 +392,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
@@ -401,6 +411,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`
@@ -446,6 +458,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.0.2`
   - `torch>=2.5.0`
@@ -480,6 +493,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
@@ -516,6 +530,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.27.0`
   - `pyyaml>=6.0`

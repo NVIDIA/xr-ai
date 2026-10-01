@@ -49,6 +49,15 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
+### Qualified HTTP and JWT security releases
+
+The release security refresh resolves `urllib3` 2.8.0 and `PyJWT` 2.15.1,
+both under the MIT license. Unmodified upstream license texts are bundled in
+[`urllib3-2.8.0`](third_party_licenses/urllib3-2.8.0/) and
+[`pyjwt-2.15.1`](third_party_licenses/pyjwt-2.15.1/), including PyJWT's author
+attributions. Each directory records the SHA-256-verified artifact URL and
+copied-file hashes.
+
 ### Pocket TTS model and voice
 
 Pocket TTS 3.0.2 pins the following downloaded artifacts for the default

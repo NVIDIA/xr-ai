@@ -265,7 +265,7 @@ def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -
     }
 
     assert config["vllm_backend"] == "docker"
-    assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.08-py3"
+    assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.09-py3"
     assert "extra_pip" not in config
     assert config["gpu_memory_utilization"] == expected_utilization[
         profile_path.parent.name

@@ -26,4 +26,4 @@ video_fps: 2
 video_num_frames: 64
 
 vllm_backend: docker
-vllm_image: nvcr.io/nvidia/vllm:26.08-py3
+vllm_image: nvcr.io/nvidia/vllm:26.09-py3

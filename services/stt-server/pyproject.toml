@@ -10,6 +10,8 @@ name = "stt-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
+    "urllib3>=2.8.0",
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
     "transformers>=5.17.0",
     # >=2.5 keeps us out of NeMo 2.0.0 (under-declared deps, no
