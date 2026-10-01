@@ -3,4 +3,6 @@
 
 endpoint: tcp://0.0.0.0:8310
 out_dir: /tmp/xr_video_queries/xr-render-demo
+# Must match device_io_hub.yaml video_recording.out_dir when history is enabled.
+recordings_dir: /dev/shm/xr-ai/recordings
 gpu_id: 0
