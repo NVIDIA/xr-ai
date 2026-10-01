@@ -1423,6 +1423,8 @@ workflow.</p></li>
 
 <span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://0.0.0.0:8310</span>
 <span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/xr_video_queries/xr-render-demo</span>
+<span class="c1"># Must match device_io_hub.yaml video_recording.out_dir when history is enabled.</span>
+<span class="nt">recordings_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/shm/xr-ai/recordings</span>
 <span class="nt">gpu_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
 </pre></div>
 </div>
@@ -1472,9 +1474,10 @@ workflow.</p></li>
 <span class="nt">openxr_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8330</span>
 <span class="nt">video_memory_endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp://127.0.0.1:8310</span>
 <span class="c1"># Past-moment questions ("what was I holding a moment ago?") need recorded</span>
-<span class="c1"># video: enable video_recording in device_io_hub.yaml and set recordings_dir</span>
-<span class="c1"># in video_memory_service.yaml, then turn this on. Off, vision_agent answers</span>
-<span class="c1"># from the live camera only.</span>
+<span class="c1"># video: enable video_recording in device_io_hub.yaml and point recordings_dir</span>
+<span class="c1"># in video_memory_service.yaml at the same directory. Omitting this setting</span>
+<span class="c1"># enables history. The sample sets it to false because hub recording is off;</span>
+<span class="c1"># when history is off, vision_agent answers from the live camera only.</span>
 <span class="nt">video_history_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">text_memory_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/shm/xr-ai/text-memory</span>
 

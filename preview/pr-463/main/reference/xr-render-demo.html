@@ -740,11 +740,25 @@ model sees only participant-safe perception facades. Recorded selection is
 grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.</p>
+<section id="recorded-video-prerequisites">
+<span id="xr-render-recording-prerequisites"></span><h3>Recorded-video prerequisites<a class="headerlink" href="#recorded-video-prerequisites" title="Link to this heading">#</a></h3>
+<p>Recorded selection requires all of the following settings:</p>
+<ul class="simple">
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">video_recording.enabled</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code>.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/video_memory_service.yaml</span></code> to the hub’s
+effective <code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. When <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> is omitted, the hub uses
+<code class="docutils literal notranslate"><span class="pre">/dev/shm/xr-ai/recordings</span></code>.</p></li>
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code>.</p></li>
+</ul>
+<p>Omitting <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> enables history. The checked-in worker YAML
+sets it to <code class="docutils literal notranslate"><span class="pre">false</span></code> because the sample hub disables recording. With history
+disabled, perception uses current frames only.</p>
 <p>Start the shared model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
 The worker does not poll model health endpoints. It retains a tool-shaped LLM
 inference warmup before announcing readiness so that LLM memory settles before
 LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.</p>
+</section>
 </section>
 <section id="stt-parakeet-tdt-0-6b-v3">
 <h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
@@ -835,7 +849,8 @@ the voice subscriber and TTS.</p></li>
 scene diff decides whether the verification pass runs.</p>
 <p>At worker startup, <code class="docutils literal notranslate"><span class="pre">app.py</span></code> composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
-instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
+instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Video-memory tools are wired only when
+worker <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is enabled. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
 <code class="docutils literal notranslate"><span class="pre">get_health</span></code>) remain worker-managed and are not exposed to the supervisor.</p>
 <p>Final messages are also persisted through native
 text memory without model scratch output or tool traces.</p>
@@ -1200,7 +1215,10 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recorded-video-prerequisites">Recorded-video prerequisites</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-pocket-tts">TTS — Pocket TTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>
