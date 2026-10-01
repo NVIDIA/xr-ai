@@ -31,6 +31,11 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
     processes, credentials, profile = sample._build_processes(hardware)
     assert len(processes) == (9 if hardware == "spark" else 10)
     assert all(process.launch_mode == "persist" for process in processes)
+    assert all(
+        process.prepare
+        == (process.command in {"nim_riva_server", "nim_server", "stt_server"})
+        for process in processes
+    )
     for process in processes:
         if process.name in {"stt-nim", "tts-nim"}:
             assert process.project == "riva-server"
@@ -251,11 +256,31 @@ def test_duplicate_ports_fail_before_launch(monkeypatch):
         sample._build_processes("spark")
 
 
-@pytest.mark.parametrize("marked,label", [(False, "stt"), (True, "stt-adapter")])
-def test_known_ports_selects_stt_cleanup_by_listener_ownership(monkeypatch, marked, label):
+@pytest.mark.parametrize(
+    ("marked", "label", "warning"),
+    [
+        (False, "stt", ""),
+        (True, "stt-adapter", ""),
+        (PermissionError(), None, "port 8103 is held by pid 123"),
+    ],
+)
+def test_known_ports_selects_stt_cleanup_by_listener_ownership(
+    monkeypatch, capsys, marked, label, warning,
+):
+    def marker(*_args):
+        if isinstance(marked, Exception):
+            raise marked
+        return marked
+
     monkeypatch.setattr(sample, "pid_on_port_checked", lambda port: (123, True, True))
-    monkeypatch.setattr(sample, "has_xr_ai_ownership_marker", lambda pid, port: marked)
-    assert (label, 8103) in sample._known_ports()
+    monkeypatch.setattr(sample, "has_xr_ai_ownership_marker", marker)
+    targets = sample._known_ports()
+    if label:
+        assert (label, 8103) in targets
+    else:
+        assert all(port != 8103 for _, port in targets)
+        assert ("tts-adapter", 8105) in targets
+    assert warning in capsys.readouterr().err
 
 
 

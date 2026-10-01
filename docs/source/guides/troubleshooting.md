@@ -377,6 +377,21 @@ OpenH264, which is royalty-bearing.
   `NVIDIA_VISIBLE_DEVICES`, and include `video` in
   `NVIDIA_DRIVER_CAPABILITIES` when starting the container.
 
+### A sample's `--check` reports a prerequisite failure
+
+Follow the corrective action in the result. For a missing local model endpoint,
+start the shared model stack using its sample README. Fix invalid or remote
+endpoints in the selected model profile. A reachable port with no known health
+path remains unverified; set the endpoint's `health_path` in the model profile
+to the service's documented health route. For a missing NVIDIA container
+runtime, follow {ref}`docker-host-setup`. DeviceIOHub reports missing codec
+libraries during preparation or startup; follow the driver codec guidance
+above. Vulkan failures require the loader and NVIDIA ICD. Install
+`vulkan-tools` to enable optional device enumeration through
+`vulkaninfo --summary`. Refer to {doc}`/components/launcher-and-process-model`
+for check coverage and skipped results, and
+{doc}`/getting_started/requirements` for required tools.
+
 ## Runtime and connection issues
 
 ### Voice session drops or agent goes silent after a few minutes idle

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -128,7 +129,18 @@ def _known_ports() -> list[tuple[str, int]]:
             # Spark's unmarked STT process is recognized by its command line;
             # the HTTP adapter must instead use managed-port ownership markers.
             pid, _, _ = pid_on_port_checked(port)
-            service = "stt-adapter" if pid and has_xr_ai_ownership_marker(pid, port) else "stt"
+            try:
+                marked = pid and has_xr_ai_ownership_marker(pid, port)
+            except PermissionError:
+                print(
+                    f"[model_servers_nim] port {port} is held by pid {pid}; identity "
+                    "unverifiable: permission denied; inspect the owning account "
+                    "and /proc access; skipping this target",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+            service = "stt-adapter" if marked else "stt"
         else:
             service = sorted(services)[0]
         targets.append((service, port))
@@ -215,15 +227,19 @@ def run() -> None:
             warn_if_missing("HF_TOKEN")
         run_stack(
             processes, _BASE, exit_after_ready=True, options=args,
+            model_profile=profile,
             credentials=tuple(name for name in credentials
                               if name != "HF_TOKEN" or not args.allow_anonymous),
             before_launch=lambda: _stop_unselected_services(processes, profile),
         )
     except (GPUInventoryError, OSError, ValueError, RuntimeError) as exc:
-        if args.check and args.json:
-            print(json.dumps([dict(name="configuration", ok=False, detected=str(exc),
-                                   required="resolvable deployment and GPU profile",
-                                   remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
+        if args.check:
+            if args.json:
+                print(json.dumps([dict(name="configuration", status="failed", detected=str(exc),
+                                       required="resolvable deployment and GPU profile",
+                                       remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
+            else:
+                print(f"[failed] configuration: {exc}", file=sys.stderr)
             raise SystemExit(1) from exc
         parser.error(str(exc))
 

@@ -468,6 +468,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `uvicorn[standard]>=0.29`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `pocket_tts_server` → `pocket_tts_server.__main__:run`
@@ -504,6 +505,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `hf-xet>=1.1.2,<2.0.0`
   - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `stt_server` → `stt_server.__main__:run`

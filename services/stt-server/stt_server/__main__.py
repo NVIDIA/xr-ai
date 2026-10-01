@@ -51,6 +51,7 @@ warnings.filterwarnings(
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import owned_listener_pid
 
 _DEFAULT_PORT              = 8103
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
@@ -214,11 +215,6 @@ def _build_app(cfg: dict, model_cache: Path):
     return app, backend
 
 
-def _health_ok(port: int) -> bool:
-    """Return True if an STT server is already answering /health on *port*."""
-    return _health_url_ok(f"http://127.0.0.1:{port}/health")
-
-
 def _health_url_ok(health_url: str) -> bool:
     """Return True if *health_url* answers successfully."""
     try:
@@ -244,16 +240,6 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
-
-    # Reuse a server that survived a previous stack run (weight persistence).
-    if _health_ok(port):
-        logger.info("STT server already running on :{} — reusing", port)
-        if ready_file:
-            ready_file.touch()
-        await asyncio.get_running_loop().run_in_executor(
-            None, _idle_until_stopped, f"http://127.0.0.1:{port}/health"
-        )
-        return
 
     app, backend = _build_app(cfg, model_cache)
 
@@ -329,6 +315,7 @@ def _start_persistent_server(
     cmd: list[str],
     health_url: str,
     startup_timeout_s: float,
+    port: int,
 ) -> subprocess.Popen:
     """Start the detached server and return it once its health check passes."""
     process: subprocess.Popen | None = None
@@ -353,6 +340,13 @@ def _start_persistent_server(
         if pending_signal is not None:
             raise SystemExit(128 + pending_signal)
         _wait_until_healthy(process, health_url, startup_timeout_s)
+        listener_pid = owned_listener_pid(port, "stt")
+        if listener_pid != process.pid:
+            raise RuntimeError(
+                f"health endpoint on port {port} is not owned by spawned STT pid "
+                f"{process.pid}; wait for another server to finish starting or run "
+                "`model_servers --stop`"
+            )
     except (Exception, KeyboardInterrupt, SystemExit):
         # Until readiness, every wrapper exit must take its detached child with
         # it. Ignore repeated signals during the bounded cleanup; after this
@@ -414,6 +408,23 @@ def _idle_until_stopped(
         )
 
 
+def _reusable_listener(port: int, health_url: str) -> int | None:
+    """Return the stable managed STT PID on *port*, or fail closed."""
+    pid = owned_listener_pid(port, "stt")
+    if pid is None:
+        return None
+    if not _health_url_ok(health_url):
+        raise RuntimeError(
+            f"managed STT pid {pid} owns port {port}, but its health check failed; "
+            "wait for it to finish starting or run `model_servers --stop`"
+        )
+    if owned_listener_pid(port, "stt") != pid:
+        raise RuntimeError(
+            f"listener on port {port} changed while its identity was being validated"
+        )
+    return pid
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -454,11 +465,17 @@ def run() -> None:
         raise SystemExit(f"[stt_server] {exc}") from exc
     health_url = f"http://127.0.0.1:{port}/health"
 
-    # Reuse an already-running server (survived a previous stack shutdown).
-    already_up = _health_url_ok(health_url)
+    try:
+        reusable_pid = _reusable_listener(port, health_url)
+    except RuntimeError as exc:
+        raise SystemExit(f"[stt_server] {exc}") from exc
 
-    if already_up:
-        print(f"[stt_server] already running on port {port} — reusing", flush=True)
+    if reusable_pid is not None:
+        print(
+            f"[stt_server] pid {reusable_pid} already running on "
+            f"port {port}: reusing",
+            flush=True,
+        )
         if ns.ready_file:
             ns.ready_file.touch()
         _idle_until_stopped(health_url)
@@ -475,7 +492,7 @@ def run() -> None:
         flush=True,
     )
     try:
-        process = _start_persistent_server(cmd, health_url, startup_timeout_s)
+        process = _start_persistent_server(cmd, health_url, startup_timeout_s, port)
     except (RuntimeError, TimeoutError) as exc:
         raise SystemExit(f"[stt_server] {exc}") from exc
 

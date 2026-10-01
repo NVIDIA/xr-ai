@@ -99,8 +99,8 @@ class Process:
     port:                int | None = None
     """Optional service port metadata.
 
-    Dependency preflight inspects this port when a requirements contract is
-    present. The launcher does not stop persistent services by port.
+    Dependency preflight inspects this port. The launcher does not stop
+    persistent services by port.
     """
 
     quiet_native_output: bool = False
@@ -435,6 +435,21 @@ def add_launch_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print --check results as JSON.")
 
 
+def _report_checks(checks: list[dict[str, object]], *, verbose: bool = False,
+                   as_json: bool = False) -> None:
+    if as_json:
+        print(json.dumps(checks))
+    else:
+        for result in checks:
+            if verbose or result["status"] != "passed":
+                print(f"[{result['status']}] {result['name']}: "
+                      f"{result['detected']}; required: {result['required']}"
+                      + (f"; fix: {result['remediation']}" if result["remediation"] else ""),
+                      file=sys.stderr)
+    if any(result["status"] == "failed" for result in checks):
+        raise SystemExit(1)
+
+
 def run_stack(
     processes: Sequence[Union[Process, Parallel]],
     base: Path,
@@ -442,6 +457,8 @@ def run_stack(
     exit_after_ready: bool = False,
     options: argparse.Namespace | None = None,
     credentials: Sequence[str] = (),
+    model_profile: Path | None = None,
+    check_sample: Callable[[], list[dict[str, object]]] | None = None,
     prepare_sample: Callable[[], None] | None = None,
     before_launch: Callable[[], None] | None = None,
 ) -> None:
@@ -462,12 +479,15 @@ def run_stack(
     *options* carries flags from :func:`add_launch_arguments`; ``None`` means
     normal launch. ``--check`` returns after reporting, and ``--prepare`` returns
     after preparation. *credentials* names additional required environment
-    variables. *prepare_sample* prepares sample-owned artifacts. For normal
-    startup, *before_launch* runs after checks and before preparation so callers
-    can free resources held by unselected services. ``--check`` and ``--prepare``
-    skip it.
-    A failed check exits 1, ``--json`` alone exits 2, and interrupted preparation
-    exits 130.
+    variables. *model_profile* selects the model endpoint profile to check.
+    *check_sample* supplies prerequisite rows with ``name``, ``status``
+    (``passed``, ``failed``, or ``skipped``), ``detected``, ``required``, and
+    ``remediation`` fields. *prepare_sample* prepares sample-owned artifacts.
+    For normal startup, *before_launch* runs
+    after checks and before preparation so callers can free resources held by
+    unselected services. ``--check`` and ``--prepare`` skip it. A failed check
+    exits 1, ``--json`` alone exits 2, and interrupted checks or preparation
+    exit 130.
 
     After all processes are ready the launcher monitors them: if any exits,
     all others are terminated and the launcher exits.  Pass
@@ -501,38 +521,42 @@ def run_stack(
     if as_json and not checking:
         print("--json requires --check", file=sys.stderr)
         raise SystemExit(2)
-    checks = preflight(processes, base, credentials=credentials, runtime=not preparing)
-    if as_json:
-        print(json.dumps(checks))
-    else:
-        for result in checks:
-            if checking or not result["ok"]:
-                print(f"[{'ok' if result['ok'] else 'FAIL'}] {result['name']}: "
-                      f"{result['detected']}; required: {result['required']}"
-                      + (f"; fix: {result['remediation']}" if not result['ok'] else ""))
-    if any(not result["ok"] for result in checks):
-        raise SystemExit(1)
-    if checking:
-        return
-    if before_launch is not None and not preparing:
-        before_launch()
-    flat = _flatten(processes)
     original_term = signal.signal(signal.SIGTERM, signal.default_int_handler)
     try:
+        checks = preflight(processes, base, credentials=credentials, runtime=not preparing,
+                           model_profile=model_profile)
+        if check_sample is not None:
+            checks.extend(check_sample())
+        _report_checks(checks, verbose=checking, as_json=as_json)
+        if checking:
+            return
+        if before_launch is not None and not preparing:
+            before_launch()
+        flat = _flatten(processes)
+        if model_profile is not None:
+            print(
+                "[models] For external or reused endpoints, prepare artifacts with "
+                "their owning model stack (for example, run `model_servers --prepare`).",
+                file=sys.stderr,
+            )
         for proc in flat:
-            if not proc.prepare or proc.launch_mode == "reuse":
+            if not proc.prepare:
+                continue
+            if proc.launch_mode == "reuse":
+                print(f"[{proc.name}] Skipping preparation: service is reused", flush=True)
                 continue
             print(f"[{proc.name}] Preparing artifacts", flush=True)
             child = _spawn(proc, base, None, prepare=True)
             try:
                 if child.wait() != 0:
                     raise SystemExit(f"{proc.name}: preparation failed; see output above")
+                print(f"[{proc.name}] Preparation complete", flush=True)
             finally:
                 _shutdown({proc.name: child})
         if prepare_sample is not None:
             prepare_sample()
     except KeyboardInterrupt:
-        print("\nAborting preparation.", flush=True)
+        print("\nAborting.", file=sys.stderr, flush=True)
         raise SystemExit(130) from None
     finally:
         signal.signal(signal.SIGTERM, original_term)

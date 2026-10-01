@@ -87,7 +87,8 @@ PROCESSES = _build_processes()
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="simple-vlm-example")
-    run_stack(_build_processes(capture=args.capture), _BASE, options=args)
+    run_stack(_build_processes(capture=args.capture), _BASE, options=args,
+              model_profile=_BASE / "yaml/models.json")
 
 
 if __name__ == "__main__":

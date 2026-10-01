@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from xr_ai_launcher import GPUInventoryError, detect_gpu_config
-from xr_ai_launcher._gpu import _query_gpu_inventory
+from xr_ai_launcher._gpu import _query_compute_processes, _query_gpu_inventory
 
 
 def _row(
@@ -70,6 +70,26 @@ def test_detection_failure_does_not_select_an_unsafe_default(error: Exception) -
     with patch("xr_ai_launcher._gpu.subprocess.check_output", side_effect=error):
         with pytest.raises(GPUInventoryError, match="nvidia-smi"):
             detect_gpu_config()
+
+
+@pytest.mark.parametrize(
+    ("query", "label"),
+    [
+        (_query_gpu_inventory, "GPU inventory"),
+        (_query_compute_processes, "compute-process inventory"),
+    ],
+)
+def test_nvidia_smi_queries_are_bounded(query, label: str) -> None:
+    error = subprocess.TimeoutExpired("nvidia-smi", 10)
+    with patch(
+        "xr_ai_launcher._gpu.subprocess.check_output", side_effect=error,
+    ) as check_output, pytest.raises(
+        GPUInventoryError,
+        match=rf"nvidia-smi {label} timed out after 10 seconds; run nvidia-smi manually",
+    ):
+        query()
+
+    assert check_output.call_args.kwargs["timeout"] == 10
 
 
 def test_empty_inventory_is_rejected() -> None:

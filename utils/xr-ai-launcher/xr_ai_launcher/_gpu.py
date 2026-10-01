@@ -15,6 +15,7 @@ _MIB_PER_GIB = 1024.0
 _SPARK_NAME = re.compile(r"(?i)\b(?:GB10|B10)\b")
 _BLACKWELL_96_MIN_GIB = 90.0
 _SPARK_MIN_GIB = 120.0
+_NVIDIA_SMI_TIMEOUT = 10
 
 
 class GPUInventoryError(RuntimeError):
@@ -68,10 +69,16 @@ def _query_compute_processes() -> dict[str, list[_GPUProcess]]:
             ],
             text=True,
             stderr=subprocess.PIPE,
+            timeout=_NVIDIA_SMI_TIMEOUT,
         ).strip()
     except FileNotFoundError as exc:
         raise GPUInventoryError(
             "nvidia-smi is unavailable while inspecting GPU compute processes"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GPUInventoryError(
+            f"nvidia-smi compute-process inventory timed out after {_NVIDIA_SMI_TIMEOUT} seconds; "
+            "run nvidia-smi manually and check the NVIDIA driver"
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()
@@ -135,10 +142,16 @@ def _query_gpu_inventory() -> tuple[_GPUDevice, ...]:
             ],
             text=True,
             stderr=subprocess.PIPE,
+            timeout=_NVIDIA_SMI_TIMEOUT,
         ).strip()
     except FileNotFoundError as exc:
         raise GPUInventoryError(
             "nvidia-smi is unavailable; XR-AI cannot inspect GPU capacity"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GPUInventoryError(
+            f"nvidia-smi GPU inventory timed out after {_NVIDIA_SMI_TIMEOUT} seconds; "
+            "run nvidia-smi manually and check the NVIDIA driver"
         ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()

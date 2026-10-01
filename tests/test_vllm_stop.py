@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import signal
 import time
+from unittest.mock import MagicMock
 
+import pytest
 import xr_ai_vllm
 
 
@@ -43,6 +45,35 @@ def test_stop_fails_closed_for_listener_without_visible_pid(monkeypatch) -> None
     assert not xr_ai_vllm.stop_persistent_servers([("omni", 8108)])
 
 
+@pytest.mark.parametrize("denied_name", ["cmdline", "environ"])
+def test_public_listener_helper_reports_unconfirmed_identity(
+    monkeypatch, denied_name,
+) -> None:
+    process_file = MagicMock()
+    process_file.read_text.return_value = "vllm\0serve\0model"
+    process_file.read_bytes.return_value = (
+        b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8108\0"
+    )
+    getattr(process_file, "read_text" if denied_name == "cmdline" else "read_bytes").side_effect = PermissionError
+
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (1234, True, True),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "Path",
+        lambda _path: process_file,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="port 8108.*pid 1234.*identity unconfirmed.*uninspectable.*inspect pid 1234",
+    ):
+        xr_ai_vllm.owned_listener_pid(8108, "vllm")
+
+
 def test_stop_does_not_signal_external_vllm_process(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)
@@ -67,6 +98,52 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
 
     assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8108)
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
+
+
+@pytest.mark.parametrize(
+    ("command", "label", "port", "expected"),
+    [
+        ("/venv/bin/vllm\0serve\0model\0", "vllm", 8108, True),
+        ("VLLM::APIServer\0", "vllm", 8108, True),
+        ("VLLM::EngineCore\0", "vllm", 8108, False),
+        ("/venv/bin/python\0-m\0pocket_tts_server\0--_serve\0", "tts", 8108, True),
+        ("/venv/bin/python\0-m\0pocket_tts_server\0--_serve\0", "vllm", 8108, False),
+        ("/venv/bin/vllm\0serve\0model\0", "tts", 8108, False),
+        ("/venv/bin/vllm\0serve\0model\0", "vllm", 8107, False),
+    ],
+)
+def test_service_identity_uses_command_and_managed_port(
+    tmp_path, monkeypatch, command, label, port, expected,
+) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "Path",
+        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
+    )
+    (proc_root / "cmdline").write_text(command)
+    (proc_root / "environ").write_bytes(
+        b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8108\0"
+    )
+    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, label, port) is expected
+
+
+def test_stt_ownership_requires_private_serve_mode(tmp_path, monkeypatch) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    (proc_root / "environ").write_bytes(b"PATH=/bin\0")
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "Path",
+        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
+    )
+
+    (proc_root / "cmdline").write_text("/venv/bin/stt_server\0")
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "stt", 8106)
+
+    (proc_root / "cmdline").write_text("/venv/bin/stt_server\0--_serve\0")
+    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "stt", 8106)
 
 
 def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:

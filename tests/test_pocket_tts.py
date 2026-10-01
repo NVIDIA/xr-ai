@@ -627,6 +627,10 @@ async def test_reuses_healthy_persistent_server(tmp_path, monkeypatch) -> None:
     ready_file = tmp_path / "ready"
     monitor = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(
+        module, "owned_listener_pid",
+        lambda *args: 4242 if args == (8105, "tts") else None,
+    )
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
     monkeypatch.setattr(module, "_monitor_reused_server", monitor)
     monkeypatch.delenv(module._READY_PROCESS_MAY_EXIT_ENV, raising=False)
@@ -647,21 +651,45 @@ async def test_reuses_healthy_persistent_server(tmp_path, monkeypatch) -> None:
     monitor.assert_called_once_with("http://127.0.0.1:8105/health")
 
 
-async def test_rejects_unhealthy_listener(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("owners", "healthy", "message"),
+    [
+        ([RuntimeError("cannot inspect ownership")], True, "cannot inspect"),
+        ([4242], False, "health check failed"),
+        ([4242, 4343], True, "changed while"),
+    ],
+)
+async def test_rejects_unverifiable_listener_without_ready_or_exec(
+    owners, healthy, message, tmp_path, monkeypatch,
+) -> None:
     module = _load_main_module()
     ready_file = tmp_path / "ready"
+    execvpe = Mock(side_effect=AssertionError("invalid listener must not be started"))
+    monitor = Mock(side_effect=AssertionError("invalid listener must not be monitored"))
+    results = iter(owners)
+    def owned_listener(*_args):
+        result = next(results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
-    monkeypatch.setattr(module, "_port_open", lambda _host, _port: True)
+    monkeypatch.setattr(module, "owned_listener_pid", owned_listener)
+    monkeypatch.setattr(module, "_health_url_ok", lambda _url: healthy)
+    monkeypatch.setattr(module, "_monitor_reused_server", monitor)
+    monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
         module.sys,
         "argv",
         ["pocket_tts_server", "--ready-file", str(ready_file)],
     )
 
-    with pytest.raises(SystemExit, match="already in use"):
+    with pytest.raises(SystemExit, match=message):
         module.run()
+
     assert not ready_file.exists()
+    monitor.assert_not_called()
+    execvpe.assert_not_called()
 
 
 async def test_startup_timeout_does_not_wait_for_cuda_warmup(
@@ -715,8 +743,9 @@ async def test_execs_managed_server_in_place(tmp_path, monkeypatch) -> None:
     ready_file = tmp_path / "ready"
     execvpe = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
-    monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
+    monkeypatch.setattr(
+        module, "owned_listener_pid", lambda *_args: None,
+    )
     monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: 8105)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
@@ -744,6 +773,9 @@ async def test_reuse_exits_when_launcher_allows_ready_exit(
     module = _load_main_module()
     ready_file = tmp_path / "ready"
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(
+        module, "owned_listener_pid", Mock(side_effect=[4242, 4242]),
+    )
     monkeypatch.setattr(module, "_health_url_ok", lambda _url: True)
     monkeypatch.setattr(
         module,
@@ -783,12 +815,10 @@ async def test_probes_configured_non_loopback_host(
     module = _load_main_module()
     config_path = tmp_path / "pocket.yaml"
     config_path.write_text(yaml.safe_dump({"host": "192.0.2.10", "port": 8123}))
-    health = Mock(return_value=False)
-    port_open = Mock(return_value=False)
+    reusable = Mock(return_value=None)
     execvpe = Mock()
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", health)
-    monkeypatch.setattr(module, "_port_open", port_open)
+    monkeypatch.setattr(module, "_reusable_listener", reusable)
     monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: 8123)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(
@@ -800,8 +830,7 @@ async def test_probes_configured_non_loopback_host(
     module.run()
 
     expected_health_url = "http://192.0.2.10:8123/health"
-    health.assert_called_once_with(expected_health_url)
-    port_open.assert_called_once_with("192.0.2.10", 8123)
+    reusable.assert_called_once_with(8123, expected_health_url)
     assert execvpe.call_args.args[1][-2:] == ["--config", str(config_path)]
     assert execvpe.call_args.args[2][module._PROCESS_GROUP_ENV] == "8123"
 
@@ -939,8 +968,9 @@ async def test_omits_group_marker_when_ownership_is_unverified(
     execvpe = Mock()
     monkeypatch.setenv(module._PROCESS_GROUP_ENV, "4321")
     monkeypatch.setattr(module, "setup_logging", lambda *_args: None)
-    monkeypatch.setattr(module, "_health_url_ok", lambda _url: False)
-    monkeypatch.setattr(module, "_port_open", lambda _host, _port: False)
+    monkeypatch.setattr(
+        module, "owned_listener_pid", lambda *_args: None,
+    )
     monkeypatch.setattr(module, "_ensure_owned_process_group", lambda: None)
     monkeypatch.setattr(module.os, "execvpe", execvpe)
     monkeypatch.setattr(module.sys, "argv", ["pocket_tts_server"])

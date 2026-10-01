@@ -92,20 +92,104 @@ def test_startup_timeout_rejects_non_finite_values(value):
         stt_main._parse_startup_timeout(value)
 
 
+def test_wrapper_reuses_only_stable_owned_listener(tmp_path, monkeypatch):
+    ready_file = tmp_path / "stt.ready"
+    idle = Mock()
+    start = Mock(side_effect=AssertionError("reuse must not spawn STT"))
+    monkeypatch.setattr(stt_main, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(
+        stt_main, "owned_listener_pid",
+        lambda *args: 4242 if args == (8103, "stt") else None,
+    )
+    monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(stt_main, "_idle_until_stopped", idle)
+    monkeypatch.setattr(stt_main, "_start_persistent_server", start)
+    monkeypatch.setattr(
+        stt_main.sys,
+        "argv",
+        ["stt_server", "--ready-file", str(ready_file)],
+    )
+
+    stt_main.run()
+
+    assert ready_file.exists()
+    idle.assert_called_once_with("http://127.0.0.1:8103/health")
+    start.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("owners", "healthy", "message"),
+    [
+        ([RuntimeError("cannot inspect ownership")], True, "cannot inspect"),
+        ([4242], False, "health check failed"),
+        ([4242, 4343], True, "changed while"),
+    ],
+)
+def test_wrapper_rejects_unverifiable_listener_without_ready_or_spawn(
+    owners, healthy, message, tmp_path, monkeypatch,
+):
+    ready_file = tmp_path / "stt.ready"
+    start = Mock(side_effect=AssertionError("invalid listener must not spawn STT"))
+    idle = Mock(side_effect=AssertionError("invalid listener must not be monitored"))
+    results = iter(owners)
+    def owned_listener(*_args):
+        result = next(results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(stt_main, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(stt_main, "owned_listener_pid", owned_listener)
+    monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: healthy)
+    monkeypatch.setattr(stt_main, "_idle_until_stopped", idle)
+    monkeypatch.setattr(stt_main, "_start_persistent_server", start)
+    monkeypatch.setattr(
+        stt_main.sys,
+        "argv",
+        ["stt_server", "--ready-file", str(ready_file)],
+    )
+
+    with pytest.raises(SystemExit, match=message):
+        stt_main.run()
+
+    assert not ready_file.exists()
+    idle.assert_not_called()
+    start.assert_not_called()
+
+
 def test_start_persistent_server_returns_healthy_child(monkeypatch):
-    process = Mock()
+    process = Mock(pid=4242)
     process.poll.return_value = None
     popen = Mock(return_value=process)
     monkeypatch.setattr(stt_main.subprocess, "Popen", popen)
     monkeypatch.setattr(stt_main, "_health_url_ok", lambda _url: True)
+    monkeypatch.setattr(stt_main, "owned_listener_pid", lambda *_args: process.pid)
 
     result = stt_main._start_persistent_server(
-        ["stt", "--_serve"], "http://health", startup_timeout_s=600
+        ["stt", "--_serve"], "http://health", startup_timeout_s=600, port=8103
     )
 
     assert result is process
     popen.assert_called_once_with(["stt", "--_serve"], start_new_session=True)
     process.wait.assert_not_called()
+
+
+def test_spawn_rejects_health_from_another_pid_and_terminates(
+    monkeypatch,
+) -> None:
+    process = Mock(pid=4242)
+    terminate = Mock()
+    monkeypatch.setattr(stt_main.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(stt_main, "_wait_until_healthy", lambda *_args: None)
+    monkeypatch.setattr(stt_main, "owned_listener_pid", lambda *_args: 4343)
+    monkeypatch.setattr(stt_main, "_terminate_process", terminate)
+
+    with pytest.raises(RuntimeError, match="not owned by spawned STT pid 4242"):
+        stt_main._start_persistent_server(
+            ["stt", "--_serve"], "http://health", 600, 8103,
+        )
+
+    terminate.assert_called_once_with(process)
 
 
 @pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
@@ -133,7 +217,9 @@ def test_startup_signal_terminates_child_and_restores_handlers(monkeypatch, sign
     monkeypatch.setattr(stt_main, "_terminate_process", terminate)
 
     with pytest.raises(SystemExit) as exc_info:
-        stt_main._start_persistent_server(["stt", "--_serve"], "http://health", 600)
+        stt_main._start_persistent_server(
+            ["stt", "--_serve"], "http://health", 600, 8103,
+        )
 
     assert exc_info.value.code == 128 + signum
     terminate.assert_called_once_with(process)
@@ -165,7 +251,9 @@ def test_signal_during_spawn_terminates_child_before_health_wait(monkeypatch):
     monkeypatch.setattr(stt_main, "_terminate_process", terminate)
 
     with pytest.raises(SystemExit) as exc_info:
-        stt_main._start_persistent_server(["stt", "--_serve"], "http://health", 600)
+        stt_main._start_persistent_server(
+            ["stt", "--_serve"], "http://health", 600, 8103,
+        )
 
     assert exc_info.value.code == 128 + signal.SIGTERM
     terminate.assert_called_once_with(process)
@@ -252,7 +340,9 @@ def test_startup_timeout_terminates_detached_child(monkeypatch):
     monkeypatch.setattr(stt_main, "_wait_until_healthy", _timeout)
 
     with pytest.raises(TimeoutError, match="cold start exceeded budget"):
-        stt_main._start_persistent_server(["stt", "--_serve"], "http://health", 600)
+        stt_main._start_persistent_server(
+            ["stt", "--_serve"], "http://health", 600, 8103,
+        )
 
     popen.assert_called_once_with(["stt", "--_serve"], start_new_session=True)
     process.terminate.assert_called_once_with()

@@ -39,6 +39,7 @@ To stop all model servers:
 """
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from xr_ai_launcher import (
@@ -235,20 +236,28 @@ def run() -> None:
     try:
         processes, credentials = _build_processes(ns.models, ns.gpu_profile)
     except (GPUInventoryError, ValueError) as exc:
-        if ns.check and ns.json:
-            print(json.dumps([dict(name="configuration", ok=False, detected=str(exc),
-                                   required="resolvable deployment and GPU profile",
-                                   remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
-            raise SystemExit(1) from exc
-        p.error(
-            str(exc) + ("\nUse --gpu-profile NAME to select an explicitly reviewed "
-                        "custom YAML profile." if isinstance(exc, GPUInventoryError) else "")
+        detail = str(exc) + (
+            "\nUse --gpu-profile NAME to select an explicitly reviewed custom YAML profile."
+            if isinstance(exc, GPUInventoryError) else ""
         )
+        if ns.check:
+            if ns.json:
+                print(json.dumps([dict(name="configuration", status="failed", detected=str(exc),
+                                       required="resolvable deployment and GPU profile",
+                                       remediation="Check --models and --gpu-profile; verify nvidia-smi.")]))
+            else:
+                print(f"[failed] configuration: {detail}", file=sys.stderr)
+            raise SystemExit(1) from exc
+        p.error(detail)
+
+    if not processes and not (ns.check or ns.prepare):
+        p.error("the deployment has no managed services to start")
 
     if ns.allow_anonymous and processes:
         warn_if_missing("HF_TOKEN")
     run_stack(
         processes, _BASE, exit_after_ready=True, options=ns,
+        model_profile=_profile_path(ns.models),
         # A missing HF_TOKEN silently stalls the multi-GB first-run download.
         credentials=credentials + (() if ns.allow_anonymous or not processes else ("HF_TOKEN",)),
         before_launch=lambda: _stop_unselected_services(processes),

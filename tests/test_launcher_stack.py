@@ -129,6 +129,7 @@ class TestRunStackShutdownContract:
     def stub_stack(self, monkeypatch, tmp_path):
         # load_credentials reads real ~/.config/~/.cache — neutralize it.
         monkeypatch.setattr(_stack, "load_credentials", lambda: None)
+        monkeypatch.setattr(_stack, "preflight", lambda *_args, **_kwargs: [])
         calls: dict[str, object] = {}
         spawn_options: dict[str, bool] = {}
 

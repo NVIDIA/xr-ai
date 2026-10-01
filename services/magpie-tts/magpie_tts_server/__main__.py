@@ -32,8 +32,7 @@ import io
 import os
 import sys
 import threading
-from importlib.metadata import version as package_version
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import yaml
 from loguru import logger
@@ -43,45 +42,13 @@ _DEFAULT_PORT        = 8104
 _DEFAULT_SAMPLE_RATE = 22050  # NeMo FastPitch/VITS native rate
 
 
-def _cache_env(cfg: dict, yaml_dir: Path) -> Path:
-    model_cache = Path(cfg.get("model_cache", "../../models"))
-    if not model_cache.is_absolute():
-        model_cache = (yaml_dir / model_cache).resolve()
-    model_cache.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
-    os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
-    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-    return model_cache
-
-
-def _download_pinned_model(model_name: str, revision: str) -> str:
-    from huggingface_hub import get_token, hf_hub_download
-
-    filename = PurePosixPath(model_name).name + ".nemo"
-    logger.info("Pinned HF revision {!r} — downloading {} …", revision, filename)
-    return hf_hub_download(
-        repo_id=model_name,
-        filename=filename,
-        revision=revision,
-        library_name="nemo",
-        library_version=package_version("nemo_toolkit"),
-        token=get_token(),
-    )
-
-
-def _prepare(cfg: dict, yaml_dir: Path) -> None:
-    model_name = cfg.get("model")
-    if not model_name:
-        raise ValueError("'model' is required in config")
-    _cache_env(cfg, yaml_dir)
-
-    revision = cfg.get("model_revision") or None
-    if revision and "/" in str(model_name):
-        _download_pinned_model(str(model_name), str(revision))
-    else:
-        from huggingface_hub import snapshot_download
-
-        snapshot_download(repo_id=str(model_name))
+def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
+    raw = cfg.get("model_cache", "../../models")
+    p   = Path(raw)
+    if not p.is_absolute():
+        p = (yaml_dir / p).resolve()
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 class _TtsBackend:
@@ -115,7 +82,22 @@ class _TtsBackend:
                 # Download a pinned revision from HuggingFace directly, then
                 # restore from the cached .nemo file.  NeMo's from_pretrained()
                 # always pulls HEAD, so we bypass it when a revision is pinned.
-                nemo_path = _download_pinned_model(self._model_name, self._revision)
+                import nemo
+                from pathlib import PurePosixPath
+                from huggingface_hub import hf_hub_download
+                from huggingface_hub import get_token as _get_hf_token
+
+                nemo_filename = PurePosixPath(self._model_name).name + ".nemo"
+                logger.info("Pinned HF revision {!r} — downloading {} …",
+                            self._revision, nemo_filename)
+                nemo_path = hf_hub_download(
+                    repo_id=self._model_name,
+                    filename=nemo_filename,
+                    revision=self._revision,
+                    library_name="nemo",
+                    library_version=nemo.__version__,
+                    token=_get_hf_token(),
+                )
                 logger.info("Restoring from {}", nemo_path)
                 model = MagpieTTSModel.restore_from(restore_path=nemo_path)
             else:
@@ -208,7 +190,11 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
         logger.error("'model' is required in config")
         sys.exit(1)
 
-    model_cache = _cache_env(cfg, yaml_dir)
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+
+    os.environ.setdefault("NEMO_CACHE_DIR", str(model_cache / "nemo"))
+    os.environ.setdefault("HF_HOME", str(model_cache / "huggingface"))
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
@@ -240,7 +226,6 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
-    p.add_argument("--prepare", action="store_true")
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -249,10 +234,6 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
-
-    if ns.prepare:
-        _prepare(cfg, yaml_dir)
-        return
 
     asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
 

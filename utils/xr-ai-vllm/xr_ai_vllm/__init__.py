@@ -53,6 +53,7 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
+from ._docker import owned_listener_pid
 from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
@@ -237,22 +238,16 @@ def stop_persistent_servers(
                 success = False
             continue
 
-        pid, pid_checked, listening = _docker.pid_on_port_checked(port)
-        if not pid_checked or (listening and pid is None):
-            print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
+        try:
+            pid = _docker.owned_listener_pid(port, label)
+        except RuntimeError as exc:
+            print(f"  [{label}] {exc} — not stopping", flush=True)
             success = False
             continue
-        if not listening:
+        if pid is None:
             continue
 
-        assert pid is not None
         found = True
-        if not _docker.is_xr_ai_server_process(pid, label, port):
-            print(f"  [{label}] listener on :{port} is not an xr-ai server — not stopping",
-                  flush=True)
-            success = False
-            continue
-
         pgid = (
             _docker._pocket_owned_process_group(pid, port)
             if label == "tts"
@@ -330,4 +325,5 @@ __all__ = [
     "prepare_requested",
     "setup_hf_env",
     "gpu_compute_major",
+    "owned_listener_pid",
 ]

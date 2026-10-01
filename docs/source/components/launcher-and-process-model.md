@@ -33,15 +33,13 @@ accepts omitted `deployment` metadata and defaults it to external ownership.
 Consumer samples declare only application processes and let workers connect to
 the configured endpoints.
 
-Launcher profile loaders require the wrapped JSON form with `adapter`,
-`endpoint`, and `deployment` objects for each model. `load_model_deployment()`
-reads the profile selected by the worker YAML, while `load_deployment_profile()`
-reads a profile path directly. Both use only the standard library and expose
-deployment metadata and credential requirements. The shared `model-servers`
-sample uses the direct loader and managed entries to select servers. Legacy
-explicit reused and external deployment entries remain accepted. Refer to
-{ref}`model profile formats <deployment-profiles>` for the worker and launcher
-requirements.
+Deployment loaders require the wrapped JSON form with `adapter`, `endpoint`,
+and `deployment` objects for each model. `load_model_deployment()` reads the
+profile selected by the worker YAML; `load_deployment_profile()` reads a profile
+path directly. The shared `model-servers` sample uses managed entries to select
+servers. Endpoint checks read literal connection fields from consumer JSON;
+the worker owns preset expansion and full configuration validation. Refer to
+{ref}`model profile formats <deployment-profiles>` for the supported formats.
 
 The orchestrator declares the process sequence in code:
 
@@ -66,23 +64,53 @@ def run() -> None:
 
 Sample commands accept `--check` to report missing prerequisites without
 starting services. `--check --json` emits one JSON array of results with
-`name`, `ok`, `detected`, `required`, and `remediation` fields. Any failed
-check exits nonzero. Credentials are reported as set or missing, never printed.
+`name`, `status`, `detected`, `required`, and `remediation` fields. `status` is
+`passed`, `failed`, or `skipped`. A skipped check remains unverified and does
+not block launch; a failed check exits nonzero. Human diagnostics go to stderr.
+Credentials are reported as set or missing, never printed.
+
+Checks use the worker's model profile or the model-server launcher's selected
+profile. An explicit `health_path`, `readiness: health`, or legacy
+`health_check: true` enables a bounded HTTP health request. The default
+`/health` path applies only to an explicit health policy. A non-2xx response,
+including 404, fails that check. A loopback endpoint without a configured
+health check gets a bounded TCP connection attempt: refusal fails, while a
+connection is reported as `skipped` with health unverified. Hosted endpoints
+without a health policy, disabled checks, and gRPC endpoints are also skipped.
+These checks establish neither inference capability nor listener ownership.
 
 Normal startup checks dependencies, prepares artifacts, then launches services.
 `--prepare` stops after preparation. Services use their existing Hugging Face
 caches and Docker image storage; downloader output goes straight to the
 terminal. Reused services are not prepared. The xr-render sample also prepares
-LOVR and its web vendor bundle. `--prepare` skips port and Vulkan checks and
-does not stop unselected model services. Speech NIM preparation compiles
+LOVR and its web vendor bundle. `--prepare` skips port and endpoint checks and
+does not stop unselected model services. The output identifies each service
+being prepared and points operators of external or reused endpoints to their
+owning model stack's preparation command. Speech NIM preparation compiles
 engines on the GPU; run `--stop` first if other model servers are running.
 
-The sample's optional `requirements.json` declares driver and Docker minimums,
-the NVIDIA container runtime and Vulkan loader, LOVR configuration, free disk
-space, and listener ports. Port entries reference the process name and its YAML
-`config_key`, so configured ports are checked. Inspection uses `ss` and does
-not bind sockets. Samples without a contract check only credentials explicitly
-supplied to the launcher.
+DeviceIOHub validates its NVDEC and NVENC libraries during preparation and
+startup, before starting LiveKit. `--check` reports this component-owned check
+as skipped. When available, the xr-render sample uses `vulkaninfo --summary` to
+check for an NVIDIA device. Missing `vulkaninfo` leaves device enumeration
+unverified; it does not add a runtime prerequisite. This diagnostic does not
+validate CloudXR rendering or Vulkan extensions. The sample also checks Node
+and npm when its web vendor bundle needs rebuilding. Hosted inference retains
+these prerequisites for local hub and rendering components.
+
+Selected GPU containers require the registered NVIDIA Docker runtime. This
+check does not launch a diagnostic container or verify GPU injection; the
+service performs its own initialization and declares readiness afterward.
+
+The sample's optional `requirements.json` declares `nvidia_driver` and `docker`
+minimum versions and the `disk_gb_free` threshold. Docker checks apply to the
+selected local hub and container processes; pip-only model services do not
+require Docker. Ports come from `Process.port` and the hub's YAML
+configuration. Inspection uses `ss` without binding sockets. An occupied
+persistent-service port is `skipped`: its wrapper must verify ownership and
+health before reuse. Samples without a contract still check supplied
+credentials, selected ports, and model endpoints. The xr-render sample checks
+LOVR.
 
 For a configured model cache, the disk threshold applies to its filesystem when
 the cache is missing or empty. A nonempty cache bypasses the cold-download
@@ -187,9 +215,7 @@ its IPC receive loop is active.
 - `"persist"` — the launcher spawns this process but leaves it running on
   shutdown. Use for heavy model servers that need to survive stack restarts
   (e.g. vLLM containers). Cleanup is the caller's responsibility. The optional
-  `port` field is metadata; `model-servers` uses it to select cleanup targets,
-  and dependency preflight checks its availability. An occupied persistent port
-  passes the check; its wrapper decides whether to reuse the listener.
+  `port` field is metadata; `model-servers` uses it to select cleanup targets.
 - `"reuse"` — the launcher does **not** spawn this process; it is assumed to be
   already running (e.g. started by `model-servers`). The entry in the process
   list documents the dependency; the launcher skips it entirely and does not

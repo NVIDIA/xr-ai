@@ -66,8 +66,6 @@ def _launch_args(
         nim_cache=cache, cuda_visible_devices=str(cfg.get("cuda_visible_devices", "all")),
         extra_env=env, prepare=prepare,
     )
-    # The shared lifecycle owns this container during both compilation and
-    # serving, including --stop before a health endpoint is available.
     if args[-1] != image["Id"]:
         raise RuntimeError("NIM launch arguments must end with the image before adding the Riva entrypoint")
     init_args = [] if prepare else ["--init"]

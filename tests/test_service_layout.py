@@ -232,17 +232,32 @@ def test_xr_render_repairs_an_incomplete_web_xr_vendor_bundle(
 
     def fake_run(command: list[str], **_kwargs) -> subprocess.CompletedProcess:
         calls.append(command)
-        if command == ["node", "--version"]:
-            return subprocess.CompletedProcess(command, 0, node_version)
-        if produce_livekit:
-            (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
-            version_marker.write_text("6.2.0\n")
-            livekit_version_marker.write_text("^2.21.0\n")
-        return subprocess.CompletedProcess(command, 0)
+        assert command == ["node", "--version"]
+        return subprocess.CompletedProcess(command, 0, node_version)
+
+    def fake_popen(command: list[str], **kwargs):
+        calls.append(command)
+        assert command == [str(build_script)]
+        assert kwargs == {
+            "cwd": str(build_script.parent),
+            "start_new_session": True,
+        }
+
+        class Build:
+            @staticmethod
+            def wait() -> int:
+                if produce_livekit:
+                    (vendor_dir / "livekit-client.esm.mjs").write_text("livekit")
+                    version_marker.write_text("6.2.0\n")
+                    livekit_version_marker.write_text("^2.21.0\n")
+                return 0
+
+        return Build()
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
     monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
     monkeypatch.setattr(sample.subprocess, "run", fake_run)
+    monkeypatch.setattr(sample.subprocess, "Popen", fake_popen)
 
     sample._ensure_web_vendor()
     assert calls == [["node", "--version"], [str(build_script)]]
@@ -292,15 +307,30 @@ def test_xr_render_rebuilds_stale_web_xr_vendor_bundle(
 
     def fake_run(command: list[str], **_kwargs) -> subprocess.CompletedProcess:
         calls.append(command)
-        if command == ["node", "--version"]:
-            return subprocess.CompletedProcess(command, 0, "v20.19.0\n")
-        version_marker.write_text("6.2.0\n")
-        livekit_version_marker.write_text("^2.21.0\n")
-        return subprocess.CompletedProcess(command, 0)
+        assert command == ["node", "--version"]
+        return subprocess.CompletedProcess(command, 0, "v20.19.0\n")
+
+    def fake_popen(command: list[str], **kwargs):
+        calls.append(command)
+        assert command == [str(build_script)]
+        assert kwargs == {
+            "cwd": str(build_script.parent),
+            "start_new_session": True,
+        }
+
+        class Build:
+            @staticmethod
+            def wait() -> int:
+                version_marker.write_text("6.2.0\n")
+                livekit_version_marker.write_text("^2.21.0\n")
+                return 0
+
+        return Build()
 
     monkeypatch.setattr(sample, "_BASE", sample_root)
     monkeypatch.setattr(sample.shutil, "which", lambda _command: "/usr/bin/npm")
     monkeypatch.setattr(sample.subprocess, "run", fake_run)
+    monkeypatch.setattr(sample.subprocess, "Popen", fake_popen)
 
     sample._ensure_web_vendor()
 

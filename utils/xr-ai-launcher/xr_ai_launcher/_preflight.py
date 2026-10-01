@@ -3,30 +3,28 @@
 """Read-only prerequisite checks for sample launchers."""
 from __future__ import annotations
 
-import ctypes.util
 import json
 import os
-import platform
 import re
 import shlex
 import shutil
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
+from ._checks import _row, _run
 from ._config import read_config_scalar
 from ._credentials import _KNOWN
+from ._endpoints import endpoint_checks
 
 if TYPE_CHECKING:
     from ._stack import Parallel, Process
 
-_FIELDS = {"nvidia_driver", "docker", "nvidia_container_toolkit", "vulkan",
-           "lovr_config", "disk_gb_free", "ports"}
-
-
-def _row(name: str, ok: bool, detected: str, required: str, remediation: str) -> dict[str, object]:
-    return {"name": name, "ok": ok, "detected": detected,
-            "required": required, "remediation": remediation}
+_FIELDS = {"nvidia_driver", "docker", "disk_gb_free"}
+_HUB_PORTS = (
+    ("lk_port_ws", 7880, "tcp"),
+    ("lk_port_tcp", 7881, "tcp"),
+    ("lk_port_udp", 7882, "udp"),
+)
 
 
 def _contract(path: Path) -> tuple[dict[str, Any] | None, str]:
@@ -38,20 +36,15 @@ def _contract(path: Path) -> tuple[dict[str, Any] | None, str]:
         return None, "contract must be an object"
     if unknown := set(value) - _FIELDS:
         return None, f"contract contains unsupported fields: {', '.join(sorted(unknown))}"
+    for name in ("nvidia_driver", "docker"):
+        if name in value and re.fullmatch(r"\d+(?:\.\d+)*", str(value[name])) is None:
+            return None, f"{name} must be a dot-separated numeric version"
+    minimum = value.get("disk_gb_free")
+    if "disk_gb_free" in value and (
+        type(minimum) not in (int, float) or not 0 < minimum < float("inf")
+    ):
+        return None, "disk_gb_free must be a positive number"
     return value, ""
-
-
-def _run(command: list[str]) -> tuple[bool, str]:
-    if shutil.which(command[0]) is None:
-        return False, f"{command[0]} not found"
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return False, type(exc).__name__
-    if result.returncode == 0:
-        return True, result.stdout.strip()
-    errors = result.stderr.strip().splitlines() or result.stdout.strip().splitlines()
-    return False, errors[0] if errors else f"exit {result.returncode}"
 
 
 def _version(value: str) -> tuple[int, ...]:
@@ -59,7 +52,7 @@ def _version(value: str) -> tuple[int, ...]:
     return tuple(map(int, match.group().split("."))) if match else ()
 
 
-def _version_check(name: str, command: list[str], minimum: str | int, remediation: str) -> dict[str, object]:
+def _version_check(name: str, command: list[str], minimum: str | int | float, remediation: str) -> dict[str, object]:
     ran, found = _run(command)
     actual, required = _version(found), _version(str(minimum))
     width = max(len(actual), len(required))
@@ -89,8 +82,8 @@ def _port_check(process: Process, port: int, proto: str, label: str) -> dict[str
     output = output.splitlines()[0] if output else ""
     occupied = bool(output)
     if mode == "persist" and occupied:
-        return _row(name, True, f"listening ({output}); wrapper will validate reuse",
-                    f"available or reusable {proto} port", "")
+        return _row(name, None, f"listening ({output}); ownership and readiness unverified",
+                    f"wrapper-validated service on {proto} port", "The service wrapper validates reuse at startup.")
     remediation = "Stop the listener on this port, or change the port in this service's config."
     if occupied and "users:" not in output:
         remediation += " No owning process is visible; check `docker ps`."
@@ -99,8 +92,12 @@ def _port_check(process: Process, port: int, proto: str, label: str) -> dict[str
 
 
 def preflight(processes: Sequence[Process | Parallel], base: Path, *,
-              credentials: Sequence[str] = (), runtime: bool = True) -> list[dict[str, object]]:
-    """Return one result row per applicable check."""
+              credentials: Sequence[str] = (), runtime: bool = True,
+              model_profile: Path | None = None) -> list[dict[str, object]]:
+    """Return prerequisite rows with ``passed``, ``failed``, or ``skipped`` status.
+
+    Skipped checks remain unverified. Service wrappers own readiness and reuse.
+    """
     base = Path(base)
     rows = []
     for name in dict.fromkeys(credentials):
@@ -110,22 +107,27 @@ def preflight(processes: Sequence[Process | Parallel], base: Path, *,
         rows.append(_row(f"credential:{name}", bool(os.environ.get(name)),
                          "set" if os.environ.get(name) else "not set", "set", remediation))
     path = base / "requirements.json"
-    if not path.is_file():
-        return rows
-    contract, error = _contract(path)
+    contract, error = _contract(path) if path.is_file() else ({}, "")
     if contract is None:
         rows.append(_row("contract", False, error, "valid requirements.json", f"Fix {path}."))
         return rows
     flat = _flatten(processes)
-    local = any(process.launch_mode != "reuse" for process in flat)
+    local = [process for process in flat if process.launch_mode != "reuse"]
+    containers = any(
+        process.command in {"nim_server", "nim_riva_server"}
+        or (process.config is not None
+            and read_config_scalar((base / process.config).resolve(), "vllm_backend") == "docker")
+        for process in local
+    )
+    hub = next((process for process in local if process.command == "device_io_hub"), None)
     if local and (minimum := contract.get("nvidia_driver")):
         rows.append(_version_check("nvidia_driver", ["nvidia-smi", "--query-gpu=driver_version",
                     "--format=csv,noheader"], minimum, "Upgrade the driver: https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#software"))
-    if local and (minimum := contract.get("docker")):
+    if (hub is not None or containers) and (minimum := contract.get("docker")):
         rows.append(_version_check("docker", ["docker", "version", "--format", "{{.Server.Version}}"],
                     minimum, f"Install Docker {minimum} or newer and allow this user to run it: "
                     "https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#docker-host-setup"))
-    if local and contract.get("nvidia_container_toolkit"):
+    if containers:
         ran, output = _run(["docker", "info", "--format", "{{json .Runtimes}}"])
         try:
             runtimes = json.loads(output) if ran else None
@@ -141,15 +143,6 @@ def preflight(processes: Sequence[Process | Parallel], base: Path, *,
         )
         rows.append(_row("nvidia_container_toolkit", available,
                          output, "nvidia Docker runtime", remediation))
-    if runtime and local and contract.get("vulkan"):
-        found = ctypes.util.find_library("vulkan")
-        rows.append(_row("vulkan", found is not None, found or "not found", "Vulkan loader",
-                         "Install the Vulkan loader (libvulkan1 on Ubuntu)."))
-    if config_name := contract.get("lovr_config"):
-        needed = platform.machine().lower() == "aarch64"
-        found = os.environ.get("LOVR_BIN") or read_config_scalar(base / config_name, "lovr_bin")
-        rows.append(_row("lovr", not needed or bool(found), found or ("not required" if not needed else "not set"),
-                         "LOVR_BIN or lovr_bin on aarch64", "Build LOVR and set LOVR_BIN: https://nvidia.github.io/xr-ai/latest/guides/troubleshooting.html#dgx-spark-lovr-auto-download-is-not-supported"))
     if local and (minimum := contract.get("disk_gb_free")):
         caches: set[Path] = set()
         for process in (item for item in flat
@@ -178,27 +171,33 @@ def preflight(processes: Sequence[Process | Parallel], base: Path, *,
                              f"Free at least {minimum} GB on the model-cache filesystem."))
     if not runtime:
         return rows
-    by_name = {process.name: process for process in flat}
     checked: set[tuple[str, int]] = set()
-    for item in contract.get("ports", []):
-        process = by_name.get(item["name"])
-        if process is None or process.launch_mode == "reuse":
-            continue
-        raw = read_config_scalar((base / process.config).resolve(),
-                                 item["config_key"], str(item["port"]))
-        try:
-            port = int(raw)
-            if not 1 <= port <= 65535:
-                raise ValueError
-        except ValueError:
-            rows.append(_row(f"port:{item['name']}", False, f"invalid port {raw!r}", "integer 1..65535",
-                             f"Fix {item['config_key']} in the process config."))
-            continue
-        rows.append(_port_check(process, port, item["proto"], item["name"]))
-        checked.add((item["name"], port))
+    if hub is not None:
+        for config_key, default, proto in _HUB_PORTS:
+            raw = (
+                read_config_scalar((base / hub.config).resolve(), config_key, str(default))
+                if hub.config is not None else str(default)
+            )
+            try:
+                port = int(raw)
+                if not 1 <= port <= 65535:
+                    raise ValueError
+            except ValueError:
+                rows.append(_row(
+                    f"port:{hub.name}", False, f"invalid port {raw!r}",
+                    "integer 1..65535", f"Fix {config_key} in the DeviceIOHub config.",
+                ))
+                continue
+            rows.append(_port_check(hub, port, proto, hub.name))
+            checked.add((hub.name, port))
     for process in flat:
         port = process.port
         if port is not None and process.launch_mode != "reuse" \
                 and (process.name, port) not in checked:
             rows.append(_port_check(process, port, "tcp", process.name))
+    if hub is not None:
+        rows.append(_row("video_codecs", None,
+                         "DeviceIOHub checks codec libraries during preparation and startup",
+                         "NVIDIA NVDEC and NVENC libraries", ""))
+    rows.extend(endpoint_checks(model_profile, {process.name for process in local}))
     return rows

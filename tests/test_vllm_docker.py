@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import threading
 import time
 from pathlib import Path
@@ -1586,12 +1587,12 @@ class TestEvictLocalListener:
         _docker.evict_local_listener(8100, "test")
         assert sent == [_docker.signal.SIGTERM]
 
-    def test_non_xr_ai_listener_is_left_alone(self, monkeypatch):
+    def test_unverified_listener_is_left_alone(self, monkeypatch, capsys):
         monkeypatch.setattr(
             _docker, "pid_on_port_checked", lambda port: (4242, True, True),
         )
         monkeypatch.setattr(
-            _docker, "is_xr_ai_server_process", lambda pid, label, port: False,
+            _docker, "is_xr_ai_server_process", lambda *_args: False,
         )
 
         def _no_kill(pid, sig):
@@ -1599,6 +1600,10 @@ class TestEvictLocalListener:
 
         monkeypatch.setattr(_docker.os, "kill", _no_kill)
         _docker.evict_local_listener(8100, "test")
+        output = capsys.readouterr().out
+        assert "identity unconfirmed" in output
+        assert "uninspectable by this user" in output
+        assert "inspect pid 4242 and its owner; not stopping" in output
 
     def test_free_port_is_a_noop(self, monkeypatch):
         monkeypatch.setattr(
@@ -1617,6 +1622,19 @@ class TestPipEviction:
         from xr_ai_vllm import _pip
 
         evicted: list[tuple[str, str]] = []
+        spawned: list[list[str]] = []
+        original_handlers = {signal.SIGINT: object(), signal.SIGTERM: object()}
+        signal_handlers = dict(original_handlers)
+        terminate = MagicMock()
+
+        def set_signal(sig, handler):
+            previous = signal_handlers[sig]
+            signal_handlers[sig] = handler
+            return previous
+
+        def idle(*_args):
+            assert signal_handlers == original_handlers
+
         monkeypatch.setattr(
             _pip._docker, "container_on_port_checked",
             lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
@@ -1629,15 +1647,23 @@ class TestPipEviction:
             _pip._docker, "remove_container",
             lambda name: evicted.append(("rm", name)) or True,
         )
-        monkeypatch.setattr(_pip._lifecycle, "health_ok", lambda url, **kw: True)
         monkeypatch.setattr(
-            _pip._lifecycle, "idle_until_stopped", lambda *a, **kw: None,
+            _pip._docker, "owned_listener_pid", MagicMock(side_effect=[None, 4343]),
         )
+        monkeypatch.setattr(_pip.os, "getpgid", lambda _pid: 4242)
+        monkeypatch.setattr(_pip._lifecycle, "wait_until_healthy", lambda *a, **kw: None)
+        monkeypatch.setattr(_pip._lifecycle, "idle_until_stopped", idle)
+        monkeypatch.setattr(_pip, "_terminate_process", terminate)
+        monkeypatch.setattr(_pip.signal, "signal", set_signal)
 
-        def _no_popen(*a, **kw):
-            raise AssertionError("reuse path must not spawn vllm")
+        process = MagicMock(pid=4242)
+        process.poll.return_value = None
 
-        monkeypatch.setattr(_pip.subprocess, "Popen", _no_popen)
+        def _popen(argv, **_kwargs):
+            spawned.append(argv)
+            return process
+
+        monkeypatch.setattr(_pip.subprocess, "Popen", _popen)
         _pip.run(
             persistent=True,
             log_prefix="test",
@@ -1650,3 +1676,184 @@ class TestPipEviction:
             ("stop", "xr-ai-nim-cosmos3-reasoner"),
             ("rm", "xr-ai-nim-cosmos3-reasoner"),
         ]
+        assert spawned == [["vllm", "serve", "m"]]
+        terminate.assert_not_called()
+
+    def test_pip_run_reuses_stable_owned_listener(self, monkeypatch, tmp_path):
+        from xr_ai_vllm import _pip
+
+        ready_file = tmp_path / "ready"
+        proc_root = tmp_path / "proc" / "4242"
+        proc_root.mkdir(parents=True)
+        (proc_root / "cmdline").write_text("VLLM::APIServer\0")
+        (proc_root / "environ").write_bytes(
+            b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8100\0"
+        )
+        inspected: list[int] = []
+        idle: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            _pip._docker,
+            "Path",
+            lambda path: proc_root / path.rsplit("/", 1)[-1],
+        )
+        monkeypatch.setattr(
+            _pip._docker, "container_on_port_checked", lambda _port: (None, True),
+        )
+
+        def pid_on_port(port):
+            inspected.append(port)
+            return (4242, True, True)
+
+        monkeypatch.setattr(_pip._docker, "pid_on_port_checked", pid_on_port)
+        monkeypatch.setattr(_pip._lifecycle, "health_ok", lambda _url: True)
+        monkeypatch.setattr(
+            _pip._lifecycle,
+            "idle_until_stopped",
+            lambda url, prefix: idle.append((url, prefix)),
+        )
+        monkeypatch.setattr(
+            _pip.subprocess,
+            "Popen",
+            lambda *_a, **_kw: pytest.fail("warm reuse must not spawn vLLM"),
+        )
+
+        _pip.run(
+            persistent=True,
+            log_prefix="test",
+            vllm_argv=["vllm", "serve", "m"],
+            host="0.0.0.0",
+            port=8100,
+            ready_file=ready_file,
+        )
+
+        assert inspected == [8100, 8100]
+        assert ready_file.exists()
+        assert idle == [("http://127.0.0.1:8100/health", "test")]
+
+    @pytest.mark.parametrize(
+        ("states", "owned", "healthy", "message"),
+        [
+            ([(None, False, False)], True, True, "cannot inspect ownership"),
+            ([(None, True, True)], True, True, "owning process is not visible"),
+            ([(4343, True, True)], False, True, "identity unconfirmed"),
+            ([(4242, True, True)], True, False, "health check failed"),
+            ([(4242, True, True), (4343, True, True)], True, True,
+             "changed while its identity was being validated"),
+        ],
+    )
+    def test_pip_run_rejects_unverified_listener_without_mutation(
+        self, monkeypatch, tmp_path, states, owned, healthy, message,
+    ):
+        from xr_ai_vllm import _pip
+
+        def forbidden(*_args, **_kwargs):
+            pytest.fail("an unverified listener must not be stopped, adopted, or replaced")
+
+        ready_file = tmp_path / "ready"
+        monkeypatch.setattr(_pip._docker, "container_on_port_checked",
+                            lambda _port: (None, True))
+        monkeypatch.setattr(_pip._docker, "pid_on_port_checked",
+                            MagicMock(side_effect=states))
+        monkeypatch.setattr(_pip._docker, "is_xr_ai_server_process",
+                            lambda *_args: owned)
+        monkeypatch.setattr(_pip._lifecycle, "health_ok",
+                            lambda _url: healthy if owned else forbidden())
+        for target, name in (
+            (_pip._docker, "stop_container"),
+            (_pip._docker, "remove_container"),
+            (_pip._lifecycle, "idle_until_stopped"),
+            (_pip.subprocess, "Popen"),
+        ):
+            monkeypatch.setattr(target, name, forbidden)
+
+        with pytest.raises(SystemExit, match=message):
+            _pip.run(persistent=True, log_prefix="test",
+                     vllm_argv=["vllm", "serve", "m"], host="0.0.0.0",
+                     port=8100, ready_file=ready_file)
+
+        assert not ready_file.exists()
+
+    @pytest.mark.parametrize(
+        ("persistent", "owners", "startup_signal", "leader_status",
+         "group_states", "expected_signals"),
+        [
+            (True, [None, 4343], None, None, [True, False], [signal.SIGTERM]),
+            (False, [4343], None, None, [], []),
+            (True, [None], signal.SIGINT, 23, [True, True],
+             [signal.SIGTERM, signal.SIGKILL]),
+            (True, [None], signal.SIGTERM, 23, [True, True],
+             [signal.SIGTERM, signal.SIGKILL]),
+        ],
+    )
+    def test_pip_spawn_rejects_health_from_another_pid_and_terminates(
+        self, monkeypatch, tmp_path, persistent, owners, startup_signal,
+        leader_status, group_states, expected_signals,
+    ):
+        from xr_ai_vllm import _pip
+
+        ready_file = tmp_path / "ready"
+        process = MagicMock(pid=4242)
+        process.poll.return_value = leader_status
+        groups = MagicMock(side_effect=group_states)
+        killed: list[tuple[int, int]] = []
+        original_handlers = {
+            signal.SIGINT: signal.default_int_handler,
+            signal.SIGTERM: signal.default_int_handler,
+        }
+        signal_handlers = dict(original_handlers)
+
+        def set_signal(sig, handler):
+            previous = signal_handlers[sig]
+            signal_handlers[sig] = handler
+            return previous
+
+        def group_alive(*_args):
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal_handlers[sig](sig, None)
+            return groups()
+
+        monkeypatch.setattr(
+            _pip._docker, "container_on_port_checked", lambda _port: (None, True),
+        )
+        monkeypatch.setattr(
+            _pip._docker, "owned_listener_pid", MagicMock(side_effect=owners),
+        )
+        monkeypatch.setattr(_pip.os, "getpgid", lambda _pid: 9999)
+        monkeypatch.setattr(_pip.os, "killpg", lambda pgid, sig: killed.append((pgid, sig)))
+        monkeypatch.setattr(_pip._docker, "process_group_alive", group_alive)
+        monkeypatch.setattr(_pip.signal, "signal", set_signal)
+        def wait_until_healthy(*_args, **_kwargs):
+            if startup_signal:
+                signal_handlers[startup_signal](startup_signal, None)
+
+        monkeypatch.setattr(_pip._lifecycle, "wait_until_healthy", wait_until_healthy)
+        monkeypatch.setattr(_pip, "_PROCESS_STOP_TIMEOUT_S", 0)
+        monkeypatch.setattr(_pip.subprocess, "Popen", lambda *_args, **_kwargs: process)
+
+        with pytest.raises(SystemExit) as caught:
+            _pip.run(
+                persistent=persistent,
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "m"],
+                host="0.0.0.0",
+                port=8100,
+                ready_file=ready_file,
+            )
+
+        assert caught.value.code == (
+            128 + startup_signal if startup_signal else
+            "[test] health endpoint on port 8100 is not owned by "
+            "spawned vLLM session 4242; wait for another server to finish starting "
+            "or run `model_servers --stop`"
+        )
+        assert not ready_file.exists()
+        assert killed == [(4242, sig) for sig in expected_signals]
+        if persistent:
+            process.send_signal.assert_not_called()
+        else:
+            assert [call.args[0] for call in process.send_signal.call_args_list] == [
+                signal.SIGTERM,
+                signal.SIGKILL,
+            ]
+        assert process.poll.call_count == (1 if persistent else 3)
+        assert signal_handlers == original_handlers

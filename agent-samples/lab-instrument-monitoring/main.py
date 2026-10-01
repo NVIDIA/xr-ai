@@ -107,7 +107,8 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config), _BASE, options=args)
+        run_stack(_build_processes(worker_config), _BASE, options=args,
+                  model_profile=worker_config.parent / "models.json")
 
 
 if __name__ == "__main__":

@@ -232,6 +232,39 @@ def test_deployment_credentials_are_collected(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("ownership", "expected"),
+    [
+        ("managed", ("ENDPOINT_KEY", "SERVICE_KEY")),
+        ("reused", ("ENDPOINT_KEY",)),
+        ("external", ("ENDPOINT_KEY",)),
+    ],
+)
+def test_server_credentials_apply_only_to_managed_deployments(
+    tmp_path, ownership, expected
+) -> None:
+    profile = tmp_path / "models.json"
+    _write_profile(profile, credential="ENDPOINT_KEY")
+    raw = json.loads(profile.read_text(encoding="utf-8"))
+    raw["models"]["vision"]["deployment"].update(
+        ownership=ownership, credentials=["SERVICE_KEY"],
+    )
+    profile.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert load_deployment_profile(profile).required_credentials == expected
+
+
+def test_deployment_loader_rejects_non_string_readiness(tmp_path) -> None:
+    profile = tmp_path / "models.json"
+    _write_profile(profile)
+    raw = json.loads(profile.read_text(encoding="utf-8"))
+    raw["models"]["vision"]["endpoint"]["readiness"] = []
+    profile.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported readiness"):
+        load_deployment_profile(profile)
+
+
+@pytest.mark.parametrize(
     ("credentials", "match"),
     [
         ("NGC_API_KEY", "must be a list"),

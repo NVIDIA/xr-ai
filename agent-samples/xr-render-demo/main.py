@@ -50,10 +50,12 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import urllib.request
 from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
 
 from loguru import logger
@@ -61,9 +63,11 @@ from xr_ai_launcher import (
     Process,
     add_launch_arguments,
     is_native_profile,
+    read_config_scalar,
     read_device_profile,
     run_stack,
 )
+from xr_ai_launcher._checks import _row, _run
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -73,6 +77,7 @@ _CLOUDXR_CONFIG = "yaml/cloudxr_runtime.yaml"
 
 # Must match _config_loader.NO_WEB_CLIENT_ENV.
 _NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
+_TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 # ── Process stack ─────────────────────────────────────────────────────────────
@@ -214,29 +219,20 @@ def _ensure_lovr_bin() -> None:
 
 # ── Web vendor bundle ─────────────────────────────────────────────────────────
 
-def _ensure_web_vendor() -> None:
-    """Build the web vendor bundle when outputs are missing or out of date.
+_MIN_NODE_VERSION = "20.19.0"
 
-    Runs client-samples/web-xr-build/build.sh, which downloads the CloudXR SDK
-    from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
-    Requires npm on PATH. Skipped when both outputs carry the CloudXR and
-    LiveKit dependency versions selected by web-xr-build.
-    """
-    vendor_dir   = (_BASE / "../../client-samples/web-xr/vendor").resolve()
-    cloudxr_out  = vendor_dir / "cloudxr-sdk.esm.mjs"
-    livekit_out  = vendor_dir / "livekit-client.esm.mjs"
+
+def _web_client_enabled() -> bool:
+    return os.environ.get(_NO_WEB_CLIENT_ENV, "").strip().lower() not in _TRUE_VALUES
+
+
+def _vendor_stale() -> tuple[bool, Path]:
+    vendor_dir = (_BASE / "../../client-samples/web-xr/vendor").resolve()
     build_sh = (_BASE / "../../client-samples/web-xr-build/build.sh").resolve()
     if not build_sh.exists():
-        logger.warning(
-            "web vendor bundle missing or stale and {} not found — skipping",
-            build_sh,
-        )
-        return
-
+        return False, build_sh
     sdk_version_path = build_sh.parent / ".sdk-version"
     package_json_path = build_sh.parent / "package.json"
-    version_marker = vendor_dir / ".cloudxr-sdk-version"
-    livekit_version_marker = vendor_dir / ".livekit-client-version"
     try:
         sdk_version = sdk_version_path.read_text(encoding="utf-8").strip()
     except OSError as exc:
@@ -249,6 +245,8 @@ def _ensure_web_vendor() -> None:
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
         sys.exit(f"\n  [setup] failed to read {package_json_path}: {exc}\n")
 
+    version_marker = vendor_dir / ".cloudxr-sdk-version"
+    livekit_version_marker = vendor_dir / ".livekit-client-version"
     try:
         built_version = version_marker.read_text(encoding="utf-8").strip()
     except OSError:
@@ -259,14 +257,16 @@ def _ensure_web_vendor() -> None:
         ).strip()
     except OSError:
         built_livekit_version = ""
-    if (
-        cloudxr_out.exists()
-        and livekit_out.exists()
+    current = (
+        (vendor_dir / "cloudxr-sdk.esm.mjs").exists()
+        and (vendor_dir / "livekit-client.esm.mjs").exists()
         and built_version == sdk_version
         and built_livekit_version == livekit_version
-    ):
-        return
+    )
+    return not current, build_sh
 
+
+def _node_npm_status() -> tuple[bool, str]:
     node_version = "unavailable"
     try:
         node_version = subprocess.run(["node", "--version"], capture_output=True,
@@ -274,51 +274,118 @@ def _ensure_web_vendor() -> None:
         version = tuple(int(part) for part in node_version.lstrip("v").split("."))
     except (OSError, subprocess.SubprocessError, ValueError):
         version = ()
-    if version < (20, 19, 0) or not shutil.which("npm"):
+    npm_found = shutil.which("npm") is not None
+    detected = f"Node.js {node_version}; npm {'found' if npm_found else 'not found'}"
+    minimum = tuple(map(int, _MIN_NODE_VERSION.split(".")))
+    return version >= minimum and npm_found, detected
+
+
+def _vulkan_check() -> dict[str, object]:
+    if shutil.which("vulkaninfo") is None:
+        return _row(
+            "vulkan_device", None,
+            "vulkaninfo not installed; device enumeration not checked",
+            "NVIDIA Vulkan physical device",
+            "Optional: install vulkan-tools to verify the Vulkan device before launch.",
+        )
+
+    ok, output = _run(["vulkaninfo", "--summary"], timeout=15)
+    if not ok:
+        return _row(
+            "vulkan_device", False, output, "NVIDIA Vulkan physical device",
+            "Fix the Vulkan loader or ICD error reported by vulkaninfo.",
+        )
+    nvidia = re.search(r"^\s*vendorID\s*=\s*0x10de\b", output,
+                       flags=re.IGNORECASE | re.MULTILINE)
+    detected = ("NVIDIA Vulkan device found" if nvidia else
+                "no NVIDIA Vulkan device in vulkaninfo --summary")
+    return _row(
+        "vulkan_device", nvidia is not None, detected,
+        "NVIDIA Vulkan physical device",
+        "Install a working NVIDIA Vulkan ICD and fix GPU device access.",
+    )
+
+
+def _check_sample() -> list[dict[str, object]]:
+    needed = platform.machine().lower() == "aarch64"
+    lovr = os.environ.get("LOVR_BIN") or read_config_scalar(
+        _BASE / "scene/scene_service.yaml", "lovr_bin",
+    )
+    rows = [_vulkan_check(), _row(
+        "lovr", bool(lovr) if needed else None,
+        lovr or ("not set" if needed else "not required"),
+        "LOVR_BIN or lovr_bin on aarch64",
+        ("Build LOVR and set LOVR_BIN: https://nvidia.github.io/xr-ai/latest/guides/troubleshooting.html#dgx-spark-lovr-auto-download-is-not-supported"
+         if needed and not lovr else ""),
+    )]
+    if not _web_client_enabled():
+        return rows
+    try:
+        stale, _ = _vendor_stale()
+    except SystemExit as exc:
+        rows.append(_row(
+            "web_vendor_bundle", False, str(exc).strip(), "readable web vendor build metadata",
+            "Restore client-samples/web-xr-build from the repository.",
+        ))
+        return rows
+    if not stale:
+        return rows
+    ok, detected = _node_npm_status()
+    rows.append(_row(
+        "web_vendor_node", ok, detected, f"Node.js >= {_MIN_NODE_VERSION} with npm",
+        "Install Node.js from https://nodejs.org, including npm.",
+    ))
+    return rows
+
+
+def _ensure_web_vendor() -> None:
+    """Build the web vendor bundle when outputs are missing or out of date.
+
+    Runs client-samples/web-xr-build/build.sh, which downloads the CloudXR SDK
+    from NGC and produces vendor/cloudxr-sdk.esm.mjs and livekit-client.esm.mjs.
+    Skipped when both outputs carry the CloudXR and LiveKit dependency versions
+    selected by web-xr-build.
+    """
+    stale, build_sh = _vendor_stale()
+    if not build_sh.exists():
+        logger.warning(
+            "web vendor bundle missing or stale and {} not found — skipping",
+            build_sh,
+        )
+        return
+    if not stale:
+        return
+
+    node_ok, detected = _node_npm_status()
+    if not node_ok:
         sys.exit(
             "\n  xr-render-demo: web vendor bundle missing or stale. Building it needs "
-            f"Node.js 20.19.0 or newer with npm (Node.js detected: {node_version}).\n"
+            f"Node.js {_MIN_NODE_VERSION} or newer with npm ({detected}).\n"
             "  Install Node.js (https://nodejs.org), then re-run, or build manually:\n"
             f"    cd {build_sh.parent} && ./build.sh\n"
         )
 
-    logger.info(
-        "Web vendor bundle missing or stale "
-        "(CloudXR have={!r}, want={!r}; LiveKit have={!r}, want={!r}) — "
-        "running build.sh: {}",
-        built_version or None,
-        sdk_version,
-        built_livekit_version or None,
-        livekit_version,
-        build_sh,
+    logger.info("Web vendor bundle missing or stale: running build.sh: {}", build_sh)
+    process = subprocess.Popen(
+        [str(build_sh)], cwd=str(build_sh.parent), start_new_session=True,
     )
-    result = subprocess.run([str(build_sh)], cwd=str(build_sh.parent))
-    if result.returncode != 0:
+    try:
+        returncode = process.wait()
+    except BaseException:
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        with suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=5)
+        raise
+    if returncode != 0:
         sys.exit(
-            f"\n  [setup] build.sh failed (exit {result.returncode}).\n"
+            f"\n  [setup] build.sh failed (exit {returncode}).\n"
             f"  Check the output above, then re-run.\n"
         )
-    missing = [path.name for path in (cloudxr_out, livekit_out) if not path.exists()]
-    if missing:
+    if _vendor_stale()[0]:
         sys.exit(
-            "\n  [setup] build.sh completed without producing: "
-            f"{', '.join(missing)}.\n"
+            "\n  [setup] build.sh completed without producing current vendor outputs.\n"
             "  Check the output above, then re-run.\n"
-        )
-    try:
-        built_version = version_marker.read_text(encoding="utf-8").strip()
-    except OSError:
-        built_version = ""
-    try:
-        built_livekit_version = livekit_version_marker.read_text(
-            encoding="utf-8"
-        ).strip()
-    except OSError:
-        built_livekit_version = ""
-    if built_version != sdk_version or built_livekit_version != livekit_version:
-        sys.exit(
-            "\n  [setup] build.sh completed without recording the requested "
-            "vendor versions.\n"
         )
     logger.info("Web vendor bundle ready")
 
@@ -326,7 +393,7 @@ def _ensure_web_vendor() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def _prepare_sample() -> None:
-    if os.environ.get(_NO_WEB_CLIENT_ENV, "").strip().lower() not in {"1", "true", "yes", "on"}:
+    if _web_client_enabled():
         _ensure_web_vendor()
     _ensure_lovr_bin()
 
@@ -337,8 +404,9 @@ def run(argv: Sequence[str] | None = None) -> None:
     if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
         os.environ[_NO_WEB_CLIENT_ENV] = "1"
         logger.info("native device profile: web client page disabled, skipping vendor build")
-    run_stack(_build_processes(capture=args.capture), _BASE,
-              options=args, prepare_sample=_prepare_sample)
+    run_stack(_build_processes(capture=args.capture), _BASE, options=args,
+              model_profile=_BASE / "yaml/models.json", check_sample=_check_sample,
+              prepare_sample=_prepare_sample)
 
 
 if __name__ == "__main__":

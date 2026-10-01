@@ -1,17 +1,30 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Stdlib-only process and credential view of a model deployment profile."""
+"""Stdlib-only process, credential, and endpoint views of model profiles."""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from ._config import read_config_scalar
 
 LaunchMode = Literal["own", "reuse"]
+EndpointReadiness = Literal["health", "none"]
+
+
+@dataclass(frozen=True)
+class _ModelEndpoint:
+    role: str
+    kind: str | None
+    base_url: str
+    health_path: str | None
+    readiness: EndpointReadiness | None
+    api_key_env: str | None
+    managed_service: str | None
 
 
 @dataclass(frozen=True)
@@ -25,11 +38,76 @@ class ModelDeployment:
     """Launcher ownership mode keyed by managed service name."""
 
     required_credentials: tuple[str, ...]
-    """Environment-variable names required by configured model endpoints."""
+    """Environment keys required by endpoints and managed services."""
 
     def launch_mode(self, service: str) -> Literal["own", "reuse"] | None:
         """Return the configured ownership mode for *service*, if managed."""
         return self.services.get(service)
+
+
+def _read_model_profile(profile_path: Path) -> Any:
+    if profile_path.suffix.lower() != ".json":
+        raise ValueError(
+            f"{profile_path}: launcher model profiles must use a .json file; "
+            "YAML profiles are supported only by worker-side xr-ai-models"
+        )
+    try:
+        return json.loads(profile_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot load model profile {profile_path}: {exc}") from exc
+
+
+def _load_model_endpoints(profile_path: Path) -> tuple[_ModelEndpoint, ...]:
+    """Project literal endpoint fields from worker-compatible JSON shapes."""
+
+    raw = _read_model_profile(profile_path)
+    models = raw.get("models", raw)
+    endpoints: list[_ModelEndpoint] = []
+    for role, model in models.items():
+        adapter = model.get("adapter", model)
+        endpoint = model.get("endpoint", model)
+        deployment = model.get("deployment", {})
+        kind = adapter.get("kind")
+        base_url = endpoint.get("base_url")
+        health_path = endpoint.get("health_path")
+        credential = endpoint.get("api_key_env")
+        has_legacy = "health_check" in endpoint
+        legacy = endpoint.get("health_check")
+        readiness = endpoint.get("readiness")
+        if (
+            not isinstance(role, str) or not role
+            or kind is not None and not isinstance(kind, str)
+            or not isinstance(base_url, str) or not base_url
+            or health_path is not None and not isinstance(health_path, str)
+            or credential is not None
+            and (not isinstance(credential, str) or not credential)
+            or has_legacy and not isinstance(legacy, bool)
+            or readiness is not None and readiness not in {"health", "none"}
+            or readiness is not None
+            and has_legacy and (readiness == "health") != legacy
+        ):
+            raise ValueError("invalid model endpoint profile")
+        if readiness is None:
+            readiness = (
+                "health" if legacy is True else "none" if legacy is False else None
+            )
+        endpoints.append(
+            _ModelEndpoint(
+                role=role,
+                kind=kind,
+                base_url=base_url,
+                health_path=health_path,
+                readiness=readiness,
+                api_key_env=credential,
+                managed_service=(
+                    deployment.get("service")
+                    if deployment.get("ownership") == "managed"
+                    and isinstance(deployment.get("service"), str)
+                    else None
+                ),
+            )
+        )
+    return tuple(endpoints)
 
 
 def load_model_deployment(worker_config: Path) -> ModelDeployment:
@@ -49,16 +127,7 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
 def load_deployment_profile(profile_path: Path) -> ModelDeployment:
     """Load a JSON deployment profile directly (no worker YAML indirection)."""
 
-    if profile_path.suffix.lower() != ".json":
-        raise ValueError(
-            f"{profile_path}: launcher model profiles must use a .json file; "
-            "YAML profiles are supported only by worker-side xr-ai-models"
-        )
-    try:
-        raw = json.loads(profile_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"cannot load model profile {profile_path}: {exc}") from exc
-
+    raw = _read_model_profile(profile_path)
     models = raw.get("models") if isinstance(raw, dict) else None
     if not isinstance(models, dict):
         raise ValueError(f"{profile_path}: 'models' must be an object")
@@ -84,7 +153,7 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
             )
 
         readiness = endpoint.get("readiness", "health")
-        if readiness not in {"health", "none"}:
+        if not isinstance(readiness, str) or readiness not in {"health", "none"}:
             raise ValueError(
                 f"{profile_path}: unsupported readiness {readiness!r} for {role!r}"
             )
@@ -97,8 +166,16 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
                 )
             credentials.add(credential)
 
-        # Keys the launched service itself needs; see the rationale on
-        # xr_ai_models DeploymentSpec.credentials.
+        ownership = deployment.get("ownership", "external")
+        if ownership == "managed":
+            launch_mode: LaunchMode = "own"
+        elif ownership == "reused":
+            launch_mode = "reuse"
+        elif ownership != "external":
+            raise ValueError(
+                f"{profile_path}: unsupported ownership {ownership!r}"
+            )
+
         deployment_credentials = deployment.get("credentials", [])
         if not isinstance(deployment_credentials, list):
             raise ValueError(
@@ -107,21 +184,14 @@ def load_deployment_profile(profile_path: Path) -> ModelDeployment:
         for name in deployment_credentials:
             if not isinstance(name, str) or not name:
                 raise ValueError(
-                    f"{profile_path}: deployment credentials for {role!r} must be non-empty strings"
+                    f"{profile_path}: deployment credentials for {role!r} "
+                    "must be non-empty strings"
                 )
-            credentials.add(name)
+            if ownership == "managed":
+                credentials.add(name)
 
-        ownership = deployment.get("ownership", "external")
         if ownership == "external":
             continue
-        if ownership == "managed":
-            launch_mode: LaunchMode = "own"
-        elif ownership == "reused":
-            launch_mode = "reuse"
-        else:
-            raise ValueError(
-                f"{profile_path}: unsupported ownership {ownership!r}"
-            )
 
         service = deployment.get("service")
         if not isinstance(service, str) or not service:

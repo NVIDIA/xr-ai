@@ -26,6 +26,7 @@ from device_io_hub._config_loader import load_config
 from device_io_hub._errors import StartupError
 from device_io_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from device_io_hub.transport.livekit import LiveKitConnector, make_client_token
+from device_io_hub.transport.livekit._hwcodec import require_nvidia_video_codecs
 
 STATS_INTERVAL = 5.0
 
@@ -186,15 +187,16 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     p.add_argument("--prepare", action="store_true")
     ns, _ = p.parse_known_args()
-    if ns.prepare:
-        from device_io_hub.transport.livekit._docker import _LIVEKIT_IMAGE
-        cached = subprocess.run(["docker", "image", "inspect", _LIVEKIT_IMAGE],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-        print(f"LiveKit: {'cached' if cached else 'downloading'}", flush=True)
-        if not cached:
-            subprocess.run(["docker", "pull", _LIVEKIT_IMAGE], check=True)
-        return
     try:
+        if ns.prepare:
+            require_nvidia_video_codecs()
+            from device_io_hub.transport.livekit._docker import _LIVEKIT_IMAGE
+            cached = subprocess.run(["docker", "image", "inspect", _LIVEKIT_IMAGE],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+            print(f"LiveKit: {'cached' if cached else 'downloading'}", flush=True)
+            if not cached:
+                subprocess.run(["docker", "pull", _LIVEKIT_IMAGE], check=True)
+            return
         asyncio.run(main(ready_file=ns.ready_file))
     except StartupError as e:
         # The message is a pre-formatted banner; print it as-is and exit

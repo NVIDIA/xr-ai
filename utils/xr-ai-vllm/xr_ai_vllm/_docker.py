@@ -372,14 +372,15 @@ def evict_local_listener(port: int, log_prefix: str) -> None:
     pid, checked, listening = pid_on_port_checked(port)
     if not checked or not listening or pid is None:
         return
-    if not (
+    managed = (
         is_xr_ai_server_process(pid, "vllm", port)
         or is_xr_ai_server_process(pid, "stt", port)
-    ):
+    )
+    if not managed:
         print(
-            f"[{log_prefix}] port {port} is held by pid {pid}, which is not "
-            f"an xr-ai server; the launch will fail to bind unless it is "
-            f"stopped",
+            f"[{log_prefix}] port {port} is held by pid {pid}; identity unconfirmed: "
+            "not an xr-ai server or uninspectable by this user; inspect pid "
+            f"{pid} and its owner; not stopping",
             flush=True,
         )
         return
@@ -1129,25 +1130,27 @@ def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
             ["ss", "-tlnpH", f"sport = :{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=5,
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
             return int(m.group(1)), True, True
         return None, True, bool(out.strip())
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         pass
     try:
         out = subprocess.check_output(
             ["lsof", "-ti", f"tcp:{port}"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=5,
         ).strip()
         if out:
             return int(out.splitlines()[0]), True, True
         return None, True, False
     except subprocess.CalledProcessError:
         return None, True, False
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return None, False, False
 
 
@@ -1158,23 +1161,73 @@ def pid_on_port(port: int) -> int | None:
 
 
 def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
-    """Return whether *pid* has the expected xr-ai server command line."""
+    """Return whether *pid* has the expected managed service identity."""
     try:
         command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
     except OSError:
         return False
-    in_process_servers = {
+    service_commands = {
         "stt": "stt_server",
+        "tts": "pocket_tts_server",
+        "vllm": "vllm",
     }
-    if expected_command := in_process_servers.get(label):
-        return expected_command in command
-    return has_xr_ai_ownership_marker(pid, port)
+    try:
+        if expected_command := service_commands.get(label):
+            argv = command.rstrip("\0").split("\0")
+            command_matches = any(
+                arg.rsplit("/", 1)[-1] == expected_command for arg in argv
+            )
+            if (
+                label == "vllm"
+                and argv == ["VLLM::APIServer"]
+                and has_xr_ai_ownership_marker(pid, port)
+            ):
+                return True
+            if not command_matches:
+                return False
+            if label == "stt":
+                # The STT wrapper's persisted child is always the private serve
+                # mode. Match argv tokens so unrelated references are not adopted.
+                return "--_serve" in argv
+            return has_xr_ai_ownership_marker(pid, port)
+        return has_xr_ai_ownership_marker(pid, port)
+    except PermissionError:
+        return False
+
+
+def owned_listener_pid(port: int, label: str) -> int | None:
+    """Return the managed *label* server listening on *port*, or ``None``.
+
+    Raises ``RuntimeError`` when listener inspection fails or a listener cannot
+    be verified as the requested service.
+    """
+    pid, inspected, listening = pid_on_port_checked(port)
+    if not inspected:
+        raise RuntimeError(
+            f"cannot inspect ownership of port {port}; ss/lsof unavailable or "
+            "timed out; run ss/lsof manually"
+        )
+    if not listening:
+        return None
+    if pid is None:
+        raise RuntimeError(
+            f"port {port} has a listener whose owning process is not visible"
+        )
+    if not is_xr_ai_server_process(pid, label, port):
+        raise RuntimeError(
+            f"port {port} is held by pid {pid}; identity unconfirmed: not a managed "
+            f"{label} server or uninspectable by this user; inspect pid {pid} and "
+            "its owner"
+        )
+    return pid
 
 
 def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
     """Return whether *pid* carries xr-ai's matching managed-port marker."""
     try:
         environment = Path(f"/proc/{pid}/environ").read_bytes()
+    except PermissionError:
+        raise
     except OSError:
         return False
     return (

@@ -44,8 +44,8 @@ def build_nim_run_argv(
     the inline comment); the port label and ``--runtime nvidia`` choices do
     mirror it. ``NGC_API_KEY`` is passed by name only, so the value stays off
     the ps-visible argv; docker reads it from the wrapper's environment. With
-    *prepare*, the container is ephemeral and has no name, labels, or published
-    ports so its caller can run a preparation entrypoint without serving.
+    *prepare*, ``--rm`` removes the container when it exits. It has no name,
+    labels, or published ports so its caller can run preparation without serving.
     """
     argv: list[str] = ["docker", "run"]
     if prepare:

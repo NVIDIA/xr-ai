@@ -64,6 +64,7 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -
     assert tts.command == "pocket_tts_server"
     assert Path(tts.config).name == "pocket_tts_server.yaml"
     assert tts.launch_mode == "persist"
+    assert all(process.prepare for process in processes)
     assert credentials == ()
 
 
@@ -403,7 +404,11 @@ def test_cli_selects_requested_profile(
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
+        lambda selection, _gpu_profile=None: (
+            selected.append(selection)
+            or [_model_servers.Process("model", ".", "model")],
+            (),
+        ),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
@@ -421,7 +426,9 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
         _model_servers,
         "_build_processes",
         lambda selection, gpu_profile=None: (
-            selected.append((selection, gpu_profile)) or [], ()
+            selected.append((selection, gpu_profile))
+            or [_model_servers.Process("model", ".", "model")],
+            (),
         ),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
@@ -432,6 +439,29 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
     _model_servers.run()
 
     assert selected == [("default", "dual_48G_ada")]
+
+
+def test_empty_profile_is_rejected_before_launch_cleanup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _model_servers, "_build_processes", lambda *_a, **_k: ([], ()),
+    )
+    monkeypatch.setattr(
+        _model_servers, "_stop_unselected_services",
+        lambda _processes: pytest.fail("cleanup must not run"),
+    )
+    monkeypatch.setattr(
+        _model_servers, "run_stack", lambda *_a, **_k: pytest.fail("launch must not run"),
+    )
+    monkeypatch.setattr(sys, "argv", ["model_servers"])
+
+    with pytest.raises(SystemExit) as error:
+        _model_servers.run()
+
+    assert error.value.code == 2
+    assert "no managed services to start" in capsys.readouterr().err
 
 
 def test_invalid_gpu_profile_name_is_rejected() -> None:
@@ -476,29 +506,57 @@ def test_selected_service_config_must_declare_http_port(
         _model_servers._build_processes(str(profile), "custom")
 
 
-@pytest.mark.parametrize(("failure", "gpu_advice"), [
-    (_model_servers.GPUInventoryError("GPU memory telemetry unavailable"), True),
-    (ValueError("unknown model profile"), False),
+@pytest.mark.parametrize(("failure", "gpu_advice", "arguments", "expected_code"), [
+    (_model_servers.GPUInventoryError("GPU memory telemetry unavailable"), True, (), 2),
+    (ValueError("unknown model profile"), False, (), 2),
+    (
+        _model_servers.GPUInventoryError(
+            "nvidia-smi GPU inventory timed out after 10 seconds; "
+            "run nvidia-smi manually and check the NVIDIA driver"
+        ),
+        True,
+        ("--check",),
+        1,
+    ),
+    (
+        _model_servers.GPUInventoryError(
+            "nvidia-smi GPU inventory timed out after 10 seconds; "
+            "run nvidia-smi manually and check the NVIDIA driver"
+        ),
+        True,
+        ("--check", "--json"),
+        1,
+    ),
 ])
 def test_cli_reports_configuration_error_without_traceback(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
-    failure: Exception, gpu_advice: bool,
+    failure: Exception, gpu_advice: bool, arguments: tuple[str, ...], expected_code: int,
 ) -> None:
     def fail_inventory(*_args, **_kwargs):
         raise failure
 
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_build_processes", fail_inventory)
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
+    monkeypatch.setattr(sys, "argv", ["model_servers", *arguments])
 
     with pytest.raises(SystemExit) as error:
         _model_servers.run()
 
-    assert error.value.code == 2
-    stderr = capsys.readouterr().err
-    assert str(failure) in stderr
-    assert ("Use --gpu-profile NAME" in stderr) is gpu_advice
-    assert "Traceback" not in stderr
+    captured = capsys.readouterr()
+    assert error.value.code == expected_code
+    assert "Traceback" not in captured.err
+    if "--json" in arguments:
+        assert json.loads(captured.out) == [{
+            "name": "configuration",
+            "status": "failed",
+            "detected": str(failure),
+            "required": "resolvable deployment and GPU profile",
+            "remediation": "Check --models and --gpu-profile; verify nvidia-smi.",
+        }]
+    else:
+        assert captured.out == ""
+        assert str(failure) in captured.err
+        assert ("Use --gpu-profile NAME" in captured.err) is gpu_advice
 
 
 def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None:
@@ -535,7 +593,8 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
 
 
 @pytest.mark.parametrize(("ownership", "arguments", "expected"), [
-    ("external", [], [((), ("NGC_API_KEY",))]),
+    ("external", ["--check"], [((), ())]),
+    ("external", ["--prepare"], [((), ())]),
     ("managed", ["--gpu-profile", "spark"], [(("vlm",), ("NGC_API_KEY", "HF_TOKEN"))]),
     ("managed", ["--gpu-profile", "spark", "--allow-anonymous"],
      ["HF_TOKEN", (("vlm",), ("NGC_API_KEY",))]),
@@ -573,7 +632,10 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda _selection, _gpu_profile=None: ([], ()),
+        lambda _selection, _gpu_profile=None: (
+            [_model_servers.Process("model", ".", "model")],
+            (),
+        ),
     )
     def run_stack(*_args, before_launch, **_kwargs):
         before_launch()

@@ -34,7 +34,6 @@ import asyncio
 import io
 import math
 import os
-import socket
 import sys
 import threading
 import time
@@ -46,6 +45,7 @@ import anyio
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import owned_listener_pid
 
 _DEFAULT_PORT = 8105
 _DEFAULT_STARTUP_TIMEOUT_S = 600.0
@@ -431,13 +431,21 @@ def _health_url(host: str, port: int) -> str:
     return f"http://{url_host}:{port}/health"
 
 
-def _port_open(host: str, port: int) -> bool:
-    """Return True if a process is already listening on the probe address."""
-    try:
-        with socket.create_connection((host, port), timeout=1):
-            return True
-    except OSError:
-        return False
+def _reusable_listener(port: int, health_url: str) -> int | None:
+    """Return the stable managed Pocket TTS PID on *port*, or fail closed."""
+    pid = owned_listener_pid(port, "tts")
+    if pid is None:
+        return None
+    if not _health_url_ok(health_url):
+        raise RuntimeError(
+            f"managed Pocket TTS pid {pid} owns port {port}, but its health check "
+            "failed; wait for it to finish starting or run `model_servers --stop`"
+        )
+    if owned_listener_pid(port, "tts") != pid:
+        raise RuntimeError(
+            f"listener on port {port} changed while its identity was being validated"
+        )
+    return pid
 
 
 def _ensure_owned_process_group() -> int | None:
@@ -619,9 +627,15 @@ def run() -> None:
         raise SystemExit(f"[pocket_tts_server] {exc}") from exc
     health_url = _health_url(probe_host, port)
 
-    if _health_url_ok(health_url):
+    try:
+        reusable_pid = _reusable_listener(port, health_url)
+    except RuntimeError as exc:
+        raise SystemExit(f"[pocket_tts_server] {exc}") from exc
+
+    if reusable_pid is not None:
         print(
-            f"[pocket_tts_server] already running on port {port} — reusing",
+            f"[pocket_tts_server] pid {reusable_pid} already running on "
+            f"port {port}: reusing",
             flush=True,
         )
         if ns.ready_file:
@@ -629,12 +643,6 @@ def run() -> None:
         if os.environ.get(_READY_PROCESS_MAY_EXIT_ENV) != "1":
             _monitor_reused_server(health_url)
         return
-
-    if _port_open(probe_host, port):
-        raise SystemExit(
-            f"[pocket_tts_server] port {port} is already in use, but its "
-            "/health endpoint is not healthy"
-        )
 
     cmd = [sys.executable, "-m", "pocket_tts_server", "--_serve"]
     if ns.config:

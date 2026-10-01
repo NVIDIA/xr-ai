@@ -55,6 +55,11 @@ Each sample README gives the shortest runnable command sequence. The linked
 documentation contains architecture, behavior, configuration, output contracts,
 evaluation, and adaptation guidance.
 
+Run the sample command with `--check` to diagnose its prerequisites before
+launch, or `--check --json` for machine-readable results. Refer to
+[launch checks and preparation](https://nvidia.github.io/xr-ai/latest/components/launcher-and-process-model.html#checking-dependencies-and-preparing-artifacts)
+for coverage and `--prepare` usage.
+
 ## Repository map
 
 | Directory | Contents |

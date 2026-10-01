@@ -1,6 +1,5 @@
 {
   "nvidia_driver": 580,
   "docker": 24,
-  "nvidia_container_toolkit": true,
   "disk_gb_free": 60
 }
