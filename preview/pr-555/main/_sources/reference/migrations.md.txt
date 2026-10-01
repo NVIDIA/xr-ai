@@ -58,6 +58,9 @@ that require the former behavior can explicitly pass
 
 ## Operator-visible runtime changes
 
+- When `video_history_enabled` is omitted from the xr-render-demo worker YAML,
+  recorded-video perception is now enabled. Set it to `false` to opt out. See
+  {ref}`xr-render-recording-prerequisites` for the required recording settings.
 - `Subscribe.ALL` is deprecated because it names the pre-file-transfer set of
   data, audio, and video subscriptions rather than every available category.
   Use `Subscribe.REALTIME` for the same behavior. Files remain opt-in through

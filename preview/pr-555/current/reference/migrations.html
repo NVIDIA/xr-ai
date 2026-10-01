@@ -476,6 +476,9 @@ that require the former behavior can explicitly pass
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>When <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is omitted from the xr-render-demo worker YAML,
+recorded-video perception is now enabled. Set it to <code class="docutils literal notranslate"><span class="pre">false</span></code> to opt out. See
+<a class="reference internal" href="xr-render-demo.html#xr-render-recording-prerequisites"><span class="std std-ref">Recorded-video prerequisites</span></a> for the required recording settings.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> is deprecated because it names the pre-file-transfer set of
 data, audio, and video subscriptions rather than every available category.
 Use <code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code> for the same behavior. Files remain opt-in through
