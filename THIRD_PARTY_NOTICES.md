@@ -5,10 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Third-Party Notices
 
-This file lists the third-party open-source software distributed with or
+This file lists the third-party software distributed with or
 required by `xr-ai`. Each entry gives the upstream project, version, SPDX
 license identifier, and a link to the upstream source repository. Complete
-license and attribution texts for reciprocal-license dependencies are bundled
+license and attribution texts for the components noted below are bundled
 under [`third_party_licenses/`](third_party_licenses/).
 
 `xr-ai` itself is licensed under Apache-2.0 — see [`LICENSE`](LICENSE).
@@ -36,7 +36,7 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nemo-relay`   | >=0.7.2,<0.8 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
-| `pipecat-ai`   | >=1.3    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
+| `pipecat-ai`   | >=1.6    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
 | `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
@@ -111,7 +111,7 @@ this repository.
 | Component | How it is used | License and notices | Corresponding source |
 |---|---|---|---|
 | `num2words` 0.5.14 | Python dependency of `pipecat-ai` | LGPL-2.1-or-later; [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) | [0.5.14 source distribution](https://pypi.org/project/num2words/0.5.14/#files) |
-| `pycountry` 26.2.16 | Python dependency of `pydantic-extra-types` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
+| `pycountry` 26.2.16 | Transitive dependency through `vllm` → `mistral-common` → `pydantic-extra-types[pycountry]` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
 | `tqdm` 4.70.0 | Progress reporting used by AI dependencies | MPL-2.0 AND MIT; [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) | [4.70.0 source distribution](https://pypi.org/project/tqdm/4.70.0/#files) |
 | `soxr` 1.0.0 / libsoxr 0.1.3 / PFFFT | Python extension used through `pipecat-ai` and `librosa`; its wheel includes PFFFT and Python-SoXR's modified libsoxr fork | LGPL-2.1-or-later for libsoxr and permissive PFFFT terms; [`license files`](third_party_licenses/soxr-1.0.0/) | [`soxr` 1.0.0 source distribution](https://pypi.org/project/soxr/1.0.0/#files); its `libsoxr/` directory is the applicable fork source |
 | `soundfile` 0.14.0 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.14.0/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.14.0 source distribution](https://pypi.org/project/soundfile/0.14.0/#files) |
@@ -132,6 +132,50 @@ applicable modified source under that component's license. The source links
 above identify the unmodified versions resolved for this release; artifact
 URLs and SHA-256 hashes are pinned in
 [`dependency-manifest/uv.lock`](dependency-manifest/uv.lock).
+
+### Additional transitive package notices
+
+The qualified lock also resolves the following packages. XR AI uses them as
+unmodified dependencies installed by users; their implementation is not copied
+into XR AI source. Each notice directory includes the exact inspected upstream
+artifact and SHA-256 hashes for the copied texts.
+
+| Package | Version | License and notices | Dependency path |
+|---|---|---|---|
+| `llvmlite` | 0.47.0 | BSD-2-Clause AND Apache-2.0 WITH LLVM-exception; [license texts](third_party_licenses/llvmlite-0.47.0/) | AI and audio dependencies → `numba` → `llvmlite` |
+| `nvtx` | 0.2.15 | Apache-2.0 WITH LLVM-exception; [license text](third_party_licenses/nvtx-0.2.15/) | Model services → `vllm` → `nvtx` |
+| `matplotlib` | 3.11.1 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.1/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
+| `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.7.19/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
+| `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
+| `humming-kernels` | 0.1.12 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.12/) | Model services → `vllm` → `humming-kernels` |
+| `quack-kernels` | 0.6.4 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.4/) | Model services → `vllm` → `quack-kernels` |
+| `torchcodec` | 0.16.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.16.0/) | Model services → `vllm` → `torchcodec` |
+
+`AND` license expressions retain all listed terms; they are not alternative
+license elections. XR AI elects the permissive FreeType License (FTL) option
+for Matplotlib's FreeType dependency. Portions of this software are copyright
+© The FreeType Project (https://www.freetype.org/). All rights reserved.
+The complete upstream FreeType license notice, including its alternatives,
+is preserved in the Matplotlib notice directory.
+
+### NVIDIA CUTLASS DSL packages
+
+The following packages are covered by the NVIDIA CUTLASS DSL EULA. They are
+separate from the BSD-licensed CUTLASS C++ project. Users download these
+packages during installation; XR AI does not redistribute their binaries.
+
+| Package | Version | Terms |
+|---|---|---|
+| `nvidia-cutlass-dsl` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-base` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-core` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu12` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu13` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+
+The [upstream license page](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/license.html)
+and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.6.2/)
+record the applicable terms. The permissive license elections elsewhere in
+this file do not apply to these proprietary packages.
 
 ### `text-unidecode` license election
 
