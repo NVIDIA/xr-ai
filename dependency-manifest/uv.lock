@@ -24,6 +24,8 @@ exclude-newer = "2026-08-27T17:15:48Z"
 
 [options.exclude-newer-package]
 transformers = "2026-09-10T00:00:00Z"
+urllib3 = "2026-09-16T00:00:00Z"
+pyjwt = "2026-09-29T00:00:00Z"
 
 [[package]]
 name = "absl-py"
@@ -860,9 +862,11 @@ dependencies = [
     { name = "livekit" },
     { name = "livekit-api" },
     { name = "numpy" },
+    { name = "pyjwt" },
     { name = "pynvvideocodec", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
     { name = "pyyaml" },
     { name = "pyzmq" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "websockets", version = "15.0.1", source = { registry = "https://pypi.org/simple" } },
     { name = "xr-ai-hub-client" },
@@ -874,12 +878,14 @@ requires-dist = [
     { name = "cryptography", specifier = ">=42.0" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "livekit", specifier = ">=1.1.15" },
+    { name = "livekit", specifier = ">=1.1.16" },
     { name = "livekit-api", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.24" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pynvvideocodec", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "pyzmq", specifier = ">=27.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "websockets", specifier = ">=12.0" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
@@ -987,8 +993,10 @@ source = { editable = "../services/embedding-server" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -998,8 +1006,10 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2092,8 +2102,10 @@ source = { editable = "../services/llama-nemotron-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2103,8 +2115,10 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2282,6 +2296,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "soundfile" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-logging" },
 ]
@@ -2297,6 +2312,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "soundfile", specifier = ">=0.12" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -2829,8 +2845,10 @@ source = { editable = "../services/nemotron-omni-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2840,8 +2858,10 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2854,8 +2874,10 @@ source = { editable = "../services/nemotron3-nano-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -2865,8 +2887,10 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -2915,12 +2939,14 @@ name = "nim-riva-server"
 version = "0.1.0"
 source = { editable = "../model-server-samples/model-servers-nim/riva-server" }
 dependencies = [
+    { name = "pyyaml" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
@@ -4022,6 +4048,7 @@ dependencies = [
     { name = "pocket-tts" },
     { name = "pyyaml" },
     { name = "torch" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-logging" },
 ]
@@ -4035,6 +4062,7 @@ requires-dist = [
     { name = "pocket-tts", specifier = "==3.0.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "torch", specifier = ">=2.5.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -4413,11 +4441,11 @@ wheels = [
 
 [[package]]
 name = "pyjwt"
-version = "2.13.0"
+version = "2.15.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", hash = "sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8", size = 121252, upload-time = "2026-09-28T18:40:42.598Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
+    { url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", hash = "sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193", size = 33860, upload-time = "2026-09-28T18:40:41.429Z" },
 ]
 
 [package.optional-dependencies]
@@ -5331,6 +5359,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-logging" },
 ]
@@ -5345,6 +5374,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -5887,11 +5917,11 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "2.7.0"
+version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", hash = "sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63", size = 458972, upload-time = "2026-09-15T19:29:36.253Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
+    { url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", hash = "sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3", size = 135717, upload-time = "2026-09-15T19:29:34.577Z" },
 ]
 
 [[package]]
@@ -6031,8 +6061,10 @@ source = { editable = "../services/vlm-server" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
+    { name = "urllib3" },
     { name = "vllm" },
     { name = "xr-ai-logging" },
     { name = "xr-ai-vllm" },
@@ -6042,8 +6074,10 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
+    { name = "urllib3", specifier = ">=2.8.0" },
     { name = "vllm", specifier = ">=0.27.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
@@ -6503,6 +6537,7 @@ dependencies = [
 [package.optional-dependencies]
 riva = [
     { name = "nvidia-riva-client" },
+    { name = "urllib3" },
 ]
 
 [package.metadata]
@@ -6510,6 +6545,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "nvidia-riva-client", marker = "extra == 'riva'", specifier = ">=2.17" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "urllib3", marker = "extra == 'riva'", specifier = ">=2.8.0" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
 provides-extras = ["riva"]

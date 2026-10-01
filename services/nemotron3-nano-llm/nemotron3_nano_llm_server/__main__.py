@@ -28,7 +28,7 @@ Config keys
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.08-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.09-py3).
     spark_uma:               bool   Enable DGX Spark compatibility settings
                                     (docker backend only; default: auto-detect).
 """
