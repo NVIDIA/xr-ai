@@ -755,6 +755,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pyyaml>=6.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
