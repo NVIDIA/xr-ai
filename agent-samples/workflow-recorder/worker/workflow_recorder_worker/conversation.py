@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared conversation with deterministic SOP controls and silent narration."""
+"""Shared guide conversation with deterministic recording and silent narration."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from xr_ai_sample_agents.front_end import (
 from xr_ai_voice import UserQuery, VoiceAggregationAgent, VoiceInterrupted, VoiceParticipantLeft
 
 from ._workflow_engine import SopEngineAgent
-from .events import INTERRUPTED_TOPIC, PARTICIPANT_LEFT_TOPIC
+from .events import INTERRUPTED_TOPIC, PARTICIPANT_LEFT_TOPIC, RECORDING_COMMAND
 from .recorder import RecorderAgent
 
 
@@ -42,7 +42,7 @@ class SopConversationFrontEnd(ConversationFrontEnd):
         async with self._input_locks.setdefault(participant_id, asyncio.Lock()):
             if not self._engine.is_connected(participant_id):
                 return
-            control = self._engine.is_control(query.text)
+            control = RECORDING_COMMAND.fullmatch(query.text) is not None
             if self._recorder.is_recording(participant_id) and not control:
                 # Main's capture service already owns this narration. It must
                 # not become a conversation turn or an unsolicited answer.

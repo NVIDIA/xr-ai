@@ -31,11 +31,29 @@ _SECOND_APP_QUERY_TOPIC = Topic("test-conversation.second-app-query", UserQuery)
 class _Conversation:
     def __init__(self, routes: list[str]) -> None:
         self.routes = routes
-        self.decisions: list[tuple[str, tuple, str, tuple[str, ...]]] = []
+        self.decisions: list[tuple[str, tuple]] = []
+        self.routing: list[tuple[str, tuple, str, tuple[str, ...]]] = []
+        self.handbacks: list[str] = []
 
-    async def decide(self, request, *, history, app_context, applications):
-        self.decisions.append((request, history, app_context, tuple(app.name for app in applications)))
+    async def _route(self, request, history, app_context, applications, *, handback=""):
+        self.routing.append((request, history, app_context, tuple(app.name for app in applications)))
+        self.handbacks.append(handback)
         route = self.routes.pop(0)
+        return "conversation" if route == "direct" else route
+
+    async def _decide_with_handoff(self, request, history, app_context):
+        self.decisions.append((request, history))
+        return ChatResponse(
+            content="A direct answer.",
+            reasoning=None,
+            tool_calls=None,
+            finish_reason="stop",
+            raw={},
+        )
+
+    async def decide(self, request, *, history, app_context, applications=()):
+        self.decisions.append((request, history))
+        route = self.routes.pop(0) if self.routes else "direct"
         calls = [ToolCall(id="app-call", name=route, arguments="{}")] if route != "direct" else None
         return ChatResponse(
             content="A direct answer." if route == "direct" else "",
@@ -258,19 +276,21 @@ async def test_focused_app_bypasses_router_and_releases_on_exit() -> None:
             participant_id="alice",
         )
         await _wait_until(lambda: len(front._history.get("alice", ())) == 2)
-        assert len(conversation.decisions) == 1
+        assert len(conversation.routing) == 1
+        assert conversation.decisions == []
         await runtime.publish(
             FRONT_END_QUERY_TOPIC,
             UserQuery(text="What did we just do?", timestamp_us=3),
             participant_id="alice",
         )
         await _wait_until(lambda: len(front._history.get("alice", ())) == 3)
-        assert len(conversation.decisions) == 2
+        assert len(conversation.routing) == 2
+        assert len(conversation.decisions) == 1
         assert [query for _pid, query in app.queries] == [
             "Start the guide.",
             "Leave the guide.",
         ]
-        assert conversation.decisions[1][1][-1].assistant == ("App answered: Leave the guide.")
+        assert conversation.routing[1][1][-1].assistant == ("App answered: Leave the guide.")
         assert all(output.kind == "result" for output in speech.outputs)
     await front.stop()
 
@@ -304,8 +324,9 @@ async def test_stateless_app_routes_every_turn() -> None:
             )
             await _wait_until(lambda: len(app.queries) == index)
             await _wait_until(lambda: len(front._history.get("alice", ())) == index)
-        assert len(conversation.decisions) == 2
-        assert conversation.decisions[1][1][0].assistant == "App answered: Add a sphere."
+        assert len(conversation.routing) == 2
+        assert conversation.decisions == []
+        assert conversation.routing[1][1][0].assistant == "App answered: Add a sphere."
     await front.stop()
 
 
@@ -370,10 +391,10 @@ async def test_focused_app_owns_cross_domain_turns_until_it_releases_focus() -> 
                 UserQuery(text=text, timestamp_us=expected_history),
                 participant_id=participant_id,
             )
-            await _wait_until(lambda: (
-                len(front._history.get(participant_id, ())) == min(expected_history, 4)
+            await _wait_until(
+                lambda: bool(front._history.get(participant_id))
                 and front._history[participant_id][-1].user == text
-            ))
+            )
 
         await send("Start the tea guide.", "alice", 1)
         await send("What do you see?", "alice", 2)
@@ -388,15 +409,15 @@ async def test_focused_app_owns_cross_domain_turns_until_it_releases_focus() -> 
             "Leave the guide.",
         ]
         assert xr.queries == [("bob", "Add a virtual cube.")]
-        assert [request for request, *_ in conversation.decisions] == [
+        assert [request for request, *_ in conversation.routing] == [
             "Start the tea guide.",
             "Add a virtual cube.",
             "What did we make?",
         ]
-        assert conversation.decisions[1][1] == ()
-        assert conversation.decisions[2][1][-1].assistant == "App answered: Leave the guide."
-        assert conversation.decisions[2][2] == "Tea guide idle for alice.\nXR scene is available."
-        assert conversation.decisions[2][3] == ("tea_guide", "xr_scene")
+        assert conversation.routing[1][1] == ()
+        assert conversation.routing[2][1][-1].assistant == "App answered: Leave the guide."
+        assert conversation.routing[2][2] == "Tea guide idle for alice.\nXR scene is available."
+        assert conversation.routing[2][3] == ("tea_guide", "xr_scene")
     await front.stop()
 
 
@@ -429,8 +450,8 @@ async def test_stateless_app_returns_to_router_for_unrelated_followup() -> None:
             )
             await _wait_until(lambda: len(front._history.get("alice", ())) == index)
         assert [query for _pid, query in xr.queries] == ["Add a cube.", "Delete the cube."]
-        assert len(conversation.decisions) == 3
-        assert conversation.decisions[2][1][-1].assistant == "A direct answer."
+        assert len(conversation.routing) == 3
+        assert conversation.routing[2][1][-1].assistant == "A direct answer."
     await front.stop()
 
 
@@ -495,7 +516,7 @@ async def test_spoken_acknowledgement_does_not_enter_conversation_history() -> N
             participant_id="alice",
         )
         await _wait_until(lambda: len(front._history.get("alice", ())) == 2)
-        assert conversation.decisions[1][1][0].assistant == "Finished: Do the task."
+        assert conversation.routing[1][1][0].assistant == "Finished: Do the task."
     await front.stop()
 
 
@@ -529,5 +550,57 @@ async def test_interruption_preserves_application_focus() -> None:
         )
         await _wait_until(lambda: len(front._history.get("alice", ())) == 1)
         assert app.queries == [("alice", "Continue the tea.")]
-        assert conversation.decisions == []
+        assert conversation.routing == []
+    await front.stop()
+
+
+async def test_conversation_returns_app_request_to_router() -> None:
+    class _HandbackConversation(_Conversation):
+        async def _decide_with_handoff(self, request, history, app_context):
+            self.decisions.append((request, history))
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=[
+                    ToolCall(
+                        id="handoff",
+                        name="application_handoff",
+                        arguments='{"reason":"The prior virtual object needs recoloring."}',
+                    )
+                ],
+                finish_reason="tool_calls",
+                raw={},
+            )
+
+    conversation = _HandbackConversation(["conversation", "xr_scene"])
+    runtime = AgentRuntime()
+    front = runtime.register(
+        "conversation",
+        ConversationFrontEnd(
+            conversation,  # type: ignore[arg-type]
+            applications=(
+                ConversationApplication(
+                    name="xr_scene",
+                    description="Handle the virtual XR scene.",
+                    query_topic=_APP_QUERY_TOPIC,
+                    has_focus=lambda _pid: False,
+                    context=lambda _pid: "XR scene is available.",
+                ),
+            ),
+        ),
+    )
+    app = runtime.register("app", _Application(focus={}))
+    speech = runtime.register("speech", _SpeechBridge())
+    async with runtime:
+        await runtime.publish(
+            FRONT_END_QUERY_TOPIC,
+            UserQuery(text="Make it blue.", timestamp_us=1),
+            participant_id="alice",
+        )
+        await _wait_until(lambda: len(app.queries) == 1)
+        assert conversation.handbacks == ["", "The prior virtual object needs recoloring."]
+        assert len(conversation.decisions) == 1
+        assert [text for _pid, text in app.queries] == ["Make it blue."]
+        await _wait_until(lambda: len(speech.outputs) == 1)
+        assert speech.outputs[0].text == "App answered: Make it blue."
     await front.stop()

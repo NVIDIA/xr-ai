@@ -9,16 +9,25 @@
   route: control
 - name: list_guides
   query: list guides
-  route: control
+  route: sop_guide
 - name: start_guide
   query: start guide inspect valve
-  route: control
+  route: sop_guide
 - name: guide_next
   query: next
-  route: control
+  route: sop_guide
 - name: guide_exit
   query: stop guide
-  route: control
+  route: sop_guide
+- name: natural_guide_start
+  query: Please help me follow the assemble toy vehicle guide.
+  route: sop_guide
+- name: natural_guide_exit
+  query: I want to leave this guide now.
+  route: sop_guide
+- name: quoted_guide
+  query: The label says start guide. What color is the label?
+  route: current_view
 - name: general_question
   query: How many sides does a hexagon have?
   route: direct

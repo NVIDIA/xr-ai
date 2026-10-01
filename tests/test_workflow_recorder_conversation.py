@@ -20,8 +20,17 @@ from workflow_recorder_worker.events import INTERRUPTED_TOPIC, PARTICIPANT_JOINE
 from xr_ai_models import ChatResponse, ToolCall
 from xr_ai_runtime import Agent
 from xr_ai_sample_agents.front_end import FRONT_END_QUERY_TOPIC
+from xr_ai_tools import ToolSet
 from xr_ai_tools.image import ImageReference
+from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceParticipantJoined, VoiceParticipantLeft
+
+
+def _tool_reply(name, **arguments):
+    return ChatResponse(
+        content="", reasoning=None, tool_calls=[ToolCall(id="call", name=name, arguments=json.dumps(arguments))],
+        finish_reason="tool_calls", raw={},
+    )
 
 
 @pytest.mark.parametrize("shutdown", ["exit", "cancel"])
@@ -218,7 +227,175 @@ class TestConversationIntegration:
         await demo.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), pid)
         await asyncio.sleep(0.01)
 
-    async def test_idle_chat_and_command_bypass(self, demo):
+    async def guide(self, demo, status="approved"):
+        guide = yaml.safe_load((_SAMPLE / "skills/recording-to-guide/references/example.guide.yaml").read_text())
+        guide["task"]["status"] = status
+        demo.catalog._guides_dir.mkdir(exist_ok=True)
+        (demo.catalog._guides_dir / "test.guide.yaml").write_text(yaml.safe_dump(guide))
+        await demo.catalog._scan()
+        demo.engine._tick = AsyncMock()
+        return guide
+
+    @pytest.mark.parametrize("status", ["approved", "draft"])
+    @pytest.mark.parametrize("query", [
+        "Please help me follow Arrange a workpiece",
+        "start guide arrange_workpiece",
+        "Start guide Arrange a workpiece.",
+        "run workflow arrange_workpiece",
+    ])
+    async def test_all_starts_use_tool_approval_and_shared_history(self, demo, status, query):
+        await self.connect(demo)
+        guide = await self.guide(demo, status)
+        demo.llm.chat.return_value = _tool_reply("sop_guide")
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__start", selector=guide["task"]["name"])
+        await demo.say(query)
+        assert demo.engine.has_focus("user") is (status == "approved")
+        assert not demo.recorder.is_recording("user")
+        assert demo.front._history["user"][-1].user == query
+        assert demo.front._history["user"][-1].assistant == demo.speech[-1][1]
+        if status == "draft":
+            assert "draft" in demo.speech[-1][1]
+        else:
+            assert demo.speech[-1][1] == guide["steps"][0]["messages"]["enter"]
+        definitions = demo.engine._llm.chat.call_args.kwargs["tools"]
+        assert {tool.name for tool in definitions} == {"workflow__list", "workflow__status", "workflow__start"}
+        assert demo.engine._llm.chat.call_args.kwargs["enable_thinking"] is True
+        assert demo.engine._llm.chat.call_args.kwargs["thinking_budget"] == 1024
+        assert demo.engine._llm.chat.call_args.kwargs["max_tokens"] == 1536
+
+    async def test_exact_start_requires_a_model_tool_call(self, demo):
+        await self.connect(demo)
+        await self.guide(demo)
+        demo.llm.chat.return_value = _tool_reply("sop_guide")
+        demo.engine._llm.chat.return_value = ChatResponse(
+            content="Which guide do you mean?", reasoning=None, tool_calls=None, finish_reason="stop", raw={},
+        )
+        await demo.say("start guide arrange_workpiece")
+        demo.engine._llm.chat.assert_awaited_once()
+        assert not demo.engine.has_focus("user")
+        assert demo.speech[-1][1] == "Which guide do you mean?"
+
+    async def test_start_tool_does_not_replace_an_active_guide(self, demo):
+        await self.connect(demo)
+        guide = await self.guide(demo)
+        await demo.engine._start("user", guide["task"]["id"])
+        session = demo.engine._sessions["user"]
+        session.state["workspace_clear"] = True
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__start", selector=guide["task"]["id"])
+        await demo.say("start guide arrange_workpiece")
+        demo.engine._llm.chat.assert_awaited_once()
+        assert demo.engine._sessions["user"] is session
+        assert session.state["workspace_clear"] is True
+        assert "already active" in demo.speech[-1][1]
+        demo.llm.chat.assert_not_awaited()
+
+    async def test_focused_natural_controls_preserve_completion_and_release_focus(self, demo):
+        await self.connect(demo)
+        guide = await self.guide(demo)
+        await demo.engine._start("user", guide["task"]["id"])
+        session = demo.engine._sessions["user"]
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__advance", skip=False)
+        await demo.say("I am finished, move to the following step please")
+        assert session.step_id == "clear_workspace"
+        assert "not complete" in demo.speech[-1][1]
+        assert not session.state["workspace_clear"]
+        definitions = demo.engine._llm.chat.call_args.kwargs["tools"]
+        assert "workflow__commit" not in {tool.name for tool in definitions}
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__advance", skip=True)
+        await demo.say("Please skip this check for now")
+        assert session.step_id == "position_workpiece"
+        assert not session.state["workspace_clear"]
+        assert "changed while" not in demo.speech[-1][1]
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__restart")
+        await demo.say("Could we begin this guide again from the beginning?")
+        assert session.step_id == "clear_workspace"
+        assert demo.speech[-1][1] == session.step.enter_message
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__reset")
+        await demo.say("I want to leave this guide now")
+        assert not demo.engine.has_focus("user")
+        assert "stopped" in demo.speech[-1][1]
+        assert demo.front._history["user"][-1].user == "I want to leave this guide now"
+        demo.llm.chat.assert_not_awaited()  # Focus bypasses generic conversation and routing.
+
+    async def test_focused_visual_answer_checks_scene_without_committing_or_advancing(self, demo):
+        await self.connect(demo)
+        guide = await self.guide(demo)
+        await demo.engine._start("user", guide["task"]["id"])
+        session = demo.engine._sessions["user"]
+        demo.frame.execute.side_effect = None
+        demo.frame.execute.return_value = SimpleNamespace(image=ImageReference(uri="xr-image://fake"))
+        demo.engine._image_query.execute = AsyncMock(return_value=ImageQueryResult(text="Workspace clear."))
+        demo.engine._llm.chat.side_effect = [
+            _tool_reply("current_view", question="Is the workspace clear?"),
+            ChatResponse(content="The workspace looks clear.", reasoning=None,
+                         tool_calls=None, finish_reason="stop", raw={}),
+        ]
+        await demo.say("Is this correct?")
+        demo.frame.execute.assert_awaited_once()
+        assert demo.frame.execute.call_args.args[0].participant_id == "user"
+        demo.engine._image_query.execute.assert_awaited_once()
+        assert session.step_id == "clear_workspace"
+        assert not session.state["workspace_clear"]  # Only the observation/evidence path commits completion.
+        assert demo.front._history["user"][-1].assistant == "The workspace looks clear."
+        demo.llm.chat.assert_not_awaited()
+
+    async def test_natural_advance_finishes_only_verified_steps(self, demo):
+        await self.connect(demo)
+        guide = await self.guide(demo)
+        await demo.engine._start("user", guide["task"]["id"])
+        session = demo.engine._sessions["user"]
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__advance", skip=False)
+        for step in guide["steps"]:
+            # Simulate already committed observation evidence, not a foreground assertion.
+            session.state.update(step["complete_when"])
+            await demo.say("Please move to the following step")
+        assert not demo.engine.has_focus("user")
+        assert demo.speech[-1][1] == guide["task"]["complete_message"]
+        demo.llm.chat.assert_not_awaited()
+
+    async def test_background_model_settings_are_unchanged(self, demo):
+        await demo.engine._tool_loop("Observe a step", "observation", ToolSet(()))
+        options = demo.engine._llm.chat.call_args.kwargs
+        assert options["max_tokens"] == 512
+        assert options["enable_thinking"] is False
+        assert "thinking_budget" not in options
+
+    @pytest.mark.parametrize("change", ["revision", "exit", "recording", "departure"])
+    async def test_delayed_model_control_cannot_mutate_changed_state(self, demo, change):
+        await self.connect(demo)
+        guide = await self.guide(demo)
+        await demo.engine._start("user", guide["task"]["id"])
+        session = demo.engine._sessions["user"]
+        entered, resume = asyncio.Event(), asyncio.Event()
+
+        async def delayed_reply(*args, **kwargs):
+            entered.set()
+            await resume.wait()
+            return _tool_reply("workflow__advance", skip=True)
+
+        demo.engine._llm.chat.side_effect = delayed_reply
+        answer = asyncio.create_task(
+            demo.engine._answer_step_question(session, "Please skip this step"),
+            context=nemo_relay.fork_asyncio_context(),
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        try:
+            if change == "revision":
+                await demo.engine._restart("user")
+            elif change == "exit":
+                await demo.engine._reset("user")
+            elif change == "recording":
+                await demo.say("start recording")
+            else:
+                await demo.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft())
+        finally:
+            resume.set()
+        response = await asyncio.wait_for(answer, 2)
+        assert "changed" in response or "unavailable" in response
+        assert session.step_id == "clear_workspace"
+        assert not session.state["workspace_clear"]
+
+    async def test_idle_chat_and_guide_commands_enter_shared_history(self, demo):
         await self.connect(demo)
         await demo.say("What is two plus two?")
         assert demo.speech[-1] == ("user", "An ordinary answer.")
@@ -226,9 +403,11 @@ class TestConversationIntegration:
         demo.frame.execute.assert_not_awaited()
         assert demo.llm.chat.call_args.kwargs["enable_thinking"] is False
         demo.llm.chat.reset_mock()
+        demo.llm.chat.return_value = _tool_reply("sop_guide")
         await demo.say("list guides")
         assert demo.speech[-1][1] == "No valid guides are available yet."
-        demo.llm.chat.assert_not_awaited()
+        demo.llm.chat.assert_awaited_once()
+        assert demo.front._history["user"][-1].user == "list guides"
 
     @pytest.mark.parametrize("cleanup", ["conversation", "engine", "aggregation"])
     async def test_departure_cannot_restart_a_suspended_dispatch(self, demo, monkeypatch, cleanup):
@@ -275,7 +454,7 @@ class TestConversationIntegration:
         assert not demo.front._pending and not demo.front._history and not demo.front._spoken
         await self.connect(demo)
         await demo.say("Hello after reconnect")
-        demo.llm.chat.assert_awaited_once()
+        assert demo.llm.chat.await_count == 2  # Destination selection, then generic answer.
 
     async def test_idle_app_delegation_does_not_invent_recording_commands(self, demo):
         await self.connect(demo)
@@ -290,10 +469,7 @@ class TestConversationIntegration:
 
     async def test_idle_visual_answer_uses_fresh_frame_and_shared_stream(self, demo):
         await self.connect(demo)
-        demo.llm.chat.return_value = ChatResponse(
-            content="", reasoning=None, tool_calls=[ToolCall(id="view", name="current_view", arguments="{}")],
-            finish_reason="tool_calls", raw={},
-        )
+        demo.llm.chat.side_effect = [_tool_reply("conversation"), _tool_reply("current_view")]
         demo.frame.execute.side_effect = None
         demo.frame.execute.return_value = SimpleNamespace(image=ImageReference(uri="xr-image://fake"))
         await demo.say("What color is this cup?")
@@ -310,6 +486,7 @@ class TestConversationIntegration:
         await demo.say("Hello")
         history = tuple(demo.front._history["user"])
         demo.llm.chat.reset_mock()
+        demo.engine._llm.chat.reset_mock()
         directories = []
         for _ in range(2):
             await demo.say("start recording")
@@ -317,7 +494,7 @@ class TestConversationIntegration:
             state = demo.recorder._sessions["user"]
             directories.append(state.directory)
             count = len(demo.speech)
-            narration = ["Fit the axle", "What do you see?", "next", "stop guide"]
+            narration = ["Fit the axle", "What do you see?", "start guide arrange_workpiece", "next", "stop guide"]
             for text in narration:
                 await demo.say(text)
             assert len(demo.speech) == count
@@ -330,15 +507,18 @@ class TestConversationIntegration:
         assert directories[0] != directories[1]
         assert tuple(demo.front._history["user"]) == history
         demo.llm.chat.assert_not_awaited()
+        demo.engine._llm.chat.assert_not_awaited()
 
     async def test_guide_focus_and_approval_preserve_execution(self, demo):
         await self.connect(demo)
+        demo.llm.chat.return_value = _tool_reply("sop_guide")
         guide = yaml.safe_load((_SAMPLE / "skills/recording-to-guide/references/example.guide.yaml").read_text())
         directory = demo.catalog._guides_dir
         directory.mkdir()
         path = directory / "test.guide.yaml"
         path.write_text(yaml.safe_dump(guide))
         await demo.catalog._scan()
+        demo.engine._llm.chat.return_value = _tool_reply("workflow__start", selector=guide["task"]["id"])
         await demo.say(f"start guide {guide['task']['id']}")
         assert not demo.engine.has_focus("user")
         assert "draft" in demo.speech[-1][1]
@@ -349,6 +529,9 @@ class TestConversationIntegration:
         await demo.say(f"start guide {guide['task']['id']}")
         session = demo.engine._sessions["user"]
         assert demo.engine.has_focus("user")
+        assert demo.front._history["user"][-1].user == f"start guide {guide['task']['id']}"
+        assert demo.llm.chat.await_count == 2
+        demo.llm.chat.reset_mock()
         await demo.say("next")
         assert demo.engine._sessions["user"].step_id == session.workflow.start_step
         assert "not complete" in demo.speech[-1][1]
@@ -363,8 +546,12 @@ class TestConversationIntegration:
         assert demo.engine.has_focus("user")
         await demo.say("stop guide")
         assert not demo.engine.has_focus("user")
+        assert demo.front._history["user"][-1].user == "stop guide"
+        demo.llm.chat.return_value = ChatResponse(
+            content="Hello!", reasoning=None, tool_calls=None, finish_reason="stop", raw={},
+        )
         await demo.say("Hello again")
-        demo.llm.chat.assert_awaited_once()
+        assert demo.llm.chat.await_count == 2
 
     async def test_start_recording_cancels_inflight_generic_turn(self, demo):
         await self.connect(demo)

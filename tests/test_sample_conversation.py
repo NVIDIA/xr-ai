@@ -5,11 +5,13 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from xr_ai_hub import FrameUnavailable
-from xr_ai_models import ChatResponse, ToolCall
+from xr_ai_models import ChatResponse, ToolCall, ToolDef
 from xr_ai_sample_agents import ConversationExchange, QuickConversation
+from xr_ai_sample_agents.conversation import _handback_reason
 from xr_ai_tools.image import ImageReference
 
 
@@ -148,7 +150,11 @@ async def test_text_conversation_does_not_fetch_camera() -> None:
 
     assert answer == ["Pippin is your terrier."]
     assert frames.participants == []
-    assert llm.messages[-2].content == "Nice name."
+    assert llm.messages[-1].content == "What is my terrier called?"
+    assert json.loads(llm.messages[-2].content.split("\n", 1)[1])["completed_exchanges"] == [
+        {"user": "My terrier is Pippin.", "assistant": "Nice name."}
+    ]
+    assert all(message.role != "assistant" for message in llm.messages)
 
 
 async def test_visual_conversation_fetches_camera_once() -> None:
@@ -162,3 +168,78 @@ async def test_visual_conversation_fetches_camera_once() -> None:
     assert answer == ["The blue cup is on your left."]
     assert frames.participants == ["alice"]
     assert vision.questions == ["What do you see?"]
+
+
+async def test_top_level_route_only_selects_destination() -> None:
+    class _RouterLLM:
+        def __init__(self) -> None:
+            self.messages = None
+            self.tools = None
+
+        async def chat(self, messages, *, tools, **_kwargs):
+            self.messages = messages
+            self.tools = tools
+            return ChatResponse(
+                content="An answer that must not be spoken.",
+                reasoning=None,
+                tool_calls=[ToolCall(id="route", name="conversation", arguments="{}")],
+                finish_reason="tool_calls",
+                raw={},
+            )
+
+    llm = _RouterLLM()
+    conversation = QuickConversation(_Frames(), _Vision(), llm=llm)  # type: ignore[arg-type]
+    app = ToolDef(
+        name="xr_scene",
+        description="Handle virtual scene state.",
+        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+    route = await conversation._route(
+        "What did that mean?",
+        (ConversationExchange("Add a cube.", "I added it."),),
+        "XR scene available.",
+        (app,),
+    )
+
+    assert route == "conversation"
+    assert [tool.name for tool in llm.tools] == ["conversation", "xr_scene"]
+    assert "I added it." in llm.messages[-1].content
+    assert "Current user request: What did that mean?" in llm.messages[-1].content
+    assert "Handle virtual scene state" not in llm.messages[0].content
+
+
+def test_repeated_replies_stay_in_reference_context() -> None:
+    from xr_ai_sample_agents.conversation import _conversation_messages
+
+    history = (
+        ConversationExchange("First request", "Same answer."),
+        ConversationExchange("Second request", "Same answer."),
+    )
+    messages = _conversation_messages("What is the capital of France?", history, "")
+
+    assert len(messages) == 3
+    assert all(message.role != "assistant" for message in messages)
+    assert messages[-1].content == "What is the capital of France?"
+    context = json.loads(messages[-2].content.split("\n", 1)[1])
+    assert context["completed_exchanges"] == [
+        {"user": "First request", "assistant": "Same answer."},
+        {"user": "Second request", "assistant": "Same answer."},
+    ]
+
+
+def test_generic_handback_reason_is_bounded() -> None:
+    response = ChatResponse(
+        content="",
+        reasoning=None,
+        tool_calls=[
+            ToolCall(
+                id="handoff",
+                name="application_handoff",
+                arguments='{"reason":"needs app state"}',
+            )
+        ],
+        finish_reason="tool_calls",
+        raw={},
+    )
+
+    assert _handback_reason(response) == "needs app state"

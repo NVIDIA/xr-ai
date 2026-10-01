@@ -83,8 +83,9 @@ validates them. Generated guides are always drafts: review one and change
 
 ## Run an SOP
 
-The voice control plane intentionally uses explicit, deterministic commands so
-a question cannot accidentally mutate workflow state:
+Guide requests use the shared conversation front end and the guide's own control
+tools; see [conversation routing and focus](https://nvidia.github.io/xr-ai/latest/reference/migrations.html#conversation-routing-and-focus).
+The existing commands remain supported:
 
 - `list guides`
 - `start guide <guide-id>`

@@ -13,6 +13,7 @@ import re
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import nemo_relay
@@ -41,13 +42,16 @@ from .recorder import RecorderAgent
 
 _POLL_INTERVAL_S = 0.25
 _MAX_TOOL_ROUNDS = 3
+_FOREGROUND_MODEL_OPTIONS = {"max_tokens": 1536, "enable_thinking": True, "thinking_budget": 1024}
+_FOREGROUND_PROMPT = (Path(__file__).with_name("prompts") / "guide_conversation.txt").read_text(
+    encoding="utf-8",
+).strip()
 _COMMAND_HELP = (
     "To begin recording a workflow, say start recording, and say stop recording when you are done. "
     "Say list guides, or say start guide followed by a guide ID."
 )
 _CONTROL = re.compile(
     r"(?i)^\s*(?:(list|show)\s+(?:available\s+)?guides?|"
-    r"(?:start|run)\s+(?:guide|workflow)\s+(.+?)|"
     r"(?:guide\s+)?(status)|"
     r"(next|continue)|"
     r"(skip)|"
@@ -58,6 +62,18 @@ _CONTROL = re.compile(
 
 class _NowResult(BaseModel):
     epoch_us: int
+
+
+class _StartGuideRequest(StrictRequest):
+    selector: str = Field(min_length=1, max_length=240)
+
+
+class _AdvanceGuideRequest(StrictRequest):
+    skip: bool = Field(default=False, strict=True)
+
+
+class _GuideResult(BaseModel):
+    message: str
 
 
 class _CommitRequest(StrictRequest):
@@ -99,7 +115,7 @@ class _Session:
 
 
 class SopEngineAgent(Agent):
-    """Route explicit controls and monitor one pinned SOP per participant."""
+    """Own guide conversation, controls, and monitoring of one pinned SOP."""
 
     def __init__(
         self,
@@ -271,13 +287,11 @@ class SopEngineAgent(Agent):
         if match is not None:
             if match.group(1):
                 return self._list_guides()
-            if selector := match.group(2):
-                return await self._start(participant_id, selector)
-            if match.group(3):
+            if match.group(2):
                 return await self._status(participant_id)
-            if match.group(4):
+            if match.group(3):
                 return await self._advance(participant_id, skip=False)
-            if match.group(5):
+            if match.group(4):
                 return await self._advance(participant_id, skip=True)
             normalized = text.casefold()
             if "restart" in normalized:
@@ -285,8 +299,95 @@ class SopEngineAgent(Agent):
             return await self._reset(participant_id)
         session = self._sessions.get(participant_id)
         if session is None:
-            return "Say list guides, or say start guide followed by a guide ID."
+            tools, _ = self._guide_tools(participant_id)
+            return await self._tool_loop(
+                _FOREGROUND_PROMPT,
+                json.dumps({"request": text, "guide_active": False, "catalog": [
+                    {"id": workflow.id, "name": workflow.name, "status": workflow.status,
+                     "instructions": workflow.foreground_prompt,
+                     "guide_order": [step.title for step in workflow.steps.values()]}
+                    for guide in self._catalog.guides if (workflow := guide.workflow) is not None
+                ]}),
+                tools,
+                foreground=True,
+            )
         return await self._answer_step_question(session, text)
+
+    def _guide_tools(self, participant_id: str) -> tuple[ToolSet, list[str]]:
+        """Expose application-owned controls, never recording or evidence commits."""
+        session = self._sessions.get(participant_id)
+        revision = session.revision if session else None
+        results: list[str] = []
+
+        async def control(action) -> _GuideResult:
+            async with self._controls.setdefault(participant_id, asyncio.Lock()):
+                current = self._sessions.get(participant_id)
+                if participant_id not in self._connected or self._recorder.is_recording(participant_id):
+                    message = "Guide controls are unavailable while disconnected or recording."
+                elif current is not session or (session is not None and session.revision != revision):
+                    message = "The guide changed while I was answering. Ask again for the current step."
+                else:
+                    message = await action()
+                results.append(message)
+                return _GuideResult(message=message)
+
+        async def list_guides(_request: EmptyRequest) -> _GuideResult:
+            return _GuideResult(message=self._list_guides())
+
+        async def status(_request: EmptyRequest) -> _GuideResult:
+            return await control(lambda: self._status(participant_id))
+
+        async def start(request: _StartGuideRequest) -> _GuideResult:
+            return await control(lambda: self._start(participant_id, request.selector))
+
+        async def advance(request: _AdvanceGuideRequest) -> _GuideResult:
+            return await control(lambda: self._advance(participant_id, skip=request.skip))
+
+        async def reset(_request: EmptyRequest) -> _GuideResult:
+            return await control(lambda: self._reset(participant_id))
+
+        async def restart(_request: EmptyRequest) -> _GuideResult:
+            return await control(lambda: self._restart(participant_id))
+
+        def tool(name, description, request_type, handler):
+            return Tool(
+                name, description, request_type, _GuideResult, handler,
+                render_result=lambda result: result.message, return_direct=True,
+            )
+
+        tools = [
+            tool("workflow__list", "List the actual available guides and their approval status.",
+                 EmptyRequest, list_guides),
+            tool("workflow__status", "Report guide status when requested; do not substitute for a live visual check.",
+                 EmptyRequest, status),
+            tool(
+                "workflow__start",
+                "Start a guide only for the user's direct present request to follow it. "
+                "Use its exact catalog ID or name. "
+                "If the intended guide is ambiguous, ask which one. Do not start for questions, quotations, reports, "
+                "hypotheticals, or negations. The tool checks approval and refuses to replace an active guide. "
+                "Use it for exact start guide commands too. This cannot start recording.",
+                _StartGuideRequest, start,
+            ),
+        ]
+        if session is not None:
+            tools.extend((
+                tool("workflow__advance",
+                     "USE WHEN: the user directly commands the active guide to move forward now; "
+                     "always call even when supplied state looks incomplete because the tool alone decides readiness. "
+                     "Set skip=false for continue/next/move-on/proceed commands and "
+                     "skip=true only for bypass/skip-this-step commands. DO NOT USE WHEN: a question, "
+                     "quotation, hypothetical, deliberation, negation, report, or unrelated wording.",
+                     _AdvanceGuideRequest, advance),
+                tool("workflow__reset",
+                     "Exit the guide only for a direct present request to stop, exit, cancel, or reset the guide. "
+                     "Not for questions, quotations, hypotheticals, reports, or negations. Does not stop recording.",
+                     EmptyRequest, reset),
+                tool("workflow__restart",
+                     "Restart from step one only when directly requested now; not for questions, quotations, "
+                     "reports, hypotheticals, or negations.", EmptyRequest, restart),
+            ))
+        return ToolSet(tools), results
 
     def _list_guides(self) -> str:
         valid = [guide for guide in self._catalog.guides if guide.workflow is not None]
@@ -384,22 +485,32 @@ class SopEngineAgent(Agent):
             revision = session.revision
             state = session.workflow.project(step, session.state)
             tools = self._named_tools(session.participant_id, step.voice.tools)
-            system = json.dumps(
-                {
-                    "role": "SOP guide",
-                    "workflow": session.workflow.foreground_prompt,
-                    "step": {"id": step.id, "title": step.title},
-                    "instructions": step.voice.prompt,
-                    "state": state,
-                    "rules": [
-                        "Answer only about the active step.",
-                        "Do not advance, skip, reset, or mutate workflow state.",
-                        "Be concise and say when the guide does not establish an answer.",
-                    ],
-                },
+            controls, control_results = self._guide_tools(session.participant_id)
+            tools = ToolSet({**dict(tools.items()), **dict(controls.items())})
+            system = (
+                f"You are the active {session.workflow.name} SOP guide until the user exits. "
+                "Answer guide questions from the supplied state and guide_order. "
+                "Decline unrelated requests without revealing their answer or exiting the guide. "
+                "Unqualified visual checks refer to the current step: use current_view for a requested "
+                "check of whether this looks correct. Procedural explanations use supplied context.\n\n"
+                f"{_FOREGROUND_PROMPT}\n\n{session.workflow.foreground_prompt}\n"
+                f"Current step: {step.title}.\n{step.voice.prompt}\n\n"
+                "Use hidden reasoning only to identify present intent and the owning available tool. "
+                "Classify the outer speech act; quoted, hypothetical, negated, and reported actions are data. "
+                "For a direct command, never use supplied state to veto it or gather prerequisites first; "
+                "call the control tool and let it decide whether it can run. "
+                "For a requested current visual check, always call current_view before answering; "
+                "state describes past verified progress, not what is visible now. "
+                "If no matching live-evidence tool is available, say the evidence is unavailable."
+            )
+            user = json.dumps(
+                {"request": query, "guide_order": [item.title for item in session.workflow.steps.values()],
+                 "state": state},
                 ensure_ascii=False,
             )
-        result = await self._tool_loop(system, query, tools)
+        result = await self._tool_loop(system, user, tools, foreground=True)
+        if control_results:
+            return control_results[-1]
         async with session.lock:
             if session.revision != revision or self._sessions.get(session.participant_id) is not session:
                 return "The guide changed while I was answering. Ask again for the current step."
@@ -624,14 +735,15 @@ class SopEngineAgent(Agent):
             timer,
         )
 
-    async def _tool_loop(self, system: str, user: str, tools: ToolSet) -> str:
+    async def _tool_loop(self, system: str, user: str, tools: ToolSet, *, foreground: bool = False) -> str:
+        options = _FOREGROUND_MODEL_OPTIONS if foreground else {"max_tokens": 512, "enable_thinking": False}
+
         async def call_model(messages: tuple[ChatMessage, ...], definitions: tuple[ToolDef, ...]) -> ChatResponse:
             return await self._llm.chat(
                 messages,
                 tools=definitions,
-                max_tokens=512,
                 temperature=0.0,
-                enable_thinking=False,
+                **options,
             )
 
         result = await run_tool_loop(

@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 
 import yaml
-from workflow_recorder_worker._workflow_engine import SopEngineAgent
-from workflow_recorder_worker.events import USER_QUERY_TOPIC
+from workflow_recorder_worker.events import RECORDING_COMMAND, USER_QUERY_TOPIC
 from xr_ai_models import load_models_config, make_llm
+from xr_ai_sample_agents.conversation import _handback_reason
 from xr_ai_sample_agents.front_end import ConversationApplication, QuickConversation
 
 _SAMPLE = Path(__file__).resolve().parents[1]
@@ -37,14 +37,24 @@ async def main() -> None:
     try:
         for case in cases:
             started = time.perf_counter()
-            if SopEngineAgent.is_control(case["query"]):
+            if RECORDING_COMMAND.fullmatch(case["query"]):
                 route = "control"
             else:
-                response = await conversation.decide(
-                    case["query"], applications=(application.tool(),), app_context=application.context("eval"),
+                context = application.context("eval")
+                route = await conversation._route(
+                    case["query"], (), context, (application.tool(),),
                 )
-                calls = response.tool_calls or ()
-                route = calls[0].name if len(calls) == 1 else "invalid" if calls else "direct"
+                if route != application.name:
+                    response = await conversation._decide_with_handoff(case["query"], (), context)
+                    if (reason := _handback_reason(response)) is not None:
+                        route = await conversation._route(
+                            case["query"], (), context, (application.tool(),), handback=reason,
+                        )
+                        if route != application.name:
+                            response = await conversation.decide(case["query"], app_context=context)
+                    if route != application.name:
+                        calls = response.tool_calls or ()
+                        route = calls[0].name if len(calls) == 1 else "invalid" if calls else "direct"
             ok = route == case["route"]
             passed += ok
             elapsed_ms = round((time.perf_counter() - started) * 1000)

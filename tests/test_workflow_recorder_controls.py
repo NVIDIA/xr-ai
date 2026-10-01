@@ -184,7 +184,10 @@ async def demo(tmp_path, request):
     )
     engine = SopEngineAgent(
         catalog=catalog,
-        llm=Mock(chat=AsyncMock()),
+        llm=Mock(chat=AsyncMock(return_value=ChatResponse(
+            content="Say list guides, or say start guide followed by a guide ID.",
+            reasoning=None, tool_calls=None, finish_reason="stop", raw={},
+        ))),
         current_frame=frame,
         image_query=Mock(),
         vision_timeout_s=1,
@@ -617,6 +620,8 @@ async def test_idle_hint_is_spoken_before_and_after_but_not_during_recording(dem
     await demo.say("What can you do?")
     assert demo.speech[-1][1] == "Say list guides, or say start guide followed by a guide ID."
     assert len(demo.speech) == 2
+    demo.engine._llm.chat.assert_awaited_once()
+    demo.engine._llm.chat.reset_mock()
     await demo.say("start recording")
     for question in ("What can you do?", "Describe what you see."):
         await demo.say(question)
@@ -625,7 +630,7 @@ async def test_idle_hint_is_spoken_before_and_after_but_not_during_recording(dem
     demo.engine._llm.chat.assert_not_awaited()
     await demo.say("stop recording")
     await demo.say("What can you do?")
-    demo.engine._llm.chat.assert_not_awaited()
+    demo.engine._llm.chat.assert_awaited_once()
     assert demo.speech[-1][1] == "Say list guides, or say start guide followed by a guide ID."
     assert len(demo.speech) == 5
     assert not demo.engine._sessions
@@ -633,11 +638,11 @@ async def test_idle_hint_is_spoken_before_and_after_but_not_during_recording(dem
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("question", ["What can you do?", "Describe what you see.", "What is two plus two?"])
-async def test_idle_questions_preserve_original_capabilities(demo, question):
+async def test_delegated_idle_questions_do_not_start_recording(demo, question):
     await demo.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined())
     await demo.say(question)
     assert demo.speech[-1][1] == "Say list guides, or say start guide followed by a guide ID."
-    demo.engine._llm.chat.assert_not_awaited()
+    demo.engine._llm.chat.assert_awaited_once()
     demo.frame.execute.assert_not_awaited()
     demo.engine._image_query.execute.assert_not_called()
     assert not list(demo.root.iterdir())

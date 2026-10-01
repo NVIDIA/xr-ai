@@ -21,7 +21,7 @@ from xr_ai_voice import (
     VoiceOutput,
 )
 
-from .conversation import ConversationExchange, QuickConversation
+from .conversation import ConversationExchange, QuickConversation, _handback_reason
 
 FRONT_END_QUERY_TOPIC: Topic[UserQuery] = Topic("sample-conversation.user-query", UserQuery)
 _MAX_HISTORY = 4
@@ -46,7 +46,7 @@ class ConversationApplication:
 
 
 class ConversationFrontEnd(Agent):
-    """Route once per idle turn; send focused turns straight to their app."""
+    """Route idle turns with one optional handback; send focused turns to their app."""
 
     def __init__(
         self,
@@ -56,8 +56,9 @@ class ConversationFrontEnd(Agent):
         super().__init__()
         if len({app.name for app in applications}) != len(applications):
             raise ValueError("application route names must be unique")
-        if any(app.name == "current_view" for app in applications):
-            raise ValueError("current_view is reserved for generic conversation")
+        reserved = {"conversation", "current_view", "application_handoff", "conversation_recall"}
+        if any(app.name in reserved for app in applications):
+            raise ValueError("application route name is reserved for generic conversation")
         self._conversation = conversation
         self._applications = applications
         self._route_tools = tuple(app.tool() for app in applications)
@@ -156,18 +157,35 @@ class ConversationFrontEnd(Agent):
                 return
             app_context = "\n".join(text for app in self._applications if (text := app.context(participant_id)))
             history = tuple(self._history.get(participant_id, ()))
-            decision = await self._conversation.decide(
-                query.text,
-                history=history,
-                app_context=app_context,
-                applications=self._route_tools,
-            )
-            calls = decision.tool_calls or ()
-            if len(calls) == 1:
+            if self._applications:
+                route = await self._conversation._route(
+                    query.text, history, app_context, self._route_tools
+                )
                 for app in self._applications:
-                    if calls[0].name == app.name:
+                    if route == app.name:
                         await ctx.publish(app.query_topic, query)
                         return
+            if self._applications:
+                decision = await self._conversation._decide_with_handoff(
+                    query.text, history, app_context
+                )
+            else:
+                decision = await self._conversation.decide(
+                    query.text, history=history, app_context=app_context
+                )
+            reason = _handback_reason(decision)
+            if reason is not None:
+                route = await self._conversation._route(
+                    query.text, history, app_context, self._route_tools, handback=reason
+                )
+                for app in self._applications:
+                    if route == app.name:
+                        await ctx.publish(app.query_topic, query)
+                        return
+                decision = await self._conversation.decide(
+                    query.text, history=history, app_context=app_context
+                )
+            calls = decision.tool_calls or ()
             streaming = len(calls) == 1 and calls[0].name == "current_view"
             async for chunk in self._conversation.stream(
                 query.text,
