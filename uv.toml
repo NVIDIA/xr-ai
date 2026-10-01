@@ -5,4 +5,8 @@
 exclude-newer = "2026-08-27T17:15:48Z"
 
 # CVE-2026-80047: qualify the fixed Transformers release independently.
-exclude-newer-package = { transformers = "2026-09-10T00:00:00Z" }
+[exclude-newer-package]
+transformers = "2026-09-10T00:00:00Z"
+# Qualify the HTTP and JWT security releases independently of the global cutoff.
+urllib3 = "2026-09-16T00:00:00Z"
+pyjwt = "2026-09-29T00:00:00Z"

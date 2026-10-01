@@ -372,12 +372,12 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.08-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.09-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.08-py3` for all wrappers.
-This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
-Nemotron model configurations. Nemotron Omni uses the image's native Mamba and
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.09-py3` for all wrappers.
+This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
 causal-convolution implementations, so the shipped configuration does not
 compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
 another tag, an internal mirror, or a custom build.
@@ -388,13 +388,13 @@ starting it with the new image:
 
 ```bash
 uv run --project model-server-samples/model-servers model_servers --stop
-docker pull nvcr.io/nvidia/vllm:26.08-py3
+docker pull nvcr.io/nvidia/vllm:26.09-py3
 ```
 
 The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
-the 26.08 stack reuses compatible weights and downloads any missing artifacts.
+the 26.09 stack reuses compatible weights and downloads any missing artifacts.
 ::::
 
 ### docker mode — prerequisites
@@ -440,11 +440,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The shipped image pin was qualified with this in-container vLLM version:
+The selected image reports this in-container vLLM version:
 
 | Image | vLLM |
 |---|---:|
-| `nvcr.io/nvidia/vllm:26.08-py3` | 0.27.1 |
+| `nvcr.io/nvidia/vllm:26.09-py3` | 0.29.0+5013de39 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
