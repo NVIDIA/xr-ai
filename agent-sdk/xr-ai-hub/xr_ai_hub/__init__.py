@@ -38,6 +38,7 @@ from ._types import (
     ReturnAudioFlush,
     RosterRequest,
     SubscriptionProbe,
+    VideoTrackEvent,
 )
 
 __all__ = [
@@ -67,6 +68,7 @@ __all__ = [
     "LiveFrameSource",
     "MsgType",
     "ParticipantEvent",
+    "VideoTrackEvent",
     "PixelFormat",
     "ReturnAudioFlush",
     "RosterRequest",
