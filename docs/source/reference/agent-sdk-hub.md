@@ -40,6 +40,12 @@ therefore be idempotent. Because ZMQ subscription changes are asynchronous,
 workers that own readiness wait for `wait_for_subscriptions()` before announcing
 availability.
 
+`on_video_track()` reports live-camera start, mute, unmute, and stream-end
+events for subscribed participants. Active camera tracks are replayed with the
+roster, so handlers must tolerate repeated active notifications. These events
+are independent of participant connection and do not represent on-demand
+still captures or screen sharing.
+
 `Subscribe.REALTIME` combines data, audio, and video. `Subscribe.DEFAULT` is
 the same real-time-only filter. `Subscribe.ALL` remains an equivalent but
 deprecated compatibility alias; completed files stay explicitly opt-in.

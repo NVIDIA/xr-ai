@@ -24,6 +24,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "model_servers",
         "model_servers_nim",
         "simple_vlm_example",
+        "sop_sample",
         "tea_making_sample",
         "xr_render_demo",
     }
@@ -45,6 +46,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--capture",),
     ]
+    assert [argument.flags for argument in commands["sop_sample"].arguments] == [("--capture",)]
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
     ]
