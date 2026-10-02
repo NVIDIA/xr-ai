@@ -19,7 +19,9 @@ from ._endpoints import endpoint_checks
 if TYPE_CHECKING:
     from ._stack import Parallel, Process
 
-_FIELDS = {"nvidia_driver", "docker", "disk_gb_free"}
+_FIELDS = {"disk_gb_free"}
+_MIN_NVIDIA_DRIVER = 580
+_MIN_DOCKER = 24
 _HUB_PORTS = (
     ("lk_port_ws", 7880, "tcp"),
     ("lk_port_tcp", 7881, "tcp"),
@@ -36,9 +38,6 @@ def _contract(path: Path) -> tuple[dict[str, Any] | None, str]:
         return None, "contract must be an object"
     if unknown := set(value) - _FIELDS:
         return None, f"contract contains unsupported fields: {', '.join(sorted(unknown))}"
-    for name in ("nvidia_driver", "docker"):
-        if name in value and re.fullmatch(r"\d+(?:\.\d+)*", str(value[name])) is None:
-            return None, f"{name} must be a dot-separated numeric version"
     minimum = value.get("disk_gb_free")
     if "disk_gb_free" in value and (
         type(minimum) not in (int, float) or not 0 < minimum < float("inf")
@@ -113,19 +112,36 @@ def preflight(processes: Sequence[Process | Parallel], base: Path, *,
         return rows
     flat = _flatten(processes)
     local = [process for process in flat if process.launch_mode != "reuse"]
+    selected = [
+        (
+            process,
+            read_config_scalar((base / process.config).resolve(), "vllm_backend")
+            if process.config is not None else None,
+        )
+        for process in local
+    ]
+    gpu = any(
+        process.command in {
+            "device_io_hub", "cloudxr_runtime", "openxr_service",
+            "nim_server", "nim_riva_server",
+            "vlm_server", "embedding_server", "nemotron_omni_llm_server",
+            "nemotron3_nano_llm_server", "llama_nemotron_llm_server",
+        }
+        or backend in {"pip", "docker"}
+        for process, backend in selected
+    )
     containers = any(
         process.command in {"nim_server", "nim_riva_server"}
-        or (process.config is not None
-            and read_config_scalar((base / process.config).resolve(), "vllm_backend") == "docker")
-        for process in local
+        or backend == "docker"
+        for process, backend in selected
     )
     hub = next((process for process in local if process.command == "device_io_hub"), None)
-    if local and (minimum := contract.get("nvidia_driver")):
+    if gpu:
         rows.append(_version_check("nvidia_driver", ["nvidia-smi", "--query-gpu=driver_version",
-                    "--format=csv,noheader"], minimum, "Upgrade the driver: https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#software"))
-    if (hub is not None or containers) and (minimum := contract.get("docker")):
+                    "--format=csv,noheader"], _MIN_NVIDIA_DRIVER, "Upgrade the driver: https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#software"))
+    if hub is not None or containers:
         rows.append(_version_check("docker", ["docker", "version", "--format", "{{.Server.Version}}"],
-                    minimum, f"Install Docker {minimum} or newer and allow this user to run it: "
+                    _MIN_DOCKER, f"Install Docker {_MIN_DOCKER} or newer and allow this user to run it: "
                     "https://nvidia.github.io/xr-ai/latest/getting_started/requirements.html#docker-host-setup"))
     if containers:
         ran, output = _run(["docker", "info", "--format", "{{json .Runtimes}}"])

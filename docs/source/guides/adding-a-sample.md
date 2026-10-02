@@ -37,7 +37,6 @@ entry point.
 agent-samples/<name>/
 ├── pyproject.toml                  ← orchestrator project
 ├── main.py                         ← orchestrator (declare PROCESSES, call run_stack)
-├── requirements.json               ← host prerequisite versions
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── device_io_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
@@ -51,12 +50,13 @@ agent-samples/<name>/
         └── …                       ← cohesive workflow, transport, and config modules
 ```
 
-Copy `requirements.json` from `simple-vlm-example` and adjust the minimum
-`nvidia_driver` and `docker` versions for the sample. Model-server samples can
-also declare `disk_gb_free`, the minimum free space required before downloading
-into an empty model cache. Ports come from process metadata and the hub YAML;
-sample-specific requirements belong in the sample's check callback. See
-{doc}`/components/launcher-and-process-model` for checks and preparation.
+The shared launcher owns the host driver and Docker minimum versions and checks
+them when required by the selected local components. Model-server samples can
+declare `disk_gb_free` in an optional `requirements.json`, the minimum free space
+required before downloading into an empty model cache. Ports come from process
+metadata and the hub YAML; sample-specific requirements belong in the sample's
+check callback. See {doc}`/components/launcher-and-process-model` for checks and
+preparation.
 
 Workers accept legacy flat JSON, wrapped JSON, or YAML; launcher endpoint checks
 read literal fields from either JSON shape, while shared model-server launches

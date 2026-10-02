@@ -102,15 +102,17 @@ Selected GPU containers require the registered NVIDIA Docker runtime. This
 check does not launch a diagnostic container or verify GPU injection; the
 service performs its own initialization and declares readiness afterward.
 
-The sample's optional `requirements.json` declares `nvidia_driver` and `docker`
-minimum versions and the `disk_gb_free` threshold. Docker checks apply to the
-selected local hub and container processes; pip-only model services do not
-require Docker. Ports come from `Process.port` and the hub's YAML
-configuration. Inspection uses `ss` without binding sockets. An occupied
+The shared launcher defines the host driver and Docker minimum versions once,
+using the baseline in {doc}`/getting_started/requirements`. Checks apply to
+selected local components that need them. Docker checks apply to the local hub
+and container processes; pip-only model services do not require Docker. The
+sample's optional `requirements.json` declares only the `disk_gb_free` threshold.
+Ports come from `Process.port` and the hub's YAML configuration. Inspection uses
+`ss` without binding sockets. An occupied
 persistent-service port is `skipped`: its wrapper must verify ownership and
-health before reuse. Samples without a contract still check supplied
-credentials, selected ports, and model endpoints. The xr-render sample checks
-LOVR.
+health before reuse. Samples without a contract still check selected host
+prerequisites, supplied credentials, selected ports, and model endpoints. The
+xr-render sample checks LOVR.
 
 For a configured model cache, the disk threshold applies to its filesystem when
 the cache is missing or empty. A nonempty cache bypasses the cold-download

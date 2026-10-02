@@ -21,8 +21,8 @@ def _contract(tmp_path: Path, value: dict) -> None:
 
 
 @pytest.mark.parametrize(("value", "detected"), [
-    ({"nvidia_driver": []}, "nvidia_driver must be a dot-separated numeric version"),
-    ({"docker": True}, "docker must be a dot-separated numeric version"),
+    ({"nvidia_driver": 580}, "contract contains unsupported fields: nvidia_driver"),
+    ({"docker": 24}, "contract contains unsupported fields: docker"),
     ({"disk_gb_free": "60"}, "disk_gb_free must be a positive number"),
 ])
 def test_invalid_contract_values_return_failed_contract_row(
@@ -41,11 +41,7 @@ def test_invalid_contract_values_return_failed_contract_row(
 def test_known_failures_report_detected_required_and_fix_without_secrets(
     tmp_path, monkeypatch, command_failure,
 ) -> None:
-    _contract(tmp_path, {
-        "nvidia_driver": 580,
-        "docker": 24.1,
-        "disk_gb_free": 60,
-    })
+    _contract(tmp_path, {"disk_gb_free": 60})
     model_config = tmp_path / "model.yaml"
     model_config.write_text(
         "vllm_backend: docker\nmodel_cache: cache\n",
@@ -106,7 +102,7 @@ def test_known_failures_report_detected_required_and_fix_without_secrets(
     assert by_name["nvidia_driver"]["remediation"].startswith(
         "Run `nvidia-smi " if command_failure else "Upgrade the driver:",
     )
-    assert by_name["docker"]["remediation"].startswith("Install Docker 24.1 or newer")
+    assert by_name["docker"]["remediation"].startswith("Install Docker 24 or newer")
     assert (
         "Install the NVIDIA" in by_name["nvidia_container_toolkit"]["remediation"]
     ) != command_failure
@@ -133,6 +129,10 @@ def test_ports_use_passive_tcp_udp_inspection_and_persist_is_unverified(
 
     def run(command, **_kwargs):
         commands.append(command)
+        if command[0] == "nvidia-smi":
+            return subprocess.CompletedProcess(command, 0, "580.1\n", "")
+        if command[:2] == ["docker", "version"]:
+            return subprocess.CompletedProcess(command, 0, "24.0\n", "")
         if "-lnup" in command:
             raise subprocess.TimeoutExpired(command, 5)
         if command[-1] == "sport = :7890":
@@ -142,8 +142,11 @@ def test_ports_use_passive_tcp_udp_inspection_and_persist_is_unverified(
         return subprocess.CompletedProcess(command, 0, "listener\n", "")
 
     monkeypatch.setattr(subprocess, "run", run)
-    assert _preflight.preflight(processes, tmp_path, runtime=False) == []
-    assert commands == []
+    assert [row["status"] for row in _preflight.preflight(
+        processes, tmp_path, runtime=False,
+    )] == ["passed", "passed"]
+    assert [command[0] for command in commands] == ["nvidia-smi", "docker"]
+    commands.clear()
 
     rows = _preflight.preflight(processes, tmp_path)
     by_name = {row["name"]: row for row in rows}
@@ -158,7 +161,7 @@ def test_ports_use_passive_tcp_udp_inspection_and_persist_is_unverified(
     assert persisted["status"] == "skipped"
     assert "ownership and readiness unverified" in persisted["detected"]
     assert "port:reused:tcp:8101" not in by_name
-    assert commands == [
+    assert commands[2:] == [
         ["ss", "-H", "-lntp", "sport = :7890"],
         ["ss", "-H", "-lntp", "sport = :7881"],
         ["ss", "-H", "-lnup", "sport = :7892"],
@@ -186,7 +189,6 @@ def test_contractless_owned_process_port_conflict_fails(tmp_path, monkeypatch) -
 
 
 def test_component_selection_controls_docker_checks(tmp_path, monkeypatch) -> None:
-    _contract(tmp_path, {"nvidia_driver": 580, "docker": 24})
     pip_config = tmp_path / "pip.yaml"
     pip_config.write_text("vllm_backend: pip\n", encoding="utf-8")
     profile = tmp_path / "models.json"
@@ -245,6 +247,75 @@ def test_component_selection_controls_docker_checks(tmp_path, monkeypatch) -> No
     assert [command[-1] for command in commands[2:]] == [
         "sport = :7880", "sport = :7881", "sport = :7882",
     ]
+
+
+@pytest.mark.parametrize("command", [
+    "vlm_server",
+    "embedding_server",
+    "nemotron_omni_llm_server",
+    "nemotron3_nano_llm_server",
+    "llama_nemotron_llm_server",
+])
+def test_vllm_wrapper_default_backend_requires_only_driver(
+    tmp_path, monkeypatch, command,
+) -> None:
+    config = tmp_path / "model.yaml"
+    config.write_text("port: 8100\n", encoding="utf-8")
+    commands = []
+
+    def run(argv, _timeout=5):
+        commands.append(argv)
+        return True, "580.1"
+
+    monkeypatch.setattr(_preflight, "_run", run)
+
+    rows = _preflight.preflight(
+        (Process("model", ".", command, config=config),),
+        tmp_path,
+        runtime=False,
+    )
+
+    assert [(row["name"], row["status"]) for row in rows] == [
+        ("nvidia_driver", "passed"),
+    ]
+    assert [argv[0] for argv in commands] == ["nvidia-smi"]
+
+
+@pytest.mark.parametrize(("driver", "docker", "status"), [
+    ("581.0", "25.0", "passed"),
+    ("579.99", "23.99", "failed"),
+])
+def test_launcher_host_minimums_apply_without_contract(
+    tmp_path, monkeypatch, driver, docker, status,
+) -> None:
+    def run(command, _timeout=5):
+        return True, driver if command[0] == "nvidia-smi" else docker
+
+    monkeypatch.setattr(_preflight, "_run", run)
+
+    rows = _preflight.preflight(
+        (Process("hub", ".", "device_io_hub"),), tmp_path, runtime=False,
+    )
+
+    assert [(row["name"], row["status"]) for row in rows] == [
+        ("nvidia_driver", status),
+        ("docker", status),
+    ]
+
+
+def test_reused_and_cpu_only_processes_omit_host_checks(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        _preflight,
+        "_run",
+        lambda *_args, **_kwargs: pytest.fail("no host check selected"),
+    )
+    processes = (
+        Process("worker", ".", "worker"),
+        Process("reused-hub", ".", "device_io_hub", launch_mode="reuse"),
+        Process("reused-model", ".", "nim_server", launch_mode="reuse"),
+    )
+
+    assert _preflight.preflight(processes, tmp_path, runtime=False) == []
 
 
 def test_disk_is_omitted_without_a_declared_prepare_cache(tmp_path) -> None:
