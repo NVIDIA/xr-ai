@@ -58,6 +58,29 @@ both under the MIT license. Unmodified upstream license texts are bundled in
 attributions. Each directory records the SHA-256-verified artifact URL and
 copied-file hashes.
 
+### Qualified pip vLLM security refresh
+
+The release security refresh resolves the following versions. The linked
+license texts were copied without modification from SHA-256-verified upstream
+artifacts; each directory records the artifact URL and hashes.
+
+| Component | Resolved version | License and notices |
+|---|---|---|
+| `vllm` | 0.30.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.30.0/) |
+| `huggingface-hub` | 1.32.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.32.0/) |
+| `flashinfer-python` | 0.6.18.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.6.18.post1/) |
+| `instanttensor` | 0.2.0 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.0/) |
+| `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
+| `protobuf` | 7.36.0 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.0/) |
+| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
+
+`instanttensor` is a new transitive dependency of vLLM. CUTLASS DSL is
+proprietary software downloaded by users, rather than part of XR AI's source
+release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
+also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
+proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
+EULA. The lock also retains protobuf 6.33.5 for a separate dependency branch.
+
 ### Pocket TTS model and voice
 
 Pocket TTS 3.0.2 pins the following downloaded artifacts for the default
@@ -148,7 +171,7 @@ artifact and SHA-256 hashes for the copied texts.
 | `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.7.19/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
 | `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
 | `humming-kernels` | 0.1.12 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.12/) | Model services → `vllm` → `humming-kernels` |
-| `quack-kernels` | 0.6.4 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.4/) | Model services → `vllm` → `quack-kernels` |
+| `quack-kernels` | 0.6.5 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.5/) | Model services → `vllm` → `quack-kernels` |
 | `torchcodec` | 0.16.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.16.0/) | Model services → `vllm` → `torchcodec` |
 
 `AND` license expressions retain all listed terms; they are not alternative
@@ -166,14 +189,14 @@ packages during installation; XR AI does not redistribute their binaries.
 
 | Package | Version | Terms |
 |---|---|---|
-| `nvidia-cutlass-dsl` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-base` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-core` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-cu12` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
-| `nvidia-cutlass-dsl-libs-cu13` | 4.6.2 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-base` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-core` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu12` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu13` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
 
 The [upstream license page](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/license.html)
-and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.6.2/)
+and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.7.1/)
 record the applicable terms. The permissive license elections elsewhere in
 this file do not apply to these proprietary packages.
 
