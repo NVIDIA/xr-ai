@@ -200,13 +200,15 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try await microphoneOperations.start(config: config) { [self] in
             guard self.room === room, connectionGeneration == generation,
                   room.connectionState == .connected else { throw StreamError.notConnected }
+            let captureOptions = AudioCaptureOptions(from: config)
             try AudioManager.shared.setEngineAvailability(.default)
             // Publishing waits for the first frame, so input must be prepared first.
-            try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+            try await AudioManager.shared.setRecordingAlwaysPreparedMode(
+                true, audioProcessingOptions: captureOptions.recordingProcessingOptions
+            )
             try Task.checkCancellation()
             guard self.room === room, connectionGeneration == generation,
                   room.connectionState == .connected else { throw StreamError.notConnected }
-            let captureOptions = AudioCaptureOptions(from: config)
             try await room.localParticipant.setMicrophone(
                 enabled: true,
                 captureOptions: captureOptions
@@ -1118,7 +1120,7 @@ private extension LiveKit.ConnectionState {
     }
 }
 
-private extension AudioCaptureOptions {
+extension AudioCaptureOptions {
     convenience init(from config: AudioConfig) {
         // AUVoiceIO (Apple's hardware Voice-Processing I/O unit) is unavailable in the
         // simulator, so we silently promote voiceProcessing → softwareProcessing there.
@@ -1131,17 +1133,27 @@ private extension AudioCaptureOptions {
 
         switch mode {
         case .voiceProcessing:
-            // AUVoiceIO owns echo cancellation / AGC / NR at the OS level;
-            // tell LiveKit's WebRTC stack to leave them off.
-            self.init(echoCancellation: false, autoGainControl: false, noiseSuppression: false,
-                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection)
+            self.init(echoCancellation: true, autoGainControl: true, noiseSuppression: true,
+                      echoCancellationMode: .platform, autoGainControlMode: .platform,
+                      noiseSuppressionMode: .platform)
         case .softwareProcessing:
             self.init(echoCancellation: true,  autoGainControl: true,  noiseSuppression: true,
-                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection)
+                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection,
+                      echoCancellationMode: .software, autoGainControlMode: .software,
+                      noiseSuppressionMode: .software, highpassFilterMode: .software)
         case .raw, .disabled:
             self.init(echoCancellation: false, autoGainControl: false, noiseSuppression: false,
                       highpassFilter: false, typingNoiseDetection: false)
         }
+    }
+
+    var recordingProcessingOptions: AudioProcessingOptions {
+        AudioProcessingOptions(
+            echoCancellation: echoCancellation, autoGainControl: autoGainControl,
+            noiseSuppression: noiseSuppression, highpassFilter: highpassFilter,
+            echoCancellationMode: echoCancellationMode, autoGainControlMode: autoGainControlMode,
+            noiseSuppressionMode: noiseSuppressionMode, highpassFilterMode: highpassFilterMode
+        )
     }
 }
 
