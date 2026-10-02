@@ -574,6 +574,8 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatResponse">ChatResponse (class in xr_ai_models)</a>
 </li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent">ChatStreamEvent (class in xr_ai_models)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RAGHealthResult.chunk_count">chunk_count (xr_ai_tools.rag.RAGHealthResult attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.HubVoiceTransport.cleanup_participant">cleanup_participant() (xr_ai_voice.HubVoiceTransport method)</a>
@@ -831,7 +833,11 @@
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceOutput.final">final (xr_ai_voice.VoiceOutput attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatResponse.finish_reason">finish_reason (xr_ai_models.ChatResponse attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.finish_reason">(xr_ai_models.ChatStreamEvent attribute)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.flush_return_audio">flush_return_audio() (xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameData.fmt">fmt (xr_ai_hub.FrameData attribute)</a>
@@ -1081,7 +1087,11 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.kind">kind (xr_ai_models.AdapterSpec attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.kind">(xr_ai_models.ChatStreamEvent attribute)</a>
 </li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.KIND_OPENAI_COMPAT">KIND_OPENAI_COMPAT (in module xr_ai_models)</a>
@@ -1564,6 +1574,8 @@
       <ul>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatResponse.reasoning">(xr_ai_models.ChatResponse attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.reasoning">(xr_ai_models.ChatStreamEvent attribute)</a>
+</li>
       </ul></li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.reasoning_field">reasoning_field (xr_ai_models.AdapterSpec attribute)</a>
 </li>
@@ -1799,10 +1811,10 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.ListTranscriptSourcesResult.sources">sources (xr_ai_tools.text_memory.ListTranscriptSourcesResult attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/types/index.html#xr_ai_tools.types.SpatialFrame">SpatialFrame (class in xr_ai_tools.types)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Spec">Spec (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.start">start() (xr_ai_runtime.AgentRuntime method)</a>
@@ -1857,6 +1869,12 @@
         <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.AsyncTool.stream">(xr_ai_tools.AsyncTool method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMService.stream_events">stream_events() (xr_ai_models.LLMService method)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatLLM.stream_events">(xr_ai_models.OpenAICompatLLM method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatVLM.stream_images">stream_images() (xr_ai_models.OpenAICompatVLM method)</a>
 
       <ul>
@@ -1909,9 +1927,11 @@
 </li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.Topic.telemetry">telemetry (xr_ai_runtime.Topic attribute)</a>
 </li>
-      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TextPart.text">text (xr_ai_models.TextPart attribute)</a>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.text">text (xr_ai_models.ChatStreamEvent attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TextPart.text">(xr_ai_models.TextPart attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrievedChunk.text">(xr_ai_tools.rag.RetrievedChunk attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.AddTranscriptRequest.text">(xr_ai_tools.text_memory.AddTranscriptRequest attribute)</a>
@@ -1977,6 +1997,8 @@
         <li><a href="reference/python/xr_ai_tools/tools/index.html#xr_ai_tools.tools.Tool">(class in xr_ai_tools.tools)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.tool_call">tool_call (xr_ai_models.ChatStreamEvent attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatMessage.tool_call_id">tool_call_id (xr_ai_models.ChatMessage attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Capabilities.tool_calls">tool_calls (xr_ai_models.Capabilities attribute)</a>
@@ -1997,10 +2019,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ToolCallResult">ToolCallResult (class in xr_ai_tools.tool_calling)</a>
 </li>
-      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef">ToolDef (class in xr_ai_models)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef">ToolDef (class in xr_ai_models)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.ToolInvocationResult">ToolInvocationResult (class in xr_ai_tools)</a>
 
       <ul>

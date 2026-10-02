@@ -44,6 +44,7 @@ Classes
    xr_ai_models.Capabilities
    xr_ai_models.ChatMessage
    xr_ai_models.ChatResponse
+   xr_ai_models.ChatStreamEvent
    xr_ai_models.EmbeddingService
    xr_ai_models.ImagePart
    xr_ai_models.LLMService
@@ -216,6 +217,59 @@ Package Contents
 
 
 
+.. py:class:: ChatStreamEvent
+
+   One normalized event from a streamed chat completion.
+
+   Text and reasoning events carry deltas as they arrive. Tool calls are
+   emitted only after the provider finishes the response and the complete
+   batch has been validated. A finish event carries the provider finish
+   reason.
+
+
+   .. py:attribute:: kind
+      :type:  Literal['text', 'reasoning', 'tool_call', 'finish']
+
+      The kind of streamed event.
+
+
+
+   .. py:attribute:: text
+      :type:  str | None
+      :value: None
+
+
+      A user-visible text delta for ``kind == "text"``.
+
+
+
+   .. py:attribute:: reasoning
+      :type:  str | None
+      :value: None
+
+
+      A model reasoning delta for ``kind == "reasoning"``.
+
+
+
+   .. py:attribute:: tool_call
+      :type:  ToolCall | None
+      :value: None
+
+
+      A complete tool call for ``kind == "tool_call"``.
+
+
+
+   .. py:attribute:: finish_reason
+      :type:  str | None
+      :value: None
+
+
+      The provider finish reason for ``kind == "finish"``.
+
+
+
 .. py:data:: ContentPart
 
    A supported text, image, or video part in a chat message.
@@ -303,6 +357,15 @@ Package Contents
    .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream user-visible response text for a sequence of chat messages.
+
+
+
+   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
+
+      Stream text, reasoning, complete tool calls, and finish events.
+
+      Tool calls are held until the stream completes successfully, so a
+      truncated or malformed function call is never exposed as executable.
 
 
 
@@ -597,6 +660,19 @@ Package Contents
 
       Malformed server-sent event lines and deltas without content are
       skipped. Tool-call and reasoning deltas are not yielded.
+
+
+
+   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
+      :async:
+
+
+      Stream normalized events, withholding tool calls until completion.
+
+      A provider finish reason followed by ``[DONE]`` is required before any
+      tool call is emitted. This prevents consumers from executing partial
+      calls if the connection ends early or the provider returns invalid
+      tool data.
 
 
 
