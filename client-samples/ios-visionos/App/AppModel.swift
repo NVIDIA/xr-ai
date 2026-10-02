@@ -458,6 +458,8 @@ final class AppModel {
                 return
             }
             isCameraActive = true
+        } catch is CancellationError {
+            return
         } catch {
             #if DEBUG
             // `error.localizedDescription` strips domain/code/underlying cause.
