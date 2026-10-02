@@ -67,7 +67,7 @@ def test_config_catalog_preserves_source_and_language() -> None:
         "agent-samples/simple-vlm-example/yaml/device_io_hub.yaml",
         "agent-samples/xr-render-demo/yaml/device_io_hub.yaml",
     ):
-        assert "# Development-only placeholders." in configs[path].content
+        assert "# Leave both blank to generate credentials for this hub run." in configs[path].content
 
     for config in configs.values():
         assert config.content == (_ROOT / config.path).read_text(encoding="utf-8")
