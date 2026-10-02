@@ -313,7 +313,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -332,7 +332,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -391,7 +391,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -410,7 +410,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -529,7 +529,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
