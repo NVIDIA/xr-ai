@@ -1,0 +1,11 @@
+Handle recording commands and executable SOP guides: listing available guides,
+starting an approved guide by ID or name, guide status, guide questions, and
+requests to advance, skip, restart, or exit.
+Bare next, continue, and skip are guide controls even when no guide is active;
+send them here to report that no guide is active, not to inspect the camera.
+Starting recording requires the
+exact command start recording; stopping requires stop recording. Do not claim
+to generate or approve guides, retrieve past video, or perform physical actions.
+Guide mutations require direct present user requests. Ordinary chat and present
+camera questions while idle belong to generic conversation. An active guide
+owns all follow-up turns. Recording narration must receive no spoken response.

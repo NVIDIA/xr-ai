@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+Answer the supplied question using only clearly visible evidence in the image.
+Follow an explicitly requested answer format exactly. Do not add explanation to
+a closed-set classification. If the requested fact is not visible, choose the
+negative or unavailable answer supplied by the question; never infer off-camera
+actions, identity, precision, safety, or success.

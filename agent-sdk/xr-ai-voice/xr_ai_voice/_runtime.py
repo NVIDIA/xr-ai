@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mappin
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import nemo_relay
 from loguru import logger
@@ -97,6 +97,12 @@ class VoiceOutput(BaseModel):
 
     timestamp_us: int | None = Field(default=None, ge=0)
     """Optional originating input timestamp propagated to TTS."""
+
+    kind: Literal["response", "acknowledgement", "progress", "result", "alert"] = "response"
+    """Semantic role used by optional multi-producer aggregation."""
+
+    turn_id: str | None = Field(default=None, min_length=1)
+    """Logical user turn shared by its acknowledgement, progress, and result."""
 
     @model_validator(mode="after")
     def validate_boundary(self) -> VoiceOutput:
@@ -229,7 +235,13 @@ class VoiceAgent(Agent):
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
         interrupt_on_supersede: bool = False,
+        stop_ack_enabled: Callable[[str], bool] | None = None,
     ) -> None:
+        """Configure participant-aware voice I/O.
+
+        ``stop_ack_enabled`` may silence STOP acknowledgements per participant
+        without disabling interruption. None preserves spoken acknowledgements.
+        """
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         super().__init__()
@@ -244,6 +256,7 @@ class VoiceAgent(Agent):
             text_topic=text_topic,
             idle_timeout_secs=idle_timeout_secs,
             transport=transport,
+            stop_ack_enabled=stop_ack_enabled,
         )
         self.query_topic = query_topic
         self.response_capacity = response_capacity
@@ -265,8 +278,22 @@ class VoiceAgent(Agent):
         ] | None = None
         self._transcript_task: asyncio.Task[None] | None = None
 
-    async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
-        """Run the owned voice session and bridge it to a running runtime."""
+    async def run(
+        self,
+        runtime: AgentRuntime,
+        *,
+        source: str = "voice",
+        before_close: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        """Run the owned voice session and bridge it to a running runtime.
+
+        After input and lifecycle delivery stop, await ``before_close`` before
+        closing the hub endpoint and model clients. Applications can use this
+        hook to drain work that still needs the return-data connection. It runs
+        on normal exit, failure, or cancellation after session entry. A pending
+        hook is drained before propagating cancellation; resources are still
+        closed if the hook raises. None preserves default cleanup.
+        """
 
         if self._runtime is not None:
             raise RuntimeError("voice agent is already running")
@@ -313,7 +340,16 @@ class VoiceAgent(Agent):
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
                 self._closed_streams.clear()
-                await self._session.close()
+                try:
+                    if before_close is not None:
+                        cleanup = asyncio.ensure_future(before_close())
+                        try:
+                            await asyncio.shield(cleanup)
+                        except asyncio.CancelledError:
+                            await cleanup
+                            raise
+                finally:
+                    await self._session.close()
         finally:
             self._runtime = None
             self._source = "voice"

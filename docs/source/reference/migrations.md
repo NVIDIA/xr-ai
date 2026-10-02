@@ -13,6 +13,175 @@ Apple platforms to `client-sdk-swift` 2.16.0, and native C++ to
 `client-sdk-cpp` 1.10.2 or newer. The native SDK root now uses the upstream
 `include/` and `lib/` directory layout.
 
+## Workflow recorder controls
+
+The workflow-recorder sample no longer starts recording on connection. Say
+`start recording` to start a packet and `stop recording` to finalize it. The
+agent says "Recording started." and then stays silent during recording. Say
+`start recording` again to record another packet without disconnecting.
+
+Command help is spoken once on connection. After each finished recording, the
+agent says "Recording ended." followed by the same command help.
+Outside recording, an active guide answers questions using its step-specific
+instructions and tools. Without an active guide, the shared conversation front
+end answers ordinary questions and routes present-camera questions to streamed
+visual inference. It delegates SOP requests to the guide engine, which can
+select and control a guide through its application-owned tools.
+Guide responses and monitoring pause during
+recording and resume afterward. Disconnecting still finalizes an open packet.
+JPEG sampling, narration format, captioning, manual guide generation,
+and guide-step execution remain unchanged.
+
+### Conversation routing and focus
+
+The worker reuses `ConversationFrontEnd` and `QuickConversation` from
+`xr-ai-sample-agents[front-end]`. As in the tea-making conversation flow, idle
+turns first select a destination without producing speech. SOP requests go to
+the guide engine; generic requests go to a separate conversation decision that
+can answer, inspect the current view, or hand back to the router once. Both
+decisions disable thinking. Visual answers use a fresh frame, do not run the SOP
+caption prompt, and stream without a preliminary acknowledgement.
+The delegated guide foreground uses tea's bounded reasoning settings: 1,024
+thinking tokens within a 1,536-token output budget. Background SOP observations
+retain their 512-token budget with thinking disabled; recording and captioning
+settings are unchanged.
+
+Only exact recording commands bypass model routing. The sample serializes
+recording controls outside cancellable conversation tasks, so another utterance
+cannot cancel a pending start or finalization. Recording narration stays in the
+shared capture transcript; it produces no conversational reply and does not
+enter conversation history. Recording still confirms its start and end.
+
+An active guide holds participant-local focus: follow-up questions and controls
+go directly to its step-specific agent, without another generic routing decision.
+That agent uses the guide's instructions and live-evidence tools and declines
+unrelated requests. Recording pauses that guide;
+stopping recording resumes it. Stopping or finishing the guide releases focus.
+Interrupting speech cancels foreground answers, not recording or guide state.
+Departure clears conversation history and still finalizes any recording.
+
+The shared front end retains up to four completed conversational exchanges and
+receives a bounded, read-only SOP status projection. Guide requests and delivered
+replies enter this history; recording commands and narration do not. The engine
+remains the source of guide state.
+Speech uses the shared voice aggregator with participant and turn identities.
+Guide approval, content-hash pinning, observation prompts, timer checks, and
+user-requested step advancement are unchanged.
+
+For example, say "Help me follow the Assemble Toy Vehicle guide", "Please move
+to the next step", or "I want to leave this guide". The guide agent uses
+application-owned start, advance, skip, restart, and exit tools. The existing
+exact commands still work once routed to the guide. All guide-start requests,
+including `start guide <guide-id>` and `run workflow <guide-id>`, go through the
+guide agent's `workflow__start` tool; there is no deterministic start shortcut.
+The separate deterministic recording-command path is unchanged. Tools enforce approval,
+completion, participant identity, and revision checks. A completion claim does
+not verify a step; skipping still requires an explicit skip request. Questions,
+quotations, reports, hypotheticals, and negations must not invoke state-changing
+tools. Ambiguous guide selections require clarification. There are no
+model-callable recording, approval, or completion-commit controls.
+
+For shared-agent callers, `QuickConversation.decide()` no longer accepts
+`applications`. Register `ConversationApplication` instances with
+`ConversationFrontEnd` instead: destination selection is separate from generic
+conversation, whose tool catalog does not expose application controls.
+
+The isolated route corpus checks idle routing and recording-command bypass without
+executing commands. With the configured language model already running, run
+from `agent-samples/workflow-recorder/`:
+
+```bash
+uv run --project worker python eval/routes.py
+uv run --project worker python eval/guide_controls.py
+```
+
+These evaluate model routing and guide-control proposals without executing
+tools, not audible latency or camera accuracy. The CPU
+tests separately exercise recording silence, guide focus, superseded answers,
+disconnects, and capture finalization through the composed runtime.
+
+### Shared media capture
+
+The sample launches main's `device_io_capture` service in explicit, raw mode.
+Its existing voice commands invoke participant-bound `CaptureTools` start and
+stop tools; connecting alone does not record media. Model servers remain
+externally managed under `model-server-samples/model-servers`.
+
+Two complementary outputs are retained locally:
+
+- `artifacts/sessions/<session-id>/packet.json` indexes the existing SOP input:
+  JPEGs sampled at 2 FPS, narration transcripts, captions generated every five
+  seconds, and the activity and phase summary. Those defaults remain in
+  `yaml/workflow_recorder_worker.yaml`.
+- `artifacts/captures/<session-id>/<capture-bundle>/manifest.json` indexes
+  main's video, bidirectional audio, speech transcripts, and event timeline.
+  `yaml/media_capture.yaml` owns that service's sampling rate, output root, and
+  retention. The worker reads the same configuration to locate each namespace.
+
+The packet's additional `media_capture.directory` field points to its media
+namespace. Each shared capture manifest contains `sop_session_id` and
+`sop_packet` in its metadata, linking back to the SOP packet. Existing packets
+without this field remain usable for guide authoring.
+
+Main's capture transcript is the source of truth for narration. On stop, the
+sample reads the file named by the capture manifest's `transcript` field and
+exports a compatible `transcript.jsonl` beside the SOP packet. The export keeps
+`source: user` entries, excludes empty text and exact `start recording` and
+`stop recording` commands, and maps `pts_us` to `timestamp_us` and an ISO
+`timestamp`. Narration receives consecutive `transcript_id` values in source
+order; repeated utterances are preserved. Agent speech remains only in the
+original capture transcript, which is not modified.
+
+The SOP sample no longer records runtime transcript events separately. During
+recording, `narration_status` is `pending` and the packet's transcript count is
+zero. The derived narration file and final count become available at
+finalization. An empty successful recording produces an empty narration file.
+Missing or malformed source transcripts produce `narration_status: failed`
+and `status: incomplete`, with details in `errors.jsonl`. Readable narration
+from an incomplete media bundle is retained with `narration_status: incomplete`.
+
+Shared capture finalization is asynchronous. After sending stop, the sample
+waits up to ten seconds for the capture manifest before announcing that
+recording ended. This lets the previous capture finish before another starts.
+The packet's `media_capture.control_status` records `start_requested` during
+recording and `complete` only after reading a complete capture manifest;
+`media_capture.manifest` then identifies that file. `start_failed` and
+`stop_failed` indicate a local command-send failure, while
+`finalization_failed` indicates a timeout, unreadable manifest, or incomplete
+capture. Those failures are logged, and finalization errors are also saved in
+the packet's `errors.jsonl`; they do not discard its images and captions. If
+no finalized transcript is available, the SOP packet is marked incomplete.
+If finalization times out, inspect the capture service log and its eventual
+manifest before starting another recording. Disconnect and service shutdown
+also finalize media.
+
+Recorder shutdown retains and drains in-progress finalization even if the
+request or disconnect handler is cancelled. Outstanding filesystem operations
+finish before the final packet and summary are written.
+
+Raw capture requires NVENC but does not require FFmpeg. Neither raw capture
+nor SOP packet creation automatically generates a guide. The existing
+recording-to-guide authoring skill still consumes the packet and its JPEGs.
+All guides, packets, and media bundles remain local and gitignored. Automatic
+media retention is disabled in this sample so source evidence is not removed
+while an SOP packet still refers to it; remove unwanted recordings manually.
+
+### Guide validation and snapshots
+
+Guide loading validates trigger arguments against the same request models used
+at execution. `current_view` requires a question of 1 to 500 characters and
+accepts no result selector other than `text`. `clock__timer` requires positive
+integer `started_at_us` and `duration_s` arguments; its optional result selector
+is `elapsed_s`, `remaining_s`, or `expired`. Unknown arguments are rejected.
+State references must name a declared, visible field of the required type;
+their actual values are validated when the trigger executes. Trigger intervals
+must be finite and positive. Invalid guides remain visible as invalid catalog
+entries and cannot start.
+
+Each catalog generation hashes and parses the same captured file contents.
+Edits discovered afterward produce a new generation and do not change the
+guide or approval status pinned to a running session.
+
 ## DeviceIOHub rename
 
 Update `services/xr-media-hub/` to `services/device-io-hub/`, the

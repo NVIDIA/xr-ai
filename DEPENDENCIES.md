@@ -529,6 +529,23 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Agent samples
 
+#### `xr-ai-sample-agents` — [`agent-samples/common/shared-agents/`](agent-samples/common/shared-agents/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+- Optional dependency groups:
+  - `front-end`:
+    - `nemo-relay>=0.7.2,<0.8`
+    - `loguru>=0.7`
+    - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+    - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+- Commands: none
+
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
 - Python: `>=3.11,<3.15`
@@ -629,6 +646,40 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups: none
 - Commands:
   - `tea_making_worker` → `tea_making_worker.__main__:run`
+
+#### `workflow-recorder` — [`agent-samples/workflow-recorder/`](agent-samples/workflow-recorder/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `workflow_recorder` → `main:run`
+
+#### `workflow-recorder-worker` — [`agent-samples/workflow-recorder/worker/`](agent-samples/workflow-recorder/worker/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.7.2,<0.8`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-sample-agents[front-end]` → [`xr-ai-sample-agents`](agent-samples/common/shared-agents/) (local, editable)
+  - `xr-ai-tools[capture,frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pydantic>=2.12`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `workflow_recorder_worker` → `workflow_recorder_worker.__main__:run`
 
 #### `xr-render-demo` — [`agent-samples/xr-render-demo/`](agent-samples/xr-render-demo/)
 
@@ -775,6 +826,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-sample-agents[front-end]` → [`xr-ai-sample-agents`](agent-samples/common/shared-agents/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
   - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)

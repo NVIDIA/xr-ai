@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: natural_start
+  query: Please help me follow Arrange a workpiece
+  tool: workflow__start
+- name: exact_start
+  query: start guide arrange_workpiece
+  tool: workflow__start
+- name: exact_start_name
+  query: Start guide Arrange a workpiece.
+  tool: workflow__start
+- name: exact_run_workflow
+  query: run workflow arrange_workpiece
+  tool: workflow__start
+- name: start_while_active
+  active: true
+  query: start guide arrange_workpiece
+  tool: workflow__start
+- name: list
+  query: Which guides are available?
+  tool: workflow__list
+- name: negated_start
+  query: Do not start the Arrange a workpiece guide. Explain what it does.
+  contains: [clear, workpiece]
+- name: recording_help
+  query: How do I start recording?
+  contains: [start recording, stop recording]
+- name: advance
+  active: true
+  query: Please move to the following step
+  tool: workflow__advance
+  arguments: {skip: false}
+- name: skip
+  active: true
+  query: Please skip this check
+  tool: workflow__advance
+  arguments: {skip: true}
+- name: exit
+  active: true
+  query: I want to leave this guide now
+  tool: workflow__reset
+  arguments: {}
+- name: restart
+  active: true
+  query: Could we begin this guide again from the beginning?
+  tool: workflow__restart
+  arguments: {}
+- name: visual_question
+  active: true
+  query: Is this correct?
+  tool: current_view
+- name: negated_skip
+  active: true
+  query: Do not skip this step. Explain what I should do.
+- name: quoted_exit
+  active: true
+  query: The instructions say stop guide. What does that mean?
+- name: hypothetical_restart
+  active: true
+  query: What would happen if I restarted the guide?
+- name: unrelated
+  active: true
+  query: What is the capital of France?
+  contains: [guide]
