@@ -157,7 +157,7 @@ final class AppModel {
     var isCameraActive = false
     private var isCameraStarting = false
     private var imageCaptureHandler:
-        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)?
+        (@MainActor @Sendable (ImageCaptureRequest) async throws -> CapturedImage)?
     private var isTearingDown = false
     var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
