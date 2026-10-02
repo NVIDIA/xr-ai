@@ -430,6 +430,8 @@ final class AppModel {
     /// ``startAudio()``/``stopAudio()`` stay intent-free so recovery can reuse them.
     func enableMic() async {
         guard !isTearingDown else { return }
+        // A duplicate enable must not invalidate an in-flight start or recovery.
+        if micEnabledByUser && (isAudioStarting || isAudioActive) { return }
         micIntentGeneration &+= 1
         let intent = micIntentGeneration
         micEnabledByUser = true
