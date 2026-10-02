@@ -84,6 +84,33 @@ def _gate(
     return VoiceGate(cfg, audio_sink=sink, tts=tts), sink, tts
 
 
+@pytest.mark.parametrize("phrases,text,expected_kind", [
+    ((), "stop", "query"),
+    (("agent",), "agent stop", "query"),
+    (("agent",), "stop", "drop"),
+])
+async def test_disabled_stop_commands_follow_ordinary_gating(phrases, text, expected_kind):
+    gate = VoiceGate(
+        VoiceGateConfig(magic_phrases=phrases, stop_commands_enabled=False),
+        audio_sink=_FakeAudioSink(), tts=_FakeTTS(),
+    )
+    events = _recording_handlers(gate)
+    assert not gate._matches_partial_stop(text)
+    await gate.feed("alice", text)
+    assert len(events) == 1
+    assert events[0][0] == expected_kind
+
+
+def test_load_stop_command_setting(tmp_path):
+    path = tmp_path / "voice.yaml"
+    assert load_voice_gate_config(path).stop_commands_enabled is True
+    path.write_text('stop_commands_enabled: "false"\n')
+    assert load_voice_gate_config(path).stop_commands_enabled is False
+    path.write_text('stop_commands_enabled: sometimes\n')
+    with pytest.raises(ValueError, match="stop_commands_enabled"):
+        load_voice_gate_config(path)
+
+
 def _recording_handlers(gate: VoiceGate) -> list[tuple]:
     """Wire all five handler slots to a single events list and return it.
 
