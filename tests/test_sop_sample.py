@@ -69,6 +69,25 @@ def test_narration_is_all_user_speech_without_command_filtering(tmp_path):
     assert _export_narration(manifest, destination) == 3
 
 
+async def test_capture_voice_gate_does_not_interrupt_or_acknowledge_stop():
+    from xr_ai_voicegate import VoiceGate, load_voice_gate_config
+
+    config = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml")
+    gate = VoiceGate(config, tts=Mock(), audio_sink=Mock())
+    query, stop = AsyncMock(), AsyncMock()
+    gate.bind(on_query=query, on_stop=stop)
+    for text in ("stop", "stop recording", "start recording", "be quiet"):
+        assert not gate._matches_partial_stop(text)
+        await gate.feed("user", text)
+    stop.assert_not_awaited()
+    assert [call.args[1] for call in query.await_args_list] == [
+        "stop",
+        "stop recording",
+        "start recording",
+        "be quiet",
+    ]
+
+
 @pytest.fixture
 async def demo(tmp_path, monkeypatch):
     from device_io_hub.capture._service import CaptureService

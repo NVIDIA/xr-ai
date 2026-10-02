@@ -5,4 +5,5 @@
 # The shared voice pipeline publishes transcripts before gate filtering.
 magic_phrases: []
 listening_chime: false
+stop_commands_enabled: false  # "stop" is narration, not a spoken control.
 followup_grace_s: 0.0

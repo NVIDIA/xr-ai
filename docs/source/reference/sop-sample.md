@@ -96,6 +96,10 @@ an independent capture-control endpoint alive until all recordings finalize.
 a conversational agent. Filesystem writes and finalization tasks are drained
 before the capture endpoint closes.
 
+The voice gate disables its optional STOP command handling for this sample, so
+STOP words do not produce interruptions or spoken acknowledgements. The
+default for other samples remains enabled.
+
 `yaml/worker.yaml` owns frame frequency, caption interval, speech detection, and
 the SOP artifact root. It resolves `yaml/media_capture.yaml` to locate shared
 manifests. Paths are relative to their owning YAML file. Keep the shared capture
