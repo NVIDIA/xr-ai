@@ -76,7 +76,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         try:
             await camera.close()
         finally:
+            # stop() alone cannot wake an idle ZMQ receive. Drain recordings
+            # first, then cancel the receiver before closing its sockets.
+            receiver.cancel()
+            await asyncio.gather(receiver, return_exceptions=True)
             endpoint.stop()
-            await receiver
             endpoint.close()
             await vlm.close()
