@@ -5,6 +5,14 @@
 
 # Release migration
 
+## LiveKit sample credentials
+
+Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
+Before starting an agent sample or DeviceIOHub directly, set `LIVEKIT_API_KEY`
+and `LIVEKIT_API_SECRET` in the launch environment. Refer to
+{doc}`/getting_started/credentials` for generation and injection instructions.
+Existing private configurations with explicit credentials remain supported.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously

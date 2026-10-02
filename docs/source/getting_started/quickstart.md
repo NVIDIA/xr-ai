@@ -14,7 +14,9 @@ walking you through the choices below. Refer to {doc}`skills` for how it works.
 :language: text
 ```
 
-The remainder of this quickstart is the manual path.
+The remainder of this quickstart is the manual path. Before starting an agent
+sample, configure LiveKit credentials in the launch terminal as described in
+{doc}`credentials`. Shipped hub configurations leave these required values blank.
 
 Every sample follows the same pattern: **start the shared model stack, wait for
 its launcher to report readiness and return, start the sample from the same

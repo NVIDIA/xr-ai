@@ -25,6 +25,11 @@ vendor bundle. Later runs reuse those files.
 
 ## Configure
 
+Before starting the sample, set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`
+in the launch terminal. Refer to the
+[credential setup](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html#livekit-credentials)
+for generation instructions; the shipped hub YAML leaves both values blank.
+
 Edit the sample-owned configuration before starting the demo; the launcher
 passes each file to the process that owns it:
 
