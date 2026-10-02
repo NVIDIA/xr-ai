@@ -45,14 +45,12 @@ jobs:
     name: pytest (gpu)
     runs-on: gpu
     timeout-minutes: 60
-    # The vllm wrapper runs `docker login nvcr.io` when NGC_API_KEY is set.
-    # Isolate that login per run so the secret never sits in the runner-global
-    # ~/.docker/config.json, where it would outlive the run and, once rotated
-    # or revoked, break the anonymous nvcr.io pulls the whole job relies on.
-    env:
-      DOCKER_CONFIG: ${{ runner.temp }}/xr-ai-docker-config
-
     steps:
+      - name: Isolate Docker credentials
+        # The vllm wrapper runs `docker login nvcr.io` when NGC_API_KEY is set.
+        # Keep that login out of the runner-global ~/.docker/config.json.
+        run: printf 'DOCKER_CONFIG=%s/xr-ai-docker-config\n' "${RUNNER_TEMP:?}" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
 
