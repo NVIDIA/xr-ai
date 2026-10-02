@@ -8,6 +8,7 @@ real HTTP listener is needed.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -21,6 +22,7 @@ from _stub_openai import StubOpenAI
 from xr_ai_models import (
     Capabilities,
     ChatMessage,
+    ChatStreamEvent,
     OpenAICompatEmbedding,
     OpenAICompatLLM,
     OpenAICompatSTT,
@@ -384,6 +386,188 @@ async def test_llm_stream_yields_content_tokens_and_stops_at_done() -> None:
     assert chunks == ["Hel", "lo", " world"]
     body = stub.last_json()
     assert body["stream"] is True
+
+
+async def test_llm_stream_events_delivers_text_and_assembles_interleaved_tools() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"content": "Checking ", "reasoning_content": "plan"}}]},
+        {"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 1, "id": "call_b", "function": {"name": "lookup", "arguments": "{\"q\":"}},
+            {"index": 0, "id": "call_a", "function": {"name": "clock", "arguments": "{"}},
+        ]}}]},
+        {"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "function": {"name": "_now", "arguments": "}"}},
+            {"index": 1, "function": {"name": "", "arguments": "\"rain\"}"}},
+        ]}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+    ])
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        events = [event async for event in llm.stream_events([
+            ChatMessage(role="user", content="weather?")
+        ])]
+
+    assert all(isinstance(event, ChatStreamEvent) for event in events)
+    assert [(event.kind, event.text, event.reasoning) for event in events[:2]] == [
+        ("text", "Checking ", None),
+        ("reasoning", None, "plan"),
+    ]
+    assert [(event.tool_call.id, event.tool_call.name, event.tool_call.arguments)
+            for event in events[2:4] if event.tool_call] == [
+        ("call_a", "clock_now", "{}"),
+        ("call_b", "lookup", '{"q":"rain"}'),
+    ]
+    assert events[-1] == ChatStreamEvent(kind="finish", finish_reason="tool_calls")
+
+
+@pytest.mark.parametrize(("terminal", "include_done", "message"), [
+    ([], False, "before \\[DONE\\]"),
+    ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}],
+     True, "malformed arguments"),
+])
+async def test_llm_stream_events_rejects_truncated_tool_calls(
+    terminal, include_done: bool, message: str,
+) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{"}},
+        ]}}]},
+        *terminal,
+    ], include_done=include_done)
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(ValueError, match=message):
+            _ = [event async for event in llm.stream_events([
+                ChatMessage(role="user", content="run")
+            ])]
+
+
+async def test_llm_stream_events_validates_batch_before_yielding_tool_calls() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{}"}},
+            {"index": 1, "id": "call_2", "function": {"name": "broken", "arguments": "nope"}},
+        ]}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+    ])
+    yielded = []
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(ValueError, match="malformed arguments"):
+            async for event in llm.stream_events([ChatMessage(role="user", content="run")]):
+                yielded.append(event)
+    assert not any(event.kind == "tool_call" for event in yielded)
+
+
+async def test_llm_stream_events_requires_finish_reason() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([{"choices": [{"index": 0, "delta": {}}]}])
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(ValueError, match="without a finish_reason"):
+            _ = [event async for event in llm.stream_events([
+                ChatMessage(role="user", content="x")
+            ])]
+
+
+async def test_llm_stream_events_accepts_usage_only_chunks() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [], "usage": {"completion_tokens": 1}},
+        {"choices": [{"index": 0, "delta": {"content": "ok"}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+    ])
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        events = [event async for event in llm.stream_events([
+            ChatMessage(role="user", content="x")
+        ])]
+    assert events == [
+        ChatStreamEvent(kind="text", text="ok"),
+        ChatStreamEvent(kind="finish", finish_reason="stop"),
+    ]
+
+
+async def test_llm_stream_events_raises_provider_error_payload() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([{"error": {"message": "model unavailable"}}])
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(RuntimeError, match="model unavailable"):
+            _ = [event async for event in llm.stream_events([
+                ChatMessage(role="user", content="x")
+            ])]
+
+
+@pytest.mark.parametrize("fragments", [
+    [None],
+    [{"id": "call_missing_index", "function": {"name": "run", "arguments": "{}"}}],
+    [{"index": 0, "function": "invalid"}],
+])
+async def test_llm_stream_events_rejects_invalid_tool_fragments(fragments) -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "id": "call_valid", "function": {"name": "run", "arguments": "{}"}},
+        ]}}]},
+        {"choices": [{"index": 0, "delta": {"tool_calls": fragments}}]},
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+    ])
+    yielded = []
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(ValueError, match="(fragment|index|function)"):
+            async for event in llm.stream_events([ChatMessage(role="user", content="run")]):
+                yielded.append(event)
+    assert not any(event.kind == "tool_call" for event in yielded)
+
+
+async def test_llm_stream_events_rejects_tool_finish_without_fragments() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_chunks([
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+    ])
+    async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
+        with pytest.raises(ValueError, match="no tool call data"):
+            _ = [event async for event in llm.stream_events([
+                ChatMessage(role="user", content="run")
+            ])]
+
+
+async def test_llm_stream_events_raises_on_malformed_event_json() -> None:
+    def handle(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b'data: {"choices": invalid}\n\ndata: [DONE]\n\n',
+            headers={"Content-Type": "text/event-stream"},
+        )
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    async with OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+        with pytest.raises(ValueError, match="malformed event JSON"):
+            _ = [event async for event in llm.stream_events([
+                ChatMessage(role="user", content="x")
+            ])]
+    await client.aclose()
+
+
+async def test_llm_stream_events_closes_response_when_cancelled() -> None:
+    closed = False
+
+    class HangingStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"choices":[{"index":0,"delta":{"content":"hello"}}]}\n\n'
+            await asyncio.Event().wait()
+
+        async def aclose(self) -> None:
+            nonlocal closed
+            closed = True
+
+    def handle(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=HangingStream())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    async with OpenAICompatLLM("http://stub", "llm", client=client) as llm:
+        stream = llm.stream_events([ChatMessage(role="user", content="x")])
+        assert (await anext(stream)).text == "hello"
+        await stream.aclose()
+    await client.aclose()
+    assert closed
 
 
 # ── LLM: health ───────────────────────────────────────────────────────────
