@@ -58,6 +58,29 @@ both under the MIT license. Unmodified upstream license texts are bundled in
 attributions. Each directory records the SHA-256-verified artifact URL and
 copied-file hashes.
 
+### Qualified pip vLLM security refresh
+
+The release security refresh resolves the following versions. The linked
+license texts were copied without modification from SHA-256-verified upstream
+artifacts; each directory records the artifact URL and hashes.
+
+| Component | Resolved version | License and notices |
+|---|---|---|
+| `vllm` | 0.30.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.30.0/) |
+| `huggingface-hub` | 1.32.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.32.0/) |
+| `flashinfer-python` | 0.6.18.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.6.18.post1/) |
+| `instanttensor` | 0.2.0 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.0/) |
+| `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
+| `protobuf` | 7.36.0 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.0/) |
+| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
+
+`instanttensor` is a new transitive dependency of vLLM. CUTLASS DSL is
+proprietary software downloaded by users, rather than part of XR AI's source
+release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
+also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
+proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
+EULA. The lock also retains protobuf 6.33.5 for a separate dependency branch.
+
 ### Pocket TTS model and voice
 
 Pocket TTS 3.0.2 pins the following downloaded artifacts for the default

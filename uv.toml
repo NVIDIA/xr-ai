@@ -10,3 +10,15 @@ transformers = "2026-09-10T00:00:00Z"
 # Qualify the HTTP and JWT security releases independently of the global cutoff.
 urllib3 = "2026-09-16T00:00:00Z"
 pyjwt = "2026-09-29T00:00:00Z"
+
+# Qualify pip vLLM 0.30.0 and its required accelerator dependencies.
+vllm = "2026-09-23T00:00:00Z"
+huggingface-hub = "2026-09-23T00:00:00Z"
+flashinfer-python = "2026-09-23T00:00:00Z"
+instanttensor = "2026-09-23T00:00:00Z"
+nvidia-cutlass-dsl = "2026-09-23T00:00:00Z"
+quack-kernels = "2026-09-23T00:00:00Z"
+nvidia-cutlass-dsl-libs-base = "2026-09-23T00:00:00Z"
+nvidia-cutlass-dsl-libs-core = "2026-09-23T00:00:00Z"
+nvidia-cutlass-dsl-libs-cu12 = "2026-09-23T00:00:00Z"
+nvidia-cutlass-dsl-libs-cu13 = "2026-09-23T00:00:00Z"
