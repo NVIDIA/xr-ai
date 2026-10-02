@@ -138,6 +138,32 @@ class ChatResponse:
 
 
 @dataclass(frozen=True)
+class ChatStreamEvent:
+    """One normalized event from a streamed chat completion.
+
+    Text and reasoning events carry deltas as they arrive. Tool calls are
+    emitted only after the provider finishes the response and the complete
+    batch has been validated. A finish event carries the provider finish
+    reason.
+    """
+
+    kind: Literal["text", "reasoning", "tool_call", "finish"]
+    """The kind of streamed event."""
+
+    text: str | None = None
+    """A user-visible text delta for ``kind == "text"``."""
+
+    reasoning: str | None = None
+    """A model reasoning delta for ``kind == "reasoning"``."""
+
+    tool_call: ToolCall | None = None
+    """A complete tool call for ``kind == "tool_call"``."""
+
+    finish_reason: str | None = None
+    """The provider finish reason for ``kind == "finish"``."""
+
+
+@dataclass(frozen=True)
 class Capabilities:
     """Features supported by a configured model endpoint."""
 
@@ -193,6 +219,26 @@ class LLMService(Protocol):
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         """Stream user-visible response text for a sequence of chat messages."""
+
+        pass
+
+    def stream_events(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        tools: Sequence[ToolDef] | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool = False,
+        thinking_budget: int | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        """Stream text, reasoning, complete tool calls, and finish events.
+
+        Tool calls are held until the stream completes successfully, so a
+        truncated or malformed function call is never exposed as executable.
+        """
 
         pass
 
