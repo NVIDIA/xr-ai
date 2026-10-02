@@ -51,6 +51,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
     private var connectionGeneration: UInt64 = 0
+    private let microphoneOperations = MicrophoneOperations()
+    // Invalidates buffer-track factories suspended across a camera stop.
+    private var cameraGeneration: UInt64 = 0
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -184,55 +187,84 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     // MARK: - StreamingBackend: audio
 
+    /// Recreates the microphone publication with the requested processing preset.
+    /// A disabled preset stops capture; engine and permission failures are thrown.
+    /// The room connection and remote audio playback remain active.
     public func startAudio(config: AudioConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
-
-        // Pre-warm the recording engine before publishing, or the publish's
-        // frame watcher never sees a buffer and times out. Reset availability
-        // first because stopAudio pins input down, and prepared mode can't
-        // start a disabled engine.
-        do {
-            try AudioManager.shared.setEngineAvailability(.default)
-        } catch {
-            #if DEBUG
-            print("startAudio: setEngineAvailability(.default) failed: \(error)")
-            #endif
-        }
-        do {
-            try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-        } catch {
-            #if DEBUG
-            print("startAudio: setRecordingAlwaysPreparedMode(true) failed: \(error)")
-            #endif
-        }
-
-        do {
-            let captureOptions = AudioCaptureOptions(from: config)
-            try await room.localParticipant.setMicrophone(
-                enabled: true,
-                captureOptions: captureOptions
-            )
-        } catch {
-            // A failed publish must not leave the engine hot, or the mic
-            // indicator stays lit with no way to clear it but disconnecting.
-            await releaseRecordingEngine()
-            throw error
+        let generation = connectionGeneration
+        try await microphoneOperations.run { [self] in
+            guard self.room === room, connectionGeneration == generation,
+                  room.connectionState == .connected else { throw StreamError.notConnected }
+            try await stopMicrophone(in: room)
+            guard config.mode != .disabled else { return }
+            do {
+                guard await LiveKitSDK.ensureDeviceAccess(for: [.audio]) else {
+                    throw LiveKitError(.deviceAccessDenied)
+                }
+                try Task.checkCancellation()
+                let options = AudioCaptureOptions(from: config)
+                try AudioManager.shared.setEngineAvailability(.default)
+                // Prewarming and track creation must use the same processing path.
+                try await AudioManager.shared.setRecordingAlwaysPreparedMode(
+                    true, audioProcessingOptions: options.recordingProcessingOptions
+                )
+                try Task.checkCancellation()
+                guard self.room === room, connectionGeneration == generation,
+                      room.connectionState == .connected else { throw StreamError.notConnected }
+                try await room.localParticipant.setMicrophone(enabled: true, captureOptions: options)
+                try Task.checkCancellation()
+                guard self.room === room, connectionGeneration == generation,
+                      room.connectionState == .connected else { throw StreamError.notConnected }
+                logMicrophoneState("started (\(config.mode))")
+                let manager = AudioManager.shared
+                guard manager.isEngineRunning, manager.engineAvailability.isInputAvailable,
+                      !manager.isMicrophoneMuted else {
+                    throw LiveKitError(.invalidState, message: "Microphone engine is not recording unmuted input")
+                }
+            } catch {
+                logMicrophoneState("start failed: \(error)")
+                do { try await stopMicrophone(in: room) }
+                catch { mediaLog.error("microphone rollback failed: \(error.localizedDescription, privacy: .public)") }
+                throw error
+            }
         }
     }
 
+    /// Removes the microphone publication and releases input without stopping playback.
     public func stopAudio() async throws {
-        guard let room else { return }
-        let micError: Error?
-        do {
-            try await room.localParticipant.setMicrophone(enabled: false)
-            micError = nil
-        } catch {
-            micError = error
+        let room = room
+        try await microphoneOperations.run(cancelWithCaller: false) { [self] in
+            try await stopMicrophone(in: room)
         }
-        await releaseRecordingEngine()
-        if let micError { throw micError }
+    }
+
+    private func stopMicrophone(in room: Room?) async throws {
+        var failure: Error?
+        do {
+            // Muting retains the old capture options and bypasses capture startup on
+            // the next enable. Remove the publication so each restart reapplies them.
+            if let publication = room?.localParticipant.localAudioTracks.first(where: { $0.source == .microphone }) {
+                try await room?.localParticipant.unpublish(publication: publication)
+            }
+        } catch { failure = error }
+        do { try await releaseRecordingEngine() }
+        catch { if failure == nil { failure = error } }
+        logMicrophoneState("stopped")
+        if let failure { throw failure }
+    }
+
+    private func logMicrophoneState(_ transition: String) {
+        let manager = AudioManager.shared
+        mediaLog.info("microphone \(transition, privacy: .public): engine=\(manager.isEngineRunning) input=\(manager.engineAvailability.isInputAvailable) muted=\(manager.isMicrophoneMuted)")
+        #if os(iOS) || os(visionOS)
+        let session = AVAudioSession.sharedInstance()
+        let inputs = session.currentRoute.inputs.map(\.portType.rawValue).joined(separator: ",")
+        let outputs = session.currentRoute.outputs.map(\.portType.rawValue).joined(separator: ",")
+        mediaLog.info("microphone route: inputs=[\(inputs, privacy: .public)] outputs=[\(outputs, privacy: .public)] rate=\(session.sampleRate) mode=\(session.mode.rawValue, privacy: .public)")
+        #endif
     }
 
     // MARK: - StreamingBackend: camera
@@ -251,7 +283,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // Capturing before publish is a LiveKit requirement — publish times out otherwise.
         // The frame loop feeds frames directly to the capturer (not through injectVideoFrame)
         // so publish is only ever called once, here, not concurrently from the loop.
-        let simTrack = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+        let generation = cameraGeneration
+        let connection = connectionGeneration
+        let simTrack = await LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+        try Task.checkCancellation()
+        guard self.room === room, room.connectionState == .connected,
+              connectionGeneration == connection else { throw StreamError.notConnected }
+        guard cameraGeneration == generation else { throw CancellationError() }
         bufferTrack = simTrack
         // Seed one frame before publish so LiveKit can resolve stream dimensions.
         // Prefer the first GIF frame so the seed matches the loop content.
@@ -287,6 +325,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     public func stopCamera() async throws {
+        cameraGeneration &+= 1
         #if targetEnvironment(simulator)
         // Stop the synthetic frame generator first so no more frames are injected.
         simulatorFrameTask?.cancel()
@@ -309,13 +348,19 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     public func captureImage(config: CameraConfig) async throws -> CapturedImage {
-        guard room?.connectionState == .connected else { throw StreamError.notConnected }
+        guard let room, room.connectionState == .connected else { throw StreamError.notConnected }
         if let localCameraTrack {
             return try await StillImageCapture.capture(track: localCameraTrack)
         }
 
         #if targetEnvironment(simulator)
-        let track = LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        let generation = cameraGeneration
+        let connection = connectionGeneration
+        let track = await LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        try Task.checkCancellation()
+        guard self.room === room, room.connectionState == .connected,
+              connectionGeneration == connection else { throw StreamError.notConnected }
+        guard cameraGeneration == generation else { throw CancellationError() }
         let pending = Task { try await StillImageCapture.capture(track: track) }
         await Task.yield()
         let pts = CMClockGetTime(CMClockGetHostTimeClock())
@@ -370,9 +415,18 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
         if bufferTrack == nil {
-            let t = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
-            bufferTrack = t
-            localCameraTrack = t
+            let generation = cameraGeneration
+            let connection = connectionGeneration
+            let t = await LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+            try Task.checkCancellation()
+            guard self.room === room, room.connectionState == .connected,
+                  connectionGeneration == connection else { throw StreamError.notConnected }
+            guard cameraGeneration == generation else { throw CancellationError() }
+            // Another frame may have installed a track while the factory was suspended.
+            if bufferTrack == nil {
+                bufferTrack = t
+                localCameraTrack = t
+            }
         }
 
         guard let track = bufferTrack,
@@ -460,11 +514,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Roll the recording engine back to its idle state: drop prepared mode and
     /// take the mic input side down so the OS mic indicator clears, leaving output
     /// up for agent playback.
-    private func releaseRecordingEngine() async {
-        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(false)
-        try? AudioManager.shared.setEngineAvailability(
-            AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
-        )
+    private func releaseRecordingEngine() async throws {
+        var failure: Error?
+        do { try await AudioManager.shared.setRecordingAlwaysPreparedMode(false) }
+        catch { failure = error }
+        do {
+            try AudioManager.shared.setEngineAvailability(
+                AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
+            )
+        } catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
     }
 
     private struct EffectiveFileOptions {
@@ -620,6 +679,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     private func tearDown() async {
         connectionGeneration &+= 1
+        cameraGeneration &+= 1
+        do { try await stopAudio() }
+        catch { mediaLog.error("microphone disconnect cleanup failed: \(error.localizedDescription, privacy: .public)") }
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -1078,7 +1140,7 @@ private extension LiveKit.ConnectionState {
     }
 }
 
-private extension AudioCaptureOptions {
+extension AudioCaptureOptions {
     convenience init(from config: AudioConfig) {
         // AUVoiceIO (Apple's hardware Voice-Processing I/O unit) is unavailable in the
         // simulator, so we silently promote voiceProcessing → softwareProcessing there.
@@ -1091,17 +1153,27 @@ private extension AudioCaptureOptions {
 
         switch mode {
         case .voiceProcessing:
-            // AUVoiceIO owns echo cancellation / AGC / NR at the OS level;
-            // tell LiveKit's WebRTC stack to leave them off.
-            self.init(echoCancellation: false, autoGainControl: false, noiseSuppression: false,
-                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection)
+            self.init(echoCancellation: true, autoGainControl: true, noiseSuppression: true,
+                      echoCancellationMode: .platform, autoGainControlMode: .platform,
+                      noiseSuppressionMode: .platform)
         case .softwareProcessing:
             self.init(echoCancellation: true,  autoGainControl: true,  noiseSuppression: true,
-                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection)
+                      highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection,
+                      echoCancellationMode: .software, autoGainControlMode: .software,
+                      noiseSuppressionMode: .software, highpassFilterMode: .software)
         case .raw, .disabled:
             self.init(echoCancellation: false, autoGainControl: false, noiseSuppression: false,
                       highpassFilter: false, typingNoiseDetection: false)
         }
+    }
+
+    var recordingProcessingOptions: AudioProcessingOptions {
+        AudioProcessingOptions(
+            echoCancellation: echoCancellation, autoGainControl: autoGainControl,
+            noiseSuppression: noiseSuppression, highpassFilter: highpassFilter,
+            echoCancellationMode: echoCancellationMode, autoGainControlMode: autoGainControlMode,
+            noiseSuppressionMode: noiseSuppressionMode, highpassFilterMode: highpassFilterMode
+        )
     }
 }
 

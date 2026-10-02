@@ -157,7 +157,7 @@ final class AppModel {
     var isCameraActive = false
     private var isCameraStarting = false
     private var imageCaptureHandler:
-        (@MainActor (ImageCaptureRequest) async throws -> CapturedImage)?
+        (@MainActor @Sendable (ImageCaptureRequest) async throws -> CapturedImage)?
     private var isTearingDown = false
     var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
@@ -206,6 +206,11 @@ final class AppModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.handleMediaServicesReset() }
         }
+        audioRouteToken = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            MainActor.assumeIsolated { self?.handleAudioRouteChange(note) }
+        }
     }
 
     deinit {
@@ -215,6 +220,7 @@ final class AppModel {
         if let mediaServicesResetToken {
             NotificationCenter.default.removeObserver(mediaServicesResetToken)
         }
+        if let audioRouteToken { NotificationCenter.default.removeObserver(audioRouteToken) }
     }
 
     // MARK: - Connect / disconnect
@@ -346,9 +352,12 @@ final class AppModel {
 
     func disconnect() async {
         isTearingDown = true
+        micEnabledByUser = false
+        micIntentGeneration &+= 1
         // Cancel any pending post-XR mic restore so it can't re-flag the mic live
         // against the session we're about to nil.
         micRecoveryTask?.cancel()
+        await micRecoveryTask?.value
         #if os(visionOS)
         // Tear down CloudXR first so the streaming view dismisses before the agent
         // channel closes (stopXR() awaits `.disconnected`, so this ordering holds).
@@ -366,6 +375,7 @@ final class AppModel {
         isAudioActive = false
         micEnabledByUser = false
         isAudioStarting = false
+        isAudioStopping = false
         isCameraActive = false
         isTearingDown = false
     }
@@ -373,14 +383,25 @@ final class AppModel {
     // MARK: - Audio
 
     func startAudio() async {
-        guard !isAudioStarting, !isAudioActive else { return }
+        guard let session, !isTearingDown, micEnabledByUser,
+              connectionState == .connected, !isAudioStarting, !isAudioActive else { return }
+        micOperationGeneration &+= 1
+        let operation = micOperationGeneration
+        let intent = micIntentGeneration
         isAudioStarting = true
-        defer { isAudioStarting = false }
+        isAudioStopping = false
+        defer { if operation == micOperationGeneration { isAudioStarting = false } }
 
         do {
-            try await session?.startAudio(config: AudioConfig(mode: audioMode))
+            try await session.startAudio(config: AudioConfig(mode: audioMode))
+            guard self.session === session, !isTearingDown, !Task.isCancelled,
+                  micEnabledByUser, intent == micIntentGeneration,
+                  operation == micOperationGeneration else { return }
             isAudioActive = true
         } catch {
+            guard self.session === session, !isTearingDown, !Task.isCancelled,
+                  intent == micIntentGeneration, operation == micOperationGeneration else { return }
+            isAudioActive = false
             #if DEBUG
             let ns = error as NSError
             print("startAudio failed: \(type(of: error)) \(ns.domain) #\(ns.code): \(error)")
@@ -390,26 +411,43 @@ final class AppModel {
     }
 
     func stopAudio() async {
+        let session = session
+        micOperationGeneration &+= 1
+        let operation = micOperationGeneration
+        isAudioStopping = true
+        defer { if operation == micOperationGeneration { isAudioStopping = false } }
         do {
             try await session?.stopAudio()
         } catch {
-            lastError = error.localizedDescription
+            if operation == micOperationGeneration { lastError = error.localizedDescription }
         }
+        guard self.session === session, operation == micOperationGeneration else { return }
         isAudioActive = false
+        isAudioStarting = false
     }
 
     /// Records mic intent (so recovery keeps retrying) and starts;
     /// ``startAudio()``/``stopAudio()`` stay intent-free so recovery can reuse them.
     func enableMic() async {
+        guard !isTearingDown else { return }
+        micIntentGeneration &+= 1
+        let intent = micIntentGeneration
         micEnabledByUser = true
+        micRecoveryTask?.cancel()
+        await micRecoveryTask?.value
+        guard intent == micIntentGeneration, micEnabledByUser, !isTearingDown else { return }
         await startAudio()
     }
 
     /// Clears mic intent and cancels in-flight recovery (so it can't fight the
     /// manual off), then stops.
     func disableMic() async {
+        micIntentGeneration &+= 1
+        let intent = micIntentGeneration
         micEnabledByUser = false
         micRecoveryTask?.cancel()
+        await micRecoveryTask?.value
+        guard intent == micIntentGeneration else { return }
         await stopAudio()
     }
 
@@ -519,6 +557,9 @@ final class AppModel {
     // settle→stop→start→verify loop (see README).
 
     private var micRecoveryTask: Task<Void, Never>?
+    private var micIntentGeneration: UInt64 = 0
+    private var micOperationGeneration: UInt64 = 0
+    private var isAudioStopping = false
 
     private static let micRecoverySettleNanos: UInt64 = 500_000_000
     private static let micRecoveryVerifyNanos: UInt64 = 500_000_000
@@ -527,13 +568,16 @@ final class AppModel {
     private var interruptionBeganGeneration = 0
 
     // Observer handles, removed in deinit; nonisolated(unsafe) because deinit reads them off the actor.
-    private nonisolated(unsafe) var audioInterruptionToken: NSObjectProtocol?
-    private nonisolated(unsafe) var mediaServicesResetToken: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var audioInterruptionToken: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var mediaServicesResetToken: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var audioRouteToken: NSObjectProtocol?
 
     private func recoverMic() {
-        guard micEnabledByUser else { return }
-        micRecoveryTask?.cancel()
+        guard micEnabledByUser, !isTearingDown else { return }
+        let previous = micRecoveryTask
+        previous?.cancel()
         micRecoveryTask = Task {
+            await previous?.value
             for _ in 0 ..< Self.micRecoveryMaxAttempts {
                 try? await Task.sleep(nanoseconds: Self.micRecoverySettleNanos)
                 guard !Task.isCancelled, session != nil, micEnabledByUser else { return }
@@ -550,7 +594,7 @@ final class AppModel {
                 // Suppress only this attempt's mic-start failure toast; an unrelated
                 // error must survive. Exhaustion is reported below by marking the mic off.
                 if lastError != errorBeforeStart { lastError = errorBeforeStart }
-                guard !Task.isCancelled, session != nil else { isAudioActive = false; return }
+                guard !Task.isCancelled, session != nil else { return }
 
                 try? await Task.sleep(nanoseconds: Self.micRecoveryVerifyNanos)
                 guard !Task.isCancelled, session != nil, micEnabledByUser else { return }
@@ -560,6 +604,22 @@ final class AppModel {
             // rather than claim a live mic.
             isAudioActive = false
         }
+    }
+
+    private func handleAudioRouteChange(_ note: Notification) {
+        guard micEnabledByUser, isAudioActive, !isAudioStarting, !isAudioStopping,
+              let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: raw),
+              reason != .categoryChange,
+              let previous = note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey]
+                as? AVAudioSessionRouteDescription else { return }
+        let current = AVAudioSession.sharedInstance().currentRoute
+        // Ignore output-only changes and the category changes caused by our own restart.
+        guard previous.inputs.map(\.uid) != current.inputs.map(\.uid) else { return }
+        #if os(visionOS)
+        guard xrState == .idle else { return }
+        #endif
+        recoverMic()
     }
 
     private func handleAudioInterruption(_ note: Notification) {
