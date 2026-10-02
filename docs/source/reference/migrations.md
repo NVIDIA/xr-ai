@@ -5,6 +5,14 @@
 
 # Release migration
 
+## LiveKit sample credentials
+
+Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to {doc}`/getting_started/credentials` for fixed-pair configuration.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -78,8 +86,9 @@ that require the former behavior can explicitly pass
   timeouts fail startup. Check the registration error in the hub logs rather
   than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
-  Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
-  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
+  The YAML loader generates a fresh pair when both values are missing or blank.
+  Set both `api_key` and `api_secret` in a private `device_io_hub.yaml`, or inject
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, to use a fixed pair.
 - Boolean service settings now require YAML booleans or the strings `true`,
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of
