@@ -15,10 +15,10 @@ from . import presets as _presets
 from ._utils import merge_dicts
 
 
-Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
+Category = Literal["llm", "vlm", "stt", "tts", "embedding", "ocr"]
 """A model role supported by :class:`ModelsConfig`."""
 
-ModelKind = Literal["openai_compat", "riva_grpc"]
+ModelKind = Literal["openai_compat", "riva_grpc", "nemotron_ocr"]
 """A supported model-service adapter implementation."""
 
 Readiness = Literal["health", "none"]
@@ -536,10 +536,22 @@ class EmbeddingSpec(_RoleSpec):
         )
 
 
-Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec
+@dataclass(frozen=True)
+class OCRSpec(_RoleSpec):
+    """Configuration for OCR via the Nemotron v2 HTTP protocol."""
+
+    adapter: AdapterSpec = field(default_factory=lambda: AdapterSpec(kind="nemotron_ocr"))
+    """OCR request dialect."""
+    endpoint: EndpointSpec = field(default_factory=lambda: EndpointSpec(health_path="/v1/health/ready"))
+    """Endpoint connectivity and readiness."""
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata."""
+
+
+Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec | OCRSpec
 """Any typed model-role specification stored in :class:`ModelsConfig`."""
 
-T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec)
+T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec, OCRSpec)
 
 
 @dataclass(frozen=True)
@@ -573,6 +585,10 @@ class ModelsConfig:
         """Return the embedding specification named *name*."""
 
         return _typed(self.entries, name, EmbeddingSpec)
+
+    def ocr(self, name: str) -> OCRSpec:
+        """Return the OCR specification named *name*."""
+        return _typed(self.entries, name, OCRSpec)
 
     @property
     def required_credentials(self) -> tuple[str, ...]:
@@ -695,7 +711,7 @@ def _build_spec(body: dict[str, Any]) -> Spec:
             f"entry gave {explicit_category!r}"
         )
     category = preset_category or explicit_category
-    if category not in {"llm", "vlm", "stt", "tts", "embedding"}:
+    if category not in {"llm", "vlm", "stt", "tts", "embedding", "ocr"}:
         raise ValueError(
             f"missing or unknown category {category!r}; "
             "set category when not using a preset"
@@ -722,7 +738,9 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
     if kind == KIND_RIVA_GRPC and category not in ("stt", "tts"):
         raise ValueError("riva_grpc is a speech kind; use it for stt/tts only")
-    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC):
+    if (kind == "nemotron_ocr") != (category == "ocr"):
+        raise ValueError("ocr requires kind nemotron_ocr, which is only valid for ocr")
+    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, "nemotron_ocr"):
         raise ValueError(f"unsupported adapter kind: {kind!r}")
 
     endpoint = EndpointSpec(
@@ -730,7 +748,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         api_key_env=_optional_str(body, "api_key_env"),
         timeout=_timeout(body, category),
         readiness=_readiness(body),
-        health_path=_health_path(body),
+        health_path=_health_path(body, default="/v1/health/ready" if category == "ocr" else "/health"),
     )
     adapter = AdapterSpec(
         kind=kind,
@@ -752,6 +770,8 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
 
     if category == "llm":
         return LLMSpec(adapter=adapter, endpoint=endpoint, deployment=deployment)
+    if category == "ocr":
+        return OCRSpec(adapter=adapter, endpoint=endpoint, deployment=deployment)
     if category == "vlm":
         return VLMSpec(adapter=adapter, endpoint=endpoint, deployment=deployment)
     if category == "stt":
@@ -805,8 +825,8 @@ def _riva_sample_rate(body: dict[str, Any]) -> int:
     return value
 
 
-def _health_path(body: dict[str, Any]) -> str:
-    path = body.get("health_path", "/health")
+def _health_path(body: dict[str, Any], *, default: str = "/health") -> str:
+    path = body.get("health_path", default)
     if not isinstance(path, str) or not path.startswith("/"):
         raise ValueError("health_path must be a string starting with '/'")
     return path

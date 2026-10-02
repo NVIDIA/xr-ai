@@ -7,7 +7,7 @@
 
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, and embedding protocols and
+`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, and OCR protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
@@ -84,6 +84,7 @@ refer to {ref}`consumer-model-readiness`.
 | `nemotron3_nano` | Nemotron 3 Nano LLM | Normalizes the `reasoning` field; thinking disabled unless requested |
 | `nemotron_omni` | Nemotron Omni | Tool calls, image and video, `reasoning_content` normalization; thinking disabled unless requested |
 | `nemotron_embedding` | Embedding server | OpenAI-compatible dense vectors |
+| `nemotron_ocr` | Hugging Face OCR server or OCR NIM 2.0 | Multilingual text, confidence, normalized polygons; `/v1/ocr` |
 | `parakeet_stt` | STT server | OpenAI-compatible transcription |
 | `pocket_tts` | Pocket TTS | OpenAI-compatible synthesis plus native PCM streaming |
 | `magpie_tts` | Magpie TTS | OpenAI-compatible speech synthesis |

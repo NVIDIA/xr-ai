@@ -49,6 +49,19 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
+### Nemotron OCR v2
+
+The local OCR container downloads source and multilingual weights from
+`nvidia/nemotron-ocr-v2` at revision
+`0e83e83f17943524b90afa6c0fd82ac2bc1a40ca`. Source is Apache-2.0; binary model
+files are governed by the NVIDIA Open Model License Agreement. The upstream
+[license](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/0e83e83f17943524b90afa6c0fd82ac2bc1a40ca/LICENSE)
+is retained in the built container. XR AI does not redistribute the weights.
+The source package compiles its CUDA extension locally. Its PyTorch,
+torchvision, Pillow, NumPy, Shapely, and Hugging Face Hub dependencies are
+installed only in the OCR container; the host launcher does not import them.
+The alternative OCR NIM image carries NVIDIA's container and model terms.
+
 ### Pocket TTS model and voice
 
 Pocket TTS 3.0.2 pins the following downloaded artifacts for the default

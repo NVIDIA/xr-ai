@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
+from ._ocr import NemotronOCR
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -13,7 +14,15 @@ from ._openai_compat import (
     OpenAICompatVLM,
     _PocketTTS,
 )
-from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, TTSService, VLMService
+from ._protocols import Capabilities, EmbeddingService, LLMService, OCRService, STTService, TTSService, VLMService
+
+
+def make_ocr(config: ModelsConfig, name: str) -> OCRService:
+    """Construct OCR for *name*; reject a missing role, wrong role, or unsupported kind."""
+    spec = config.ocr(name)
+    if spec.kind != "nemotron_ocr":
+        raise ValueError(f"unsupported OCR kind: {spec.kind!r}")
+    return NemotronOCR(spec)
 
 
 def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:

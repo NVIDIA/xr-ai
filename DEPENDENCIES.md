@@ -425,6 +425,19 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `nim_server` → `nim_server.__main__:run`
 
+#### `ocr-server` — [`services/ocr-server/`](services/ocr-server/)
+
+- Python: `>=3.11,<3.13`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `ocr_server` → `ocr_server.__main__:run`
+
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
 - Python: `>=3.11,<3.14`
@@ -871,6 +884,7 @@ Python dependency metadata, so they remain curated here.
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning | vLLM (pip or docker), multimodal |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed RPC using msgpack over ZMQ |
+| `services/ocr-server/` | `ocr-server` | `ocr_server` | 8112 | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed RPC using msgpack over ZMQ |
 | `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed RPC using msgpack over ZMQ |

@@ -29,6 +29,7 @@ recorded video, and document retrieval.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/ocr-server/` | `ocr_server` | 8112 | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
@@ -39,6 +40,95 @@ YAML and resolved relative to the YAML file. Self-hosted NIM containers use
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
+
+(ocr-serving)=
+
+## OCR serving
+
+Both shared model-server samples provide multilingual Nemotron OCR v2 on port
+`8112`. The regular sample downloads NVIDIA's pinned Hugging Face source and
+`v2_multilingual` weights and runs inference locally. Its launcher builds a
+Python 3.12, PyTorch 2.9.1, CUDA 13 image because the upstream implementation
+requires a compiled CUDA extension. Docker, NVIDIA Container Toolkit,
+and a CUDA 13-compatible NVIDIA driver are required; a host CUDA toolkit is
+not. The first build takes several minutes.
+The model remains loaded across requests. Refer to the
+[upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
+
+The NIM sample instead runs the pinned OCR NIM 2.0.1 image, explicitly selecting
+the multilingual variant, one engine, and batch size one. It uses the existing
+NIM launcher and `NGC_API_KEY`; no HTTP compatibility adapter is needed.
+Both implementations expose `POST /v1/ocr` and readiness at
+`GET /v1/health/ready`. Refer to the
+[NVIDIA NIM deployment documentation](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/getting-started.html).
+This is self-hosted inference, not a call to the hosted NVIDIA Build endpoint.
+
+Use the `nemotron_ocr` preset and the typed SDK factory in consumers:
+
+```python
+from pathlib import Path
+from xr_ai_models import load_models_config, make_ocr
+
+config = load_models_config("yaml/models.json")
+async with make_ocr(config, "ocr") as ocr:
+    spans = await ocr.read_text(Path("image.png"))
+    for span in spans:
+        print(span.text, span.confidence, span.polygon)
+```
+
+Copy the deployment profile's `ocr` entry into the consumer profile, omitting
+`deployment`. Applications reuse the service; an OCR tool does not load its
+own GPU model. The same client works with either backend. The client sends one
+inline PNG or JPEG and returns text, confidence, and normalized polygons.
+Remote image URLs are intentionally unsupported by this shared contract.
+Word, sentence, and paragraph grouping are available; backend recognition results
+need not be identical.
+
+The Hugging Face server accepts one image per request, at most 10 MiB encoded
+image bytes and 20 million pixels after full-resolution square padding:
+`max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
+This check runs before RGB conversion or inference because upstream pads the
+image on CUDA before resizing; lowering `infer_length` does not reduce that
+allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
+this is not a bound on total inference memory. Oversized inputs receive HTTP
+413; callers must downsample or tile them first.
+The server serializes inference and rejects
+overlapping requests with HTTP 503 rather than growing a GPU request queue.
+Its detector length is configured server-wide in `ocr_server.yaml` (640 or
+1024). NIM does not expose this Hugging Face detector setting.
+Neither service performs the experimental text-dense cropping or sharpening
+pipeline; preprocessing remains caller-owned.
+
+Both shared model-server samples load OCR last, after all other selected models,
+including embeddings. The existing non-OCR startup order is preserved.
+The regular stack places OCR on GPU 0 for all profiles. NIM places it on GPU 1
+on dual Ada and GPU 0 on Blackwell and Spark. Existing model allocations are
+unchanged. NVIDIA reports approximately 3 GiB startup memory for multilingual
+NIM on comparable discrete GPUs; input-dependent runtime allocations can grow.
+Dual Ada has limited remaining headroom and requires target-machine concurrent
+load testing. Spark uses unified memory. Configuration coverage and image
+architecture support are not complete-stack hardware qualification.
+Refer to [NIM memory measurements](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/performance.html)
+and {doc}`/reference/model-servers-nim`.
+
+Local weights and the torchvision backbone are cached beneath the OCR YAML's
+`model_cache`; the CUDA extension stays in the Docker image. NIM weights and
+compiled artifacts use its existing per-container `nim_cache` mount.
+Stop the current stack before switching backends because both use port 8112.
+Changing the local YAML or service source rebuilds as needed and invalidates
+container reuse. Stop and restart through the sample's normal lifecycle.
+
+Both OCR backends passed individual startup, synthetic equipment-text
+transcription at all three merge levels, backend switching, and cached reuse
+on an RTX PRO 6000 Blackwell workstation. These checks do not qualify the
+combined model stack under concurrent load or execution on Ada or Spark.
+To repeat the transcription smoke test against a running server, run from
+the repository root:
+
+```bash
+XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project tests \
+  pytest tests/test_ocr_server.py -m gpu
+```
 
 ## Two HuggingFace cache roots
 

@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Multilingual OCR NIM 2.0.1; amd64 + arm64 manifest list.
+image: nvcr.io/nim/nvidia/nemotron-ocr-v2:2.0.1@sha256:8bc300c5bfbe33e48c9d9901cbdf559770764837cf1635639bfff09215d1e3df
+container_name: xr-ai-model-servers-nim-ocr
+http_port: 8112
+nim_cache: ../../../../models/nim
+cuda_visible_devices: "0"
+env:
+  NIM_ENGINE_MODEL_VARIANT: multilingual
+  NIM_ENGINE_MODEL_DOWNLOAD_PROVIDER: ngc
+  # Keep weights and compiled artifacts in the existing launcher's cache mount.
+  NIM_ENGINE_MODEL_PATH: /opt/nim/.cache/ocr
+  NIM_ENGINE_PRECOMPILE_CACHE_DIR: /opt/nim/.cache/compiled
+  # One visible GPU, one engine, batch one: bound the shared-GPU memory cost.
+  NIM_ENGINE_DEVICES: "0"
+  NIM_PERFORMANCE_MODE: "false"
+  NIM_ENGINE_COUNT: "1"
+  NIM_PIPELINE_MAX_BATCH_SIZE: "1"
+  NIM_SERVER_MAX_QUEUE_SIZE: "8"

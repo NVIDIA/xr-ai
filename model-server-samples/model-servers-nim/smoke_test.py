@@ -20,6 +20,7 @@ from xr_ai_models import (
     load_models_config,
     make_embedding,
     make_llm,
+    make_ocr,
     make_stt,
     make_tts,
     make_vlm,
@@ -54,7 +55,8 @@ async def check(profile: Path) -> None:
     async with AsyncExitStack() as stack:
         clients = {}
         for name, factory in (("stt", make_stt), ("tts", make_tts), ("llm", make_llm),
-                              ("agent_llm", make_llm), ("vlm", make_vlm), ("embedding", make_embedding)):
+                              ("agent_llm", make_llm), ("vlm", make_vlm),
+                              ("embedding", make_embedding), ("ocr", make_ocr)):
             if name not in config.entries:
                 continue
             client = factory(config, name)
@@ -99,6 +101,12 @@ async def check(profile: Path) -> None:
             if not streamed.strip():
                 raise RuntimeError("VLM returned no streamed text for an image request")
             print(f"PASS streamed image: {streamed.strip()}", flush=True)
+
+        if "ocr" in clients:
+            spans = await clients["ocr"].read_text(_red_image())
+            if spans:
+                raise RuntimeError("OCR returned text for a blank image")
+            print("PASS OCR: blank image returned no text", flush=True)
 
         if "embedding" in clients:
             vectors = await clients["embedding"].embed([
