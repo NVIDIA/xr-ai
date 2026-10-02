@@ -198,7 +198,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                   room.connectionState == .connected else { throw StreamError.notConnected }
             try await stopMicrophone(in: room)
             guard config.mode != .disabled else { return }
-            do {
+            try await MicrophoneOperations.withRollback {
                 try Task.checkCancellation()
                 let options = AudioCaptureOptions(from: config)
                 try AudioManager.shared.setEngineAvailability(.default)
@@ -210,10 +210,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 try Task.checkCancellation()
                 guard self.room === room, connectionGeneration == generation,
                       room.connectionState == .connected else { throw StreamError.notConnected }
-            } catch {
-                do { try await stopMicrophone(in: room) }
-                catch { mediaLog.error("microphone rollback failed: \(error.localizedDescription, privacy: .public)") }
-                throw error
+            } cleanup: {
+                try await stopMicrophone(in: room)
+            } cleanupFailed: { error in
+                mediaLog.error("microphone rollback failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1048,7 +1048,7 @@ extension LiveKitBackend: RoomDelegate {
         didUnpublishTrack publication: LocalTrackPublication
     ) {
         #if DEBUG
-        mediaLog.error("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
+        mediaLog.info("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
         #endif
     }
 

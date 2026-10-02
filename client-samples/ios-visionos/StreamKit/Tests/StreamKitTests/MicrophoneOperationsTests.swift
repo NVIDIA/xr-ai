@@ -53,9 +53,7 @@ struct MicrophoneOperationsTests {
         first.cancel()
         await resumeStart.release()
         await cleaning.wait()
-        let next = Task {
-            try await operations.run { await events.append("next start") }
-        }
+        let next = await operations.enqueue { await events.append("next start") }
         await resumeCleanup.release()
         do {
             try await first.value
@@ -77,9 +75,7 @@ struct MicrophoneOperationsTests {
             }
         }
         await entered.wait()
-        let cancelled = Task {
-            try await operations.run { await events.append("unexpected start") }
-        }
+        let cancelled = await operations.enqueue { await events.append("unexpected start") }
         cancelled.cancel()
         await resume.release()
         try await first.value

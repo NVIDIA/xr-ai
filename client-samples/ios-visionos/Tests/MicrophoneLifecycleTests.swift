@@ -4,7 +4,7 @@
 import Testing
 @testable import MicrophoneLifecycle
 
-private actor Gate {
+actor Gate {
     private var open = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     func wait() async {
@@ -21,7 +21,7 @@ private actor Gate {
 /// Uses the production backend queue, but replaces LiveKit/AVAudioEngine calls
 /// with observable publication/input state and deterministic suspension points.
 @MainActor
-private final class Backend {
+final class TestMicrophoneBackend {
     let operations = MicrophoneOperations()
     let enteredStart = Gate()
     var holdStart: Gate?
@@ -30,9 +30,13 @@ private final class Backend {
     var published = false
     var inputRunning = false
     var failStart = false
-    var failStop = false
+    var failUnpublish = false
+    var failRelease = false
+    var waitForCancellation = false
+    var onStarted: (() -> Void)?
+    var rollbackFailures = 0
     var events: [String] = []
-    enum Failure: Error { case start, stop }
+    enum Failure: Error { case start, unpublish, release }
 
     func start() async throws {
         try await operations.run { [self] in try await startPhysical() }
@@ -41,29 +45,41 @@ private final class Backend {
         try await operations.run(cancelWithCaller: false) { [self] in try await stopPhysical() }
     }
     private func startPhysical() async throws {
-        events.append("start")
-        inputRunning = true
-        await enteredStart.release()
-        await holdStart?.wait()
-        if failStart {
-            inputRunning = false
-            throw Failure.start
+        try await stopPhysical()
+        try await MicrophoneOperations.withRollback {
+            events.append("start")
+            inputRunning = true
+            await enteredStart.release()
+            await holdStart?.wait()
+            if waitForCancellation { try await Task.sleep(nanoseconds: 30_000_000_000) }
+            try Task.checkCancellation()
+            if failStart { throw Failure.start }
+            published = true
+            onStarted?()
+        } cleanup: {
+            try await stopPhysical()
+        } cleanupFailed: { _ in
+            rollbackFailures += 1
         }
-        published = true
     }
     private func stopPhysical() async throws {
         events.append("stop")
-        await enteredStop.release()
-        await holdStop?.wait()
-        if failStop { throw Failure.stop }
-        published = false
-        inputRunning = false
+        if let holdStop {
+            await enteredStop.release()
+            await holdStop.wait()
+        }
+        var failure: Failure?
+        if failUnpublish { failure = .unpublish }
+        else { published = false }
+        if failRelease { if failure == nil { failure = .release } }
+        else { inputRunning = false }
+        if let failure { throw failure }
     }
 }
 
 @MainActor
 private final class Fixture {
-    let backend = Backend()
+    let backend = TestMicrophoneBackend()
     var active = false
     var starting = false
     var errors = 0
@@ -74,7 +90,7 @@ private final class Fixture {
             self?.active = active
             self?.starting = starting
         },
-        failed: { [weak self] _ in self?.errors += 1 }
+        failed: { [weak self] _, _ in self?.errors += 1 }
     )
 
     func expectCapture(_ expected: Bool) {
@@ -100,7 +116,7 @@ struct MicrophoneLifecycleTests {
         await first.value
         await second.value
         f.expectCapture(true)
-        #expect(f.backend.events == ["start"])
+        #expect(f.backend.events == ["stop", "start"])
     }
 
     @Test func stopDuringSuspendedStart() async {
@@ -115,7 +131,8 @@ struct MicrophoneLifecycleTests {
         await start.value
         await stop.value
         f.expectCapture(false)
-        #expect(f.backend.events == ["start", "stop"])
+        #expect(f.backend.events.last == "stop")
+        #expect(f.errors == 0)
     }
 
     @Test func startStopStartDuringSuspendedStart() async {
@@ -133,7 +150,9 @@ struct MicrophoneLifecycleTests {
         await stop.value
         await last.value
         f.expectCapture(true)
-        #expect(f.backend.events == ["start", "stop", "start"])
+        #expect(f.backend.events.filter { $0 == "start" }.count == 2)
+        #expect(f.backend.events.last == "start")
+        #expect(f.errors == 0)
     }
 
     @Test func startDuringSuspendedStop() async {
@@ -149,7 +168,7 @@ struct MicrophoneLifecycleTests {
         await stop.value
         await start.value
         f.expectCapture(true)
-        #expect(f.backend.events == ["start", "stop", "start"])
+        #expect(f.backend.events == ["stop", "start", "stop", "stop", "start"])
     }
 
     @Test func stopDuringRecovery() async {
@@ -166,7 +185,7 @@ struct MicrophoneLifecycleTests {
         await recovery.value
         await stop.value
         f.expectCapture(false)
-        #expect(!f.backend.events.dropFirst().contains("start"))
+        #expect(f.backend.events.filter { $0 == "start" }.count == 1)
     }
 
     @Test func disconnectDuringSuspendedStart() async {
@@ -183,7 +202,8 @@ struct MicrophoneLifecycleTests {
         await start.value
         f.expectCapture(false)
         #expect(!f.mic.isEnabled)
-        #expect(f.backend.events == ["start", "stop"])
+        #expect(f.backend.events.last == "stop")
+        #expect(f.errors == 0)
     }
 
     @Test func failureCanRetryWithoutSpinning() async {
@@ -192,22 +212,82 @@ struct MicrophoneLifecycleTests {
         await f.mic.setEnabled(true)
         f.expectCapture(false)
         #expect(f.errors == 1)
-        #expect(f.backend.events == ["start"])
+        #expect(f.backend.events == ["stop", "start", "stop"])
         f.backend.failStart = false
         await f.mic.setEnabled(true)
         f.expectCapture(true)
-        #expect(f.backend.events == ["start", "start"])
+        #expect(f.backend.events == ["stop", "start", "stop", "stop", "start"])
     }
 
-    @Test func stopFailureDoesNotClaimIdle() async {
+    @Test func partialStopFailureDoesNotClaimIdle() async {
         let f = Fixture()
         await f.mic.setEnabled(true)
-        f.backend.failStop = true
+        f.backend.failRelease = true
         await f.mic.setEnabled(false)
-        f.expectCapture(true)
+        #expect(f.active && f.mic.isActive)
+        #expect(!f.backend.published && f.backend.inputRunning)
         #expect(f.errors == 1)
-        f.backend.failStop = false
+        f.backend.failRelease = false
         await f.mic.setEnabled(false)
         f.expectCapture(false)
+    }
+
+    @Test func unpublishFailureStillReleasesInput() async {
+        let f = Fixture()
+        await f.mic.setEnabled(true)
+        f.backend.failUnpublish = true
+        await f.mic.setEnabled(false)
+        #expect(f.backend.published && !f.backend.inputRunning)
+        #expect(f.active && f.errors == 1)
+        f.backend.failUnpublish = false
+        await f.mic.setEnabled(false)
+        f.expectCapture(false)
+    }
+
+    @Test func closeCancelsPendingStartWithoutWaitingForFrames() async {
+        let f = Fixture()
+        f.backend.waitForCancellation = true
+        let start = Task { await f.mic.setEnabled(true) }
+        await f.backend.enteredStart.wait()
+        await f.mic.close().value
+        await start.value
+        f.expectCapture(false)
+        #expect(f.errors == 0)
+    }
+
+    @Test func repeatedCloseDoesNotRepeatSuccessfulStop() async {
+        let f = Fixture()
+        await f.mic.setEnabled(true)
+        await f.mic.close().value
+        let events = f.backend.events
+        await f.mic.close().value
+        await f.mic.close().value
+        #expect(f.backend.events == events)
+        f.expectCapture(false)
+    }
+
+    @Test func closeRetriesFailedStop() async {
+        let f = Fixture()
+        await f.mic.setEnabled(true)
+        f.backend.failRelease = true
+        await f.mic.close().value
+        #expect(f.backend.inputRunning)
+        f.backend.failRelease = false
+        await f.mic.close().value
+        f.expectCapture(false)
+    }
+
+    @Test func restartDoesNotCancelPendingStart() async {
+        let f = Fixture()
+        let gate = Gate()
+        f.backend.holdStart = gate
+        let first = Task { await f.mic.setEnabled(true) }
+        await f.backend.enteredStart.wait()
+        let recovery = Task { await f.mic.restart() }
+        await gate.release()
+        await first.value
+        await recovery.value
+        f.expectCapture(true)
+        #expect(f.errors == 0)
     }
 }

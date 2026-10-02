@@ -255,10 +255,10 @@ final class AppModel {
         newSession.onConnectionStateChanged = { [weak self, weak newSession] state in
             guard let self, self.session === newSession else { return }
             self.connectionState = state
+            self.handleMicrophoneConnectionState(state)
             switch state {
             case .disconnected:
                 self.isAudioActive = false
-                self.microphone?.close()
                 self.isAudioStarting = false
                 self.isCameraActive = false
                 self.agentStatus = nil
@@ -337,25 +337,7 @@ final class AppModel {
         }
 
         session = newSession
-        microphone = MicrophoneReconciler(
-            start: { [weak self, weak newSession] in
-                guard let self, let newSession, self.session === newSession,
-                      !self.isTearingDown, self.connectionState == .connected else {
-                    throw StreamError.notConnected
-                }
-                try await newSession.startAudio(config: AudioConfig(mode: self.audioMode))
-            },
-            stop: { [weak newSession] in try await newSession?.stopAudio() },
-            changed: { [weak self, weak newSession] active, starting in
-                guard let self, let newSession, self.session === newSession else { return }
-                self.isAudioActive = active
-                self.isAudioStarting = starting
-            },
-            failed: { [weak self, weak newSession] error in
-                guard let self, let newSession, self.session === newSession else { return }
-                self.lastError = error.localizedDescription
-            }
-        )
+        microphone = makeMicrophone(for: newSession)
 
         do {
             try await newSession.connect(config: SessionConfig(identity: identity))
@@ -370,6 +352,31 @@ final class AppModel {
             imageCaptureHandler = nil
             connectionState = .disconnected
         }
+    }
+
+    private func makeMicrophone(for newSession: StreamSession) -> MicrophoneReconciler {
+        MicrophoneReconciler(
+            start: { [weak self, weak newSession] in
+                guard let self, let newSession, self.session === newSession,
+                      !self.isTearingDown, self.connectionState == .connected else {
+                    throw StreamError.notConnected
+                }
+                try await newSession.startAudio(config: AudioConfig(mode: self.audioMode))
+            },
+            stop: { [weak newSession] in try await newSession?.stopAudio() },
+            changed: { [weak self, weak newSession] active, starting in
+                guard let self, let newSession, self.session === newSession else { return }
+                self.isAudioActive = active
+                self.isAudioStarting = starting
+            },
+            failed: { [weak self, weak newSession] error, operation in
+                guard let self, let newSession, self.session === newSession else { return }
+                guard !(error is CancellationError), !self.isRecoveringMic, !self.isTearingDown else { return }
+                self.lastError = operation == .start
+                    ? "Microphone couldn’t start. Please try again."
+                    : error.localizedDescription
+            }
+        )
     }
 
     func disconnect() async {
@@ -519,6 +526,7 @@ final class AppModel {
     // settle→stop→start→verify loop (see README).
 
     private var micRecoveryTask: Task<Void, Never>?
+    private var isRecoveringMic = false
 
     private static let micRecoverySettleNanos: UInt64 = 500_000_000
     private static let micRecoveryVerifyNanos: UInt64 = 500_000_000
@@ -531,14 +539,19 @@ final class AppModel {
     private nonisolated(unsafe) var mediaServicesResetToken: NSObjectProtocol?
 
     private func recoverMic() {
-        guard micEnabledByUser, !isTearingDown, let microphone else { return }
+        guard micEnabledByUser, !isTearingDown, connectionState == .connected,
+              let microphone else { return }
         let previous = micRecoveryTask
         previous?.cancel()
         micRecoveryTask = Task {
             await previous?.value
+            guard !Task.isCancelled else { return }
+            isRecoveringMic = true
+            defer { isRecoveringMic = false }
             for _ in 0 ..< Self.micRecoveryMaxAttempts {
                 try? await Task.sleep(nanoseconds: Self.micRecoverySettleNanos)
-                guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser else { return }
+                guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser,
+                      connectionState == .connected else { return }
 
                 // Snapshot before the attempt: a `.began` after this point means
                 // NSK re-suspended the capture we are about to restart.
@@ -547,11 +560,29 @@ final class AppModel {
                 guard !Task.isCancelled, self.microphone === microphone else { return }
 
                 try? await Task.sleep(nanoseconds: Self.micRecoveryVerifyNanos)
-                guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser else { return }
+                guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser,
+                      connectionState == .connected else { return }
                 if isAudioActive, interruptionBeganGeneration == generation { return }
             }
-            // Exhaustion does not invent a physical stop; only the reconciler
-            // updates capture state after the backend completes a transition.
+            guard !Task.isCancelled, self.microphone === microphone,
+                  connectionState == .connected else { return }
+            await microphone.setEnabled(false)
+        }
+    }
+
+    private func handleMicrophoneConnectionState(_ state: ConnectionState) {
+        switch state {
+        case .disconnected:
+            micRecoveryTask?.cancel()
+            microphone?.close()
+        case .reconnecting:
+            micRecoveryTask?.cancel()
+        case .connected:
+            // Recreate capture after reconnect, including interruptions that
+            // could not be recovered while the transport was unavailable.
+            if micEnabledByUser { recoverMic() }
+        default:
+            break
         }
     }
 

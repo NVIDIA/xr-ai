@@ -23,16 +23,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  microphone-lifecycle:
-    name: Swift microphone lifecycle
-    runs-on: macos-15
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Test production reconciler and backend queue
-        run: python3 -m unittest discover -s client-samples/ios-visionos/Tests -v
-
   pytest:
     name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest

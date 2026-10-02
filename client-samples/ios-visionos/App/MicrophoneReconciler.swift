@@ -5,21 +5,23 @@
 /// before applying the latest request; callers never cancel the drain task.
 @MainActor
 final class MicrophoneReconciler {
+    enum Operation { case start, stop }
     private(set) var isEnabled = false
     private(set) var isActive = false
     private var closed = false
     private var needsStop = false
     private var revision: UInt64 = 0
     private var drain: Task<Void, Never>?
+    private var pendingStart: Task<Void, Error>?
     private let start: () async throws -> Void
     private let stop: () async throws -> Void
     private let changed: (Bool, Bool) -> Void
-    private let failed: (Error) -> Void
+    private let failed: (Error, Operation) -> Void
 
     init(start: @escaping () async throws -> Void,
          stop: @escaping () async throws -> Void,
          changed: @escaping (Bool, Bool) -> Void,
-         failed: @escaping (Error) -> Void) {
+         failed: @escaping (Error, Operation) -> Void) {
         self.start = start
         self.stop = stop
         self.changed = changed
@@ -34,6 +36,7 @@ final class MicrophoneReconciler {
             // Preserve a requested stop even if Start arrives before it completes.
             if !enabled { needsStop = true }
         }
+        if !enabled { pendingStart?.cancel() }
         await reconcile().value
     }
 
@@ -47,10 +50,13 @@ final class MicrophoneReconciler {
     /// Closes intent synchronously, including from a disconnected notification.
     @discardableResult
     func close() -> Task<Void, Never> {
-        closed = true
-        isEnabled = false
-        needsStop = true
-        revision &+= 1
+        if !closed {
+            closed = true
+            isEnabled = false
+            needsStop = true
+            revision &+= 1
+        }
+        pendingStart?.cancel()
         return reconcile()
     }
 
@@ -69,18 +75,24 @@ final class MicrophoneReconciler {
                     } catch {
                         // Do not report idle when physical teardown failed.
                         needsStop = true
-                        failed(error)
+                        failed(error, .stop)
                         if attempt == revision { return }
                     }
                 } else if isEnabled && !isActive {
                     changed(false, true)
+                    let startup = Task { try await start() }
+                    pendingStart = startup
                     do {
-                        try await start()
+                        try await startup.value
+                        pendingStart = nil
                         isActive = true
                         changed(true, false)
                     } catch {
+                        pendingStart = nil
                         changed(false, false)
-                        failed(error)
+                        // The backend may wrap cancellation in its own error type.
+                        // Suppress only the startup explicitly cancelled by an off request.
+                        if !startup.isCancelled { failed(error, .start) }
                         // Explicit enable/recovery may retry, but a stable failing
                         // request must not spin forever in the background.
                         if attempt == revision { return }

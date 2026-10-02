@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run the production reconciler/queue tests without Apple or LiveKit frameworks."""
+"""Run microphone lifecycle and app-wiring tests without Apple or LiveKit frameworks."""
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -39,6 +40,17 @@ class MicrophoneLifecycleTests(unittest.TestCase):
                 SAMPLE / "StreamKit/Sources/StreamKit/Backends/LiveKit/MicrophoneOperations.swift", sources
             )
             shutil.copy2(SAMPLE / "Tests" / "MicrophoneLifecycleTests.swift", tests)
+            shutil.copy2(SAMPLE / "StreamKit/Sources/StreamKit/Config/AudioConfig.swift", tests)
+            app = (SAMPLE / "App/AppModel.swift").read_text()
+            methods = []
+            for name in ("makeMicrophone", "enableMic", "disableMic", "recoverMic", "handleMicrophoneConnectionState"):
+                matches = re.findall(rf"^    (?:private )?func {name}\(.*?^    }}\n", app, re.MULTILINE | re.DOTALL)
+                self.assertEqual(len(matches), 1, f"Expected one production {name} method")
+                methods.append(matches[0])
+            template = (SAMPLE / "Tests/AppModelMicrophoneTests.swift.in").read_text()
+            (tests / "AppModelMicrophoneTests.swift").write_text(
+                template.replace("    // APP_MODEL_METHODS", "\n".join(methods))
+            )
             # Only the module name differs in the dependency-free host test target.
             queue_tests = SAMPLE / "StreamKit/Tests/StreamKitTests/MicrophoneOperationsTests.swift"
             (tests / queue_tests.name).write_text(
