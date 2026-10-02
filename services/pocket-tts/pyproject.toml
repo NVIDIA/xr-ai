@@ -10,6 +10,8 @@ name = "pocket-tts-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
+    "urllib3>=2.8.0",
     "anyio>=4.0",
     "pocket-tts==3.0.2",
     # The PyPI build includes CUDA libraries on Linux so one environment can
