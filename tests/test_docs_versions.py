@@ -318,7 +318,8 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
         assert "uv run --directory" not in bash
         assert f"--project {relative_dir}" not in bash
         assert re.search(rf"^uv run {re.escape(command)}(?:\s|$)", bash, re.MULTILINE)
-        assert re.search(r"^uv run main\.py\s*$", bash, re.MULTILINE)
+        required_mode = r" --capture" if command == "sop_sample" else ""
+        assert re.search(rf"^uv run main\.py{required_mode}\s*$", bash, re.MULTILINE)
         assert "yaml/" in configure_section
         assert (
             "https://nvidia.github.io/xr-ai/latest/reference/configuration.html"
