@@ -283,7 +283,8 @@ async def test_app_finalizes_after_voice_shutdown_before_capture_endpoint_closes
     from sop_sample_worker import app
     from xr_ai_voice._session import _VoiceSession
 
-    stopped = asyncio.Event()
+    receiving = asyncio.Event()
+    receiver_cancelled = asyncio.Event()
     capture_closed = False
     voice_closed = False
     callbacks = {}
@@ -292,13 +293,21 @@ async def test_app_finalizes_after_voice_shutdown_before_capture_endpoint_closes
         assert not capture_closed
         await demo.service._on_agent_data(message)
 
+    async def receive_forever():
+        receiving.set()
+        try:
+            await asyncio.Future()
+        finally:
+            receiver_cancelled.set()
+
     capture_endpoint = SimpleNamespace(
         on_participant=lambda cb: callbacks.update(participant=cb),
         on_video_track=lambda cb: callbacks.update(video=cb),
-        run=stopped.wait,
-        wait_until_running=AsyncMock(),
+        run=receive_forever,
+        wait_until_running=receiving.wait,
         send_return_data=AsyncMock(side_effect=send),
-        stop=stopped.set,
+        # ProcessorEndpoint.stop does not wake its blocked ZMQ receive.
+        stop=Mock(),
     )
 
     def close_capture():
@@ -338,5 +347,13 @@ async def test_app_finalizes_after_voice_shutdown_before_capture_endpoint_closes
         artifacts_dir=demo.root / "app-sessions",
         media_capture_dir=demo.root / "captures",
     )
-    await app.run_app(config)
+    task = asyncio.create_task(app.run_app(config))
+    try:
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert task in done, "capture receiver blocked application shutdown"
+        await task
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
     assert capture_closed
+    assert receiver_cancelled.is_set()
