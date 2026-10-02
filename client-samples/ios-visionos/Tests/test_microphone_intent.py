@@ -14,7 +14,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SAMPLE = Path(__file__).resolve().parents[1]
 
 HARNESS = r"""
