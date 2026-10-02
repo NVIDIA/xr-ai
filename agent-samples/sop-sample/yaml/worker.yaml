@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Paths are relative to this YAML. Media output is resolved from the capture
+# config so the worker and shared service agree on the manifest location.
+artifacts_dir: ../artifacts
+media_capture_yaml: media_capture.yaml
+capture_fps: 2.0
+caption_interval_s: 5.0
+frame_max_age_s: 2.0
+frame_timeout_s: 3.0
+silence_duration: 0.6
+min_speech: 0.15
+silero_threshold: 0.4

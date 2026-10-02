@@ -40,6 +40,7 @@ from xr_ai_hub import (
     FrameSignal,
     MsgType,
     ParticipantEvent,
+    VideoTrackEvent,
     PixelFormat,
     ReturnAudioFlush,
     ShmRingBuffer,
@@ -373,6 +374,10 @@ class ConnectorEndpoint:
         await self._push.send(encode(MsgType.CONTROL, msg))
 
     # ── participant lifecycle ─────────────────────────────────────────────────
+
+    async def notify_video_track(self, event: VideoTrackEvent) -> None:
+        """Forward live-camera lifecycle to the hub and its processors."""
+        await self._push.send(encode(MsgType.VIDEO_TRACK_EVENT, event))
 
     async def notify_participant_joined(
         self,

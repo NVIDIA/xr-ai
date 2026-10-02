@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared media capture. The worker starts and stops explicit sessions when
+# camera tracks become active or inactive; connection alone does not record.
+hub_sub_addr: ipc:///tmp/xr_hub_pub
+hub_push_addr: ipc:///tmp/xr_hub_in
+out_dir: ../artifacts/captures
+profile: raw
+session_mode: explicit
+sample_fps: 30.0
+max_total_bytes: 0  # No automatic deletion of source recordings.
