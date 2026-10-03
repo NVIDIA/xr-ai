@@ -46,22 +46,33 @@ class MicrophoneLifecycleTests(unittest.TestCase):
             for name in ("makeMicrophone", "enableMic", "disableMic", "recoverMic", "handleMicrophoneConnectionState"):
                 matches = re.findall(rf"^    (?:private )?func {name}\(.*?^    }}\n", app, re.MULTILINE | re.DOTALL)
                 self.assertEqual(len(matches), 1, f"Expected one production {name} method")
-                methods.append(matches[0])
+                methods.append(matches[0].replace("#if os(visionOS)", "#if os(visionOS) || TEST_VISIONOS"))
             template = (SAMPLE / "Tests/AppModelMicrophoneTests.swift.in").read_text()
+            xr_state = re.findall(r"^enum XRState:.*?^}\n", app, re.MULTILINE | re.DOTALL)
+            self.assertEqual(len(xr_state), 1)
             (tests / "AppModelMicrophoneTests.swift").write_text(
-                template.replace("    // APP_MODEL_METHODS", "\n".join(methods))
+                template.replace("    // APP_MODEL_METHODS", "\n".join(methods)).replace("// XR_STATE", xr_state[0])
+            )
+            backend = (SAMPLE / "StreamKit/Sources/StreamKit/Backends/LiveKit/LiveKitBackend.swift").read_text()
+            stop = re.findall(r"^    private func stopMicrophone\(.*?^    }\n", backend, re.MULTILINE | re.DOTALL)
+            self.assertEqual(len(stop), 1)
+            cleanup_template = (SAMPLE / "Tests/MicrophoneCleanupTests.swift.in").read_text()
+            (tests / "MicrophoneCleanupTests.swift").write_text(
+                cleanup_template.replace("    // BACKEND_STOP_METHOD", stop[0])
             )
             # Only the module name differs in the dependency-free host test target.
             queue_tests = SAMPLE / "StreamKit/Tests/StreamKitTests/MicrophoneOperationsTests.swift"
             (tests / queue_tests.name).write_text(
                 queue_tests.read_text().replace("@testable import StreamKit", "@testable import MicrophoneLifecycle")
             )
-            result = subprocess.run(
-                [swift, "test", "--package-path", str(work)],
-                capture_output=True, text=True, timeout=180,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            print(result.stdout, end="")
+            # Exercise the XR guards on the host without importing CloudXR/ARKit.
+            for flags in ([], ["-Xswiftc", "-DTEST_VISIONOS"]):
+                result = subprocess.run(
+                    [swift, "test", "--package-path", str(work), *flags],
+                    capture_output=True, text=True, timeout=180,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                print(result.stdout, end="")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,86 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+import Testing
+
+// Compile the production cleanup method against observable publication and
+// engine boundaries; no LiveKit transport or device audio is exercised here.
+private struct Publication {
+    enum Source { case microphone, camera }
+    let id: Int
+    let source: Source
+}
+
+@MainActor
+private final class Room {
+    let localParticipant = Participant()
+}
+
+@MainActor
+private final class Participant {
+    var localAudioTracks: [Publication] = []
+    var failedIDs: Set<Int> = []
+    var attempted: [Int] = []
+    struct UnpublishFailure: Error { let id: Int }
+
+    func unpublish(publication: Publication) async throws {
+        attempted.append(publication.id)
+        if failedIDs.contains(publication.id) { throw UnpublishFailure(id: publication.id) }
+        localAudioTracks.removeAll { $0.id == publication.id }
+    }
+}
+
+@MainActor
+private final class CleanupHarness {
+    var released = false
+    var failRelease = false
+    enum Failure: Error { case release }
+
+    func stop(_ room: Room?) async throws { try await stopMicrophone(in: room) }
+    private func releaseRecordingEngine() async throws {
+        released = true
+        if failRelease { throw Failure.release }
+    }
+
+    // BACKEND_STOP_METHOD
+}
+
+@Suite("Production microphone publication cleanup")
+@MainActor
+struct MicrophoneCleanupTests {
+    @Test func stopRemovesAllMicrophonesButNotOtherSources() async throws {
+        let room = Room()
+        room.localParticipant.localAudioTracks = [
+            Publication(id: 1, source: .microphone), Publication(id: 2, source: .camera),
+            Publication(id: 3, source: .microphone),
+        ]
+        let cleanup = CleanupHarness()
+        try await cleanup.stop(room)
+        #expect(room.localParticipant.attempted == [1, 3])
+        #expect(room.localParticipant.localAudioTracks.map(\.id) == [2])
+        #expect(cleanup.released)
+    }
+
+    @Test func failuresDoNotSkipOtherMicrophonesOrEngineRelease() async {
+        let room = Room()
+        room.localParticipant.localAudioTracks = (1...3).map { Publication(id: $0, source: .microphone) }
+        room.localParticipant.failedIDs = [1, 3]
+        let cleanup = CleanupHarness()
+        cleanup.failRelease = true
+        do {
+            try await cleanup.stop(room)
+            Issue.record("Stop failure was swallowed")
+        } catch {
+            #expect((error as? Participant.UnpublishFailure)?.id == 1)
+        }
+        #expect(room.localParticipant.attempted == [1, 2, 3])
+        #expect(room.localParticipant.localAudioTracks.map(\.id) == [1, 3])
+        #expect(cleanup.released)
+    }
+
+    @Test func missingRoomStillReleasesEngine() async throws {
+        let cleanup = CleanupHarness()
+        try await cleanup.stop(nil)
+        #expect(cleanup.released)
+    }
+}

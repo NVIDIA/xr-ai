@@ -33,6 +33,7 @@ final class TestMicrophoneBackend {
     var failUnpublish = false
     var failRelease = false
     var waitForCancellation = false
+    var successfulStarts = 0
     var onStarted: (() -> Void)?
     var rollbackFailures = 0
     var events: [String] = []
@@ -51,13 +52,16 @@ final class TestMicrophoneBackend {
             inputRunning = true
             await enteredStart.release()
             await holdStart?.wait()
-            if waitForCancellation { try await Task.sleep(nanoseconds: 30_000_000_000) }
+            if waitForCancellation {
+                while true { try await Task.sleep(nanoseconds: 1_000_000_000) }
+            }
             try Task.checkCancellation()
             if failStart { throw Failure.start }
             published = true
+            successfulStarts += 1
             onStarted?()
         } cleanup: {
-            try await stopPhysical()
+            try await self.stopPhysical()
         } cleanupFailed: { _ in
             rollbackFailures += 1
         }
@@ -176,7 +180,7 @@ struct MicrophoneLifecycleTests {
         await f.mic.setEnabled(true)
         let gate = Gate()
         f.backend.holdStop = gate
-        let recovery = Task { await f.mic.restart() }
+        let recovery = f.mic.restart()
         await f.backend.enteredStop.wait()
         let stop = Task { await f.mic.setEnabled(false) }
         while f.mic.isEnabled { await Task.yield() }
@@ -253,6 +257,7 @@ struct MicrophoneLifecycleTests {
         await start.value
         f.expectCapture(false)
         #expect(f.errors == 0)
+        #expect(f.backend.successfulStarts == 0)
     }
 
     @Test func repeatedCloseDoesNotRepeatSuccessfulStop() async {
@@ -283,11 +288,13 @@ struct MicrophoneLifecycleTests {
         f.backend.holdStart = gate
         let first = Task { await f.mic.setEnabled(true) }
         await f.backend.enteredStart.wait()
-        let recovery = Task { await f.mic.restart() }
+        let recovery = f.mic.restart()
         await gate.release()
         await first.value
         await recovery.value
         f.expectCapture(true)
         #expect(f.errors == 0)
+        #expect(f.backend.successfulStarts == 2)
+        #expect(f.backend.events == ["stop", "start", "stop", "stop", "start"])
     }
 }

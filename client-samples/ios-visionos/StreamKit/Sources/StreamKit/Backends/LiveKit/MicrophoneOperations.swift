@@ -38,12 +38,14 @@ actor MicrophoneOperations {
     static func withRollback(
         isolation: isolated (any Actor)? = #isolation,
         _ operation: () async throws -> Void,
-        cleanup: () async throws -> Void,
+        cleanup: @escaping @Sendable () async throws -> Void,
         cleanupFailed: (Error) -> Void
     ) async throws {
         do { try await operation() }
         catch {
-            do { try await cleanup() }
+            // Unstructured cleanup does not inherit the failed start's
+            // cancellation; await it here to keep the queue serialized.
+            do { try await Task { try await cleanup() }.value }
             catch { cleanupFailed(error) }
             throw error
         }

@@ -28,6 +28,33 @@ private actor MicrophoneTestEvents {
 
 @Suite("Microphone transition ordering", .timeLimit(.minutes(1)))
 struct MicrophoneOperationsTests {
+    @Test func rollbackIgnoresCallerCancellationAndPreservesOriginalError() async throws {
+        enum OriginalFailure: Error { case startup }
+        let entered = MicrophoneTestGate()
+        let resume = MicrophoneTestGate()
+        let events = MicrophoneTestEvents()
+        let task = Task {
+            try await MicrophoneOperations.withRollback {
+                await entered.release()
+                await resume.wait()
+                throw OriginalFailure.startup
+            } cleanup: {
+                try Task.checkCancellation()
+                await events.append("cleanup completed")
+            } cleanupFailed: { _ in
+                Issue.record("Rollback inherited startup cancellation")
+            }
+        }
+        await entered.wait()
+        task.cancel()
+        await resume.release()
+        do {
+            try await task.value
+            Issue.record("Original startup failure was swallowed")
+        } catch { #expect(error is OriginalFailure) }
+        #expect(await events.values == ["cleanup completed"])
+    }
+
     @Test func cancelledStartFinishesCleanupBeforeNextStart() async throws {
         let operations = MicrophoneOperations()
         let started = MicrophoneTestGate()
@@ -37,15 +64,18 @@ struct MicrophoneOperationsTests {
         let events = MicrophoneTestEvents()
         let first = Task {
             try await operations.run {
-                await started.release()
-                await resumeStart.wait()
-                do { try Task.checkCancellation() }
-                catch {
+                try await MicrophoneOperations.withRollback {
+                    await started.release()
+                    await resumeStart.wait()
+                    try Task.checkCancellation()
+                } cleanup: {
+                    try Task.checkCancellation()
                     await events.append("cleanup started")
                     await cleaning.release()
                     await resumeCleanup.wait()
                     await events.append("cleanup finished")
-                    throw error
+                } cleanupFailed: { _ in
+                    Issue.record("Rollback failed")
                 }
             }
         }

@@ -211,7 +211,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 guard self.room === room, connectionGeneration == generation,
                       room.connectionState == .connected else { throw StreamError.notConnected }
             } cleanup: {
-                try await stopMicrophone(in: room)
+                try await self.stopMicrophone(in: room)
             } cleanupFailed: { error in
                 mediaLog.error("microphone rollback failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -228,13 +228,15 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     private func stopMicrophone(in room: Room?) async throws {
         var failure: Error?
-        do {
-            // Muting retains the old capture options and bypasses capture startup on
-            // the next enable. Remove the publication so each restart reapplies them.
-            if let publication = room?.localParticipant.localAudioTracks.first(where: { $0.source == .microphone }) {
-                try await room?.localParticipant.unpublish(publication: publication)
+        // Muting retains capture options. Remove every microphone publication,
+        // including duplicates left by an overlapping SDK reconnect republish.
+        if let room {
+            let publications = room.localParticipant.localAudioTracks.filter { $0.source == .microphone }
+            for publication in publications {
+                do { try await room.localParticipant.unpublish(publication: publication) }
+                catch { if failure == nil { failure = error } }
             }
-        } catch { failure = error }
+        }
         do { try await releaseRecordingEngine() }
         catch { if failure == nil { failure = error } }
         if let failure { throw failure }

@@ -10,6 +10,7 @@ final class MicrophoneReconciler {
     private(set) var isActive = false
     private var closed = false
     private var needsStop = false
+    private var restartRequested = false
     private var revision: UInt64 = 0
     private var drain: Task<Void, Never>?
     private var pendingStart: Task<Void, Error>?
@@ -34,17 +35,23 @@ final class MicrophoneReconciler {
             isEnabled = enabled
             revision &+= 1
             // Preserve a requested stop even if Start arrives before it completes.
-            if !enabled { needsStop = true }
+            if !enabled {
+                needsStop = true
+                restartRequested = false
+            }
         }
         if !enabled { pendingStart?.cancel() }
         await reconcile().value
     }
 
-    func restart() async {
-        guard isEnabled, !closed else { return }
+    /// Registers recovery before returning its completion task.
+    func restart() -> Task<Void, Never> {
+        guard isEnabled, !closed else { return Task {} }
         needsStop = true
+        restartRequested = true
         revision &+= 1
-        await reconcile().value
+        let completion = reconcile()
+        return Task { await completion.value }
     }
 
     /// Closes intent synchronously, including from a disconnected notification.
@@ -79,6 +86,8 @@ final class MicrophoneReconciler {
                         if attempt == revision { return }
                     }
                 } else if isEnabled && !isActive {
+                    let isRestart = restartRequested
+                    restartRequested = false
                     changed(false, true)
                     let startup = Task { try await start() }
                     pendingStart = startup
@@ -95,7 +104,12 @@ final class MicrophoneReconciler {
                         if !startup.isCancelled { failed(error, .start) }
                         // Explicit enable/recovery may retry, but a stable failing
                         // request must not spin forever in the background.
-                        if attempt == revision { return }
+                        if attempt == revision {
+                            // A failed manual Start must not re-arm on a later
+                            // OS event. Recovery retains intent for bounded retries.
+                            if !isRestart { isEnabled = false }
+                            return
+                        }
                     }
                 } else {
                     return

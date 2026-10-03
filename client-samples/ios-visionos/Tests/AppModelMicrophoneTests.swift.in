@@ -9,6 +9,7 @@ import Testing
 // platform shell are replaced; the reconciler, queue, and rollback are production code.
 enum ConnectionState { case connected, connecting, reconnecting, disconnected }
 enum StreamError: Error { case notConnected }
+// XR_STATE
 
 @MainActor
 final class StreamSession {
@@ -31,6 +32,8 @@ final class AppModelHarness {
     var micEnabledByUser: Bool { microphone?.isEnabled == true }
     var micRecoveryTask: Task<Void, Never>?
     var isRecoveringMic = false
+    var micRecoveryPending = false
+    var xrState = XRState.idle
     var interruptionBeganGeneration = 0
     static let micRecoverySettleNanos: UInt64 = 0
     static let micRecoveryVerifyNanos: UInt64 = 0
@@ -63,6 +66,16 @@ struct AppModelMicrophoneTests {
         await app.enableMic()
         #expect(app.lastError == "Microphone couldn’t start. Please try again.")
         #expect(!app.isAudioActive && !backend.published && !backend.inputRunning)
+        #expect(!app.micEnabledByUser)
+        backend.failStart = false
+        let events = backend.events
+        await app.recover()
+        app.receiveConnection(.connected)
+        await app.micRecoveryTask?.value
+        #expect(backend.events == events)
+        #expect(!backend.inputRunning)
+        await app.enableMic()
+        #expect(app.isAudioActive && backend.inputRunning)
     }
 
     @Test func disableCancelsStartupWithoutToast() async {
@@ -75,6 +88,7 @@ struct AppModelMicrophoneTests {
         await start.value
         #expect(app.errors.isEmpty)
         #expect(!app.isAudioActive && !backend.published && !backend.inputRunning)
+        #expect(backend.successfulStarts == 0)
     }
 
     @Test func recoveryFailuresDoNotReplaceUnrelatedError() async {
@@ -110,11 +124,116 @@ struct AppModelMicrophoneTests {
         await app.recover()
         #expect(backend.events == events)
         #expect(app.micEnabledByUser)
+        #expect(app.micRecoveryPending)
         app.receiveConnection(.connected)
         await app.micRecoveryTask?.value
         #expect(app.isAudioActive && backend.published && backend.inputRunning)
         #expect(backend.events.filter { $0 == "start" }.count == 2)
+        #expect(!app.micRecoveryPending)
     }
+
+    @Test func healthyReconnectDoesNotRestartCapture() async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        let events = backend.events
+        app.receiveConnection(.reconnecting)
+        app.receiveConnection(.connected)
+        await app.micRecoveryTask?.value
+        #expect(backend.events == events)
+        #expect(app.isAudioActive && app.micEnabledByUser && backend.published)
+    }
+
+    @Test func reconnectDuringRecoveryResumesOnlyPendingRecovery() async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        let gate = Gate()
+        backend.holdStop = gate
+        let recovery = Task { await app.recover() }
+        await backend.enteredStop.wait()
+        app.receiveConnection(.reconnecting)
+        await gate.release()
+        await recovery.value
+        #expect(app.micEnabledByUser && app.micRecoveryPending)
+        backend.holdStop = nil
+        app.receiveConnection(.connected)
+        await app.micRecoveryTask?.value
+        #expect(app.isAudioActive && backend.published && backend.inputRunning)
+        #expect(!app.micRecoveryPending)
+    }
+
+    @Test func userStopDuringRecoveryReportsStopFailure() async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        let gate = Gate()
+        backend.holdStop = gate
+        let recovery = Task { await app.recover() }
+        await backend.enteredStop.wait()
+        backend.failRelease = true
+        let stop = Task { await app.disableMic() }
+        while app.micEnabledByUser { await Task.yield() }
+        #expect(app.isRecoveringMic)
+        await gate.release()
+        await recovery.value
+        await stop.value
+        #expect(!app.errors.isEmpty)
+        #expect(app.isAudioActive && backend.inputRunning)
+        backend.failRelease = false
+        await app.disableMic()
+    }
+
+    @Test func exhaustedRecoveryReportsFinalStopFailure() async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        backend.onStarted = { [weak app, weak backend] in
+            app?.interruptionBeganGeneration += 1
+            if backend?.successfulStarts == 5 { backend?.failRelease = true }
+        }
+        await app.recover()
+        #expect(!app.micEnabledByUser)
+        #expect(app.isAudioActive && backend.inputRunning)
+        #expect(app.errors.count == 1)
+        backend.failRelease = false
+        await app.disableMic()
+    }
+
+    #if TEST_VISIONOS
+    @Test(arguments: [XRState.idle, .error("XR disconnected")])
+    func reconnectDuringXRPreservesIntentUntilXRExit(_ terminalState: XRState) async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        let events = backend.events
+        app.xrState = .streaming
+        app.receiveConnection(.reconnecting)
+        await app.recover()
+        app.receiveConnection(.connected)
+        await app.micRecoveryTask?.value
+        #expect(backend.events == events)
+        #expect(app.micEnabledByUser && app.micRecoveryPending)
+        app.xrState = terminalState
+        await app.recover()
+        #expect(app.isAudioActive && app.micEnabledByUser && backend.inputRunning)
+        #expect(backend.successfulStarts == 2)
+    }
+
+    @Test func XRFailureWhileReconnectingResumesAfterTransportReturns() async {
+        let app = AppModelHarness()
+        let backend = app.session!.backend
+        await app.enableMic()
+        app.receiveConnection(.reconnecting)
+        app.xrState = .error("XR disconnected")
+        await app.recover()
+        app.receiveConnection(.connected)
+        await app.micRecoveryTask?.value
+        #expect(app.isAudioActive && app.micEnabledByUser && backend.inputRunning)
+        #expect(!app.micRecoveryPending)
+        #expect(backend.successfulStarts == 2)
+    }
+    #endif
 
     @Test func reconnectDoesNotEnableUserDisabledMic() async {
         let app = AppModelHarness()

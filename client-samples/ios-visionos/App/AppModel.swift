@@ -226,6 +226,7 @@ final class AppModel {
         defer { isConnecting = false }
 
         // AudioManager is process-wide: drain the old session before replacing it.
+        micRecoveryPending = false
         micRecoveryTask?.cancel()
         await microphone?.close().value
         await micRecoveryTask?.value
@@ -371,7 +372,8 @@ final class AppModel {
             },
             failed: { [weak self, weak newSession] error, operation in
                 guard let self, let newSession, self.session === newSession else { return }
-                guard !(error is CancellationError), !self.isRecoveringMic, !self.isTearingDown else { return }
+                guard !self.isTearingDown else { return }
+                if operation == .start, error is CancellationError || self.isRecoveringMic { return }
                 self.lastError = operation == .start
                     ? "Microphone couldn’t start. Please try again."
                     : error.localizedDescription
@@ -381,6 +383,7 @@ final class AppModel {
 
     func disconnect() async {
         isTearingDown = true
+        micRecoveryPending = false
         // Cancel any pending post-XR mic restore so it can't re-flag the mic live
         // against the session we're about to nil.
         micRecoveryTask?.cancel()
@@ -415,6 +418,7 @@ final class AppModel {
     }
 
     func disableMic() async {
+        micRecoveryPending = false
         micRecoveryTask?.cancel()
         await microphone?.setEnabled(false)
         await micRecoveryTask?.value
@@ -527,6 +531,7 @@ final class AppModel {
 
     private var micRecoveryTask: Task<Void, Never>?
     private var isRecoveringMic = false
+    private var micRecoveryPending = false
 
     private static let micRecoverySettleNanos: UInt64 = 500_000_000
     private static let micRecoveryVerifyNanos: UInt64 = 500_000_000
@@ -539,8 +544,13 @@ final class AppModel {
     private nonisolated(unsafe) var mediaServicesResetToken: NSObjectProtocol?
 
     private func recoverMic() {
-        guard micEnabledByUser, !isTearingDown, connectionState == .connected,
-              let microphone else { return }
+        guard micEnabledByUser, !isTearingDown, let microphone else { return }
+        micRecoveryPending = true
+        guard connectionState == .connected else { return }
+        #if os(visionOS)
+        // A failed XR disconnect is terminal too; it need not pass through idle.
+        guard !xrState.isLive, xrState != .stopping else { return }
+        #endif
         let previous = micRecoveryTask
         previous?.cancel()
         micRecoveryTask = Task {
@@ -552,20 +562,30 @@ final class AppModel {
                 try? await Task.sleep(nanoseconds: Self.micRecoverySettleNanos)
                 guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser,
                       connectionState == .connected else { return }
+                #if os(visionOS)
+                guard !xrState.isLive, xrState != .stopping else { return }
+                #endif
 
                 // Snapshot before the attempt: a `.began` after this point means
                 // NSK re-suspended the capture we are about to restart.
                 let generation = interruptionBeganGeneration
-                await microphone.restart()
+                await microphone.restart().value
                 guard !Task.isCancelled, self.microphone === microphone else { return }
 
                 try? await Task.sleep(nanoseconds: Self.micRecoveryVerifyNanos)
                 guard !Task.isCancelled, self.microphone === microphone, micEnabledByUser,
                       connectionState == .connected else { return }
-                if isAudioActive, interruptionBeganGeneration == generation { return }
+                #if os(visionOS)
+                guard !xrState.isLive, xrState != .stopping else { return }
+                #endif
+                if isAudioActive, interruptionBeganGeneration == generation {
+                    micRecoveryPending = false
+                    return
+                }
             }
             guard !Task.isCancelled, self.microphone === microphone,
                   connectionState == .connected else { return }
+            micRecoveryPending = false
             await microphone.setEnabled(false)
         }
     }
@@ -573,14 +593,33 @@ final class AppModel {
     private func handleMicrophoneConnectionState(_ state: ConnectionState) {
         switch state {
         case .disconnected:
+            micRecoveryPending = false
             micRecoveryTask?.cancel()
             microphone?.close()
         case .reconnecting:
             micRecoveryTask?.cancel()
         case .connected:
-            // Recreate capture after reconnect, including interruptions that
-            // could not be recovered while the transport was unavailable.
-            if micEnabledByUser { recoverMic() }
+            guard micEnabledByUser, !isTearingDown, let microphone else { return }
+            #if os(visionOS)
+            guard !xrState.isLive, xrState != .stopping else { return }
+            #endif
+            if micRecoveryPending {
+                recoverMic()
+            } else {
+                // LiveKit owns healthy-track republishing on reconnect. Only
+                // restart when an actual recovery request was deferred.
+                let previous = micRecoveryTask
+                previous?.cancel()
+                micRecoveryTask = Task {
+                    await previous?.value
+                    guard !Task.isCancelled, self.microphone === microphone,
+                          micEnabledByUser, !isTearingDown, connectionState == .connected else { return }
+                    #if os(visionOS)
+                    guard !xrState.isLive, xrState != .stopping else { return }
+                    #endif
+                    await microphone.setEnabled(true)
+                }
+            }
         default:
             break
         }
