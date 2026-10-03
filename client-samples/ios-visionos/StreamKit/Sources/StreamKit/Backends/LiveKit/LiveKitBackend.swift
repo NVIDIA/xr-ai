@@ -51,6 +51,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
     private var connectionGeneration: UInt64 = 0
+    private let microphoneOperations = MicrophoneOperations()
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -184,55 +185,61 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     // MARK: - StreamingBackend: audio
 
+    /// Recreates the microphone publication with the requested processing preset.
+    /// A disabled preset stops capture; engine failures are thrown.
+    /// The room connection and remote audio playback remain active.
     public func startAudio(config: AudioConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
-
-        // Pre-warm the recording engine before publishing, or the publish's
-        // frame watcher never sees a buffer and times out. Reset availability
-        // first because stopAudio pins input down, and prepared mode can't
-        // start a disabled engine.
-        do {
-            try AudioManager.shared.setEngineAvailability(.default)
-        } catch {
-            #if DEBUG
-            print("startAudio: setEngineAvailability(.default) failed: \(error)")
-            #endif
-        }
-        do {
-            try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-        } catch {
-            #if DEBUG
-            print("startAudio: setRecordingAlwaysPreparedMode(true) failed: \(error)")
-            #endif
-        }
-
-        do {
-            let captureOptions = AudioCaptureOptions(from: config)
-            try await room.localParticipant.setMicrophone(
-                enabled: true,
-                captureOptions: captureOptions
-            )
-        } catch {
-            // A failed publish must not leave the engine hot, or the mic
-            // indicator stays lit with no way to clear it but disconnecting.
-            await releaseRecordingEngine()
-            throw error
+        let generation = connectionGeneration
+        try await microphoneOperations.run { [self] in
+            guard self.room === room, connectionGeneration == generation,
+                  room.connectionState == .connected else { throw StreamError.notConnected }
+            try await stopMicrophone(in: room)
+            guard config.mode != .disabled else { return }
+            try await MicrophoneOperations.withRollback {
+                try Task.checkCancellation()
+                let options = AudioCaptureOptions(from: config)
+                try AudioManager.shared.setEngineAvailability(.default)
+                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+                try Task.checkCancellation()
+                guard self.room === room, connectionGeneration == generation,
+                      room.connectionState == .connected else { throw StreamError.notConnected }
+                try await room.localParticipant.setMicrophone(enabled: true, captureOptions: options)
+                try Task.checkCancellation()
+                guard self.room === room, connectionGeneration == generation,
+                      room.connectionState == .connected else { throw StreamError.notConnected }
+            } cleanup: {
+                try await self.stopMicrophone(in: room)
+            } cleanupFailed: { error in
+                mediaLog.error("microphone rollback failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
+    /// Removes the microphone publication and releases input without stopping playback.
     public func stopAudio() async throws {
-        guard let room else { return }
-        let micError: Error?
-        do {
-            try await room.localParticipant.setMicrophone(enabled: false)
-            micError = nil
-        } catch {
-            micError = error
+        let room = room
+        try await microphoneOperations.run(cancelWithCaller: false) { [self] in
+            try await stopMicrophone(in: room)
         }
-        await releaseRecordingEngine()
-        if let micError { throw micError }
+    }
+
+    private func stopMicrophone(in room: Room?) async throws {
+        var failure: Error?
+        // Muting retains capture options. Remove every microphone publication,
+        // including duplicates left by an overlapping SDK reconnect republish.
+        if let room {
+            let publications = room.localParticipant.localAudioTracks.filter { $0.source == .microphone }
+            for publication in publications {
+                do { try await room.localParticipant.unpublish(publication: publication) }
+                catch { if failure == nil { failure = error } }
+            }
+        }
+        do { try await releaseRecordingEngine() }
+        catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
     }
 
     // MARK: - StreamingBackend: camera
@@ -460,11 +467,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Roll the recording engine back to its idle state: drop prepared mode and
     /// take the mic input side down so the OS mic indicator clears, leaving output
     /// up for agent playback.
-    private func releaseRecordingEngine() async {
-        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(false)
-        try? AudioManager.shared.setEngineAvailability(
-            AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
-        )
+    private func releaseRecordingEngine() async throws {
+        var failure: Error?
+        do { try await AudioManager.shared.setRecordingAlwaysPreparedMode(false) }
+        catch { failure = error }
+        do {
+            try AudioManager.shared.setEngineAvailability(
+                AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
+            )
+        } catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
     }
 
     private struct EffectiveFileOptions {
@@ -620,6 +632,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     private func tearDown() async {
         connectionGeneration &+= 1
+        do { try await stopAudio() }
+        catch { mediaLog.error("microphone disconnect cleanup failed: \(error.localizedDescription, privacy: .public)") }
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -1036,7 +1050,7 @@ extension LiveKitBackend: RoomDelegate {
         didUnpublishTrack publication: LocalTrackPublication
     ) {
         #if DEBUG
-        mediaLog.error("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
+        mediaLog.info("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
         #endif
     }
 

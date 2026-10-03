@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: ios-microphone-tests
+
+# Host-side Swift tests for microphone lifecycle and app wiring; no device audio.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client-samples/ios-visionos/**'
+      - '.github/workflows/ios-microphone-tests.yml'
+  pull_request:
+    paths:
+      - 'client-samples/ios-visionos/**'
+      - '.github/workflows/ios-microphone-tests.yml'
+
+concurrency:
+  group: ios-microphone-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  microphone-lifecycle:
+    name: Swift microphone lifecycle
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Test production microphone lifecycle and app wiring
+        run: python3 -m unittest discover -s client-samples/ios-visionos/Tests -v

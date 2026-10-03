@@ -38,6 +38,22 @@ bash tests/run_local_gpu_tests.sh
 
 Pass extra pytest arguments after the script name to select a file or test.
 
+## Apple microphone lifecycle tests
+
+On macOS with Swift 6 installed, run the host-side microphone tests from the
+repository root:
+
+```bash
+python3 -m unittest discover -s client-samples/ios-visionos/Tests -v
+```
+
+The `ios-microphone-tests` workflow runs this command when the Apple client or
+that workflow changes. The harness compiles the production reconciler, operation
+queue, rollback helper, and selected unmodified AppModel microphone methods.
+It substitutes session and hardware operations to check cancellation, partial
+failures, recovery, and reconnect behavior. It does not validate LiveKit device
+capture, remote audio levels, or the operating system's microphone indicator.
+
 ## Coverage boundaries
 
 The suite includes:

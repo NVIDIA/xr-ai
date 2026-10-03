@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AA000100000000000000DD01 /* StreamKitSampleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC01 /* StreamKitSampleApp.swift */; };
 		AA000100000000000000DD02 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC02 /* AppModel.swift */; };
+		AA000100000000000000DD08 /* MicrophoneReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC09 /* MicrophoneReconciler.swift */; };
 		AA000100000000000000DD03 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC03 /* ContentView.swift */; };
 		AA000100000000000000DD04 /* ImmersiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC04 /* ImmersiveView.swift */; };
 		AA000100000000000000DD05 /* StreamKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA000100000000000002CC02 /* StreamKit */; };
@@ -19,6 +20,7 @@
 /* Begin PBXFileReference section */
 		AA000100000000000000CC01 /* StreamKitSampleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKitSampleApp.swift; sourceTree = "<group>"; };
 		AA000100000000000000CC02 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		AA000100000000000000CC09 /* MicrophoneReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneReconciler.swift; sourceTree = "<group>"; };
 		AA000100000000000000CC03 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA000100000000000000CC04 /* ImmersiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveView.swift; sourceTree = "<group>"; };
 		AA000100000000000000CC05 /* StreamKitSample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StreamKitSample.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -54,6 +56,7 @@
 			children = (
 				AA000100000000000000CC01 /* StreamKitSampleApp.swift */,
 				AA000100000000000000CC02 /* AppModel.swift */,
+				AA000100000000000000CC09 /* MicrophoneReconciler.swift */,
 				AA000100000000000000CC03 /* ContentView.swift */,
 				AA000100000000000000CC04 /* ImmersiveView.swift */,
 				AA000100000000000000CC08 /* Assets.xcassets */,
@@ -182,6 +185,7 @@
 			files = (
 				AA000100000000000000DD01 /* StreamKitSampleApp.swift in Sources */,
 				AA000100000000000000DD02 /* AppModel.swift in Sources */,
+				AA000100000000000000DD08 /* MicrophoneReconciler.swift in Sources */,
 				AA000100000000000000DD03 /* ContentView.swift in Sources */,
 				AA000100000000000000DD04 /* ImmersiveView.swift in Sources */,
 			);
