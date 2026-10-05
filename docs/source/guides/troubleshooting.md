@@ -509,10 +509,10 @@ recovery; the room connection stays open.
 If microphone cleanup fails while connected, the client reports that capture
 may still be running and keeps Stop available. Retry Stop before starting again.
 If cleanup fails during Disconnect, the connection still closes, but the client
-reports the cleanup failure. Reconnect to retry input cleanup before starting
-another session. A failed manual Start clears the enabled intent; select Start
-again to retry. Recovery waits for a connected session and does not consume its
-retry attempts while reconnecting.
+reports the cleanup failure and retains the old session's cleanup resources.
+Reconnect retries that cleanup before creating another session; if it still
+fails, the client stays disconnected. A failed manual Start retains the user's
+microphone intent, so later interruption recovery can retry capture.
 
 Phone calls, Siri, route changes, media-service resets, another capture app, or
 closing an XR space can interrupt audio or camera while the control still shows

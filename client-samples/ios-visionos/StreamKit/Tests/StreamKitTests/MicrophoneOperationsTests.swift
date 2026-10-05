@@ -45,17 +45,17 @@ private final class TransactionBackend: StreamingBackend, @unchecked Sendable {
     let capture = Capture()
     let entered = Gate()
     func connect(config: SessionConfig) async throws {}
-    func startAudio(config: AudioConfig) async throws {
+    @MainActor func startAudio(config: AudioConfig) async throws {
         try await operations.start(config: config) { [self] in
             await entered.release()
             try await Task.sleep(for: .seconds(60))
             Issue.record("Disconnect did not cancel the suspended start")
         } cleanup: { [self] in try await capture.clean() }
     }
-    func stopAudio() async throws {
+    @MainActor func stopAudio() async throws {
         try await operations.stop { [self] in try await capture.clean() }
     }
-    func disconnect() async throws {
+    @MainActor func disconnect() async throws {
         try await operations.disconnect { [self] in try await capture.clean() }
         close: { [self] in await capture.record("disconnect") }
     }
@@ -66,6 +66,20 @@ private final class TransactionBackend: StreamingBackend, @unchecked Sendable {
 
 @Suite("Microphone transactions", .timeLimit(.minutes(1)))
 struct MicrophoneOperationsTests {
+    @Test @MainActor func stopBeforePreparationCancelsRegisteredStart() async throws {
+        let backend = TransactionBackend()
+        let session = StreamSession(backend: backend)
+        // Run both callers on the registration executor. Stop enters before the
+        // queued prepare task gets a turn; it must still find and cancel Start.
+        let start = Task { try await session.startAudio() }
+        let stop = Task { try await session.stopAudio() }
+        try await stop.value
+        do { try await start.value; Issue.record("Stopped start succeeded") }
+        catch { #expect(error is CancellationError) }
+        #expect(backend.operations.state == .idle)
+        #expect(await backend.capture.events == ["cleanup"])
+    }
+
     @Test func rollbackFailureStaysPendingUntilSuccessfulStop() async throws {
         let operations = MicrophoneOperations()
         let capture = Capture()
@@ -233,7 +247,7 @@ struct MicrophoneOperationsTests {
         try await session.disconnect()
         do { try await start.value; Issue.record("Suspended start was not cancelled") }
         catch { #expect(error is CancellationError) }
-        #expect(await backend.operations.state == .idle)
+        #expect(backend.operations.state == .idle)
         #expect(await backend.capture.events == ["cleanup", "cleanup", "cleanup", "disconnect"])
     }
 
@@ -241,7 +255,7 @@ struct MicrophoneOperationsTests {
         let backend = TransactionBackend()
         let session = StreamSession(backend: backend)
         try await session.startAudio(config: .disabled)
-        #expect(await backend.operations.state == .idle)
+        #expect(backend.operations.state == .idle)
         #expect(await backend.capture.events == ["cleanup"])
     }
 
@@ -251,10 +265,10 @@ struct MicrophoneOperationsTests {
         await backend.capture.failCleanup()
         do { try await session.disconnect(); Issue.record("Cleanup failure was swallowed") }
         catch { #expect(error as? CaptureFailure == .cleanup) }
-        #expect(await backend.operations.state == .cleanupRequired)
+        #expect(backend.operations.state == .cleanupRequired)
         #expect(await backend.capture.events == ["cleanup", "disconnect"])
         await backend.capture.allowCleanup()
         try await session.disconnect()
-        #expect(await backend.operations.state == .idle)
+        #expect(backend.operations.state == .idle)
     }
 }

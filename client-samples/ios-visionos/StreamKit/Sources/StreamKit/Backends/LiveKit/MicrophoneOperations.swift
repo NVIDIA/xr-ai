@@ -3,8 +3,11 @@
 
 import Foundation
 
-/// Serializes complete capture transactions, not just the synchronous actor work.
-actor MicrophoneOperations {
+/// Registers requests on the session executor before suspending, then serializes
+/// each complete physical transition, including rollback.
+@MainActor
+final class MicrophoneOperations {
+    nonisolated init() {}
     enum State { case idle, active, cleanupRequired }
     private(set) var state: State = .idle
     private var tail: Task<Void, Error>?
@@ -87,7 +90,7 @@ actor MicrophoneOperations {
     }
 
     private func enqueue(
-        _ operation: @escaping @Sendable (isolated MicrophoneOperations) async throws -> Void
+        _ operation: @escaping @MainActor @Sendable (MicrophoneOperations) async throws -> Void
     ) -> Task<Void, Error> {
         let previous = tail
         let task = Task {

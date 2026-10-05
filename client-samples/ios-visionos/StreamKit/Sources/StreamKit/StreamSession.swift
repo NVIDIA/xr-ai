@@ -108,7 +108,8 @@ public final class StreamSession: ObservableObject {
 
     /// Disconnects the transport and attempts to release all resources.
     /// Throws the first cleanup error after closing the transport; capture may
-    /// still be running. Retry cleanup before treating it as released.
+    /// still be running. Retain this session and retry `disconnect()` or
+    /// `stopAudio()` until cleanup succeeds before discarding it.
     public func disconnect() async throws {
         cancelImageCaptures()
         defer {

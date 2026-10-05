@@ -153,11 +153,9 @@ final class AppModel {
     var agentResponse: String?
     var isAudioActive = false
     // Keep Stop available if capture teardown could not be verified.
-    private(set) var micCleanupRequired = false
-    private(set) var micEnabledByUser = false
+    private var micCleanupRequired = false
+    private var micEnabledByUser = false
     private var micIntentGeneration: UInt64 = 0
-    private var micStartTask: Task<Void, Never>?
-    private var micStopTask: Task<Void, Never>?
     private(set) var isAudioStarting = false
     var isCameraActive = false
     private var isCameraStarting = false
@@ -230,6 +228,11 @@ final class AppModel {
         defer { isConnecting = false }
 
         lastError = nil
+        // Keep the old backend until its exact capture resources are released.
+        if session != nil {
+            await disconnect()
+            guard !micCleanupRequired else { return }
+        }
         receivedMessages.removeAll()
 
         let portNumber = Int(port) ?? 8080
@@ -276,7 +279,6 @@ final class AppModel {
                     Task { await self.stopCamera() }
                 }
             case .connected:
-                self.resumeMicAfterReconnect()
                 if self.cameraMode == .live {
                     Task { await self.startCamera() }
                 }
@@ -339,13 +341,12 @@ final class AppModel {
 
         do {
             try await newSession.connect(config: SessionConfig(identity: identity))
-            micCleanupRequired = false
         } catch {
             lastError = error.localizedDescription
             // Tear down synchronously — don't rely on the delegate callback firing
             // when the connection never fully established.
             await disconnectSession(newSession)
-            session = nil
+            if !micCleanupRequired { session = nil }
             imageCaptureHandler = nil
             connectionState = .disconnected
         }
@@ -354,8 +355,8 @@ final class AppModel {
     func disconnect() async {
         guard !isTearingDown else { return }
         isTearingDown = true
-        micEnabledByUser = false
         micIntentGeneration &+= 1
+        micEnabledByUser = false
         // Cancel any pending post-XR mic restore so it can't re-flag the mic live
         // against the session we're about to nil.
         micRecoveryTask?.cancel()
@@ -367,9 +368,7 @@ final class AppModel {
         }
         #endif
         if let session { await disconnectSession(session) }
-        await micStartTask?.value
-        await micStopTask?.value
-        session = nil
+        if !micCleanupRequired { session = nil }
         imageCaptureHandler = nil
         connectionState = .disconnected
         agentStatus = nil
@@ -388,79 +387,61 @@ final class AppModel {
             micCleanupRequired = false
         } catch {
             micCleanupRequired = true
-            lastError = "Microphone cleanup failed during disconnect; capture may still be running. Reconnect to retry cleanup."
+            lastError = "Microphone cleanup failed; capture may still be running. Reconnect to retry cleanup."
         }
     }
 
     // MARK: - Audio
 
     func startAudio() async {
-        let requestedSession = session
-        // Join the full app completion, not only the backend operation: an older
-        // startup must not update flags after a newer Stop has cleared them.
-        await micStopTask?.value
-        await micStartTask?.value
-        guard session === requestedSession, micEnabledByUser else { return }
         guard !isTearingDown, let session, connectionState == .connected else { return }
         guard audioMode != .disabled else { await stopAudio(); return }
         guard !isAudioStarting, !isAudioActive else { return }
+        micIntentGeneration &+= 1
+        let generation = micIntentGeneration
         isAudioStarting = true
-        let task = Task {
-            defer {
-                isAudioStarting = false
-                micStartTask = nil
-            }
-            do {
-                try await session.startAudio(config: AudioConfig(mode: audioMode))
-                guard self.session === session, !isTearingDown, micEnabledByUser else { return }
-                micCleanupRequired = false
-                isAudioActive = true
-            } catch StreamError.microphoneCleanupFailed {
-                guard self.session === session, !isTearingDown else { return }
-                micCleanupRequired = true
-                isAudioActive = true
-                lastError = "Microphone cleanup failed; capture may still be running. Try Stop again."
-            } catch is CancellationError {
-                return
-            } catch {
-                guard self.session === session, !isTearingDown else { return }
-                #if DEBUG
-                let ns = error as NSError
-                print("startAudio failed: \(type(of: error)) \(ns.domain) #\(ns.code): \(error)")
-                #endif
-                lastError = "Microphone couldn’t start. Please try again."
-            }
+        defer { if generation == micIntentGeneration { isAudioStarting = false } }
+
+        do {
+            try await session.startAudio(config: AudioConfig(mode: audioMode))
+            guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
+            micCleanupRequired = false
+            isAudioActive = true
+        } catch StreamError.microphoneCleanupFailed {
+            guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
+            micCleanupRequired = true
+            isAudioActive = true
+            lastError = "Microphone cleanup failed; capture may still be running. Try Stop again."
+        } catch is CancellationError {
+            return
+        } catch {
+            guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
+            #if DEBUG
+            let ns = error as NSError
+            print("startAudio failed: \(type(of: error)) \(ns.domain) #\(ns.code): \(error)")
+            #endif
+            lastError = "Microphone couldn’t start. Please try again."
         }
-        micStartTask = task
-        await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
     }
 
     func stopAudio() async {
-        if let stop = micStopTask {
-            await stop.value
-            return
-        }
         guard let session else { return }
-        let starting = micStartTask
+        micIntentGeneration &+= 1
+        let generation = micIntentGeneration
+        // Register requests directly with the backend; only UI completions may be stale.
+        isAudioStarting = false
         isAudioActive = false
-        let task = Task {
-            defer { micStopTask = nil }
-            do {
-                try await session.stopAudio()
-                await starting?.value
-                guard self.session === session, !isTearingDown else { return }
-                micCleanupRequired = false
-                isAudioActive = false
-            } catch {
-                await starting?.value
-                guard self.session === session, !isTearingDown else { return }
-                micCleanupRequired = true
-                isAudioActive = true
-                lastError = "Microphone could not stop; capture may still be running. \(error.localizedDescription)"
-            }
+        do {
+            try await session.stopAudio()
+            guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
+            micCleanupRequired = false
+            isAudioActive = false
+        } catch {
+            guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
+            micCleanupRequired = true
+            isAudioActive = true
+            lastError = "Microphone could not stop; capture may still be running. \(error.localizedDescription)"
         }
-        micStopTask = task
-        await task.value
     }
 
     /// Records mic intent (so recovery keeps retrying) and starts;
@@ -468,19 +449,13 @@ final class AppModel {
     func enableMic() async {
         guard !isTearingDown, session != nil, connectionState == .connected else { return }
         guard audioMode != .disabled else { await disableMic(); return }
-        micIntentGeneration &+= 1
-        let generation = micIntentGeneration
         micEnabledByUser = true
         await startAudio()
-        if generation == micIntentGeneration, !isAudioActive || micCleanupRequired {
-            micEnabledByUser = false
-        }
     }
 
     /// Clears mic intent and cancels in-flight recovery (so it can't fight the
     /// manual off), then stops.
     func disableMic() async {
-        micIntentGeneration &+= 1
         micEnabledByUser = false
         micRecoveryTask?.cancel()
         await stopAudio()
@@ -593,7 +568,7 @@ final class AppModel {
     // XR exit posts `.began` with no `.ended`; recovery is a bounded
     // settle→stop→start→verify loop (see README).
 
-    private(set) var micRecoveryTask: Task<Void, Never>?
+    private var micRecoveryTask: Task<Void, Never>?
 
     private static let micRecoverySettleNanos: UInt64 = 500_000_000
     private static let micRecoveryVerifyNanos: UInt64 = 500_000_000
@@ -606,13 +581,12 @@ final class AppModel {
     private nonisolated(unsafe) var mediaServicesResetToken: NSObjectProtocol?
 
     private func recoverMic() {
-        guard micEnabledByUser, !isTearingDown, connectionState == .connected else { return }
+        guard micEnabledByUser else { return }
         micRecoveryTask?.cancel()
         micRecoveryTask = Task {
             for _ in 0 ..< Self.micRecoveryMaxAttempts {
                 try? await Task.sleep(nanoseconds: Self.micRecoverySettleNanos)
-                guard !Task.isCancelled, session != nil, micEnabledByUser,
-                      connectionState == .connected else { return }
+                guard !Task.isCancelled, session != nil, micEnabledByUser else { return }
 
                 // Snapshot before the attempt: a `.began` after this point means
                 // NSK re-suspended the capture we are about to restart.
@@ -620,8 +594,7 @@ final class AppModel {
                 // stopAudio() clears isAudioActive first so startAudio()'s
                 // `guard !isAudioActive` can't no-op the restart.
                 await stopAudio()
-                guard !Task.isCancelled, session != nil, micEnabledByUser,
-                      connectionState == .connected else { return }
+                guard !Task.isCancelled, session != nil, micEnabledByUser else { return }
                 let errorBeforeStart = lastError
                 await startAudio()
                 // Suppress only this attempt's mic-start failure toast; an unrelated
@@ -630,22 +603,13 @@ final class AppModel {
                 guard !Task.isCancelled, session != nil else { return }
 
                 try? await Task.sleep(nanoseconds: Self.micRecoveryVerifyNanos)
-                guard !Task.isCancelled, session != nil, micEnabledByUser,
-                      connectionState == .connected else { return }
+                guard !Task.isCancelled, session != nil, micEnabledByUser else { return }
                 if isAudioActive, !micCleanupRequired, interruptionBeganGeneration == generation { return }
             }
             // Every attempt was re-suspended (or never published): keep the UI honest
             // rather than claim a live mic.
             if !micCleanupRequired { isAudioActive = false }
         }
-    }
-
-    func resumeMicAfterReconnect() {
-        guard micEnabledByUser, !isTearingDown, connectionState == .connected else { return }
-        #if os(visionOS)
-        guard xrState == .idle else { return }
-        #endif
-        Task { await startAudio() }
     }
 
     private func handleAudioInterruption(_ note: Notification) {

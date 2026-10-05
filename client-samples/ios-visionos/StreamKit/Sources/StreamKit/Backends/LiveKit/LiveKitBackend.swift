@@ -52,6 +52,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
     private var connectionGeneration: UInt64 = 0
     private let microphoneOperations = MicrophoneOperations()
+    private let microphoneCleanup = MicrophoneCleanup()
     // Invalidates buffer-track factories suspended across a camera stop.
     private var cameraGeneration: UInt64 = 0
 
@@ -122,6 +123,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Establishes the WebRTC peer connection and data channel only.
     /// Audio and camera are not started — call ``startAudio(config:)`` and
     /// ``startCamera(config:)`` explicitly after connecting.
+    @MainActor
     public func connect(config sessionConfig: SessionConfig) async throws {
         self.sessionConfig = sessionConfig
 
@@ -181,12 +183,14 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         startNetworkMetricsReporting(for: room)
     }
 
+    @MainActor
     public func disconnect() async throws {
         try await tearDown()
     }
 
     // MARK: - StreamingBackend: audio
 
+    @MainActor
     public func startAudio(config: AudioConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
@@ -215,6 +219,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
     }
 
+    @MainActor
     public func stopAudio() async throws {
         let room = room
         try await microphoneOperations.stop { [self] in
@@ -222,13 +227,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
     }
 
+    @MainActor
     private func stopMicrophone(in room: Room?) async throws {
         let publications = room?.localParticipant.localAudioTracks.filter { $0.source == .microphone } ?? []
-        try await MicrophoneCleanup.stop(publications: publications) { publication in
+        try await microphoneCleanup.stop(publications: publications) { publication in
             // The SDK's full-reconnect republisher skips muted tracks. Muting is
             // best effort; unpublish and engine release must still run if it fails.
             try await (publication.track as? LocalAudioTrack)?.mute()
         } unpublish: { publication in
+            // The retained closure owns the room as well as the publication, so
+            // cleanup can retry after disconnect has cleared self.room.
             try await room?.localParticipant.unpublish(publication: publication)
         } release: { [self] in
             try await releaseRecordingEngine()
@@ -643,6 +651,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         return value
     }
 
+    @MainActor
     private func tearDown() async throws {
         connectionGeneration &+= 1
         cameraGeneration &+= 1

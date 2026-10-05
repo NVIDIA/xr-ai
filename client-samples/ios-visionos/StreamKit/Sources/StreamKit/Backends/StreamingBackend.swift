@@ -86,6 +86,7 @@ public protocol StreamingBackend: AnyObject, Sendable {
 
     /// Disconnect the transport even if resource cleanup fails, then throw the
     /// first cleanup error. A failed disconnect does not verify that capture stopped.
+    /// Retain unresolved resources so another disconnect or stop can finish cleanup.
     func disconnect() async throws
 
     // MARK: - Audio
