@@ -5,6 +5,17 @@
 
 # Release migration
 
+## Swift microphone cleanup errors
+
+`StreamSession.disconnect()` and `StreamingBackend.disconnect()` now throw
+cleanup errors after closing the transport. Update callers to use `try await`
+and handle failures: capture may still be running even though the connection
+has closed. Retain the same session and retry `disconnect()` or `stopAudio()`
+until cleanup succeeds before discarding it. Connecting that same LiveKit
+backend also retries its pending cleanup before opening another connection.
+A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
+satisfy the throwing protocol requirement.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously

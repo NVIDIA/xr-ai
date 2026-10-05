@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: ios-microphone-tests
+
+on:
+  push:
+    branches: [main, 'release/**']
+    paths:
+      - 'client-samples/ios-visionos/**'
+      - '.github/workflows/ios-microphone-tests.yml'
+  pull_request:
+    paths:
+      - 'client-samples/ios-visionos/**'
+      - '.github/workflows/ios-microphone-tests.yml'
+
+concurrency:
+  group: ios-microphone-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  microphone-lifecycle:
+    name: StreamKit tests and unsigned Apple app builds
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Test the real StreamKit package on iOS Simulator
+        working-directory: client-samples/ios-visionos/StreamKit
+        run: >-
+          xcodebuild -scheme StreamKit
+          -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+          -derivedDataPath "$RUNNER_TEMP/streamkit-tests"
+          -resultBundlePath "$RUNNER_TEMP/streamkit-tests.xcresult"
+          CODE_SIGNING_ALLOWED=NO test
+      - name: Build the unsigned iOS app
+        working-directory: client-samples/ios-visionos
+        run: >-
+          xcodebuild -project StreamKitSample.xcodeproj -scheme StreamKitSample
+          -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/streamkit-ios"
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Build the unsigned visionOS app
+        working-directory: client-samples/ios-visionos
+        run: >-
+          xcodebuild -project StreamKitSample.xcodeproj -scheme StreamKitSample
+          -destination 'generic/platform=visionOS'
+          -derivedDataPath "$RUNNER_TEMP/streamkit-visionos"
+          CODE_SIGNING_ALLOWED=NO build
