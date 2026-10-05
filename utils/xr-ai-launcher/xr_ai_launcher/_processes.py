@@ -41,6 +41,16 @@ def _ts() -> str:
     return time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now - int(now)) * 1000):03d}"
 
 
+def _configured_log_dir() -> Path | None:
+    """Return the per-run log directory when all stamped env vars are set."""
+    root = os.environ.get("XR_AI_LOG_ROOT")
+    namespace = os.environ.get("XR_AI_LOG_NAMESPACE")
+    timestamp = os.environ.get("XR_AI_LOG_TIMESTAMP")
+    if not (root and namespace and timestamp):
+        return None
+    return Path(root) / f"log_{namespace}_{timestamp}"
+
+
 def _open_log_file(name: str) -> IO[str] | None:
     """Open ``<XR_AI_LOG_ROOT>/log_<ns>_<ts>/<name>.log`` for append.
 
@@ -48,12 +58,9 @@ def _open_log_file(name: str) -> IO[str] | None:
     parent never called :func:`xr_ai_logging.setup_logging`), so the caller
     can fall back to ``print`` and not silently drop the subprocess output.
     """
-    root = os.environ.get("XR_AI_LOG_ROOT")
-    ns   = os.environ.get("XR_AI_LOG_NAMESPACE")
-    ts   = os.environ.get("XR_AI_LOG_TIMESTAMP")
-    if not (root and ns and ts):
+    log_dir = _configured_log_dir()
+    if log_dir is None:
         return None
-    log_dir = Path(root) / f"log_{ns}_{ts}"
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         return open(log_dir / f"{name}.log", "a", buffering=1, encoding="utf-8")

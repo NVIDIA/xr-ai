@@ -525,6 +525,119 @@ def test_post_mortem_is_scoped_to_current_attempt(tmp_path):
 
 
 class TestContainerHelpers:
+    def test_docker_availability_reports_daemon_error_from_single_probe(
+        self, monkeypatch, caplog,
+    ):
+        calls: list[tuple[list[str], dict]] = []
+
+        def _run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return _docker.subprocess.CompletedProcess(
+                argv,
+                1,
+                stdout="",
+                stderr="permission denied while connecting to docker.sock\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        assert not _docker._docker_available()
+        assert len(calls) == 1
+        assert calls[0][0] == [
+            "docker", "version", "--format", "{{.Server.Version}}",
+        ]
+        assert "permission denied while connecting to docker.sock" in caplog.text
+        assert "NVIDIA Container Toolkit" in caplog.text
+
+    def test_failed_container_start_keeps_captured_runtime_error(
+        self, monkeypatch, caplog,
+    ):
+        calls = 0
+
+        def _run(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise _docker.subprocess.CalledProcessError(
+                125,
+                ["docker", "start", "some-name"],
+                stderr=b"unknown or invalid runtime name: nvidia\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        assert not _docker.start_container("some-name")
+        assert calls == 1
+        assert "unknown or invalid runtime name: nvidia" in caplog.text
+        assert "docker start some-name" in caplog.text
+
+    def test_failed_ngc_login_reports_image_and_existing_stderr_once(
+        self, monkeypatch, caplog,
+    ):
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+        monkeypatch.setattr(_docker, "_already_logged_in", lambda _registry: False)
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        calls = 0
+
+        def _run(argv, **kwargs):
+            nonlocal calls
+            calls += 1
+            return _docker.subprocess.CompletedProcess(
+                argv,
+                1,
+                stderr=b"unauthorized: authentication required\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        image = "nvcr.io/nvidia/vllm:26.09-py3"
+        _docker._maybe_ngc_login(image)
+
+        assert calls == 1
+        assert image in caplog.text
+        assert "unauthorized: authentication required" in caplog.text
+        assert "docker login nvcr.io" in caplog.text
+
+    def test_port_ownership_failure_keeps_docker_stderr_without_retry(
+        self, monkeypatch, caplog,
+    ):
+        calls = 0
+
+        def _check_output(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise _docker.subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "check_output", _check_output)
+
+        assert _docker.container_on_port_checked(8100) == (None, False)
+        assert calls == 1
+        assert "Cannot connect to the Docker daemon" in caplog.text
+        assert "Docker ownership for port 8100" in caplog.text
+
+    def test_port_ownership_failure_is_debug_only_when_requested(
+        self, monkeypatch, caplog,
+    ):
+        def _check_output(*_args, **_kwargs):
+            raise _docker.subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "check_output", _check_output)
+
+        with caplog.at_level("DEBUG", logger=_docker.__name__):
+            assert _docker.container_on_port_checked(
+                8100, warn_on_failure=False,
+            ) == (None, False)
+
+        assert "Cannot connect to the Docker daemon" in caplog.text
+        assert all(record.levelname == "DEBUG" for record in caplog.records)
+
     def test_container_exists_false_when_docker_missing(self):
         with patch(
             "xr_ai_vllm._docker.subprocess.check_output",
@@ -1255,7 +1368,7 @@ class TestRunContainer:
 
     @pytest.mark.parametrize("with_vllm_context", [False, True])
     def test_failure_diagnostics_are_vllm_only(
-        self, monkeypatch, tmp_path, with_vllm_context,
+        self, monkeypatch, tmp_path, caplog, with_vllm_context,
     ):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
@@ -1303,6 +1416,10 @@ class TestRunContainer:
             _docker.run_container(**kwargs)
 
         assert captured == ([diagnostic_argv] if with_vllm_context else [])
+        assert "xr-ai-test-ctr" in caplog.text
+        assert "some-image" in caplog.text
+        assert "http://127.0.0.1:1/health" in caplog.text
+        assert str(tmp_path / "container.log") in caplog.text
 
     def test_spark_retries_driver_allocation_failure_once(
         self, monkeypatch, tmp_path,
@@ -1613,13 +1730,86 @@ class TestEvictLocalListener:
 
 
 class TestPipEviction:
+    def test_pip_startup_exit_reports_endpoint_rc_and_command_once(
+        self, monkeypatch, caplog,
+    ):
+        from xr_ai_vllm import _pip
+
+        ownership_checks: list[int] = []
+        monkeypatch.setattr(
+            _pip._docker,
+            "container_on_port_checked",
+            lambda port, **_kwargs: ownership_checks.append(port) or (None, True),
+        )
+
+        class _FailedProc:
+            def poll(self):
+                return 127
+
+        launches: list[list[str]] = []
+        monkeypatch.setattr(
+            _pip.subprocess,
+            "Popen",
+            lambda argv, **_kwargs: launches.append(argv) or _FailedProc(),
+        )
+        argv = [
+            "vllm", "serve", "org/model", "--port", "8100",
+            "--api-key", "super-secret",
+        ]
+
+        with pytest.raises(SystemExit, match="^1$"):
+            _pip.run(
+                persistent=False,
+                log_prefix="test",
+                vllm_argv=argv,
+                host="0.0.0.0",
+                port=8100,
+                ready_file=None,
+            )
+
+        assert ownership_checks == [8100]
+        assert launches == [argv]
+        assert "http://127.0.0.1:8100/health" in caplog.text
+        assert "rc=127" in caplog.text
+        assert "vLLM executable vllm" in caplog.text
+        assert "super-secret" not in caplog.text
+
+    def test_pip_launch_preserves_original_os_error(self, monkeypatch, caplog):
+        from xr_ai_vllm import _pip
+
+        monkeypatch.setattr(
+            _pip._docker,
+            "container_on_port_checked",
+            lambda _port, **_kwargs: (None, True),
+        )
+        error = FileNotFoundError("vllm executable not found")
+        monkeypatch.setattr(
+            _pip.subprocess,
+            "Popen",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+        with pytest.raises(FileNotFoundError) as raised:
+            _pip.run(
+                persistent=False,
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "org/model"],
+                host="0.0.0.0",
+                port=8100,
+                ready_file=None,
+            )
+
+        assert raised.value is error
+        assert "vllm executable not found" in caplog.text
+        assert "http://127.0.0.1:8100/health" in caplog.text
+
     def test_pip_run_evicts_container_holding_its_port(self, monkeypatch):
         from xr_ai_vllm import _pip
 
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
             _pip._docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
+            lambda port, **_kwargs: ("xr-ai-nim-cosmos3-reasoner", True),
         )
         monkeypatch.setattr(
             _pip._docker, "stop_container",

@@ -8,6 +8,19 @@
 Common issues and their fixes. If you hit something not listed here, open an
 issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
+## Investigating a failed run
+
+Start with the launcher's failure summary and the JSON report path printed
+beside it. They identify the failed service and configuration and include
+recent output from the actual run. The service's own errors can include
+recovery advice. If per-run logging is available, use the reported log
+directory and suggested command to inspect the full traceback. Otherwise,
+inspect the captured output in the report. Run the suggested command
+explicitly when further investigation is needed.
+
+Refer to {doc}`../components/launcher-and-process-model` for failure-report
+locations, exit codes, and process ownership.
+
 ## Setup-time issues
 
 (dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
@@ -41,10 +54,9 @@ and cleanup aborts because ownership could not be verified.
 
 **Diagnosis:** run `docker ps` without `sudo` from the same login session. If
 it reports permission denied for `/var/run/docker.sock`, the launcher cannot
-inspect persistent containers. Its internal Docker check suppresses stderr,
-so running the command directly exposes the underlying error. These cleanup
-errors can have other causes; use the Docker output to confirm socket access
-is the problem.
+inspect persistent containers. The ownership check includes Docker's error
+output in the launch log. These cleanup errors can have other causes; use
+that output or the direct command to confirm socket access is the problem.
 
 **Fix:** complete the Docker group setup and refresh the launch session as
 described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without

@@ -23,8 +23,16 @@ def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
     monkeypatch.setattr(_stack.threading, "Thread", Mock(return_value=thread))
 
     process = _stack.Process("tts", tmp_path, "pocket_tts_server")
-    _stack._spawn(process, tmp_path, tmp_path / "ready")
+    failure_contexts = {}
+    result = _stack._spawn(
+        process,
+        tmp_path,
+        tmp_path / "ready",
+        failure_contexts=failure_contexts,
+    )
 
+    assert result is spawned
+    assert failure_contexts["tts"].service == "tts"
     kwargs = popen.call_args.kwargs
     assert kwargs["start_new_session"] is True
     assert (
@@ -105,8 +113,9 @@ class TestParallelDataclass:
 
 class _FakePopen:
     """Minimal Popen stand-in: alive (poll()->None), spawned without subprocess."""
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, returncode: int | None = None) -> None:
         self.name = name
+        self.returncode = returncode
 
     def poll(self):
         return None
@@ -128,9 +137,16 @@ class TestRunStackShutdownContract:
         spawn_options: dict[str, bool] = {}
 
         def _fake_spawn(
-            proc, base, ready_file, *, ready_process_may_exit=False,
+            proc,
+            base,
+            ready_file,
+            *,
+            ready_process_may_exit=False,
+            failure_contexts=None,
         ):
             spawn_options[proc.name] = ready_process_may_exit
+            if failure_contexts is not None:
+                failure_contexts[proc.name] = Mock(service=proc.name)
             return _FakePopen(proc.name)
 
         monkeypatch.setattr(_stack, "_spawn", _fake_spawn)
@@ -188,6 +204,113 @@ class TestRunStackShutdownContract:
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
         assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
+
+    def test_runtime_report_interrupt_preserves_exit_and_persist_ownership(
+        self, stub_stack, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+
+        def _monitor(procs):
+            proc = procs["vlm"]
+            proc.returncode = 7
+            return "vlm", proc
+
+        monkeypatch.setattr(_stack, "_monitor", _monitor)
+        monkeypatch.setattr(
+            _stack,
+            "emit_failure_report",
+            Mock(side_effect=KeyboardInterrupt),
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            _stack.run_stack(
+                [
+                    _stack.Process(
+                        "vlm",
+                        "../../vlm",
+                        "vlm_server",
+                        launch_mode="persist",
+                    )
+                ],
+                tmp_path,
+            )
+
+        assert excinfo.value.code == 7
+        assert stub_stack["no_kill"] == {"vlm"}
+
+    def test_unexpected_zero_runtime_exit_is_failure(
+        self, stub_stack, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+
+        def _monitor(procs):
+            proc = procs["worker"]
+            proc.returncode = 0
+            return "worker", proc
+
+        monkeypatch.setattr(_stack, "_monitor", _monitor)
+        monkeypatch.setattr(_stack, "emit_failure_report", Mock())
+
+        with pytest.raises(SystemExit) as excinfo:
+            _stack.run_stack(
+                [_stack.Process("worker", "../../worker", "worker")],
+                tmp_path,
+            )
+
+        assert excinfo.value.code == 1
+
+    def test_readiness_report_interrupt_preserves_signal_exit(
+        self, stub_stack, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            _stack,
+            "_wait_ready",
+            lambda name, rf, proc: (_ for _ in ()).throw(
+                _stack._ReadinessFailure(name, -15)
+            ),
+        )
+        monkeypatch.setattr(
+            _stack,
+            "emit_failure_report",
+            Mock(side_effect=KeyboardInterrupt),
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            _stack.run_stack(
+                [
+                    _stack.Process(
+                        "vlm",
+                        "../../vlm",
+                        "vlm_server",
+                        launch_mode="persist",
+                    )
+                ],
+                tmp_path,
+            )
+
+        assert excinfo.value.code == 143
+        assert stub_stack["no_kill"] == set()
+
+
+def test_monitor_prefers_cancellation_over_same_tick_child_exit(monkeypatch):
+    handlers = {}
+    monkeypatch.setattr(_stack.signal, "getsignal", lambda _sig: None)
+    monkeypatch.setattr(
+        _stack.signal,
+        "signal",
+        lambda sig, handler: handlers.__setitem__(sig, handler),
+    )
+
+    class _ExitedDuringSignal:
+        returncode = 9
+
+        def poll(self):
+            handlers[_stack.signal.SIGINT](_stack.signal.SIGINT, None)
+            return self.returncode
+
+    assert _stack._monitor({"worker": _ExitedDuringSignal()}) is None
+
+
 class TestStripConflictingCudnn:
     """LD_LIBRARY_PATH sanitization so a host cuDNN can't shadow the venv one."""
 
