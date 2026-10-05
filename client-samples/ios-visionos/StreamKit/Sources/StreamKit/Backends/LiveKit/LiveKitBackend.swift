@@ -51,6 +51,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
     private var connectionGeneration: UInt64 = 0
+    private let microphoneOperations = MicrophoneOperations()
     // Invalidates buffer-track factories suspended across a camera stop.
     private var cameraGeneration: UInt64 = 0
 
@@ -191,50 +192,49 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             throw StreamError.notConnected
         }
 
-        // Pre-warm the recording engine before publishing, or the publish's
-        // frame watcher never sees a buffer and times out. Reset availability
-        // first because stopAudio pins input down, and prepared mode can't
-        // start a disabled engine.
-        do {
+        let generation = connectionGeneration
+        try await microphoneOperations.start(config: config) { [self] in
+            guard self.room === room, connectionGeneration == generation,
+                  room.connectionState == .connected else { throw StreamError.notConnected }
             try AudioManager.shared.setEngineAvailability(.default)
-        } catch {
-            #if DEBUG
-            print("startAudio: setEngineAvailability(.default) failed: \(error)")
-            #endif
-        }
-        do {
+            // Publishing waits for the first frame, so input must be prepared first.
             try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-        } catch {
-            #if DEBUG
-            print("startAudio: setRecordingAlwaysPreparedMode(true) failed: \(error)")
-            #endif
-        }
-
-        do {
+            try Task.checkCancellation()
+            guard self.room === room, connectionGeneration == generation,
+                  room.connectionState == .connected else { throw StreamError.notConnected }
             let captureOptions = AudioCaptureOptions(from: config)
             try await room.localParticipant.setMicrophone(
                 enabled: true,
                 captureOptions: captureOptions
             )
-        } catch {
-            // A failed publish must not leave the engine hot, or the mic
-            // indicator stays lit with no way to clear it but disconnecting.
-            await releaseRecordingEngine()
-            throw error
+            try Task.checkCancellation()
+            guard self.room === room, connectionGeneration == generation,
+                  room.connectionState == .connected else { throw StreamError.notConnected }
+        } cleanup: { [self] in
+            try await stopMicrophone(in: room)
         }
     }
 
     public func stopAudio() async throws {
-        guard let room else { return }
-        let micError: Error?
-        do {
-            try await room.localParticipant.setMicrophone(enabled: false)
-            micError = nil
-        } catch {
-            micError = error
+        let room = room
+        try await microphoneOperations.stop { [self] in
+            try await stopMicrophone(in: room)
         }
-        await releaseRecordingEngine()
-        if let micError { throw micError }
+    }
+
+    private func stopMicrophone(in room: Room?) async throws {
+        var failure: Error?
+        // Muting retains the old capture options and audio track. Unpublish all
+        // microphone tracks, including duplicates from an SDK reconnect.
+        if let room {
+            for publication in room.localParticipant.localAudioTracks where publication.source == .microphone {
+                do { try await room.localParticipant.unpublish(publication: publication) }
+                catch { if failure == nil { failure = error } }
+            }
+        }
+        do { try await releaseRecordingEngine() }
+        catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
     }
 
     // MARK: - StreamingBackend: camera
@@ -484,11 +484,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Roll the recording engine back to its idle state: drop prepared mode and
     /// take the mic input side down so the OS mic indicator clears, leaving output
     /// up for agent playback.
-    private func releaseRecordingEngine() async {
-        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(false)
-        try? AudioManager.shared.setEngineAvailability(
-            AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
-        )
+    private func releaseRecordingEngine() async throws {
+        var failure: Error?
+        do { try await AudioManager.shared.setRecordingAlwaysPreparedMode(false) }
+        catch { failure = error }
+        do {
+            try AudioManager.shared.setEngineAvailability(
+                AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
+            )
+        } catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
     }
 
     private struct EffectiveFileOptions {
@@ -645,6 +650,19 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private func tearDown() async {
         connectionGeneration &+= 1
         cameraGeneration &+= 1
+        let room = room
+        do {
+            try await microphoneOperations.disconnect { [self] in
+                try await stopMicrophone(in: room)
+            } close: { [self] in
+                await closeRoom()
+            }
+        } catch {
+            mediaLog.error("microphone disconnect cleanup failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func closeRoom() async {
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -1061,7 +1079,7 @@ extension LiveKitBackend: RoomDelegate {
         didUnpublishTrack publication: LocalTrackPublication
     ) {
         #if DEBUG
-        mediaLog.error("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
+        mediaLog.info("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
         #endif
     }
 

@@ -38,6 +38,26 @@ bash tests/run_local_gpu_tests.sh
 
 Pass extra pytest arguments after the script name to select a file or test.
 
+## Apple microphone transaction tests
+
+With Xcode 26.3 or newer selected, run the real StreamKit package tests on an
+installed iOS Simulator. From `client-samples/ios-visionos/StreamKit`:
+
+```bash
+xcodebuild -scheme StreamKit \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+Replace the simulator name with one installed in your Xcode environment. The
+`ios-microphone-tests` workflow runs these tests and builds the unsigned iOS
+and visionOS app targets from a clean checkout with dependency resolution
+enabled. It compiles the actual app and LiveKit backend, not extracted methods.
+The transaction tests substitute physical capture and transport operations to
+check rollback failures, cancellation, disconnect ordering, and disabled audio.
+They do not verify usable remote audio or the operating system's microphone
+indicator; those checks require a physical device and a running server.
+
 ## Coverage boundaries
 
 The suite includes:

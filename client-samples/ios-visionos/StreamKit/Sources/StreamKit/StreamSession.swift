@@ -119,6 +119,9 @@ public final class StreamSession: ObservableObject {
     /// Starts microphone capture and publishes an audio track.
     ///
     /// Throws if the audio device is unavailable. Never drops the connection.
+    /// The `.disabled` preset stops capture instead. If rollback fails, throws
+    /// ``StreamError/microphoneCleanupFailed(startup:cleanup:)``; capture may
+    /// still be running until a subsequent `stopAudio()` succeeds.
     public func startAudio(config: AudioConfig = .default) async throws {
         try await backend.startAudio(config: config)
     }
