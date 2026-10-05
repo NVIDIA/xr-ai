@@ -134,6 +134,8 @@ public final class StreamSession: ObservableObject {
     /// Stops microphone capture.
     /// Throws the first cleanup error after attempting to unpublish every
     /// microphone and release engine input. Capture may still be running on failure.
+    /// Retrying a partial teardown is not guaranteed to succeed. If cleanup keeps
+    /// failing, use `disconnect()` to close the transport and retain unresolved resources.
     public func stopAudio() async throws {
         try await backend.stopAudio()
     }

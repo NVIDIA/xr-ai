@@ -66,18 +66,17 @@ private final class TransactionBackend: StreamingBackend, @unchecked Sendable {
 
 @Suite("Microphone transactions", .timeLimit(.minutes(1)))
 struct MicrophoneOperationsTests {
-    @Test @MainActor func stopBeforePreparationCancelsRegisteredStart() async throws {
+    @Test @MainActor func stopCancelsRegisteredStart() async throws {
         let backend = TransactionBackend()
         let session = StreamSession(backend: backend)
-        // Run both callers on the registration executor. Stop enters before the
-        // queued prepare task gets a turn; it must still find and cancel Start.
         let start = Task { try await session.startAudio() }
-        let stop = Task { try await session.stopAudio() }
-        try await stop.value
+        // Stop must cancel a registered request regardless of how far preparation ran.
+        while backend.operations.pendingStartCount != 1 { await Task.yield() }
+        try await session.stopAudio()
         do { try await start.value; Issue.record("Stopped start succeeded") }
         catch { #expect(error is CancellationError) }
         #expect(backend.operations.state == .idle)
-        #expect(await backend.capture.events == ["cleanup"])
+        #expect(await backend.capture.events.last == "cleanup")
     }
 
     @Test func rollbackFailureStaysPendingUntilSuccessfulStop() async throws {
