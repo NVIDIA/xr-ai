@@ -51,6 +51,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var networkMetricsTask: Task<Void, Never>?
     private var statisticsTracks: [ObjectIdentifier: Track] = [:]
     private var connectionGeneration: UInt64 = 0
+    // Invalidates buffer-track factories suspended across a camera stop.
+    private var cameraGeneration: UInt64 = 0
 
     /// Publication for the device camera track (iOS) or ARKit track (visionOS).
     /// Nil on simulator — all video goes through the buffer track path.
@@ -251,7 +253,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // Capturing before publish is a LiveKit requirement — publish times out otherwise.
         // The frame loop feeds frames directly to the capturer (not through injectVideoFrame)
         // so publish is only ever called once, here, not concurrently from the loop.
-        let simTrack = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+        let generation = cameraGeneration
+        let connection = connectionGeneration
+        let simTrack = await LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+        try Task.checkCancellation()
+        guard self.room === room, room.connectionState == .connected,
+              connectionGeneration == connection else { throw StreamError.notConnected }
+        guard cameraGeneration == generation else { throw CancellationError() }
         bufferTrack = simTrack
         // Seed one frame before publish so LiveKit can resolve stream dimensions.
         // Prefer the first GIF frame so the seed matches the loop content.
@@ -287,6 +295,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     public func stopCamera() async throws {
+        cameraGeneration &+= 1
         #if targetEnvironment(simulator)
         // Stop the synthetic frame generator first so no more frames are injected.
         simulatorFrameTask?.cancel()
@@ -309,13 +318,19 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     public func captureImage(config: CameraConfig) async throws -> CapturedImage {
-        guard room?.connectionState == .connected else { throw StreamError.notConnected }
+        guard let room, room.connectionState == .connected else { throw StreamError.notConnected }
         if let localCameraTrack {
             return try await StillImageCapture.capture(track: localCameraTrack)
         }
 
         #if targetEnvironment(simulator)
-        let track = LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        let generation = cameraGeneration
+        let connection = connectionGeneration
+        let track = await LocalVideoTrack.createBufferTrack(name: "still-capture", source: .camera)
+        try Task.checkCancellation()
+        guard self.room === room, room.connectionState == .connected,
+              connectionGeneration == connection else { throw StreamError.notConnected }
+        guard cameraGeneration == generation else { throw CancellationError() }
         let pending = Task { try await StillImageCapture.capture(track: track) }
         await Task.yield()
         let pts = CMClockGetTime(CMClockGetHostTimeClock())
@@ -370,9 +385,18 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
         if bufferTrack == nil {
-            let t = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
-            bufferTrack = t
-            localCameraTrack = t
+            let generation = cameraGeneration
+            let connection = connectionGeneration
+            let t = await LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+            try Task.checkCancellation()
+            guard self.room === room, room.connectionState == .connected,
+                  connectionGeneration == connection else { throw StreamError.notConnected }
+            guard cameraGeneration == generation else { throw CancellationError() }
+            // Another frame may have installed a track while the factory was suspended.
+            if bufferTrack == nil {
+                bufferTrack = t
+                localCameraTrack = t
+            }
         }
 
         guard let track = bufferTrack,
@@ -620,6 +644,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     private func tearDown() async {
         connectionGeneration &+= 1
+        cameraGeneration &+= 1
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
