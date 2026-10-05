@@ -1,19 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for xr_ai_vllm._nim (self-hosted NIM container backend) and
-the shipped NIM deployment profiles. Pure argv/config coverage — no
-docker daemon or GPU."""
+"""Unit tests for the NIM container backend; no Docker daemon or GPU required."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from xr_ai_models import load_models_config
 from xr_ai_vllm import _docker
 from xr_ai_vllm._nim import build_nim_run_argv, serve_nim
-
-_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestBuildNimRunArgv:
@@ -221,32 +216,3 @@ def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
             http_port=8106,
             nim_cache=tmp_path / "nim",
         )
-
-
-# ── shipped profiles parse through the real loader ─────────────────────────
-
-
-_MS_YAML = _REPO_ROOT / "model-server-samples" / "model-servers" / "yaml"
-
-
-def test_model_servers_nim_profile_parses() -> None:
-    cfg = load_models_config(_MS_YAML / "models.vlm_llm_nim.json")
-    llm = cfg.llm("llm")
-    assert llm.kind == "openai_compat"
-    assert llm.model_name == (
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-    )
-    assert llm.reasoning_field == "reasoning"
-    assert llm.capabilities.get("vision") is True
-    assert llm.capabilities.get("video") is True
-    # The NIM chat template defaults thinking on; without the pin,
-    # non-thinking agent calls can truncate mid-reasoning.
-    assert llm.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
-    vlm = cfg.vlm("vlm")
-    assert vlm.model_name == "nvidia/cosmos3-nano-reasoner"
-    assert vlm.capabilities.get("video") is True
-    # NIM's health route is /v1/health/ready, not /health.
-    assert vlm.health_check is True
-    assert vlm.health_path == "/v1/health/ready"
-    assert cfg.llm("llm").health_path == "/v1/health/ready"
-    assert cfg.stt("stt").kind == "openai_compat"

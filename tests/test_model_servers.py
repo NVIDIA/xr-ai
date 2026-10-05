@@ -7,7 +7,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os.path
-import shlex
 import sys
 from pathlib import Path
 
@@ -50,10 +49,11 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
+@pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, gpu_profile) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
 
-    processes, credentials = _model_servers._build_processes("default")
+    processes, credentials = _model_servers._build_processes()
 
     assert [process.name for process in processes] == [
         "stt", "tts", "omni", "vlm", "embedding",
@@ -73,7 +73,7 @@ def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(_model_servers, "detect_gpu_config", fail_detection)
 
-    processes, _ = _model_servers._build_processes("default", "spark")
+    processes, _ = _model_servers._build_processes(gpu_profile="spark")
 
     expected_dir = _REPO_ROOT / "model-server-samples/model-servers/yaml/spark"
     assert all(Path(process.config).parent == expected_dir for process in processes)
@@ -114,10 +114,6 @@ def test_read_service_port_rejects_invalid_values(
 
 def test_known_ports_are_discovered_from_service_yaml() -> None:
     assert set(_model_servers._known_service_ports()) == {
-        ("stt-nim", 9010),
-        ("tts-nim", 9011),
-        ("llm-nim", 8110),
-        ("vlm-nim", 8100),
         ("stt", 8103),
         ("tts", 8105),
         ("agent-llm", 8107),
@@ -127,120 +123,22 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
     }
 
 
-def test_nim_profile_mixes_nim_containers_and_local_servers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, credentials = _model_servers._build_processes("vlm_llm_nim")
-
-    assert [process.name for process in processes] == [
-        "llm-nim", "vlm-nim", "stt", "tts", "embedding",
-    ]
-    assert [process.port for process in processes] == [8110, 8100, 8103, 8105, 8109]
-    assert credentials == ("NGC_API_KEY",)
-
-
 @pytest.mark.parametrize(
-    "config_path",
-    sorted(
-        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
-            "*/nim_vlm_server.yaml"
-        )
-    ),
-)
-def test_nim_profiles_serve_cosmos3_nano_reasoner(config_path: Path) -> None:
-    config = yaml.safe_load(config_path.read_text())
-
-    assert config["image"] == "nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0"
-    assert config["env"]["NIM_MODEL_SIZE"] == "nano"
-
-
-@pytest.mark.parametrize(
-    "config_path",
-    sorted(
-        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
-            "*/nim_llm_server.yaml"
-        )
-    ),
-)
-def test_nim_profiles_serve_nemotron_omni(config_path: Path) -> None:
-    config = yaml.safe_load(config_path.read_text())
-    env = config["env"]
-    args = shlex.split(env["NIM_PASSTHROUGH_ARGS"])
-    expected_budget = {
-        "spark": "0.35",
-        "96G_blackwell": "0.4",
-        "dual_48G_ada": "0.8",
-    }[config_path.parent.name]
-
-    assert config["image"] == (
-        "nvcr.io/nim/nvidia/"
-        "nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant"
-    )
-    assert "NIM_KVCACHE_PERCENT" not in env
-    memory_index = args.index("--gpu-memory-utilization")
-    assert args[memory_index + 1] == expected_budget
-    assert "--reasoning-parser" in args
-    assert args[args.index("--reasoning-parser") + 1] == "nemotron_v3"
-    assert "--tool-call-parser" in args
-    assert args[args.index("--tool-call-parser") + 1] == "qwen3_coder"
-
-
-def test_custom_profiles_can_still_launch_riva_speech_nims(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    profile = tmp_path / "models.custom_riva.json"
-    profile.write_text(
-        json.dumps(
-            {
-                "models": {
-                    role: {
-                        "adapter": {"kind": "riva_grpc"},
-                        "endpoint": {"base_url": endpoint},
-                        "deployment": {
-                            "ownership": "managed",
-                            "service": service,
-                            "credentials": ["NGC_API_KEY"],
-                        },
-                    }
-                    for role, endpoint, service in (
-                        ("stt", "localhost:50051", "stt-nim"),
-                        ("tts", "localhost:50052", "tts-nim"),
-                    )
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, credentials = _model_servers._build_processes(str(profile))
-
-    assert [process.name for process in processes] == ["stt-nim", "tts-nim"]
-    assert credentials == ("NGC_API_KEY",)
-
-
-@pytest.mark.parametrize(
-    ("selection", "service", "config_name", "gpu"),
+    ("service", "config_name", "gpu"),
     [
-        ("default", "embedding", "embedding_server.yaml", "0"),
-        ("vlm_llm_nim", "embedding", "embedding_server.yaml", "0"),
-        ("vlm_llm_nim", "stt", "stt_server.yaml", "1"),
-        ("vlm_llm_nim", "vlm-nim", "nim_vlm_server.yaml", "0"),
+        ("embedding", "embedding_server.yaml", "0"),
+        ("stt", "stt_server.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(
     monkeypatch: pytest.MonkeyPatch,
-    selection: str,
     service: str,
     config_name: str,
     gpu: str,
 ) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    processes, _ = _model_servers._build_processes(selection)
+    processes, _ = _model_servers._build_processes()
     process = next(p for p in processes if p.name == service)
     config_path = _REPO_ROOT / "model-server-samples/model-servers" / str(process.config)
 
@@ -333,10 +231,6 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     _model_servers._stop_models()
 
     assert set(stopped) == {
-        ("stt-nim", 9010),
-        ("tts-nim", 9011),
-        ("llm-nim", 8110),
-        ("vlm-nim", 8100),
         ("stt", 8103),
         ("tts", 8105),
         ("agent-llm", 8107),
@@ -359,18 +253,8 @@ def test_stop_fails_when_any_service_remains(
         _model_servers._stop_models()
 
 
-@pytest.mark.parametrize(
-    ("selection", "expected_stopped_ports"),
-    [
-        # The selected profile's ports are kept; everything else is stopped.
-        ("default", {9010, 9011, 8110, 8107}),
-        ("vlm_llm_nim", {9010, 9011, 8107, 8108}),
-    ],
-)
 def test_starting_profile_stops_unselected_services(
     monkeypatch: pytest.MonkeyPatch,
-    selection: str,
-    expected_stopped_ports: set[int],
 ) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     stopped: list[tuple[str, int]] = []
@@ -380,25 +264,25 @@ def test_starting_profile_stops_unselected_services(
         lambda services: stopped.extend(services) or True,
     )
 
-    processes, _ = _model_servers._build_processes(selection)
+    processes, _ = _model_servers._build_processes()
     _model_servers._stop_unselected_services(processes)
 
-    assert {port for _, port in stopped} == expected_stopped_ports
+    assert {port for _, port in stopped} == {8107}
 
 
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
-        ([], "default"),
-        (["--models", "vlm_llm_nim"], "vlm_llm_nim"),
+        ([], None),
+        (["--models", "./models.custom.json"], Path("models.custom.json")),
     ],
 )
 def test_cli_selects_requested_profile(
     monkeypatch: pytest.MonkeyPatch,
     argv: list[str],
-    expected: str,
+    expected: Path | None,
 ) -> None:
-    selected: list[str] = []
+    selected: list[Path | None] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
@@ -415,7 +299,7 @@ def test_cli_selects_requested_profile(
 
 
 def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    selected: list[tuple[str, str | None]] = []
+    selected: list[tuple[Path | None, str | None]] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
@@ -433,7 +317,7 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
 
     _model_servers.run()
 
-    assert selected == [("default", "dual_48G_ada")]
+    assert selected == [(None, "dual_48G_ada")]
 
 
 def test_invalid_gpu_profile_name_is_rejected() -> None:
@@ -459,7 +343,7 @@ def test_custom_gpu_profile_must_contain_every_selected_service_config(
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
     with pytest.raises(ValueError, match="profile 'custom' is incomplete.*stt_server"):
-        _model_servers._build_processes(str(profile), "custom")
+        _model_servers._build_processes(profile, "custom")
 
 
 def test_selected_service_config_must_declare_http_port(
@@ -475,7 +359,7 @@ def test_selected_service_config_must_declare_http_port(
         ValueError,
         match=r"stt_server\.yaml: service config must declare port or http_port",
     ):
-        _model_servers._build_processes(str(profile), "custom")
+        _model_servers._build_processes(profile, "custom")
 
 
 def test_cli_reports_gpu_inventory_error_without_traceback(
@@ -498,17 +382,18 @@ def test_cli_reports_gpu_inventory_error_without_traceback(
     assert "Traceback" not in stderr
 
 
-def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("service", ["no-such-service", "llm-nim", "vlm-nim", "stt-nim", "tts-nim"])
+def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch, service) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     profile = tmp_path / "models.custom.json"
     profile.write_text(json.dumps({"models": {"vision": {
         "adapter": {"preset": "cosmos_vlm"},
         "endpoint": {"base_url": "http://localhost:8100"},
-        "deployment": {"ownership": "managed", "service": "no-such-service"},
+        "deployment": {"ownership": "managed", "service": service},
     }}}), encoding="utf-8")
 
     with pytest.raises(ValueError, match="unknown services"):
-        _model_servers._build_processes(str(profile))
+        _model_servers._build_processes(profile)
 
 
 def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> None:
@@ -520,7 +405,7 @@ def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> No
         "deployment": {"ownership": "managed", "service": "vlm"},
     }}}), encoding="utf-8")
 
-    processes, _ = _model_servers._build_processes(str(profile))
+    processes, _ = _model_servers._build_processes(profile)
 
     assert [process.name for process in processes] == ["vlm"]
     # Config variants key off the profile filename stem; a custom name has
@@ -541,14 +426,14 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
-        lambda _selection, _gpu_profile=None: ([], ("NGC_API_KEY",)),
+        lambda _selection, _gpu_profile=None: ([], ("CUSTOM_API_KEY",)),
     )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "custom.json"])
 
     _model_servers.run()
 
-    assert required == ["HF_TOKEN", "NGC_API_KEY"]
+    assert required == ["HF_TOKEN", "CUSTOM_API_KEY"]
 
 
 def test_cli_aborts_when_unselected_services_cannot_stop(
@@ -828,3 +713,25 @@ def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:
     _model_servers.run()
 
     assert calls == ["stop"]
+
+
+@pytest.mark.parametrize(("argv", "message", "code"), [
+    (["--models", "default"], "run model_servers without --models", 2),
+    (["--models", "vlm_llm_nim"], "use the model-servers-nim sample", 2),
+    (["--dry-run"], "unrecognized arguments", 2),
+    (["--unknown"], "unrecognized arguments", 2),
+    (["--help"], "Custom local deployment JSON", 0),
+])
+def test_cli_help_and_invalid_options_do_not_touch_servers(monkeypatch, capsys, argv, message, code):
+    def unexpected(*args, **kwargs):
+        pytest.fail("argument handling must not inspect GPUs, credentials, or servers")
+
+    for name in ("detect_gpu_config", "_build_processes", "require_credentials",
+                 "_stop_unselected_services", "_stop_models", "run_stack"):
+        monkeypatch.setattr(_model_servers, name, unexpected)
+    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
+    with pytest.raises(SystemExit) as error:
+        _model_servers.run()
+    assert error.value.code == code
+    captured = capsys.readouterr()
+    assert message in captured.out + captured.err
