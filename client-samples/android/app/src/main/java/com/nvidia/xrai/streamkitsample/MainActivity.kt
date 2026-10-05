@@ -658,6 +658,7 @@ private fun CameraModeSelectorRow(
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
+                matchTextFieldWidth = false,
             ) {
                 CameraMode.entries.forEach { mode ->
                     DropdownMenuItem(
