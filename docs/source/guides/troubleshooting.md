@@ -507,7 +507,8 @@ after each restart. These events are expected during manual stops and microphone
 recovery; the room connection stays open.
 
 If microphone cleanup fails while connected, the client reports that capture
-may still be running and keeps Stop available. Retry Stop before starting again.
+may still be running, shows “Cleanup required,” and keeps Stop available.
+Retry Stop before starting again.
 If cleanup fails during Disconnect, the connection still closes, but the client
 reports the cleanup failure and retains the old session's cleanup resources.
 Reconnect retries that cleanup before creating another session; if it still

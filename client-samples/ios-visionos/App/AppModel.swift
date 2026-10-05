@@ -153,7 +153,7 @@ final class AppModel {
     var agentResponse: String?
     var isAudioActive = false
     // Keep Stop available if capture teardown could not be verified.
-    private var micCleanupRequired = false
+    private(set) var micCleanupRequired = false
     private var micEnabledByUser = false
     private var micIntentGeneration: UInt64 = 0
     private(set) var isAudioStarting = false
@@ -396,7 +396,7 @@ final class AppModel {
     func startAudio() async {
         guard !isTearingDown, let session, connectionState == .connected else { return }
         guard audioMode != .disabled else { await stopAudio(); return }
-        guard !isAudioStarting, !isAudioActive else { return }
+        guard !isAudioStarting, !isAudioActive, !micCleanupRequired else { return }
         micIntentGeneration &+= 1
         let generation = micIntentGeneration
         isAudioStarting = true
@@ -410,7 +410,6 @@ final class AppModel {
         } catch StreamError.microphoneCleanupFailed {
             guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
             micCleanupRequired = true
-            isAudioActive = true
             lastError = "Microphone cleanup failed; capture may still be running. Try Stop again."
         } catch is CancellationError {
             return
@@ -439,7 +438,6 @@ final class AppModel {
         } catch {
             guard self.session === session, generation == micIntentGeneration, !isTearingDown else { return }
             micCleanupRequired = true
-            isAudioActive = true
             lastError = "Microphone could not stop; capture may still be running. \(error.localizedDescription)"
         }
     }
