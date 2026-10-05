@@ -37,7 +37,7 @@ import LiveKit
 /// // 4. Stop media / disconnect
 /// try await session.stopAudio()
 /// try await session.stopCamera()
-/// await session.disconnect()
+/// try await session.disconnect()
 /// ```
 @MainActor
 public final class StreamSession: ObservableObject {
@@ -106,12 +106,16 @@ public final class StreamSession: ObservableObject {
         try await backend.connect(config: config)
     }
 
-    /// Disconnects and releases all resources.
-    public func disconnect() async {
+    /// Disconnects the transport and attempts to release all resources.
+    /// Throws the first cleanup error after closing the transport; capture may
+    /// still be running. Retry cleanup before treating it as released.
+    public func disconnect() async throws {
         cancelImageCaptures()
-        await backend.disconnect()
-        agentStatus = nil
-        networkMetrics = nil
+        defer {
+            agentStatus = nil
+            networkMetrics = nil
+        }
+        try await backend.disconnect()
     }
 
     // MARK: - Audio
@@ -127,6 +131,8 @@ public final class StreamSession: ObservableObject {
     }
 
     /// Stops microphone capture.
+    /// Throws the first cleanup error after attempting to unpublish every
+    /// microphone and release engine input. Capture may still be running on failure.
     public func stopAudio() async throws {
         try await backend.stopAudio()
     }

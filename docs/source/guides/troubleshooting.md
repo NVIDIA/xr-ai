@@ -506,9 +506,13 @@ publication instead of unmuting the old one. The hub therefore observes
 after each restart. These events are expected during manual stops and microphone
 recovery; the room connection stays open.
 
-If microphone cleanup fails, the client reports that capture may still be
-running and keeps Stop available. Retry Stop before starting again. A successful
-cleanup is required before the client can report the microphone as idle.
+If microphone cleanup fails while connected, the client reports that capture
+may still be running and keeps Stop available. Retry Stop before starting again.
+If cleanup fails during Disconnect, the connection still closes, but the client
+reports the cleanup failure. Reconnect to retry input cleanup before starting
+another session. A failed manual Start clears the enabled intent; select Start
+again to retry. Recovery waits for a connected session and does not consume its
+retry attempts while reconnecting.
 
 Phone calls, Siri, route changes, media-service resets, another capture app, or
 closing an XR space can interrupt audio or camera while the control still shows

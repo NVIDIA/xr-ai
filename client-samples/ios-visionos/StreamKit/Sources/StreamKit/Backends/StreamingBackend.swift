@@ -46,7 +46,7 @@ import Foundation
 ///     func connect(config: SessionConfig) async throws {
 ///         onConnectionStateChanged?(.connected)
 ///     }
-///     func disconnect() async { … }
+///     func disconnect() async throws { … }
 ///     func startAudio(config: AudioConfig) async throws { … }
 ///     func stopAudio() async throws { … }
 ///     func startCamera(config: CameraConfig) async throws { … }
@@ -84,8 +84,9 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// Does **not** start audio or camera capture.
     func connect(config: SessionConfig) async throws
 
-    /// Cleanly disconnect and release all resources.
-    func disconnect() async
+    /// Disconnect the transport even if resource cleanup fails, then throw the
+    /// first cleanup error. A failed disconnect does not verify that capture stopped.
+    func disconnect() async throws
 
     // MARK: - Audio
 

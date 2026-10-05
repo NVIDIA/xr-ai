@@ -12,9 +12,10 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// An operation that requires an active connection was called while disconnected.
     case notConnected
 
-    /// Startup failed and rollback could not verify that capture stopped.
+    /// Pre-start cleanup or rollback could not verify that capture stopped.
+    /// `startup` is nil when cleanup failed before capture was attempted.
     /// Capture may still be running. Retry `stopAudio()` before reporting idle.
-    case microphoneCleanupFailed(startup: any Error, cleanup: any Error)
+    case microphoneCleanupFailed(startup: (any Error)?, cleanup: any Error)
 
     /// Neither a `token` nor a `tokenURL` was provided to the LiveKit backend.
     case missingToken
@@ -52,7 +53,7 @@ public enum StreamError: Error, LocalizedError, Sendable {
         case .invalidHost(let h):         return "'\(h)' is not a valid hostname."
         case .notConnected:               return "Not connected. Call connect() first."
         case .microphoneCleanupFailed(_, let cleanup):
-            return "Microphone cleanup failed; capture may still be running. Try Stop again. \(cleanup.localizedDescription)"
+            return "Microphone cleanup failed; capture may still be running. \(cleanup.localizedDescription)"
         case .missingToken:               return "Provide a token or tokenURL in LiveKitConfig."
         case .tokenFetchFailed(let url):  return "Failed to fetch token from \(url)."
         case .cameraRequiresConnection:   return "Connect before starting the camera."

@@ -24,7 +24,7 @@ actor MicrophoneOperations {
         let task = enqueue { operations in
             // Also remove publications retained or republished by the SDK.
             do { try await operations.clean(cleanup) }
-            catch { throw StreamError.microphoneCleanupFailed(startup: error, cleanup: error) }
+            catch { throw StreamError.microphoneCleanupFailed(startup: nil, cleanup: error) }
             operations.state = .cleanupRequired
             do {
                 try Task.checkCancellation()

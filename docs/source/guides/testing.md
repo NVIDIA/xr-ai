@@ -52,9 +52,20 @@ xcodebuild -scheme StreamKit \
 Replace the simulator name with one installed in your Xcode environment. The
 `ios-microphone-tests` workflow runs these tests and builds the unsigned iOS
 and visionOS app targets from a clean checkout with dependency resolution
-enabled. It compiles the actual app and LiveKit backend, not extracted methods.
+enabled. It compiles the actual app and LiveKit backend.
 The transaction tests substitute physical capture and transport operations to
 check rollback failures, cancellation, disconnect ordering, and disabled audio.
+The `AppModelTests` Xcode scheme compiles the full production AppModel and tests
+microphone requests against a fake transport. Run it from
+`client-samples/ios-visionos`:
+
+```bash
+xcodebuild -project StreamKitSample.xcodeproj -scheme AppModelTests \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+Both test suites run in the Apple client workflow.
 They do not verify usable remote audio or the operating system's microphone
 indicator; those checks require a physical device and a running server.
 

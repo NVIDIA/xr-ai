@@ -55,11 +55,9 @@ private final class TransactionBackend: StreamingBackend, @unchecked Sendable {
     func stopAudio() async throws {
         try await operations.stop { [self] in try await capture.clean() }
     }
-    func disconnect() async {
-        do {
-            try await operations.disconnect { [self] in try await capture.clean() }
-            close: { [self] in await capture.record("disconnect") }
-        } catch { Issue.record("Unexpected cleanup failure: \(error)") }
+    func disconnect() async throws {
+        try await operations.disconnect { [self] in try await capture.clean() }
+        close: { [self] in await capture.record("disconnect") }
     }
     func startCamera(config: CameraConfig) async throws {}
     func stopCamera() async throws {}
@@ -176,7 +174,8 @@ struct MicrophoneOperationsTests {
             try await operations.start(config: .default) { await capture.record("unexpected start") }
             cleanup: { try await capture.clean() }
             Issue.record("Failed cleanup was swallowed")
-        } catch StreamError.microphoneCleanupFailed(_, let cleanup) {
+        } catch StreamError.microphoneCleanupFailed(let startup, let cleanup) {
+            #expect(startup == nil)
             #expect(cleanup as? CaptureFailure == .cleanup)
         }
         #expect(await capture.events == ["cleanup"])
@@ -231,7 +230,7 @@ struct MicrophoneOperationsTests {
         let session = StreamSession(backend: backend)
         let start = Task { try await session.startAudio() }
         await backend.entered.wait()
-        await session.disconnect()
+        try await session.disconnect()
         do { try await start.value; Issue.record("Suspended start was not cancelled") }
         catch { #expect(error is CancellationError) }
         #expect(await backend.operations.state == .idle)
@@ -244,5 +243,18 @@ struct MicrophoneOperationsTests {
         try await session.startAudio(config: .disabled)
         #expect(await backend.operations.state == .idle)
         #expect(await backend.capture.events == ["cleanup"])
+    }
+
+    @Test @MainActor func sessionDisconnectPropagatesCleanupFailureAndCanRetry() async throws {
+        let backend = TransactionBackend()
+        let session = StreamSession(backend: backend)
+        await backend.capture.failCleanup()
+        do { try await session.disconnect(); Issue.record("Cleanup failure was swallowed") }
+        catch { #expect(error as? CaptureFailure == .cleanup) }
+        #expect(await backend.operations.state == .cleanupRequired)
+        #expect(await backend.capture.events == ["cleanup", "disconnect"])
+        await backend.capture.allowCleanup()
+        try await session.disconnect()
+        #expect(await backend.operations.state == .idle)
     }
 }

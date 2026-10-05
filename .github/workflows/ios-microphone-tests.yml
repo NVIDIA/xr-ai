@@ -5,7 +5,7 @@ name: ios-microphone-tests
 
 on:
   push:
-    branches: [main, release/v0.3.0-beta-rc1]
+    branches: [main, 'release/**']
     paths:
       - 'client-samples/ios-visionos/**'
       - '.github/workflows/ios-microphone-tests.yml'
@@ -35,6 +35,14 @@ jobs:
           -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
           -derivedDataPath "$RUNNER_TEMP/streamkit-tests"
           -resultBundlePath "$RUNNER_TEMP/streamkit-tests.xcresult"
+          CODE_SIGNING_ALLOWED=NO test
+      - name: Test AppModel microphone requests on iOS Simulator
+        working-directory: client-samples/ios-visionos
+        run: >-
+          xcodebuild -project StreamKitSample.xcodeproj -scheme AppModelTests
+          -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+          -derivedDataPath "$RUNNER_TEMP/appmodel-tests"
+          -resultBundlePath "$RUNNER_TEMP/appmodel-tests.xcresult"
           CODE_SIGNING_ALLOWED=NO test
       - name: Build the unsigned iOS app
         working-directory: client-samples/ios-visionos

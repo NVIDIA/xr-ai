@@ -16,6 +16,66 @@
 		AA000100000000000000DD07 /* CloudXRKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA000100000000000002CC04 /* CloudXRKit */; };
 /* End PBXBuildFile section */
 
+		AB000100000000000000DD01 /* AppModel.swift in test Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC02; };
+		AB000100000000000000DD02 /* AppModelMicrophoneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000100000000000000CC01; };
+		AB000100000000000000DD03 /* StreamKit in test Frameworks */ = {isa = PBXBuildFile; productRef = AA000100000000000002CC02; };
+		AB000100000000000000CC01 /* AppModelMicrophoneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppModelMicrophoneTests.swift; sourceTree = SOURCE_ROOT; };
+		AB000100000000000000CC02 /* AppModelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = AppModelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB000100000000000000EE01 /* Test Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (AB000100000000000000DD01, AB000100000000000000DD02);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB000100000000000000EE02 /* Test Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (AB000100000000000000DD03);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB000100000000000000FF01 /* AppModelTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB000100000000000001BB03;
+			buildPhases = (AB000100000000000000EE01, AB000100000000000000EE02);
+			buildRules = ();
+			dependencies = ();
+			name = AppModelTests;
+			packageProductDependencies = (AA000100000000000002CC02);
+			productName = AppModelTests;
+			productReference = AB000100000000000000CC02;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AB000100000000000001BB01 /* Test Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.nvidia.xr-ai-example.AppModelTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AB000100000000000001BB02 /* Test Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.nvidia.xr-ai-example.AppModelTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AB000100000000000001BB03 /* AppModelTests configurations */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (AB000100000000000001BB01, AB000100000000000001BB02);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+
 /* Begin PBXFileReference section */
 		AA000100000000000000CC01 /* StreamKitSampleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKitSampleApp.swift; sourceTree = "<group>"; };
 		AA000100000000000000CC02 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -46,6 +106,7 @@
 				AA000100000000000000BB02 /* App */,
 				AA000100000000000000BB04 /* Packages */,
 				AA000100000000000000BB03 /* Products */,
+				AB000100000000000000CC01 /* AppModelMicrophoneTests.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -67,6 +128,7 @@
 			isa = PBXGroup;
 			children = (
 				AA000100000000000000CC05 /* StreamKitSample.app */,
+				AB000100000000000000CC02 /* AppModelTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -136,6 +198,7 @@
 			projectRoot = "";
 			targets = (
 				AA000100000000000000FF01 /* StreamKitSample */,
+				AB000100000000000000FF01 /* AppModelTests */,
 			);
 		};
 /* End PBXProject section */
