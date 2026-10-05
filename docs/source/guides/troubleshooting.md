@@ -500,6 +500,22 @@ recording mode before publishing to make that first buffer available. Stopping
 the microphone then disables prepared input while leaving output active, so the
 orange microphone indicator clears without silencing agent audio.
 
+Stopping the microphone unpublishes its audio track; starting it creates a new
+publication instead of unmuting the old one. The hub therefore observes
+`track_unsubscribed` and `track_subscribed` events, and a new audio `track_id`
+after each restart. These events are expected during manual stops and microphone
+recovery; the room connection stays open.
+
+If microphone cleanup fails while connected, the client reports that capture
+may still be running, shows “Cleanup required,” and keeps Stop available.
+Retry Stop before starting again. If Stop keeps failing, use Disconnect to close
+the transport. Retrying a partial teardown does not guarantee recovery.
+If cleanup fails during Disconnect, the connection still closes, but the client
+reports the cleanup failure and retains the old session's cleanup resources.
+Reconnect retries that cleanup before creating another session; if it still
+fails, the client stays disconnected. A failed manual Start retains the user's
+microphone intent, so later interruption recovery can retry capture.
+
 Phone calls, Siri, route changes, media-service resets, another capture app, or
 closing an XR space can interrupt audio or camera while the control still shows
 the user's requested state. The client re-arms capture when the OS allows it.
