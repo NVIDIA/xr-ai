@@ -10,10 +10,8 @@ launcher's process group and survives stack restarts.  The vLLM process
 is visible to ss(8) on the host via --network host, so cleanup uses the
 same pid_on_port → SIGTERM path as pip mode.
 
-NGC auth: if the image is from `nvcr.io/` and `NGC_API_KEY` is in the
-environment, this module runs `docker login nvcr.io` once per process so the
-pull can proceed. Existing `~/.docker/config.json` entries take priority and
-are not overwritten.
+NGC auth: for `nvcr.io/` images with `NGC_API_KEY` in the environment, this
+module logs in when Docker's active config lacks nvcr.io credentials.
 """
 from __future__ import annotations
 
@@ -37,7 +35,7 @@ from . import _diagnostics, _lifecycle
 log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
-_LOGIN_DONE: set[str] = set()
+_LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
 _LAUNCH_CONTRACT_VERSION = 2
 _HF_DOWNLOAD_ENV_KEYS = (
@@ -473,10 +471,15 @@ def _registry_for(image: str) -> str | None:
     return head if "." in head or ":" in head else None
 
 
+def _docker_config_path() -> Path:
+    config_dir = os.environ.get("DOCKER_CONFIG")
+    return Path(config_dir) / "config.json" if config_dir else _DOCKER_CONFIG
+
+
 def _already_logged_in(registry: str) -> bool:
-    """Best-effort: True if ~/.docker/config.json already has credentials for *registry*."""
+    """Best-effort: True if Docker's active config has credentials for *registry*."""
     try:
-        data = json.loads(_DOCKER_CONFIG.read_text())
+        data = json.loads(_docker_config_path().read_text())
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return False
     return registry in data.get("auths", {})
@@ -491,8 +494,9 @@ def _maybe_ngc_login(image: str) -> None:
     registry = _registry_for(image)
     if registry != "nvcr.io":
         return
-    if registry in _LOGIN_DONE or _already_logged_in(registry):
-        _LOGIN_DONE.add(registry)
+    login_key = (_docker_config_path(), registry)
+    if login_key in _LOGIN_DONE or _already_logged_in(registry):
+        _LOGIN_DONE.add(login_key)
         return
     token = os.environ.get("NGC_API_KEY", "").strip()
     if not token:
@@ -514,7 +518,7 @@ def _maybe_ngc_login(image: str) -> None:
         )
         return
     if result.returncode == 0:
-        _LOGIN_DONE.add(registry)
+        _LOGIN_DONE.add(login_key)
         log.debug("docker login %s succeeded via NGC_API_KEY", registry)
     else:
         log.warning(

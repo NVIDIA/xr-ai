@@ -64,6 +64,10 @@ class TestRegistryFor:
 
 
 class TestAlreadyLoggedIn:
+    @pytest.fixture(autouse=True)
+    def default_docker_config(self, monkeypatch):
+        monkeypatch.delenv("DOCKER_CONFIG", raising=False)
+
     def test_no_docker_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", tmp_path / "config.json")
         assert not _already_logged_in("nvcr.io")
@@ -85,6 +89,51 @@ class TestAlreadyLoggedIn:
         cfg.write_text("not json{{{")
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert not _already_logged_in("nvcr.io")
+
+    def test_isolated_config_logs_in_despite_global_auth(self, tmp_path, monkeypatch):
+        global_config = tmp_path / "global" / "config.json"
+        global_config.parent.mkdir()
+        global_config.write_text(json.dumps({"auths": {"nvcr.io": {}}}))
+        monkeypatch.setattr(_docker, "_DOCKER_CONFIG", global_config)
+        isolated_config = tmp_path / "isolated"
+        isolated_config.mkdir()
+        monkeypatch.setenv("DOCKER_CONFIG", str(isolated_config))
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+
+        with patch("xr_ai_vllm._docker.subprocess.run") as login:
+            login.return_value.returncode = 0
+            _docker._maybe_ngc_login("nvcr.io/nim/meta/llama-3.1-8b-instruct:2.0.10")
+
+        login.assert_called_once_with(
+            ["docker", "login", "nvcr.io", "-u", "$oauthtoken", "--password-stdin"],
+            input=b"nvapi-test",
+            stdout=_docker.subprocess.DEVNULL,
+            stderr=_docker.subprocess.PIPE,
+            check=False,
+        )
+
+    def test_login_cache_is_scoped_to_docker_config(self, tmp_path, monkeypatch):
+        config_a = tmp_path / "config-a"
+        config_b = tmp_path / "config-b"
+        config_a.mkdir()
+        config_b.mkdir()
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+        image = "nvcr.io/nim/meta/llama-3.1-8b-instruct:2.0.10"
+
+        with patch("xr_ai_vllm._docker.subprocess.run") as login:
+            login.return_value.returncode = 0
+            monkeypatch.setenv("DOCKER_CONFIG", str(config_a))
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 1
+
+            monkeypatch.setenv("DOCKER_CONFIG", str(config_b))
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 2
+
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 2
 
 
 class TestBuildRunArgv:
