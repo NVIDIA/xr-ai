@@ -231,10 +231,6 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private func stopMicrophone(in room: Room?) async throws {
         let publications = room?.localParticipant.localAudioTracks.filter { $0.source == .microphone } ?? []
         try await microphoneCleanup.stop(publications: publications) { publication in
-            // The SDK's full-reconnect republisher skips muted tracks. Muting is
-            // best effort; unpublish and engine release must still run if it fails.
-            try await (publication.track as? LocalAudioTrack)?.mute()
-        } unpublish: { publication in
             // The retained closure owns the room as well as the publication, so
             // cleanup can retry after disconnect has cleared self.room.
             try await room?.localParticipant.unpublish(publication: publication)

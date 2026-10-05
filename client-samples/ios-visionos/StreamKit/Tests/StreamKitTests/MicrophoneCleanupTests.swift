@@ -9,7 +9,7 @@ private final class Publication: Sendable {
     init(_ id: Int) { self.id = id }
 }
 
-private enum CleanupFailure: Error { case mute, firstPublication, secondPublication, prepared, input }
+private enum CleanupFailure: Error { case firstPublication, secondPublication, prepared, input }
 private actor CleanupEvents {
     var values: [String] = []
     func record(_ value: String) { values.append(value) }
@@ -22,8 +22,7 @@ struct MicrophoneCleanupTests {
         let operations = MicrophoneOperations()
         let owner = PublicationOwner()
         let stop: @Sendable () async throws -> Void = {
-            try await cleanup.stop(publications: await owner.publications) { _ in }
-            unpublish: { try await owner.unpublish($0) }
+            try await cleanup.stop(publications: await owner.publications) { try await owner.unpublish($0) }
             release: { await owner.recordRelease() }
         }
         do {
@@ -59,8 +58,6 @@ struct MicrophoneCleanupTests {
         let events = CleanupEvents()
         do {
             try await MicrophoneCleanup().stop(publications: [Publication(1), Publication(2)]) { id in
-                await events.record("mute \(id.id)")
-            } unpublish: { id in
                 await events.record("unpublish \(id.id)")
                 throw id.id == 1 ? CleanupFailure.firstPublication : CleanupFailure.secondPublication
             } release: {
@@ -69,28 +66,18 @@ struct MicrophoneCleanupTests {
             }
             Issue.record("Cleanup failure was swallowed")
         } catch { #expect(error as? CleanupFailure == .firstPublication) }
-        #expect(await events.values == ["mute 1", "unpublish 1", "mute 2", "unpublish 2", "release"])
+        #expect(await events.values == ["unpublish 1", "unpublish 2", "release"])
     }
 
     @Test func successfulUnpublishPropagatesReleaseFailure() async throws {
         let events = CleanupEvents()
         do {
-            try await MicrophoneCleanup().stop(publications: [Publication(1)]) { _ in }
-            unpublish: { _ in await events.record("unpublish") }
-            release: { await events.record("release"); throw CleanupFailure.input }
+            try await MicrophoneCleanup().stop(publications: [Publication(1)]) { _ in
+                await events.record("unpublish")
+            } release: { await events.record("release"); throw CleanupFailure.input }
             Issue.record("Release failure was swallowed")
         } catch { #expect(error as? CleanupFailure == .input) }
         #expect(await events.values == ["unpublish", "release"])
-    }
-
-    @Test func muteFailureDoesNotPreventSuccessfulCleanup() async throws {
-        let events = CleanupEvents()
-        try await MicrophoneCleanup().stop(publications: [Publication(1)]) { _ in
-            await events.record("mute")
-            throw CleanupFailure.mute
-        } unpublish: { _ in await events.record("unpublish") }
-        release: { await events.record("release") }
-        #expect(await events.values == ["mute", "unpublish", "release"])
     }
 
     @Test func preparedFailureStillReleasesInputAndWinsOverLaterError() async throws {
@@ -110,8 +97,7 @@ struct MicrophoneCleanupTests {
 
     @Test func noPublicationsStillReleasesEngine() async throws {
         let events = CleanupEvents()
-        try await MicrophoneCleanup().stop(publications: [Publication]()) { _ in Issue.record("Unexpected mute") }
-        unpublish: { _ in Issue.record("Unexpected unpublish") }
+        try await MicrophoneCleanup().stop(publications: [Publication]()) { _ in Issue.record("Unexpected unpublish") }
         release: { await events.record("release") }
         #expect(await events.values == ["release"])
     }

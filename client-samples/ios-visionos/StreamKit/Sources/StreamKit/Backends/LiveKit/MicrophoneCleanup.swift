@@ -11,7 +11,6 @@ final class MicrophoneCleanup {
     /// their publications from its registry before throwing.
     func stop<Publication: AnyObject & Sendable>(
         publications: [Publication],
-        mute: @escaping @Sendable (Publication) async throws -> Void,
         unpublish: @escaping @Sendable (Publication) async throws -> Void,
         release: @Sendable () async throws -> Void
     ) async throws {
@@ -19,7 +18,6 @@ final class MicrophoneCleanup {
             let id = ObjectIdentifier(publication)
             guard !pending.contains(where: { $0.id == id }) else { continue }
             pending.append((id, {
-                try? await mute(publication)
                 try await unpublish(publication)
             }))
         }
