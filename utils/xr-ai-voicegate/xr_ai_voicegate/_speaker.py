@@ -16,6 +16,7 @@ from ._conversation import _ConversationConfig
 class _SpeakerConfig(_ConversationConfig):
     base_url: str = "http://127.0.0.1:8102"
     backend: str = "auto"
+    diagnostics: bool = False
     timeout_s: float = 10.0
     activity_threshold: float = 0.7
     silence_duration: float = 0.6
@@ -51,6 +52,8 @@ class _SpeakerConfig(_ConversationConfig):
             raise ValueError("speaker.base_url must be an HTTP origin")
         if cfg.backend not in ("auto", "required"):
             raise ValueError("speaker.backend must be auto or required")
+        if not isinstance(cfg.diagnostics, bool):
+            raise ValueError("speaker.diagnostics must be a boolean")
         for name in ("activity_threshold", "silence_duration", "max_utterance_s", "timeout_s"):
             value = getattr(cfg, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:

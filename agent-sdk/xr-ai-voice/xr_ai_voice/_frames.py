@@ -33,6 +33,17 @@ class _SpeakerEnrollmentFrame(DataFrame):
 
 
 @dataclass
+class _SpeakerDiagnosticFrame(DataFrame):
+    """Display-only speaker activity or ignored text; never an agent query."""
+
+    participant_id: str
+    speaker_id: int
+    status: str
+    text: str
+    pts_us: int
+
+
+@dataclass
 class _UnrecognizedSpeechFrame(DataFrame):
     """A final utterance produced no transcript; discard pending controls."""
 
@@ -75,6 +86,13 @@ class GatedQueryFrame(DataFrame):
     text: str
     fresh_match: bool
     pts_us: int
+
+
+@dataclass(kw_only=True)
+class _SpeakerGatedQueryFrame(GatedQueryFrame):
+    """Keep the speaker label attached through asynchronous query delivery."""
+
+    speaker_id: int
 
 
 @dataclass

@@ -22,14 +22,17 @@ from pipecat.frames.frames import (
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from xr_ai_hub import DataMessage
 
 from .._frames import (
     AssistantResponseEndFrame,
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    _SpeakerDiagnosticFrame,
+    _SpeakerGatedQueryFrame,
 )
-from .._types import VoiceInputSink, VoiceQuery, VoiceResponse
+from .._types import VoiceInputSink, VoiceQuery, VoiceResponse, _SpeakerVoiceQuery
 
 if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
@@ -130,6 +133,19 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._spawn_query(frame)
             return
 
+        if isinstance(frame, _SpeakerDiagnosticFrame):
+            if self._transport is not None:
+                label = f"Speaker {frame.speaker_id} [{frame.status}]"
+                text = f"{label}: {frame.text}" if frame.text else f"{label} detected"
+                try:
+                    await self._transport.send_return_data(DataMessage(
+                        topic="voice.speaker-diagnostic", participant_id=frame.participant_id,
+                        pts_us=frame.pts_us, data=text.encode("utf-8"),
+                    ))
+                except Exception:
+                    logger.exception("send speaker diagnostic failed pid={!r}", frame.participant_id)
+            return
+
         if isinstance(frame, ParticipantJoinedFrame):
             logger.info("voice participant joined pid={!r}", frame.participant_id)
             if self._transport is not None:
@@ -179,12 +195,15 @@ class _VoiceIOProcessor(FrameProcessor):
         try:
             if interrupted_response is not None:
                 await asyncio.gather(interrupted_response, return_exceptions=True)
+            query_type = _SpeakerVoiceQuery if isinstance(frame, _SpeakerGatedQueryFrame) else VoiceQuery
+            speaker = {"speaker_id": frame.speaker_id} if isinstance(frame, _SpeakerGatedQueryFrame) else {}
             await self._input_sink(
-                VoiceQuery(
+                query_type(
                     participant_id=pid,
                     text=frame.text,
                     timestamp_us=frame.pts_us,
                     interrupted_output=interrupted_response is not None,
+                    **speaker,
                 )
             )
         except asyncio.CancelledError:

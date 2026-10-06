@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""NeMo speaker-conditioned ASR for one enrolled speaker."""
+"""NeMo speaker-conditioned ASR with optional display-only diagnostic streams."""
 
 from __future__ import annotations
 
@@ -146,13 +146,15 @@ class _Session:
         self._candidate_streams: dict[int, _DecodedStream] = {}
         self._candidate_completed: list[tuple[int, _CompletedStream]] = []
         self._truncated_episodes: dict[int, float] = {}
+        self._diagnostic_streams: dict[int, _DecodedStream] = {}
+        self._diagnostic_active: dict[int, str] = {}
         self._reset_asr()
 
     def _new_asr(self) -> _AsrState:
         return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
 
     def _reset_asr(self) -> None:
-        self._asr = self._new_asr() if self.selection.owner is not None else None
+        self._asr = self._new_asr() if self.selection.owner is not None and not self.selection.cfg.diagnostics else None
         self.last_partial = ""
 
     def _decode_streams(
@@ -274,6 +276,36 @@ class _Session:
             text = text.text
         return text or ""
 
+    def _diagnostic_events(
+        self, active: set[int], completed: list[tuple[int, _DecodedStream | _CompletedStream]],
+        owner_before: int | None, pts_us: int,
+    ) -> list[dict]:
+        owner = self.selection.owner
+        statuses = {
+            speaker: "enrolled" if speaker == owner else "ignored" if owner is not None else "waiting for enrollment"
+            for speaker in active
+        }
+        events = [
+            {"kind": "diagnostic", "speaker_id": speaker, "status": status, "pts_us": pts_us, "text": ""}
+            for speaker, status in sorted(statuses.items())
+            if self._diagnostic_active.get(speaker) != status
+        ]
+        # Enrollment completes in a silence tail; display the selected identity
+        # even if the new owner is no longer acoustically active.
+        if owner is not None and owner != owner_before and owner not in active:
+            events.append({"kind": "diagnostic", "speaker_id": owner, "status": "enrolled",
+                           "pts_us": pts_us, "text": ""})
+        self._diagnostic_active = statuses
+        for speaker, stream in completed:
+            if speaker in {owner_before, owner} or not stream.text.strip():
+                continue
+            status = "ignored" if owner is not None else "ignored; waiting for enrollment"
+            if stream.duration >= self.selection.cfg.max_utterance_s:
+                status += "; truncated"
+            events.append({"kind": "diagnostic", "speaker_id": speaker, "status": status,
+                           "pts_us": stream.pts_us, "text": stream.text.strip()})
+        return events
+
     def _feed(self, audio: bytes) -> list[dict]:
         import torch
 
@@ -317,6 +349,8 @@ class _Session:
                 )
                 if self.selection.owner is None:
                     events.extend(self._candidate_step(features, lengths, preds, drop, active, chunk_pts))
+                    if self.selection.cfg.diagnostics:
+                        events.extend(self._diagnostic_events(active, self._candidate_completed, None, chunk_pts))
                     self.step += 1
                     continue
                 selected, edges, started = self.selection._activity(
@@ -325,19 +359,26 @@ class _Session:
                     chunk_pts,
                 )
                 events.extend(edges)
-                if started or self._asr is None:
+                if started or (not self.selection.cfg.diagnostics and self._asr is None):
                     self._reset_asr()
-                if selected is not None:
-                    encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
-                    self.selection.text = self._decode(
-                        encoded,
-                        encoded_lengths,
-                        preds,
-                        selected,
-                        drop,
-                        self._asr,
-                        self.selection._finished,
+                    if self.selection.cfg.diagnostics and selected is not None:
+                        # A new owner utterance starts fresh decoder history.
+                        self._diagnostic_streams.pop(selected, None)
+                owner_before = self.selection.owner
+                completed = []
+                if self.selection.cfg.diagnostics:
+                    texts, completed = self._decode_streams(
+                        features, lengths, preds, drop, active, chunk_pts, self._diagnostic_streams,
+                        required={selected} if selected is not None else set(),
                     )
+                    if selected is not None:
+                        self.selection.text = texts.get(selected, "")
+                if selected is not None:
+                    if not self.selection.cfg.diagnostics:
+                        encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+                        self.selection.text = self._decode(
+                            encoded, encoded_lengths, preds, selected, drop, self._asr, self.selection._finished,
+                        )
                     text = self.selection.text
                     if self.selection.owner is not None and text and text != self.last_partial:
                         events.append({"kind": "partial", "text": text})
@@ -350,5 +391,10 @@ class _Session:
                     truncated = self.selection.duration >= self.selection.cfg.max_utterance_s
                     events.extend(self.selection._finish(text, allow_control=not truncated))
                     self._reset_asr()
+                if self.selection.cfg.diagnostics:
+                    events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))
+                    if self.selection.owner is None:
+                        # Display-only history cannot seed the next enrollment.
+                        self._diagnostic_streams.clear()
                 self.step += 1
         return events

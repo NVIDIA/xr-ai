@@ -260,6 +260,18 @@ phrase, including during overlapping speech. If multiple speakers complete the
 phrase in the same accepted audio step, neither is selected. Once enrolled,
 another voice's later start phrase cannot take over the connection.
 
+
+Optional `speaker.diagnostics: true` displays candidate transcripts before
+enrollment and additionally transcribes non-owner voices after enrollment. It
+and returns activity and ignored text on `voice.speaker-diagnostic` through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. Before enrollment, display reuses the
+required candidate decoding without additional caches or decoding. After
+enrollment, diagnostics share model weights and encoded features but add decoding
+work and separate temporary ASR caches for non-owner speakers. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.
+
 Start the inference process separately from the repository root:
 
 ```bash

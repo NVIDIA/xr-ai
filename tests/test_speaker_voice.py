@@ -319,6 +319,7 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     expected = "look around" if require_wake else "hey agent look around"
     assert len(queries) == 1 and queries[0].text == expected
     assert queries[0].pts_us == 123
+    assert queries[0].speaker_id == 7
     await gate.process_frame(_SpeakerEnrollmentFrame("a", "released"), FrameDirection.DOWNSTREAM)
     gate.push_frame.reset_mock()
     await speech("a", "hey agent look around")
@@ -326,6 +327,8 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     typed = TranscriptionFrame(text="hey agent typed query", user_id="a", timestamp="now")
     await gate.process_frame(typed, FrameDirection.DOWNSTREAM)
     assert any(isinstance(c.args[0], GatedQueryFrame) for c in gate.push_frame.call_args_list)
+    assert gate._feeding_speaker_id is None
+    assert not hasattr(gate.push_frame.call_args.args[0], "speaker_id")
 
 
 @pytest.mark.asyncio
@@ -689,3 +692,63 @@ def test_conversation_can_use_ordinary_stt_or_preserve_legacy_wake_mode(tmp_path
     cfg = _config(tmp_path, conversation=False)
     assert cfg._conversation is None and cfg._speaker is None
     assert cfg.magic_phrases == ("hey agent",)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("diagnostics", [False, True])
+@pytest.mark.parametrize("send_fails", [False, True])
+async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries(tmp_path, diagnostics, send_fails):
+    cfg = _SpeakerConfig(diagnostics=diagnostics)
+    partial, final, accepted = AsyncMock(), AsyncMock(), AsyncMock()
+    sender = AsyncMock(side_effect=RuntimeError("display unavailable") if send_fails else None)
+    processor = _SpeakerSttProcessor(cfg=cfg, on_partial_transcript=partial, on_final_transcript=final)
+    gate = VoiceGateProcessor(cfg=_voice_cfg(tmp_path, diagnostics=diagnostics), tts=SimpleNamespace())
+    output = _VoiceIOProcessor(accepted, transport=SimpleNamespace(send_return_data=sender))
+    output.push_frame = AsyncMock()
+
+    async def to_gate(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    async def to_output(frame, *_args):
+        await output.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+    gate.push_frame = to_output
+    try:
+        for enrolled in (False, True):
+            if enrolled:
+                await processor._event("wearer", {"kind": "enrolled"})
+                output.push_frame.reset_mock()
+            for text in ("", cfg.stop_phrase):
+                await processor._event("wearer", {
+                    "kind": "diagnostic", "speaker_id": 1, "status": "ignored", "pts_us": 42, "text": text,
+                })
+        assert sender.await_count == (4 if diagnostics else 0)
+        if diagnostics:
+            messages = [call.args[0] for call in sender.await_args_list]
+            assert all(m.topic == "voice.speaker-diagnostic" and m.participant_id == "wearer" and m.pts_us == 42
+                       for m in messages)
+            assert messages[0].data.decode() == "Speaker 1 [ignored] detected"
+            assert messages[1].data.decode() == f"Speaker 1 [ignored]: {cfg.stop_phrase}"
+        accepted.assert_not_awaited()
+        partial.assert_not_awaited()
+        final.assert_not_awaited()
+        output.push_frame.assert_not_awaited()
+        assert not processor._interrupted and "wearer" in processor._enrolled
+        await processor._event("wearer", {
+            "kind": "transcript", "speaker_id": 0, "text": "look around", "pts_us": 123,
+        })
+        await asyncio.gather(*output._input_tasks)
+        query = accepted.call_args.args[0]
+        assert query.speaker_id == 0 and query.text == "look around" and query.timestamp_us == 123
+        assert gate._feeding_speaker_id is None
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+        await output.cleanup()
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_diagnostic_setting_requires_boolean(value):
+    with pytest.raises(ValueError, match="diagnostics"):
+        _SpeakerConfig._from_yaml({"enabled": True, "diagnostics": value})

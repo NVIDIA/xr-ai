@@ -15,13 +15,14 @@ from threading import Lock
 import nemo_relay
 from loguru import logger
 from PIL import Image
+from xr_ai_hub import DataMessage, ProcessorEndpoint
 from xr_ai_logging import setup_logging
 from xr_ai_models import VLMService, load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import StreamingImageQueryTool
-from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
+from xr_ai_voice import HubVoiceTransport, UserQuery, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agent import (
@@ -35,6 +36,28 @@ from .config import WorkerConfig
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4
 _VLM_WARMUP_TIMEOUT_S = 120.0
+
+
+class _QueryEchoAgent(Agent):
+    """Return accepted input using the existing participant-routed data channel."""
+
+    def __init__(self, endpoint: ProcessorEndpoint) -> None:
+        super().__init__()
+        self._endpoint = endpoint
+
+    @subscribe(USER_QUERY_TOPIC)
+    async def _echo(self, query: UserQuery, ctx: RuntimeContext) -> None:
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            raise ValueError("query echo requires a participant")
+        speaker = f"Speaker {query._speaker_id}" if query._speaker_id is not None else "User"
+        try:
+            await self._endpoint.send_return_data(DataMessage(
+                participant_id=participant_id, topic=USER_QUERY_TOPIC.name,
+                pts_us=query.timestamp_us, data=f"{speaker}: {query.text}".encode("utf-8"),
+            ))
+        except Exception:
+            logger.exception("query text echo failed pid={!r}", participant_id)
 
 
 def _vlm_warmup_jpeg() -> bytes:
@@ -146,6 +169,7 @@ async def run_app(
     )
 
     runtime = AgentRuntime()
+    runtime.register("query-echo", _QueryEchoAgent(transport.endpoint))
     images = ImageRegistry()
     frames = CurrentFrameTool(
         endpoint=transport.endpoint,
