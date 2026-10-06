@@ -7,23 +7,41 @@
 
 Standalone launcher for the persistent local Clef SystemOne decision service.
 Refer to the
-[Clef-Flash guide](../../docs/source/reference/clef-flash.md) for request
+[Clef-Flash guide](https://nvidia.github.io/xr-ai/latest/reference/clef-flash.html) for request
 behavior and deployment details.
 
-Run these commands from `model-server-samples/clef-flash/`:
+## Configure
+
+`yaml/clef_server.yaml` selects the pinned model revision, cache directory,
+GPU device, context limit, and HTTP port. For example, raise the context limit
+after checking available GPU memory:
+
+```yaml
+max_length: 8192
+```
+
+Set `model_path` only when you have an extracted copy of the pinned snapshot.
+Refer to the generated
+[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
+for the remaining checked-in fields and comments.
+
+## Run
+
+Run all commands from `model-server-samples/clef-flash/`:
 
 ```bash
-uv --config-file ../../uv.toml sync
-uv --config-file ../../uv.toml run clef_flash_model
+uv sync
+uv run clef_flash_model
+```
+
+Alternatively, run the source file directly after synchronization:
+
+```bash
+uv run main.py
 ```
 
 Stop only this model server with:
 
 ```bash
-uv --config-file ../../uv.toml run clef_flash_model --stop
+uv run clef_flash_model --stop
 ```
-
-`yaml/clef_server.yaml` selects the pinned model revision, cache directory,
-GPU device, context limit, and HTTP port. To raise the context limit after
-checking available GPU memory, edit `max_length` in that file. Set `model_path`
-there only when you have an extracted copy of the pinned snapshot.
