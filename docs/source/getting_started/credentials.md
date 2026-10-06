@@ -8,12 +8,23 @@
 The launcher manages HuggingFace and NGC API tokens so they are never stored
 in source files or YAML configurations.
 
-DeviceIOHub also requires a LiveKit API key and secret. Set `api_key` and
-`api_secret` in `device_io_hub.yaml`, or supply `LIVEKIT_API_KEY` and
-`LIVEKIT_API_SECRET` in the environment. Environment values override the YAML
-fields, which lets deployed stacks inject credentials without rewriting the
-configuration file. Both values are required; the hub fails at startup when
-either is missing or blank instead of silently using development credentials.
+## LiveKit credentials
+
+DeviceIOHub generates a random LiveKit API key and secret at startup when neither
+environment credential is set and both YAML values are missing or blank.
+Shipped hub YAML files leave both fields blank,
+so samples run without credential setup or a LiveKit account. The generated
+pair configures the local LiveKit server and token endpoint and changes on
+each restart. Clients use the connection token supplied by DeviceIOHub.
+
+For a fixed pair, set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the launch
+environment, or supply `api_key` and `api_secret` in a private
+`device_io_hub.yaml`. If either environment variable is set, both must contain
+non-blank values; the environment pair replaces the YAML pair together. Partial
+pairs fail at startup, and blank environment values do not trigger credential
+generation. Never commit credentials.
+
+## Model credentials
 
 Tokens are cached in `~/.config/xr-ai/credentials.json` — outside any
 project directory. Values already in `os.environ`

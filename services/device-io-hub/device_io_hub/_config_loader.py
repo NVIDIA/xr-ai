@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import os
+import secrets
 from pathlib import Path
 
 import yaml
@@ -41,15 +42,18 @@ def _resolve_path(value: str, base: Path) -> str:
 
 
 def _apply_env_credentials(data: dict) -> None:
-    if LIVEKIT_API_KEY_ENV in os.environ:
-        data["api_key"] = os.environ[LIVEKIT_API_KEY_ENV]
-    if LIVEKIT_API_SECRET_ENV in os.environ:
-        data["api_secret"] = os.environ[LIVEKIT_API_SECRET_ENV]
+    if LIVEKIT_API_KEY_ENV in os.environ or LIVEKIT_API_SECRET_ENV in os.environ:
+        data["api_key"] = os.environ.get(LIVEKIT_API_KEY_ENV, "").strip()
+        data["api_secret"] = os.environ.get(LIVEKIT_API_SECRET_ENV, "").strip()
+        return
     data.setdefault("api_key", "")
     data.setdefault("api_secret", "")
     for key in ("api_key", "api_secret"):
         if isinstance(data[key], str):
             data[key] = data[key].strip()
+    if data["api_key"] == "" and data["api_secret"] == "":
+        data["api_key"] = "xr-ai-" + secrets.token_hex(16)
+        data["api_secret"] = "xr-ai-" + secrets.token_hex(32)
 
 
 def load_config() -> LiveKitConnectorConfig:
@@ -57,8 +61,11 @@ def load_config() -> LiveKitConnectorConfig:
     Parse --config from argv, load the YAML file if it exists, and return
     a fully populated LiveKitConnectorConfig.
 
-    If no --config flag is given and no device_io_hub.yaml exists in CWD,
-    returns non-secret defaults with LiveKit credentials from the environment.
+    If either environment credential is set, require a complete, non-blank
+    environment pair instead of YAML credentials. Otherwise, use the YAML pair
+    or generate a fresh pair when both YAML values are missing or blank.
+    A partial pair remains an error. If no --config flag is given and no
+    device_io_hub.yaml exists in CWD, use the remaining configuration defaults.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
