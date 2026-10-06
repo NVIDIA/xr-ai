@@ -367,6 +367,17 @@ tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
 do not establish capture continuity, and delivery jitter does not trigger guessed
 resets. Explicit same-track capture epochs are outside this integration.
 
+Optional `speaker.diagnostics: true` displays candidate transcripts before
+enrollment and additionally transcribes non-owner voices after enrollment. It
+and returns activity and ignored text on `voice.speaker-diagnostic` through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. Before enrollment, display reuses the
+required candidate decoding without additional caches or decoding. After
+enrollment, diagnostics share model weights and encoded features but add decoding
+work and separate temporary ASR caches for non-owner speakers. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.
+
 Start the inference process separately from the repository root:
 
 ```bash

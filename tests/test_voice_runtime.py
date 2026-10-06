@@ -1272,3 +1272,31 @@ def test_voice_agent_does_not_expose_owned_media_internals() -> None:
     assert "_session" not in parameters
     assert "text_transform" not in parameters
     assert "text_ignore_topics" not in parameters
+
+
+@pytest.mark.parametrize("speaker_id", [None, 0, 7])
+async def test_query_speaker_metadata_survives_runtime_without_changing_public_fields(speaker_id):
+    from dataclasses import fields
+
+    from xr_ai_voice._types import _SpeakerVoiceQuery
+
+    session = _Session()
+    recorder = _InputRecorder()
+    runtime = AgentRuntime()
+    runtime.register("recorder", recorder)
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    kind = VoiceQuery if speaker_id is None else _SpeakerVoiceQuery
+    speaker = {} if speaker_id is None else {"speaker_id": speaker_id}
+    async with _running_voice(runtime, voice, session):
+        await session.handler(kind(participant_id="alice", text="look around", timestamp_us=123, **speaker))
+        await asyncio.wait_for(recorder.changed.wait(), 1.0)
+    pid, _source, query = recorder.messages[0]
+    assert pid == "alice" and query._speaker_id == speaker_id
+    assert query.model_dump() == {"text": "look around", "timestamp_us": 123}
+    assert set(UserQuery.model_json_schema()["properties"]) == {"text", "timestamp_us"}
+    assert [field.name for field in fields(VoiceQuery)] == [
+        "participant_id", "text", "timestamp_us", "interrupted_output",
+    ]
+    with pytest.raises(ValidationError):
+        UserQuery(text="look around", timestamp_us=123, speaker_id=7)

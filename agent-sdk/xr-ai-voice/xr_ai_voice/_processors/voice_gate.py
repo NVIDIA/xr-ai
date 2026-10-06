@@ -45,6 +45,7 @@ from .._frames import (
     ParticipantLeftFrame,
     TextResponseEndFrame,
     _SpeakerEnrollmentFrame,
+    _SpeakerGatedQueryFrame,
     _SpeakerTranscriptionFrame,
     _SpeakerTurnFrame,
     _UnrecognizedSpeechFrame,
@@ -103,6 +104,7 @@ class VoiceGateProcessor(FrameProcessor):
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
         # so the value is read back inside that callback.
         self._feeding_pts_us: int | None = None
+        self._feeding_speaker_id: int | None = None
 
     @property
     def gate(self) -> VoiceGate:
@@ -250,6 +252,7 @@ class VoiceGateProcessor(FrameProcessor):
         # Gate callbacks run synchronously with feed, so capture metadata belongs
         # to this transcript until that call completes.
         self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
+        self._feeding_speaker_id = frame.speaker_id if isinstance(frame, _SpeakerTranscriptionFrame) else None
         self._feeding_speech_transcript = bool(
             frame.transport_source and frame.transport_source == frame.user_id
         )
@@ -265,6 +268,7 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._gate.feed(frame.user_id, frame.text)
         finally:
             self._feeding_pts_us = None
+            self._feeding_speaker_id = None
             self._feeding_speech_transcript = False
             self._early_wake_ack.discard(frame.user_id)
 
@@ -372,7 +376,9 @@ class VoiceGateProcessor(FrameProcessor):
             or (self._mode == "wake_only" and self._use_speaker_asr)
         ):
             await self._emit_chime(pid, early=False)
-        await self.push_frame(GatedQueryFrame(
+        query_type = _SpeakerGatedQueryFrame if self._feeding_speaker_id is not None else GatedQueryFrame
+        speaker = {"speaker_id": self._feeding_speaker_id} if self._feeding_speaker_id is not None else {}
+        await self.push_frame(query_type(
             participant_id = pid,
             text           = text,
             fresh_match    = fresh_match,
@@ -384,6 +390,7 @@ class VoiceGateProcessor(FrameProcessor):
                 if self._feeding_pts_us is not None
                 else time.time_ns() // 1_000
             ),
+            **speaker,
         ))
 
     async def _on_gate_stop(self, pid: str) -> None:

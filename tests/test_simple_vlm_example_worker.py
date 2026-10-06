@@ -21,7 +21,7 @@ import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._readiness import wait_for_services
@@ -113,6 +113,10 @@ class _Transport:
 class _DataEndpoint:
     def __init__(self) -> None:
         self.statuses: list[tuple[str, str]] = []
+        self.returned_data = []
+
+    async def send_return_data(self, message) -> None:
+        self.returned_data.append(message)
 
     def on_audio(self, callback):
         self.audio_callback = callback
@@ -661,6 +665,10 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
     assert callable(run_options["on_interrupted"])
+    assert len(transport.endpoint.returned_data) == 1
+    message = transport.endpoint.returned_data[0]
+    assert message.topic == "simple-vlm.user-query" and message.participant_id == "alice"
+    assert message.pts_us == 123 and message.data.decode() == "User: What is in front of me?"
 
 
 async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
@@ -1074,3 +1082,43 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
             source="voice.interruption",
         )
         await asyncio.wait_for(cancelled.wait(), 1.0)
+
+
+@pytest.mark.parametrize("speaker_id", [None, 0, 7])
+@pytest.mark.parametrize("send_fails", [False, True])
+async def test_query_echo_labels_input_and_display_failure_preserves_other_subscriber(speaker_id, send_fails):
+    from unittest.mock import AsyncMock
+
+    received, display_complete = asyncio.Event(), asyncio.Event()
+    seen = []
+    sender = AsyncMock()
+
+    async def send(message):
+        display_complete.set()
+        if send_fails:
+            raise RuntimeError("display unavailable")
+
+    sender.side_effect = send
+
+    class Recorder(Agent):
+        @subscribe(USER_QUERY_TOPIC)
+        async def record(self, query: UserQuery, ctx: RuntimeContext) -> None:
+            seen.append((ctx.metadata.participant_id, query.text))
+            received.set()
+
+    runtime = AgentRuntime()
+    runtime.register("echo", app._QueryEchoAgent(SimpleNamespace(send_return_data=sender)))
+    runtime.register("recorder", Recorder())
+    query = UserQuery(text="What is shown?", timestamp_us=123)
+    query._speaker_id = speaker_id
+    async with runtime:
+        await runtime.publish(USER_QUERY_TOPIC, query, participant_id="alice", source="test")
+        await asyncio.wait_for(received.wait(), 1.0)
+        await asyncio.wait_for(display_complete.wait(), 1.0)
+    assert seen == [("alice", "What is shown?")]
+    sender.assert_awaited_once()
+    message = sender.call_args.args[0]
+    label = "User" if speaker_id is None else f"Speaker {speaker_id}"
+    assert message.data.decode() == f"{label}: What is shown?"
+    assert message.topic == "simple-vlm.user-query"
+    assert message.participant_id == "alice" and message.pts_us == 123
