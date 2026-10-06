@@ -290,6 +290,24 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
+The default shared model stack also starts speaker ASR. From the repository root:
+
+```bash
+uv --config-file uv.toml run --project model-server-samples/model-servers \
+  model_servers
+```
+
+It uses `model-server-samples/model-servers/yaml/<gpu-profile>/speaker_stt.yaml`
+for placement and capacity, waits for decoder warmup, and reuses matching warm
+instances. `model_servers --stop` includes the speaker service. Stop the stack
+before changing its speaker-service YAML. The `vlm_llm_nim` profile and independent
+`model-servers-nim` stack retain ordinary STT. Auto-selected workers use their
+existing NIM adapters when speaker ASR is unavailable.
+
+The default profile does not start batch STT. Consumers that require it can
+manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
+{doc}`/guides/customizing-model-servers` for these deployment choices.
+
 Say the exact start phrase to nominate its speaker. Other speech can continue:
 the service conditions each candidate transcript on that speaker's target and
 interference masks. Candidate phrases finalize on each speaker's configured

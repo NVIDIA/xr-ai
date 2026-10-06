@@ -14,6 +14,9 @@ dependencies = [
     "xr-ai-logging",
     # Used by --stop to clean up persisted vLLM servers.
     "xr-ai-vllm",
+    # Private speaker-STT lifecycle control uses its local IPC endpoint.
+    "pyzmq>=27.0",
+    "msgpack>=1.0",
 ]
 
 [tool.uv.sources]
