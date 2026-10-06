@@ -228,6 +228,7 @@ def _streaming_models(monkeypatch):
     asr_calls = []
     masks = []
     cache_allocations = []
+    encodes = []
     text = [""]
 
     class Adapter:
@@ -242,6 +243,7 @@ def _streaming_models(monkeypatch):
 
         def forward_pre_encoded(self, features, lengths, drop):
             assert drop == 2
+            encodes.append(drop)
             return torch.zeros(1, 2, 128), torch.tensor([2])
 
     class Buffer:
@@ -283,5 +285,6 @@ def _streaming_models(monkeypatch):
             conformer_stream_step=decode,
         ),
         diar=SimpleNamespace(sortformer_modules=SimpleNamespace(init_streaming_state=lambda **kwargs: object())),
+        encodes=encodes,
     )
     return models, activity, asr_calls, masks, cache_allocations, text

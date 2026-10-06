@@ -48,3 +48,5 @@ speaker:
   enabled: true
   backend: required
   base_url: http://127.0.0.1:8102
+  # Display detected/ignored speakers in RECEIVED; adds ASR work for other voices.
+  diagnostics: true
