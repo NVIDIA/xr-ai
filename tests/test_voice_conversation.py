@@ -195,6 +195,29 @@ async def test_closed_participant_cannot_interrupt_another_conversation(harness)
     assert h.gate._conversation_active == {"a"}
 
 
+async def test_natural_speech_preserves_complete_queries(harness):
+    h = harness
+    await h.speak("hey agent let's start talking")
+
+    utterances = [
+        "Hey agent, explain the current reading",
+        "Compare the current and previous readings. Hey agent, explain the difference.",
+        "What is the current pressure? Hey agent.",
+    ]
+    for utterance in utterances:
+        await h.speak(utterance)
+
+    assert [query.text for query in h.accepted] == utterances
+
+
+async def test_natural_speech_partial_stop_uses_the_complete_transcript(harness):
+    h = harness
+    await h.speak("hey agent let's start talking")
+
+    assert await h.gate.handle_partial_transcript("a", "stop")
+    assert not await h.gate.handle_partial_transcript("a", "Keep explaining. Hey agent, stop")
+
+
 def test_disabled_conversation_preserves_legacy_gate_config(tmp_path):
     cfg = _config(tmp_path, enabled=False)
     assert cfg._conversation is None

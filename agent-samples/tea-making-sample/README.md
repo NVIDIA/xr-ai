@@ -26,12 +26,13 @@ automatically:
 |---|---|
 | `yaml/tea_making_worker.yaml` | Selected configuration files, observation cadence, VAD, timeouts, artifacts, and event viewer |
 | `yaml/workflow.yaml` | Workflow state, steps, evidence rules, tools, and messages |
-| `yaml/voice_gate*.yaml` | Wake-word or always-on speech behavior |
+| `yaml/voice_gate*.yaml` | Conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |
 | `yaml/models.local.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
-For example, make speech always-on by changing this line in
+For example, use the preset that accepts speech without a wake phrase during an
+active conversation by changing this line in
 `yaml/tea_making_worker.yaml`:
 
 ```yaml
@@ -75,8 +76,9 @@ uv run tea_making_sample --expose-web-events
 ```
 
 Open `https://localhost:8080`, accept the development certificate on first use,
-allow microphone and camera access, and connect. Begin voice commands with
-“Agent” or “Hey Agent.” The optional event viewer is available at
+allow microphone and camera access, and connect. Say “Hey agent, let's start
+talking,” then speak commands without a wake phrase. Say “Hey agent, let's stop
+talking” to close the conversation. The optional event viewer is available at
 `http://127.0.0.1:8092` by default, and durable output is written below
 `artifacts/`.
 

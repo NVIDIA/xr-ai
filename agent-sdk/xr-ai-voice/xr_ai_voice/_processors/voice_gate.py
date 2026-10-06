@@ -124,8 +124,7 @@ class VoiceGateProcessor(FrameProcessor):
             if pid not in self._conversation_active or cfg._could_be_control(text):
                 return False
             if not cfg.require_wake_phrase:
-                stripped = strip_magic(self._gate._magic_re, text)
-                return bool(STOP_RE.match(text if stripped is None else stripped))
+                return bool(STOP_RE.match(text))
         if self._gate._matches_partial_stop(text):
             return True
         if self._gate.matches_magic_phrase(text):
@@ -253,8 +252,7 @@ class VoiceGateProcessor(FrameProcessor):
         if cfg.require_wake_phrase:
             await self._gate.feed(pid, frame.text)
             return
-        stripped = strip_magic(self._gate._magic_re, frame.text)
-        text = frame.text if stripped is None else stripped
+        text = frame.text
         if text and STOP_RE.match(text):
             await self._on_gate_stop(pid)
         elif text:
