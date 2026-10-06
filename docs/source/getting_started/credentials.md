@@ -10,16 +10,19 @@ in source files or YAML configurations.
 
 ## LiveKit credentials
 
-DeviceIOHub generates a random LiveKit API key and secret at startup when both
-values are missing or blank. Shipped hub YAML files leave both fields blank,
+DeviceIOHub generates a random LiveKit API key and secret at startup when neither
+environment credential is set and both YAML values are missing or blank.
+Shipped hub YAML files leave both fields blank,
 so samples run without credential setup or a LiveKit account. The generated
 pair configures the local LiveKit server and token endpoint and changes on
 each restart. Clients use the connection token supplied by DeviceIOHub.
 
 For a fixed pair, set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the launch
 environment, or supply `api_key` and `api_secret` in a private
-`device_io_hub.yaml`. Environment values override YAML fields. Supply both
-values together; a partial pair fails at startup. Never commit credentials.
+`device_io_hub.yaml`. If either environment variable is set, both must contain
+non-blank values; the environment pair replaces the YAML pair together. Partial
+pairs fail at startup, and blank environment values do not trigger credential
+generation. Never commit credentials.
 
 ## Model credentials
 

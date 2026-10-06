@@ -26,6 +26,21 @@ def _reset_argv(monkeypatch: pytest.MonkeyPatch) -> None:
         ("env-key", None),
         (None, "env-secret"),
         ("   ", "env-secret"),
+        ("env-key", "   "),
+        ("", None),
+        (None, ""),
+        ("   ", None),
+        (None, "   "),
+        ("", ""),
+        ("   ", "   "),
+    ],
+)
+@pytest.mark.parametrize(
+    "yaml_text",
+    [
+        None,
+        'api_key: ""\napi_secret: ""\n',
+        "api_key: yaml-key\napi_secret: yaml-secret\n",
     ],
 )
 def test_load_config_rejects_partial_livekit_credentials(
@@ -33,7 +48,10 @@ def test_load_config_rejects_partial_livekit_credentials(
     monkeypatch,
     api_key,
     api_secret,
+    yaml_text,
 ) -> None:
+    if yaml_text is not None:
+        (tmp_path / "device_io_hub.yaml").write_text(yaml_text, encoding="utf-8")
     _reset_argv(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)
