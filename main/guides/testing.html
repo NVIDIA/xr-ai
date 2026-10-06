@@ -477,6 +477,25 @@ only on a suitably configured developer host:</p>
 </div>
 <p>Pass extra pytest arguments after the script name to select a file or test.</p>
 </section>
+<section id="apple-microphone-transaction-tests">
+<h2>Apple microphone transaction tests<a class="headerlink" href="#apple-microphone-transaction-tests" title="Link to this heading">#</a></h2>
+<p>With Xcode 26.3 or newer selected, run the real StreamKit package tests on an
+installed iOS Simulator. From <code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/StreamKit</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>xcodebuild<span class="w"> </span>-scheme<span class="w"> </span>StreamKit<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-destination<span class="w"> </span><span class="s1">'platform=iOS Simulator,name=iPhone 17 Pro'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="nv">CODE_SIGNING_ALLOWED</span><span class="o">=</span>NO<span class="w"> </span><span class="nb">test</span>
+</pre></div>
+</div>
+<p>Replace the simulator name with one installed in your Xcode environment. The
+<code class="docutils literal notranslate"><span class="pre">ios-microphone-tests</span></code> workflow runs these tests and builds the unsigned iOS
+and visionOS app targets from a clean checkout with dependency resolution
+enabled. It compiles the actual app and LiveKit backend.
+The transaction tests substitute physical capture and transport operations to
+check rollback failures, retained cleanup resources, cancellation, request ordering,
+and disabled audio.
+They do not verify usable remote audio or the operating system’s microphone
+indicator; those checks require a physical device and a running server.</p>
+</section>
 <section id="coverage-boundaries">
 <h2>Coverage boundaries<a class="headerlink" href="#coverage-boundaries" title="Link to this heading">#</a></h2>
 <p>The suite includes:</p>
@@ -555,6 +574,7 @@ test only when a real process boundary is material to the contract.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-suite">Run the suite</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#apple-microphone-transaction-tests">Apple microphone transaction tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coverage-boundaries">Coverage boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-tests">Adding tests</a></li>
 </ul>

@@ -459,6 +459,17 @@ blank, so samples require no credential setup. Existing private configurations
 and environment overrides remain supported; partial pairs still fail startup.
 Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for fixed-pair configuration.</p>
 </section>
+<section id="swift-microphone-cleanup-errors">
+<h2>Swift microphone cleanup errors<a class="headerlink" href="#swift-microphone-cleanup-errors" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">StreamSession.disconnect()</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingBackend.disconnect()</span></code> now throw
+cleanup errors after closing the transport. Update callers to use <code class="docutils literal notranslate"><span class="pre">try</span> <span class="pre">await</span></code>
+and handle failures: capture may still be running even though the connection
+has closed. Retain the same session and retry <code class="docutils literal notranslate"><span class="pre">disconnect()</span></code> or <code class="docutils literal notranslate"><span class="pre">stopAudio()</span></code>
+until cleanup succeeds before discarding it. Connecting that same LiveKit
+backend also retries its pending cleanup before opening another connection.
+A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
+satisfy the throwing protocol requirement.</p>
+</section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
 <p>Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -706,6 +717,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>
