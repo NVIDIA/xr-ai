@@ -254,7 +254,17 @@ each event response before sending the next frame. The service derives timestamp
 from accepted sample counts; reconnecting starts a fresh timeline and requires
 enrollment again. Other voices contribute to
 diarization and interference conditioning, but are not transcribed after
-enrollment. Start the inference process separately from the repository root:
+enrollment.
+
+Optional `speaker.diagnostics: true` additionally transcribes detected voices
+and returns activity and ignored text on `voice.speaker-diagnostic` through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. Diagnostics share model weights but
+add decoding work and separate temporary ASR caches for active speakers. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.
+
+Start the inference process separately from the repository root:
 
 ```bash
 uv --config-file uv.toml run --project services/speaker-stt \

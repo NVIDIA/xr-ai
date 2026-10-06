@@ -154,6 +154,27 @@ def test_http_identity_models_and_websocket_session_lifecycle():
     assert not server.sessions
 
 
+def test_websocket_preserves_diagnostic_config_and_display_events():
+    event = {"kind": "diagnostic", "speaker_id": 1, "status": "ignored", "pts_us": 123, "text": "hello"}
+    observed = []
+
+    def session(cfg, *, audio_origin_us):
+        observed.append((cfg.diagnostics, audio_origin_us))
+        return SimpleNamespace(_feed=lambda audio: [event])
+
+    server = service._Server(SimpleNamespace(_session=session))
+    with TestClient(service._build_app(server, _CFG)) as client:
+        with client.websocket_connect(service._STREAM_PATH) as websocket:
+            opening = _opening(audio_origin_us=123)
+            opening["config"]["diagnostics"] = True
+            websocket.send_json(opening)
+            assert websocket.receive_json()["protocol"] == service._PROTOCOL
+            websocket.send_bytes(bytes(640))
+            assert websocket.receive_json() == {"events": [event]}
+    assert observed == [(True, 123)]
+    assert not server.sessions
+
+
 def test_websocket_rejects_invalid_opening_and_text_audio():
     server = service._Server(_models())
     with TestClient(service._build_app(server, _CFG)) as client:

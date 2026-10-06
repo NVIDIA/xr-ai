@@ -22,7 +22,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_voicegate._phrases import STOP_RE
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
-from .._frames import ParticipantLeftFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+from .._frames import ParticipantLeftFrame, _SpeakerDiagnosticFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
 from .._speaker_client import _SpeakerClient
 
 
@@ -135,6 +135,13 @@ class _SpeakerSttProcessor(FrameProcessor):
 
     async def _event(self, pid: str, event: dict) -> None:
         kind = event["kind"]
+        if kind == "diagnostic":
+            if self._cfg.diagnostics:
+                await self.push_frame(_SpeakerDiagnosticFrame(
+                    participant_id=pid, speaker_id=event["speaker_id"], status=event["status"],
+                    text=event["text"], pts_us=event["pts_us"],
+                ))
+            return
         if kind in {"enrolled", "released", "reset"}:
             if kind == "enrolled":
                 self._enrolled.add(pid)

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""NeMo speaker-conditioned ASR for one enrolled speaker."""
+"""NeMo speaker-conditioned ASR with optional display-only diagnostic streams."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
+from loguru import logger
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 from ._selection import _Selection
@@ -26,6 +27,15 @@ class _AsrState:
     cache: tuple[Tensor, Tensor, Tensor]
     previous_hypotheses: list[Hypothesis] | None = None
     previous_pred: list[Tensor] | None = None
+
+
+@dataclass
+class _DiagnosticStream:
+    asr: _AsrState
+    pts_us: int
+    duration: float = 0.0
+    silence: float = 0.0
+    text: str = ""
 
 
 class _Models:
@@ -126,10 +136,16 @@ class _Session:
         self.step = 0
         self.audio_origin_us = audio_origin_us
         self.last_partial = ""
+        self._diagnostic_streams: dict[int, _DiagnosticStream] = {}
+        self._diagnostic_active: dict[int, str] = {}
         self._reset_asr()
 
+    def _new_asr(self) -> _AsrState:
+        return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
+
     def _reset_asr(self) -> None:
-        self._asr = _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
+        if not self.selection.cfg.diagnostics:
+            self._asr = self._new_asr()
         self.last_partial = ""
 
     def _decode(
@@ -176,6 +192,84 @@ class _Session:
         if not isinstance(text, str):
             text = text.text
         return text or ""
+
+    def _diagnostic_step(
+        self, features, lengths, predictions, drop: int, active: set[int], pts_us: int, selected: int | None,
+    ) -> tuple[dict[int, str], list[tuple[int, _DiagnosticStream]]]:
+        cfg = self.selection.cfg
+        texts: dict[int, str] = {}
+        completed: list[tuple[int, _DiagnosticStream]] = []
+        speakers = active | self._diagnostic_streams.keys()
+        if not speakers:
+            return texts, completed
+        # Encode once; each serial conditioned decoder keeps its own history.
+        try:
+            encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+        except Exception:
+            if selected is not None:
+                raise
+            self._diagnostic_streams.clear()
+            logger.exception("speaker diagnostic encoding failed")
+            return texts, completed
+        seconds = self.models.hop_samples / 16000
+        # Allocate and decode the selected speaker first; optional caches must
+        # not take the capacity needed to produce the primary transcript.
+        for speaker in sorted(speakers, key=lambda speaker: (speaker != selected, speaker)):
+            if speaker not in self._diagnostic_streams:
+                try:
+                    self._diagnostic_streams[speaker] = _DiagnosticStream(self._new_asr(), pts_us)
+                except Exception:
+                    if speaker == selected:
+                        raise
+                    logger.exception("speaker diagnostic cache allocation failed speaker={}", speaker)
+                    continue
+            stream = self._diagnostic_streams[speaker]
+            stream.duration += seconds
+            stream.silence = 0.0 if speaker in active else stream.silence + seconds
+            finished = stream.silence >= cfg.silence_duration or stream.duration >= cfg.max_utterance_s
+            try:
+                stream.text = self._decode(encoded, encoded_lengths, predictions, speaker, drop, stream.asr, finished)
+            except Exception:
+                if speaker == selected:
+                    raise
+                del self._diagnostic_streams[speaker]
+                logger.exception("speaker diagnostic decoding failed speaker={}", speaker)
+                continue
+            texts[speaker] = stream.text
+            if finished:
+                completed.append((speaker, stream))
+                del self._diagnostic_streams[speaker]
+        return texts, completed
+
+    def _diagnostic_events(
+        self, active: set[int], completed: list[tuple[int, _DiagnosticStream]],
+        owner_before: int | None, pts_us: int,
+    ) -> list[dict]:
+        owner = self.selection.owner
+        statuses = {
+            speaker: "enrolled" if speaker == owner else "ignored" if owner is not None else "waiting for enrollment"
+            for speaker in active
+        }
+        events = [
+            {"kind": "diagnostic", "speaker_id": speaker, "status": status, "pts_us": pts_us, "text": ""}
+            for speaker, status in sorted(statuses.items())
+            if self._diagnostic_active.get(speaker) != status
+        ]
+        # Enrollment completes in a silence tail; display the selected identity
+        # even if the new owner is no longer acoustically active.
+        if owner is not None and owner != owner_before and owner not in active:
+            events.append({"kind": "diagnostic", "speaker_id": owner, "status": "enrolled",
+                           "pts_us": pts_us, "text": ""})
+        self._diagnostic_active = statuses
+        for speaker, stream in completed:
+            if speaker in {owner_before, owner} or not stream.text.strip():
+                continue
+            status = "ignored" if owner is not None else "ignored; waiting for enrollment"
+            if stream.duration >= self.selection.cfg.max_utterance_s:
+                status += "; truncated"
+            events.append({"kind": "diagnostic", "speaker_id": speaker, "status": status,
+                           "pts_us": stream.pts_us, "text": stream.text.strip()})
+        return events
 
     def _feed(self, audio: bytes) -> list[dict]:
         import torch
@@ -226,17 +320,24 @@ class _Session:
                 events.extend(edges)
                 if started:
                     self._reset_asr()
-                if selected is not None:
-                    encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
-                    self.selection.text = self._decode(
-                        encoded,
-                        encoded_lengths,
-                        preds,
-                        selected,
-                        drop,
-                        self._asr,
-                        self.selection._finished,
+                    if self.selection.cfg.diagnostics and selected is not None:
+                        # A newly selected candidate must recognize fresh audio;
+                        # ignored speech from before release cannot enroll it.
+                        self._diagnostic_streams.pop(selected, None)
+                owner_before = self.selection.owner
+                completed = []
+                if self.selection.cfg.diagnostics:
+                    texts, completed = self._diagnostic_step(
+                        features, lengths, preds, drop, active, chunk_pts, selected,
                     )
+                    if selected is not None:
+                        self.selection.text = texts.get(selected, "")
+                if selected is not None:
+                    if not self.selection.cfg.diagnostics:
+                        encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+                        self.selection.text = self._decode(
+                            encoded, encoded_lengths, preds, selected, drop, self._asr, self.selection._finished,
+                        )
                     text = self.selection.text
                     if self.selection.owner is not None and text and text != self.last_partial:
                         events.append({"kind": "partial", "text": text})
@@ -249,5 +350,7 @@ class _Session:
                     truncated = self.selection.duration >= self.selection.cfg.max_utterance_s
                     events.extend(self.selection._finish(text, allow_control=not truncated))
                     self._reset_asr()
+                if self.selection.cfg.diagnostics:
+                    events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))
                 self.step += 1
         return events

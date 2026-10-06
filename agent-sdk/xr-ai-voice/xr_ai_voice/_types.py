@@ -22,6 +22,13 @@ class VoiceQuery:
     interrupted_output: bool = False
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _SpeakerVoiceQuery(VoiceQuery):
+    """Private speaker metadata; the public input contract stays unchanged."""
+
+    speaker_id: int
+
+
 VoiceInputSink: TypeAlias = Callable[[VoiceQuery], Awaitable[None]]
 VoiceResponse: TypeAlias = str | AsyncIterator[str]
 

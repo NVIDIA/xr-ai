@@ -15,7 +15,7 @@ from typing import Any
 
 import nemo_relay
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
 from xr_ai_models import STTService, TTSService
@@ -25,7 +25,7 @@ from xr_ai_voicegate import VoiceGateConfig
 from ._processors import VadConfig
 from ._session import _VoiceSession
 from ._transport import HubVoiceTransport
-from ._types import VoiceQuery
+from ._types import VoiceQuery, _SpeakerVoiceQuery
 
 _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
@@ -40,6 +40,7 @@ class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
 
     model_config = ConfigDict(extra="forbid")
+    _speaker_id: int | None = PrivateAttr(default=None)
 
     text: str = Field(min_length=1)
     """Gate-accepted speech or direct typed text."""
@@ -436,6 +437,9 @@ class VoiceAgent(Agent):
 
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
+        request = UserQuery(text=query.text, timestamp_us=query.timestamp_us)
+        if isinstance(query, _SpeakerVoiceQuery):
+            request._speaker_id = query.speaker_id
         if query.interrupted_output and self.interrupted_topic is not None:
             await runtime.publish(
                 self.interrupted_topic,
@@ -445,7 +449,7 @@ class VoiceAgent(Agent):
             )
         await runtime.publish(
             self.query_topic,
-            UserQuery(text=query.text, timestamp_us=query.timestamp_us),
+            request,
             participant_id=query.participant_id,
             source=self._source,
         )
