@@ -173,10 +173,10 @@ the Simple VLM sample reference. In particular, make sure the name replacements
 did not leave a nonexistent `/reference/my-app.html` link. Change its working
 directory to `apps/my-app/` and use the model-server command shown below.
 
-The copied DeviceIOHub YAML contains development-only credential placeholders.
-They can remain in place: `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` from the
-environment overwrite them at startup. Never put actual keys or tokens in
-source files. Refer to {doc}`/getting_started/credentials` for the supported
+The copied DeviceIOHub YAML leaves credentials blank, so the hub generates a
+fresh pair at startup. To use a fixed pair, set `LIVEKIT_API_KEY` and
+`LIVEKIT_API_SECRET` in the launch environment. Never put actual keys or tokens
+in source files. Refer to {doc}`/getting_started/credentials` for the supported
 credential sources.
 
 Frame selection and vision inference use separate public paths: import
