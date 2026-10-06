@@ -21,6 +21,7 @@ class _SpeakerTranscriptionFrame(TranscriptionFrame):
     """An accepted speaker-ASR transcript with its session-local label."""
 
     speaker_id: int | None
+    _control_pending: bool = False
 
 
 @dataclass

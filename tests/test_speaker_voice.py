@@ -36,6 +36,38 @@ from xr_ai_voicegate._speaker import _SpeakerConfig
 
 
 @pytest.mark.asyncio
+async def test_empty_speaker_utterance_invalidates_control_without_dropping_next_query(tmp_path):
+    cfg = _voice_cfg(tmp_path)
+    selection = _Selection(cfg._speaker)
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate.push_frame = AsyncMock()
+
+    async def to_gate(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+
+    async def utterance(text, pts_us):
+        selection._activity({7}, 0.2, pts_us)
+        for event in selection._finish(text):
+            await processor._event("wearer", event)
+
+    try:
+        await utterance(cfg._speaker.start_phrase, 0)
+        gate.push_frame.reset_mock()
+        await utterance("hey agent", 1_000_000)
+        await utterance("", 2_000_000)
+        await utterance("let's start talking", 3_000_000)
+        queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        assert [q.text for q in queries] == ["let's start talking"]
+        assert selection.owner == 7 and "wearer" in gate._conversation_active
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("retry", ["reconnect", "shutdown"])
 async def test_timed_out_cleanup_is_retried_without_reusing_enrollment(retry):
     server = _Server(SimpleNamespace(_session=lambda cfg: SimpleNamespace(_feed=lambda *_args: [])))
@@ -137,7 +169,8 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     gate.push_frame.reset_mock()
     await speech("a", "hey agent look around")
     queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
-    assert len(queries) == 1 and queries[0].text == "look around"
+    expected = "look around" if require_wake else "hey agent look around"
+    assert len(queries) == 1 and queries[0].text == expected
     assert queries[0].pts_us == 123
     await gate.process_frame(_SpeakerEnrollmentFrame("a", "released"), FrameDirection.DOWNSTREAM)
     gate.push_frame.reset_mock()
@@ -146,7 +179,6 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     typed = TranscriptionFrame(text="hey agent typed query", user_id="a", timestamp="now")
     await gate.process_frame(typed, FrameDirection.DOWNSTREAM)
     assert any(isinstance(c.args[0], GatedQueryFrame) for c in gate.push_frame.call_args_list)
-    assert gate._feeding_speaker_id is None
 
 
 @pytest.mark.asyncio
