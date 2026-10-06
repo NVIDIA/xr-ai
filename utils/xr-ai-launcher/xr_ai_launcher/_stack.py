@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Sequence, Union
 
 from ._credentials import load_credentials
-from ._failure import FailureContext, emit_failure_report, failure_exit_status
+from ._failure import FailureContext, emit_failure_summary, failure_exit_status
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -142,14 +142,7 @@ class Parallel:
 _LOGURU_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}\.\d{3}\s")
 
 
-def _forward(
-    stream,
-    prefix: str,
-    *,
-    quiet_native: bool = False,
-    failure_context: FailureContext | None = None,
-    stream_name: str = "output",
-) -> None:
+def _forward(stream, prefix: str, *, quiet_native: bool = False) -> None:
     """Drain *stream* line-by-line, printing each with *prefix*.
 
     When *quiet_native* is True, lines that don't carry a loguru-style
@@ -160,8 +153,6 @@ def _forward(
     """
     for raw in stream:
         line = raw.decode(errors='replace').rstrip()
-        if failure_context is not None:
-            failure_context.add_line(stream_name, line)
         formatted = f"{prefix} {line}"
         if quiet_native and not _LOGURU_TIME_RE.match(line):
             log.debug(formatted)
@@ -233,7 +224,7 @@ def _spawn(
     cmd += ["--ready-file", str(ready_file)]
     failure_context = FailureContext(
         service=proc.name,
-        command=cmd,
+        command=tuple(cmd),
         project_path=project,
         config_path=config_path,
     )
@@ -279,24 +270,18 @@ def _spawn(
             start_new_session=True,
         )
     except Exception as exc:
-        _emit_failure_report(failure_context, "spawn", error=exc)
+        _emit_failure_summary(failure_context, "spawn", error=exc)
         raise
     if failure_contexts is not None:
         failure_contexts[proc.name] = failure_context
     prefix = f"[{proc.name}]"
-    for stream_name, stream in (("stdout", p.stdout), ("stderr", p.stderr)):
-        thread = threading.Thread(
+    for stream in (p.stdout, p.stderr):
+        threading.Thread(
             target=_forward,
             args=(stream, prefix),
-            kwargs={
-                "quiet_native": proc.quiet_native_output,
-                "failure_context": failure_context,
-                "stream_name": stream_name,
-            },
+            kwargs={"quiet_native": proc.quiet_native_output},
             daemon=True,
-        )
-        failure_context.add_forwarder(thread)
-        thread.start()
+        ).start()
     return p
 
 
@@ -408,16 +393,16 @@ def _killpg(p: subprocess.Popen, sig: int) -> None:
         pass
 
 
-def _emit_failure_report(
+def _emit_failure_summary(
     context: FailureContext,
     phase: str,
     *,
     returncode: int | None = None,
     error: BaseException | None = None,
 ) -> None:
-    """Keep report interruption from replacing the process failure."""
+    """Keep summary failures and interruptions from replacing the child failure."""
     try:
-        emit_failure_report(
+        emit_failure_summary(
             context,
             phase,
             returncode=returncode,
@@ -425,6 +410,11 @@ def _emit_failure_report(
         )
     except KeyboardInterrupt:
         pass
+    except Exception:
+        try:
+            log.debug("Failure summary generation failed", exc_info=True)
+        except (Exception, KeyboardInterrupt):
+            pass
 
 
 def _shutdown(
@@ -514,9 +504,9 @@ def run_stack(
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
     unexpected zero exit to 1.
-    Spawn errors, readiness failures, and unexpected monitored exits write a
-    unique redacted JSON report beside configured run logs, or in the system
-    temporary directory as a fallback, and print its path. Pass
+    Spawn errors, readiness failures, and unexpected monitored exits print a
+    concise summary with the constructed command and an existing configured
+    run-log directory when available. Pass
     ``exit_after_ready=True`` to return immediately once everything is ready
     instead — useful for launchers whose processes are all ``launch_mode="persist"``
     and should outlive the orchestrator (e.g. ``model-servers``).
@@ -609,7 +599,7 @@ def run_stack(
             if exited is not None:
                 name, proc = exited
                 failure_status = failure_exit_status(proc.returncode)
-                _emit_failure_report(
+                _emit_failure_summary(
                     failure_contexts[name],
                     "runtime",
                     returncode=proc.returncode,
@@ -618,7 +608,7 @@ def run_stack(
         except _ReadinessFailure as exc:
             aborted = True
             failure_status = failure_exit_status(exc.returncode)
-            _emit_failure_report(
+            _emit_failure_summary(
                 failure_contexts[exc.name],
                 "readiness",
                 returncode=exc.returncode,

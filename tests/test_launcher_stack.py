@@ -161,7 +161,7 @@ class TestRunStackShutdownContract:
         return calls
 
     def test_abort_during_startup_kills_everything_including_persist(
-        self, stub_stack, tmp_path, monkeypatch,
+        self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Simulate Ctrl-C while waiting for the (persist) server to come up.
         def _boom(name, ready_file, proc):
@@ -180,9 +180,10 @@ class TestRunStackShutdownContract:
         assert stub_stack["no_kill"] == set()
         assert "vlm" in stub_stack["procs"]
         assert stub_stack["spawn_options"] == {"vlm": False}
+        assert "Process failure:" not in capsys.readouterr().err
 
     def test_clean_exit_after_ready_keeps_persist_alive(
-        self, stub_stack, tmp_path, monkeypatch,
+        self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Ready file appears immediately; no interruption.
         monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
@@ -204,8 +205,9 @@ class TestRunStackShutdownContract:
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
         assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
+        assert "Process failure:" not in capsys.readouterr().err
 
-    def test_runtime_report_interrupt_preserves_exit_and_persist_ownership(
+    def test_runtime_summary_interrupt_preserves_exit_and_persist_ownership(
         self, stub_stack, tmp_path, monkeypatch,
     ):
         monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
@@ -218,7 +220,7 @@ class TestRunStackShutdownContract:
         monkeypatch.setattr(_stack, "_monitor", _monitor)
         monkeypatch.setattr(
             _stack,
-            "emit_failure_report",
+            "emit_failure_summary",
             Mock(side_effect=KeyboardInterrupt),
         )
 
@@ -249,7 +251,16 @@ class TestRunStackShutdownContract:
             return "worker", proc
 
         monkeypatch.setattr(_stack, "_monitor", _monitor)
-        monkeypatch.setattr(_stack, "emit_failure_report", Mock())
+        monkeypatch.setattr(
+            _stack,
+            "emit_failure_summary",
+            Mock(side_effect=RuntimeError("summary failed")),
+        )
+        monkeypatch.setattr(
+            _stack.log,
+            "debug",
+            Mock(side_effect=RuntimeError("logging failed")),
+        )
 
         with pytest.raises(SystemExit) as excinfo:
             _stack.run_stack(
@@ -259,7 +270,7 @@ class TestRunStackShutdownContract:
 
         assert excinfo.value.code == 1
 
-    def test_readiness_report_interrupt_preserves_signal_exit(
+    def test_readiness_summary_interrupt_preserves_signal_exit(
         self, stub_stack, tmp_path, monkeypatch,
     ):
         monkeypatch.setattr(
@@ -271,7 +282,7 @@ class TestRunStackShutdownContract:
         )
         monkeypatch.setattr(
             _stack,
-            "emit_failure_report",
+            "emit_failure_summary",
             Mock(side_effect=KeyboardInterrupt),
         )
 

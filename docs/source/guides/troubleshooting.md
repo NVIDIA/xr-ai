@@ -10,16 +10,14 @@ issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
 ## Investigating a failed run
 
-Start with the launcher's failure summary and the JSON report path printed
-beside it. They identify the failed service and configuration and include
-recent output from the actual run. The service's own errors can include
-recovery advice. If per-run logging is available, use the reported log
-directory and suggested command to inspect the full traceback. Otherwise,
-inspect the captured output in the report. Run the suggested command
-explicitly when further investigation is needed.
+Start with the launcher's failure summary to identify the failed service,
+command, configuration, and exit status. Inspect that service's terminal
+output and the run-log directory printed in the summary for the underlying
+error and recovery advice. If the run-log directory is unavailable, use the
+terminal output.
 
-Refer to {doc}`../components/launcher-and-process-model` for failure-report
-locations, exit codes, and process ownership.
+Refer to {doc}`../components/launcher-and-process-model` for failure behavior,
+exit codes, and process ownership.
 
 ## Setup-time issues
 

@@ -172,26 +172,20 @@ abort during startup (Ctrl-C, or a process exiting before it signals ready)
 the launcher tears down **everything**, including `persist` processes, so no
 half-started service is left behind.
 
-## Failure reports
+## Process failures
 
 When a managed process cannot start, exits before readiness, or exits while
-the stack is being monitored, the launcher prints its command, configuration,
-exit status, and recent output. It also writes a uniquely named
-`failure-report-*.json` beside the run logs and prints the path. If per-run
-logging is unavailable or the directory cannot be written, the report goes
-in the system temporary directory. Reports remain after exit for inspection.
-
-Reports preserve the failed operation's evidence, including any advice from
-the service itself. When per-run logging is configured, a suggested command
-points to the full logs; developers and agents run it explicitly. Otherwise,
-the captured output is available in the report. Known credentials and common
-token formats are redacted from the excerpt.
+the stack is being monitored, the launcher prints the failed process,
+command, project, configuration, and exit status or spawn error. When the
+configured run-log directory exists, the summary includes its path. Inspect
+the service's terminal output and run logs for the underlying error and any
+recovery advice. Each service controls its own log filename.
 
 An unexpected monitored exit is a stack failure even when the child exits
 with code 0; the launcher returns 1 in that case. Other child exit codes are
 preserved, and signal termination maps to `128 + signal number`. Startup
 cancellation returns 130; cancellation after readiness follows normal
-shutdown. Reporting errors do not replace the original failure. A failure
+shutdown. Summary errors do not replace the original failure. A failure
 in a parallel startup group cancels the other readiness waits and triggers
 startup cleanup.
 

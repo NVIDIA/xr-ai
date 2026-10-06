@@ -209,7 +209,6 @@ def test_serve_nim_preserves_non_permission_cache_error(
     assert raised.value is error
     assert "read-only filesystem" in caplog.text
     assert str(tmp_path / "nim" / "xr-ai-nim-llama") in caplog.text
-    assert "df -h" not in caplog.text
 
 
 def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
