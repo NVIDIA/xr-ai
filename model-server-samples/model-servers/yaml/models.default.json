@@ -1,4 +1,9 @@
 {
+  "services": {
+    "speaker-stt": {
+      "ownership": "managed"
+    }
+  },
   "models": {
     "stt": {
       "adapter": {
@@ -9,7 +14,7 @@
         "readiness": "health"
       },
       "deployment": {
-        "ownership": "managed",
+        "ownership": "external",
         "service": "stt"
       }
     },

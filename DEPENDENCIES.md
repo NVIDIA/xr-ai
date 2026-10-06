@@ -752,6 +752,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `pyzmq>=27.0`
+  - `msgpack>=1.0`
 - Optional dependency groups: none
 - Commands:
   - `model_servers` → `main:run`
