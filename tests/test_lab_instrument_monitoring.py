@@ -273,6 +273,11 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
             "require_wake_phrase": False,
             "phrase_window_s": 6.0,
         },
+        "speaker": {
+            "enabled": True,
+            "backend": "auto",
+            "endpoint": "ipc:///tmp/xr-ai-speaker-stt.sock",
+        },
     }
     device_1 = config.device_map.resolve(MarkerType.QR_CODE, "device-1")
     device_5 = config.device_map.resolve(MarkerType.QR_CODE, "device-5")
