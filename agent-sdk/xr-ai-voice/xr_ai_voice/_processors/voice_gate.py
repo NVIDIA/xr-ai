@@ -101,7 +101,6 @@ class VoiceGateProcessor(FrameProcessor):
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
         # so the value is read back inside that callback.
         self._feeding_pts_us: int | None = None
-        self._feeding_speaker_id: int | None = None
 
     @property
     def gate(self) -> VoiceGate:
@@ -218,7 +217,6 @@ class VoiceGateProcessor(FrameProcessor):
         # Gate callbacks run synchronously with feed, so capture metadata belongs
         # to this transcript until that call completes.
         self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
-        self._feeding_speaker_id = frame.speaker_id if isinstance(frame, _SpeakerTranscriptionFrame) else None
         self._feeding_speech_transcript = bool(
             frame.transport_source and frame.transport_source == frame.user_id
         )
@@ -229,7 +227,6 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._gate.feed(frame.user_id, frame.text)
         finally:
             self._feeding_pts_us = None
-            self._feeding_speaker_id = None
             self._feeding_speech_transcript = False
             self._early_wake_ack.discard(frame.user_id)
 
@@ -237,27 +234,42 @@ class VoiceGateProcessor(FrameProcessor):
         cfg = self._conversation_cfg
         assert cfg is not None
         pid = frame.user_id
+        active = pid in self._conversation_active
+        if self._use_speaker_asr:
+            # The inference service sees unrecognized and competing speech too.
+            # Its matcher alone decides whether a fragment is a control.
+            if not isinstance(frame, _SpeakerTranscriptionFrame):
+                return
+            if frame._control_pending:
+                await self._handle_pending_control(pid, frame.text)
+            elif active:
+                await self._dispatch_conversation_transcript(frame)
+            return
         matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
-        key = self._feeding_speaker_id if self._feeding_speaker_id is not None else pid
-        action = matcher._feed(frame.text, key=key, at_s=at_s)
-        active = pid in self._conversation_active
+        action = matcher._feed(frame.text, key=pid, at_s=at_s)
         if action == "start":
-            if not active and not self._use_speaker_asr:
+            if not active:
                 await self._set_conversation_active(pid, True)
             return
         if action == "stop":
-            if active and not self._use_speaker_asr:
+            if active:
                 await self._set_conversation_active(pid, False)
             return
         if action == "pending":
-            # A standalone wake phrase can also start a control. Preserve its
-            # follow-up window while withholding the possible control prefix.
-            if active and cfg.require_wake_phrase and strip_magic(self._gate._magic_re, frame.text) == "":
-                await self._gate.feed(pid, frame.text)
+            await self._handle_pending_control(pid, frame.text)
             return
         if active:
             await self._dispatch_conversation_transcript(frame)
+
+    async def _handle_pending_control(self, pid: str, text: str) -> None:
+        cfg = self._conversation_cfg
+        assert cfg is not None
+        # A standalone wake phrase can also start a control. Preserve its
+        # follow-up window while withholding the possible control prefix.
+        if (pid in self._conversation_active and cfg.require_wake_phrase
+                and strip_magic(self._gate._magic_re, text) == ""):
+            await self._gate.feed(pid, text)
 
     async def _dispatch_conversation_transcript(self, frame: TranscriptionFrame) -> None:
         cfg = self._conversation_cfg

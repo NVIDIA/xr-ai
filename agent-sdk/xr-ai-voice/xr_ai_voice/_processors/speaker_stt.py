@@ -168,6 +168,7 @@ class _SpeakerSttProcessor(FrameProcessor):
                 await self._on_final(pid, text, pts_us)
             frame = _SpeakerTranscriptionFrame(
                 text=text, user_id=pid, timestamp=str(pts_us), speaker_id=event.get("speaker_id"),
+                _control_pending=kind == "control_pending",
             )
             frame.pts = pts_us * 1_000
         else:
