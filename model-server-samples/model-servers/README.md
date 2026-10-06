@@ -6,7 +6,7 @@
 # Shared model servers
 
 This sample starts the reusable inference services consumed by the agent
-samples. The default deployment includes Parakeet STT, Pocket TTS, Nemotron-3
+samples. The default deployment includes enrolled-speaker ASR, Pocket TTS, Nemotron-3
 Nano Omni, Cosmos3 Nano Reasoner, and the Nemotron embedding model.
 
 The launcher waits for every selected service to become healthy. It then prints
@@ -73,6 +73,12 @@ To use the self-hosted NIM profile instead of the default profile:
 ```bash
 uv run model_servers --models vlm_llm_nim
 ```
+
+The default profile starts enrolled-speaker ASR. The NIM profile retains batch STT. Configure placement in
+`yaml/<gpu-profile>/speaker_stt.yaml`; the shipped voice samples enable
+`speaker.enabled` in their voice-gate YAML. Refer to the
+[speaker enrollment reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-voice.html#speaker-enrollment)
+for enrollment and wake-phrase behavior.
 
 The services persist across agent-sample restarts. Stop them explicitly when
 they are no longer needed:

@@ -374,6 +374,15 @@ its persistent process with `start_new_session=True`, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
 `model_servers --stop` cleanup.
 
+The default model profile starts speaker ASR through its private `services`
+declaration. The launcher waits for model loading, decoder warmup and IPC binding
+before reporting readiness, and reuses warm instances with matching configuration.
+Configuration changes require stopping and restarting the service. `--stop`
+verifies the IPC protocol and configuration fingerprint before requesting
+shutdown. The speaker service has no HTTP port and is excluded from HTTP cleanup.
+The NIM model profile retains its existing STT server. Refer to
+{doc}`/reference/agent-sdk-voice` for worker backend selection and enrollment.
+
 Pocket TTS uses the launcher's persistent process group directly. Its bootstrap
 reuses an existing healthy listener. In a monitored stack, the reuse invocation
 remains alive as a health proxy so the launcher can detect service loss. A

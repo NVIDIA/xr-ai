@@ -13,7 +13,7 @@ profile can mix local in-process servers, vLLM servers, and self-hosted NIM
 containers. Shipped profiles (yaml/models.<name>.json):
 
   default
-    stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
+    speaker-stt — Nemotron 3 Diarization + Multitalker Parakeet (local IPC)
     tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
@@ -23,6 +23,9 @@ containers. Shipped profiles (yaml/models.<name>.json):
     stt + tts + embedding local; the LLM and VLM as self-hosted NIM containers
     (Nemotron-3-Nano-Omni port 8110, Cosmos3-Nano Reasoner port 8100).
     Requires docker + NGC_API_KEY. Samples may reuse these endpoints.
+
+The default profile declares speaker ASR under ``services``. Consuming workers
+configure enrollment in their voice-gate YAML.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
 YAML directory; a service may ship a profile-specific config variant named
@@ -38,6 +41,9 @@ To stop all model servers:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
+import json
+import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from xr_ai_launcher import (
@@ -82,6 +88,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server"),
     "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server"),
     "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server"),
+    "speaker-stt": ("../../services/speaker-stt", "speaker_stt", "speaker_stt"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "agent-llm": (
@@ -128,7 +135,19 @@ def _build_processes(
 ) -> tuple[list[Process], tuple[str, ...]]:
     profile_path = _profile_path(selection)
     deployment = load_deployment_profile(profile_path)
-    unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
+    services = dict(deployment.services)
+    # Private IPC speech has no model HTTP adapter. Its declaration belongs
+    # to this operator profile, outside the shared model-client schema.
+    private_services = json.loads(profile_path.read_text()).get("services", {})
+    if not isinstance(private_services, dict):
+        raise ValueError("model profile services must be an object")
+    for service, spec in private_services.items():
+        if service != "speaker-stt" or spec != {"ownership": "managed"}:
+            raise ValueError("private services must declare speaker-stt with ownership: managed")
+        if service in services and services[service] != "own":
+            raise ValueError(f"conflicting ownership for service {service!r}")
+        services[service] = "own"
+    unknown = services.keys() - _MODEL_SERVICES.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
 
@@ -137,7 +156,7 @@ def _build_processes(
     profile_key = profile_path.stem.removeprefix("models.")
     processes: list[Process] = []
     for service, (project, command, config_base) in _MODEL_SERVICES.items():
-        if deployment.launch_mode(service) != "own":
+        if services.get(service) != "own":
             continue
         config = _resolve_config_variant(config_dir, config_base, profile_key)
         if not config.is_file():
@@ -145,9 +164,15 @@ def _build_processes(
                 f"GPU profile {profile_name!r} is incomplete: missing {config} "
                 f"for service {service!r}"
             )
-        port = _read_service_port(config)
-        if port is None:
-            raise ValueError(f"{config}: service config must declare port or http_port")
+        if service == "speaker-stt":
+            if read_config_scalar(config, "port") or read_config_scalar(config, "http_port"):
+                raise ValueError(f"{config}: speaker STT uses IPC and must not declare an HTTP port")
+            _speaker_socket_path(read_config_scalar(config, "endpoint"))
+            port = None
+        else:
+            port = _read_service_port(config)
+            if port is None:
+                raise ValueError(f"{config}: service config must declare port or http_port")
         processes.append(Process(
             service, project, command, config=config,
             launch_mode="persist", port=port,
@@ -155,10 +180,84 @@ def _build_processes(
     return processes, deployment.required_credentials
 
 
+def _speaker_socket_path(endpoint: str) -> Path:
+    if not endpoint.startswith("ipc:///") or endpoint == "ipc:///":
+        raise ValueError("speaker STT endpoint must be an absolute local ipc:// path")
+    return Path(endpoint.removeprefix("ipc://"))
+
+
+def _speaker_exchange(endpoint: str, body: dict) -> dict:
+    import msgpack
+    import zmq
+
+    socket = zmq.Context.instance().socket(zmq.REQ)
+    socket.setsockopt(zmq.LINGER, 0)
+    socket.setsockopt(zmq.IMMEDIATE, 1)
+    socket.setsockopt(zmq.SNDTIMEO, 10000)
+    socket.setsockopt(zmq.RCVTIMEO, 10000)
+    socket.connect(endpoint)
+    try:
+        socket.send(msgpack.packb(body, use_bin_type=True))
+        result = msgpack.unpackb(socket.recv(), raw=False)
+        if not isinstance(result, dict) or result.get("service") != "xr-ai-speaker-stt" or result.get("protocol") != 1:
+            raise RuntimeError(f"refusing to stop incompatible service at {endpoint}")
+        return result
+    except zmq.Again as exc:
+        raise TimeoutError(f"speaker STT did not respond at {endpoint}") from exc
+    finally:
+        socket.close()
+
+
+def _speaker_lock_held(path: Path) -> bool:
+    import fcntl
+
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    if not lock_path.is_file():
+        return False
+    with lock_path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+    return False
+
+
+def _stop_speaker_endpoint(endpoint: str) -> None:
+    path = _speaker_socket_path(endpoint)
+    if not path.exists() and not _speaker_lock_held(path):
+        return
+    try:
+        status = _speaker_exchange(endpoint, {"op": "status"})
+    except TimeoutError:
+        if not _speaker_lock_held(path):
+            return  # No live owner; a killed server may leave a stale socket.
+        raise
+    _speaker_exchange(endpoint, {"op": "shutdown", "fingerprint": status["fingerprint"]})
+    deadline = time.monotonic() + 10
+    while _speaker_lock_held(path):
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"speaker STT did not release its socket at {endpoint}")
+        time.sleep(0.05)
+
+
+def _stop_speaker_services(processes: Sequence[Process] = ()) -> None:
+    selected = {
+        read_config_scalar(Path(process.config), "endpoint")
+        for process in processes if process.name == "speaker-stt"
+    }
+    configs = list((_BASE / "yaml").glob("*/speaker_stt*.yaml"))
+    configs.append((_BASE / "../../services/speaker-stt/speaker_stt.yaml").resolve())
+    endpoints = {read_config_scalar(path, "endpoint") for path in configs if path.is_file()}
+    for endpoint in sorted(endpoints - selected):
+        _stop_speaker_endpoint(endpoint)
+
+
 def _known_service_ports() -> list[tuple[str, int]]:
     """Discover cleanup targets from the YAML files that own their ports."""
     targets: set[tuple[str, int]] = set()
     for service, (project, _, config_base) in _MODEL_SERVICES.items():
+        if service == "speaker-stt":
+            continue
         configs = list((_BASE / "yaml").glob(f"*/{config_base}*.yaml"))
         configs.append((_BASE / project / f"{config_base}.yaml").resolve())
         for config in configs:
@@ -168,9 +267,10 @@ def _known_service_ports() -> list[tuple[str, int]]:
 
 
 def _stop_models() -> None:
-    # Surface docker/ss/lsof failures so operators see why --stop aborted
+    # Surface cleanup failures so operators see why --stop aborted
     # instead of a silent traceback exit.
     try:
+        _stop_speaker_services()
         if not stop_persistent_servers(_known_service_ports()):
             raise RuntimeError("one or more persistent servers are still running")
     except Exception as exc:
@@ -185,8 +285,10 @@ def _stop_unselected_services(processes: list[Process]) -> None:
     Stops by port, keeping any port the profile uses: a persistent server
     already holding a selected port is reused (or evicted by the incoming
     wrapper when a different container owns it).
+    Speaker ASR is kept or stopped by its configured local IPC endpoint.
     """
     selected_ports = {process.port for process in processes}
+    _stop_speaker_services(processes)
     unselected = [
         (service, port)
         for service, port in _known_service_ports()
