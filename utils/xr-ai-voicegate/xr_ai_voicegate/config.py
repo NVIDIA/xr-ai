@@ -6,12 +6,13 @@ for the voice gate."""
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from typing import Protocol
 
 import yaml
 
 from ._conversation import _ConversationConfig
+from ._speaker import _SpeakerConfig
 
 _TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
 _FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
@@ -57,6 +58,7 @@ class VoiceGateConfig:
     set ``listening_chime: false`` to disable it.
     """
 
+    _speaker: _SpeakerConfig | None = field(default=None, init=False, repr=False)
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
 
 
@@ -65,8 +67,9 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
     bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
-    An optional ``conversation`` mapping configures microphone start and stop
-    controls in the unified voice pipeline.
+    Optional ``conversation`` and ``speaker`` mappings configure session
+    controls and speech-backend selection for the unified voice pipeline.
+    Their settings remain private to that path.
     Missing file or empty file → returns the dataclass defaults (gate
     disabled / always-on). ``magic_phrases: null`` and trailing whitespace
     in phrases are normalized the same way the inline-block parser did.
@@ -89,7 +92,18 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
             raw.get("listening_chime", True), "listening_chime"
         ),
     )
-    object.__setattr__(cfg, "_conversation", _ConversationConfig._from_yaml(raw.get("conversation")))
+    speaker = _SpeakerConfig._from_yaml(raw.get("speaker"))
+    conversation = _ConversationConfig._from_yaml(raw.get("conversation"))
+    if "conversation" not in raw and speaker is not None:
+        # Preserve existing speaker-only YAML while separating the two concerns
+        # for newly configured workers.
+        conversation = _ConversationConfig(**{f.name: getattr(speaker, f.name) for f in fields(_ConversationConfig)})
+    if conversation is None:
+        speaker = None
+    elif speaker is not None:
+        speaker = replace(speaker, **{f.name: getattr(conversation, f.name) for f in fields(_ConversationConfig)})
+    object.__setattr__(cfg, "_speaker", speaker)
+    object.__setattr__(cfg, "_conversation", conversation)
     return cfg
 
 

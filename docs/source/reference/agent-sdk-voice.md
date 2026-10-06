@@ -220,12 +220,75 @@ acknowledgement. If STT revises partial `hey agent stop` to final `hey agent sto
 monitoring xyz`, the final transcript instead dispatches `stop monitoring xyz`
 to the agent; the latency-saving interruption is not undone.
 
+(speaker-enrollment)=
+
+## Speaker filtering and backend selection
+
+The same conversation controls work with ordinary STT and optional speaker
+filtering. Add `speaker` alongside `conversation` in the worker's voice-gate YAML:
+
+```yaml
+speaker:
+  enabled: true
+  backend: auto
+  endpoint: ipc:///tmp/xr-ai-speaker-stt.sock
+```
+
+The worker probes this private endpoint once before starting its media pipeline.
+A ready compatible service selects diarization; an absent or unresponsive endpoint
+selects the configured ordinary `STTService`, including the unchanged NIM stack's
+HTTP STT adapter. The worker logs its selection. Ordinary STT cannot identify or
+reject other voices on the same microphone. Set `speaker.backend: required` to
+refuse startup without diarization, or `speaker.enabled: false` to select ordinary
+STT while retaining conversation controls. Restart the worker to change backends.
+Loss of a selected diarization service resets enrollment instead of switching to
+unfiltered STT.
+
+Speaker filtering uses Nemotron 3 Diarization with Multitalker Parakeet. A private
+inference process shares model weights across workers and keeps one
+speaker-conditioned ASR stream per participant. Other voices contribute to
+diarization and interference conditioning, but are not transcribed after
+enrollment. Start the inference process separately from the repository root:
+
+```bash
+uv --config-file uv.toml run --project services/speaker-stt \
+  python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
+```
+
+Say the start phrase while other speakers are quiet. Before enrollment, the
+service transcribes one unambiguous candidate solely to recognize that phrase,
+without dispatching a query. Enrollment is refused when another voice appears
+during the utterance. Split controls must retain the same speaker label, and a
+competing voice before enrollment clears a pending prefix. After enrollment,
+only the selected speaker can send queries or release the conversation. Wake
+phrases remain optional through `conversation.require_wake_phrase`; filtering
+cannot determine whom the wearer is addressing.
+
+Conversation state belongs to a participant connection. Disconnect, inference
+failure, processing overload or an audio-timeline discontinuity requires
+enrollment again. Per-participant queues retain at most two seconds or 200 audio
+frames; overload drops pending audio and revokes enrollment. Workers wait two
+seconds before retrying after failure or overload. Abandoned sessions expire and
+the service bounds their count. An unfinished utterance at `max_utterance_s` is
+dropped instead of acting on a truncated control phrase.
+
+Worker phrase settings do not require restarting the model service. When both
+`conversation` and `speaker` are present, `conversation` owns the control settings.
+Speaker-only YAML remains supported. Disabling conversation controls also disables
+speaker enrollment; typed input retains its existing behavior.
+
+Speech accuracy, identity stability, interference suppression, latency and GPU
+memory require live qualification on the intended microphones. Enrollment selects
+a session speaker; it is not authentication or a persistent biometric identity.
+No speaker profiles are saved to disk.
+
 ## Relay telemetry
 
 Voice output fragments use a low-cardinality runtime topic. `VoiceAgent` emits
 one semantic `voice.response` scope per finite response or completed stream.
-The media pipeline emits one `voice.stt` scope per transcription and one
-`voice.tts` scope per sentence synthesis. STT records audio size, duration, and
+The batch-STT path emits one `voice.stt` scope per transcription; speaker
+filtering does not currently emit STT scopes. The media pipeline emits one
+`voice.tts` scope per sentence synthesis. Batch STT records audio size, duration, and
 sample rate plus a transcript result mark; TTS records its sentence. Raw audio
 is never written to Relay events, and these timings end at provider handoff,
 not client playback.
