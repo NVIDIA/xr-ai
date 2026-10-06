@@ -46,8 +46,11 @@ For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
 For deployment order and migration of existing applications, refer to
 {ref}`consumer-model-readiness`.
 
-Each non-empty final STT result is queued for publication on
-`VOICE_TRANSCRIPT_TOPIC` before wake-phrase filtering. Accepted speech and
+Each non-empty final STT result during an active conversation is queued for
+publication on `VOICE_TRANSCRIPT_TOPIC` before optional wake-phrase filtering.
+Conversation control phrases and speech while the conversation is closed are
+withheld. With conversation controls disabled, all non-empty final results are
+published before wake-phrase filtering. Accepted speech and
 untopiced typed text become `UserQuery`; named application and control messages
 are never interpreted as user text. Optional participant join, leave, and
 interruption topics let application agents own their state cleanup.
@@ -135,15 +138,56 @@ Applications call `release(participant_id)` on departure and `stop()` before
 runtime shutdown. The aggregator logs accepted contributions discarded during
 release or shutdown.
 
+(voice-conversation-controls)=
+## Conversation controls
+
+The shipped voice samples start with their microphone conversation closed.
+After connecting, say `Hey agent, let's start talking`, then speak naturally
+without a wake phrase. Say `Hey agent, let's stop talking` to close the
+conversation and interrupt the current response. A short `stop` interrupts the
+response while keeping the conversation open.
+
+Configure the phrases in each sample's voice-gate YAML:
+
+```yaml
+conversation:
+  enabled: true
+  start_phrase: "Hey agent, let's start talking"
+  stop_phrase: "Hey agent, let's stop talking"
+  require_wake_phrase: false
+  phrase_window_s: 6.0
+```
+
+Matching ignores case, punctuation, and apostrophes; `let us` also matches
+`let's`. Exact control prefixes can span final STT results: `Hey agent`, followed
+by `let's start talking`, starts the conversation if their speech onsets fall
+within `phrase_window_s`. An unrelated or unrecognized utterance, an expired
+window, or a disconnect discards pending fragments. Quoting the phrase inside a
+longer utterance does not activate it. Control phrases never become agent
+queries or transcript-topic events.
+
+These controls use the sample's existing STT service, including the independent
+NIM model stack. They do not identify speakers or reject other voices on the
+same microphone. Conversation state is scoped to each connected participant.
+Typed messages retain their existing wake-gate behavior and cannot open or close
+a microphone conversation.
+
+Set `conversation.require_wake_phrase: true` to require `magic_phrases` during
+an active conversation, preserving the optional chime and follow-up grace
+window. Set `conversation.enabled: false`, or omit the mapping, for the original
+wake-only behavior. An empty `magic_phrases` list in that mode restores
+immediate always-on speech dispatch.
+
 ## Voice gating and early probes
 
 VAD and STT probe the opening audio while the user is still speaking. Probe
-audio includes a silent tail so offline STT can finalize a phrase. A partial
-global-STOP match interrupts active output immediately, but it does not commit
+audio includes a silent tail so offline STT can finalize a phrase. During an
+active conversation, a partial global-STOP match interrupts output immediately,
+but it does not commit
 the user's intent: final STT remains authoritative for global-stop versus query
 routing. A slow probe receives a short grace period and is then cancelled.
-With wake phrases configured, one utterance can make up to three bounded partial
-STT requests plus the authoritative final request. Set `stop_probe_after_s` to
+With wake phrases or conversation controls configured, one utterance can make
+up to three bounded partial STT requests plus the authoritative final request. Set `stop_probe_after_s` to
 zero to disable the additional requests and early interruption path.
 
 A wake phrase is accepted at the beginning of a transcript or after

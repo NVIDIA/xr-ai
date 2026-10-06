@@ -6,10 +6,12 @@ for the voice gate."""
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import yaml
+
+from ._conversation import _ConversationConfig
 
 _TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
 _FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
@@ -55,12 +57,16 @@ class VoiceGateConfig:
     set ``listening_chime: false`` to disable it.
     """
 
+    _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
+
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
     bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+    An optional ``conversation`` mapping configures microphone start and stop
+    controls in the unified voice pipeline.
     Missing file or empty file → returns the dataclass defaults (gate
     disabled / always-on). ``magic_phrases: null`` and trailing whitespace
     in phrases are normalized the same way the inline-block parser did.
@@ -76,13 +82,15 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
         phrases_raw = [phrases_raw]
     phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
 
-    return VoiceGateConfig(
+    cfg = VoiceGateConfig(
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
         listening_chime  = _parse_config_bool(
             raw.get("listening_chime", True), "listening_chime"
         ),
     )
+    object.__setattr__(cfg, "_conversation", _ConversationConfig._from_yaml(raw.get("conversation")))
+    return cfg
 
 
 class AudioSink(Protocol):

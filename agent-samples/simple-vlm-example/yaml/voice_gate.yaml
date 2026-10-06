@@ -25,3 +25,14 @@ listening_chime: false
 # bypasses the gate so "hey agent" → pause → "what am I looking at?"
 # works as one natural interaction. Set to 0 to disable.
 followup_grace_s: 5.0
+
+# Start once, then speak naturally until the full stop phrase.
+# A short "stop" interrupts the response without closing the conversation.
+conversation:
+  enabled: true
+  start_phrase: "Hey agent, let's start talking"
+  stop_phrase: "Hey agent, let's stop talking"
+  # false: speak naturally after starting. true: keep wake and follow-up rules.
+  require_wake_phrase: false
+  # Join exact control fragments whose onsets are within this window.
+  phrase_window_s: 6.0

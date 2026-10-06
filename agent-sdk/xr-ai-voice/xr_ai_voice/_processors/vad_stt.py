@@ -43,7 +43,7 @@ from xr_ai_models import STTService
 from xr_ai_vad import VadDetector
 from xr_ai_voicegate._phrases import STOP_RE
 
-from .._frames import ParticipantLeftFrame
+from .._frames import ParticipantLeftFrame, _UnrecognizedSpeechFrame
 
 
 # True means the gate matched STOP; False requests another bounded probe.
@@ -108,6 +108,7 @@ class VadSttProcessor(FrameProcessor):
         self._vad_cfg               = vad_cfg
         self._on_partial_transcript = on_partial_transcript
         self._on_final_transcript   = on_final_transcript
+        self._gate_controls_partial_stop = False
         self._detectors: dict[str, VadDetector] = {}
         # Track which pid is currently in an utterance so on_utterance
         # can push the matching ``UserStoppedSpeakingFrame`` even though
@@ -211,6 +212,7 @@ class VadSttProcessor(FrameProcessor):
             f = UserStoppedSpeakingFrame()
             f.transport_source = pid
             await self.push_frame(f)
+            onset_pts = self._utterance_pts.pop(pid, None)
             try:
                 text = await self._transcribe(
                     audio_bytes,
@@ -220,8 +222,10 @@ class VadSttProcessor(FrameProcessor):
                 )
             except Exception:
                 logger.exception("stt transcribe failed pid={!r}", pid)
+                await self.push_frame(_UnrecognizedSpeechFrame(participant_id=pid))
                 return
             if not text:
+                await self.push_frame(_UnrecognizedSpeechFrame(participant_id=pid))
                 return
             tf = TranscriptionFrame(
                 text      = text,
@@ -233,7 +237,7 @@ class VadSttProcessor(FrameProcessor):
             # than user_id) need the same value.
             tf.transport_source = pid
             # Anchor the transcript to speech onset, not to STT completion.
-            tf.pts = self._utterance_pts.pop(pid, None)
+            tf.pts = onset_pts
             if self._on_final_transcript is not None:
                 await self._on_final_transcript(
                     pid,
@@ -327,7 +331,7 @@ class VadSttProcessor(FrameProcessor):
                     pid, attempt, round((time.monotonic() - before) * 1000),
                     stop_matched,
                 )
-                if stop_matched:
+                if stop_matched and not self._gate_controls_partial_stop:
                     await self._emit_early_interruption(pid, text)
                     return
 

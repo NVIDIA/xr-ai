@@ -3,19 +3,25 @@
 
 # xr-render-demo voice gate configuration.
 #
-# magic_phrases — wake-word gate. Empty list (the current default) DISABLES
-#                 the gate: every STT transcript is dispatched to the agent
-#                 (always-on, no wake word). To require a "hey agent" / "agent"
-#                 wake word instead, set:
+# magic_phrases — optional wake phrases during the active conversation.
+#                 To require a "hey agent" / "agent" wake word, also set
+#                 conversation.require_wake_phrase: true and use:
 #                     magic_phrases:
 #                       - "agent"
 #                       - "hey agent"
-#                 (matches the simple-vlm-example default). Strict-prefix match.
 # listening_chime — when true AND magic_phrases is non-empty, a short two-tone
 #                   chime plays on fresh magic-phrase matches. Inert while
 #                   magic_phrases is empty (no match can occur).
 # followup_grace_s — seconds after a phrase match during which the next
 #                    utterance from the same participant bypasses the gate.
-magic_phrases: []  # always-on; see note above to enable a wake word
+magic_phrases: []  # no wake word during the conversation
 listening_chime: true
 followup_grace_s: 5.0
+
+# Start once, then speak naturally until the full stop phrase.
+conversation:
+  enabled: true
+  start_phrase: "Hey agent, let's start talking"
+  stop_phrase: "Hey agent, let's stop talking"
+  require_wake_phrase: false
+  phrase_window_s: 6.0

@@ -6,14 +6,21 @@
 Everything pipecat already ships (``InputAudioRawFrame``,
 ``OutputAudioRawFrame``, ``TranscriptionFrame``, ``UserStartedSpeakingFrame``,
 ``UserStoppedSpeakingFrame``, ``InterruptionFrame``, ``TextFrame``) is reused
-directly — only participant lifecycle, voice-gate queries, and synthesized-text
-response boundaries live here.
+directly — participant lifecycle, unrecognized utterances, voice-gate queries,
+and synthesized-text response boundaries live here.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from pipecat.frames.frames import DataFrame
+
+
+@dataclass
+class _UnrecognizedSpeechFrame(DataFrame):
+    """A final utterance produced no transcript; discard pending controls."""
+
+    participant_id: str
 
 
 @dataclass
