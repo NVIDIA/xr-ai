@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-speaker-stt"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "pyzmq>=27.0", "msgpack>=1.0", "numpy>=1.24", "pyyaml>=6.0",
+    "xr-ai-voicegate", "xr-ai-logging",
+    "nemo-toolkit[asr]", "lightning>2.2.1,<=2.4.0", "lhotse==2.0.0a6",
+]
+
+[project.scripts]
+speaker_stt = "speaker_stt.__main__:_run"
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+
+[tool.uv.sources]
+nemo-toolkit = { git = "https://github.com/NVIDIA-NeMo/Speech", rev = "1688cc3d6a9ade854f544987810c53f605dc86fc" }
+lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
+# Exact runtime artifact required by the pinned Speech revision. This keeps
+# the new inference environment isolated without changing the global cutoff.
+lhotse = { url = "https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl" }
+xr-ai-voicegate = { path = "../../utils/xr-ai-voicegate", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["speaker_stt"]

@@ -22,6 +22,7 @@ recorded video, and document retrieval.
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `services/speaker-stt/` | `speaker_stt` | local IPC | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
@@ -39,6 +40,39 @@ YAML and resolved relative to the YAML file. Self-hosted NIM containers use
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
+
+## Speaker-conditioned STT
+
+`services/speaker-stt` is a private local inference process. It shares
+Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
+while keeping each session's diarization history, enrollment and ASR caches
+separate. A session enrolls one speaker with the configured start phrase and
+releases that identity with the stop phrase. Background voices do not reach
+the ASR decoder after enrollment. Speaker labels are session-local identities.
+
+The process accepts mono signed 16-bit PCM at 16 kHz over its private msgpack
+IPC socket. It serializes inference because model conditioning is mutable.
+Dropped audio that breaks the timeline revokes enrollment. Utterances forced
+to end at the configured duration limit cannot enroll or release a speaker.
+Start and stop phrases can span utterances within the conversation phrase
+window; another speaker or ambiguous speech clears pending enrollment.
+
+Configure model IDs, device, precision, the socket path and session capacity
+in `services/speaker-stt/speaker_stt.yaml`. From the repository root, start it
+with:
+
+```bash
+uv --config-file uv.toml run --project services/speaker-stt speaker_stt
+```
+
+The service warms both streaming and final decoding before signaling ready.
+An existing process with the same resolved configuration is reused; a changed
+configuration requires stopping that process first. Each session owns one
+ASR cache and one diarization cache. Idle sessions expire after 60 seconds
+when subsequent requests arrive; `max_sessions` bounds retained sessions.
+The model environment is isolated from workers and the existing batch STT
+service. Model weights are downloaded on first use and then reused from the
+configured cache, with `HF_HOME` set directly to `model_cache`.
 
 ## Two HuggingFace cache roots
 

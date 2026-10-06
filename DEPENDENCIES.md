@@ -487,6 +487,25 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `rag_service` → `rag_service.__main__:run`
 
+#### `xr-ai-speaker-stt` — [`services/speaker-stt/`](services/speaker-stt/)
+
+- Python: `>=3.12,<3.14`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyzmq>=27.0`
+  - `msgpack>=1.0`
+  - `numpy>=1.24`
+  - `pyyaml>=6.0`
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
+  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
+- Optional dependency groups: none
+- Commands:
+  - `speaker_stt` → `speaker_stt.__main__:_run`
+
 #### `stt-server` — [`services/stt-server/`](services/stt-server/)
 
 - Python: `>=3.11,<3.15`

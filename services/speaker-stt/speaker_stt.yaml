@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Private local IPC socket. Match speaker.endpoint in the worker's voice gate.
+endpoint: ipc:///tmp/xr-ai-speaker-stt.sock
+asr_model: nvidia/multitalker-parakeet-streaming-0.6b-v1
+diar_model: nvidia/Nemotron-3-Diarization
+device: cuda
+precision: bf16
+# GPU 1 matches the dual Ada speech placement; choose 0 on a single GPU.
+cuda_visible_devices: "1"
+model_cache: ../../models
+# Each session holds one ASR cache and one diarization cache.
+max_sessions: 16
