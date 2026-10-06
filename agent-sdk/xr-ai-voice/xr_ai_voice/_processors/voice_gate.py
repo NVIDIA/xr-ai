@@ -44,6 +44,8 @@ from .._frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _SpeakerEnrollmentFrame,
+    _SpeakerTranscriptionFrame,
     _UnrecognizedSpeechFrame,
 )
 
@@ -83,6 +85,7 @@ class VoiceGateProcessor(FrameProcessor):
         self._wake_phrase = max(cfg.magic_phrases, key=len, default="")
         self._conversation_active: set[str] = set()
         self._controls: dict[str, _ControlMatcher] = {}
+        self._use_speaker_asr = cfg._speaker is not None
         self._on_conversation_transcript: Callable[[str, str, int], Awaitable[None]] | None = None
         self._gate = gate or VoiceGate(cfg, audio_sink=self, tts=tts)
         self._gate.bind(
@@ -98,6 +101,7 @@ class VoiceGateProcessor(FrameProcessor):
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
         # so the value is read back inside that callback.
         self._feeding_pts_us: int | None = None
+        self._feeding_speaker_id: int | None = None
 
     @property
     def gate(self) -> VoiceGate:
@@ -163,6 +167,18 @@ class VoiceGateProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, _SpeakerEnrollmentFrame):
+            if frame.state == "reset":
+                self._conversation_active.discard(frame.participant_id)
+                self._controls.pop(frame.participant_id, None)
+                self._gate.forget(frame.participant_id)
+                self._early_wake_ack.discard(frame.participant_id)
+            elif frame.state in {"enrolled", "released"}:
+                await self._set_conversation_active(frame.participant_id, frame.state == "enrolled")
+            else:
+                raise ValueError(f"unknown speaker enrollment state: {frame.state}")
+            return
+
         if isinstance(frame, _UnrecognizedSpeechFrame):
             self._controls.pop(frame.participant_id, None)
             return
@@ -202,6 +218,7 @@ class VoiceGateProcessor(FrameProcessor):
         # Gate callbacks run synchronously with feed, so capture metadata belongs
         # to this transcript until that call completes.
         self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
+        self._feeding_speaker_id = frame.speaker_id if isinstance(frame, _SpeakerTranscriptionFrame) else None
         self._feeding_speech_transcript = bool(
             frame.transport_source and frame.transport_source == frame.user_id
         )
@@ -212,6 +229,7 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._gate.feed(frame.user_id, frame.text)
         finally:
             self._feeding_pts_us = None
+            self._feeding_speaker_id = None
             self._feeding_speech_transcript = False
             self._early_wake_ack.discard(frame.user_id)
 
@@ -221,14 +239,15 @@ class VoiceGateProcessor(FrameProcessor):
         pid = frame.user_id
         matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
-        action = matcher._feed(frame.text, key=pid, at_s=at_s)
+        key = self._feeding_speaker_id if self._feeding_speaker_id is not None else pid
+        action = matcher._feed(frame.text, key=key, at_s=at_s)
         active = pid in self._conversation_active
         if action == "start":
-            if not active:
+            if not active and not self._use_speaker_asr:
                 await self._set_conversation_active(pid, True)
             return
         if action == "stop":
-            if active:
+            if active and not self._use_speaker_asr:
                 await self._set_conversation_active(pid, False)
             return
         if action == "pending":
@@ -266,7 +285,8 @@ class VoiceGateProcessor(FrameProcessor):
         self._early_wake_ack.discard(pid)
         if active:
             self._conversation_active.add(pid)
-            await self._emit_text_response(pid, "I'm listening now.")
+            text = "I'm listening to you now." if self._use_speaker_asr else "I'm listening now."
+            await self._emit_text_response(pid, text)
             return
         self._conversation_active.discard(pid)
         stop = InterruptionFrame()

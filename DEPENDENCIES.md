@@ -197,6 +197,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `nltk!=3.10.1`
   - `numpy>=1.24`
   - `scipy>=1.11`
+  - `pyzmq>=27.0`
+  - `msgpack>=1.0`
 - Optional dependency groups: none
 - Commands: none
 
