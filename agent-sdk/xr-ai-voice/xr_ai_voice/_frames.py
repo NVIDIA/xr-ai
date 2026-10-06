@@ -13,7 +13,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pipecat.frames.frames import DataFrame
+from pipecat.frames.frames import DataFrame, TranscriptionFrame
+
+
+@dataclass(kw_only=True)
+class _SpeakerTranscriptionFrame(TranscriptionFrame):
+    """An accepted speaker-ASR transcript with its session-local label."""
+
+    speaker_id: int | None
+
+
+@dataclass
+class _SpeakerEnrollmentFrame(DataFrame):
+    """Private enrollment transition consumed by the conversation gate."""
+
+    participant_id: str
+    state: str
 
 
 @dataclass
