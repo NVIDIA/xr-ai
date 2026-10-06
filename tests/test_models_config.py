@@ -11,9 +11,11 @@ import pytest
 from xr_ai_models import (
     AdapterSpec,
     Category,
+    DecisionSpec,
     DeploymentSpec,
     EndpointSpec,
     KIND_OPENAI_COMPAT,
+    KIND_SYSTEMONE,
     LLMSpec,
     ModelKind,
     EmbeddingSpec,
@@ -37,9 +39,11 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat", "riva_grpc")
-    assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
+    assert KIND_SYSTEMONE == "systemone"
+    assert get_args(ModelKind) == ("openai_compat", "riva_grpc", "systemone")
+    assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding", "decision"}
     assert LLMSpec in get_args(Spec)
+    assert DecisionSpec in get_args(Spec)
 
 
 def test_nine_presets_registered() -> None:

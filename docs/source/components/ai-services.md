@@ -29,6 +29,7 @@ recorded video, and document retrieval.
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
@@ -213,7 +214,8 @@ readiness, refer to {ref}`consumer-model-readiness`.
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, `make_embedding`, and
+`make_decision`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.

@@ -1184,6 +1184,7 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
         return False
     in_process_servers = {
         "stt": "stt_server",
+        "clef": "clef_server",
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command

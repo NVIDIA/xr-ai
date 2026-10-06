@@ -15,10 +15,10 @@ from . import presets as _presets
 from ._utils import merge_dicts
 
 
-Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
+Category = Literal["llm", "vlm", "stt", "tts", "embedding", "decision"]
 """A model role supported by :class:`ModelsConfig`."""
 
-ModelKind = Literal["openai_compat", "riva_grpc"]
+ModelKind = Literal["openai_compat", "riva_grpc", "systemone"]
 """A supported model-service adapter implementation."""
 
 Readiness = Literal["health", "none"]
@@ -28,6 +28,8 @@ KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 """The adapter kind for OpenAI-compatible HTTP endpoints."""
 KIND_RIVA_GRPC: ModelKind = "riva_grpc"
 """The adapter kind for Riva gRPC speech clients (the ``riva`` extra)."""
+KIND_SYSTEMONE: ModelKind = "systemone"
+"""The adapter kind for typed Clef SystemOne decision endpoints."""
 
 
 @dataclass(frozen=True)
@@ -536,10 +538,24 @@ class EmbeddingSpec(_RoleSpec):
         )
 
 
-Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec
+@dataclass(frozen=True)
+class DecisionSpec(_RoleSpec):
+    """Configuration for a choice-only structured decision endpoint."""
+
+    adapter: AdapterSpec = field(default_factory=lambda: AdapterSpec(kind=KIND_SYSTEMONE))
+    """Model identifier and adapter settings."""
+
+    endpoint: EndpointSpec = field(default_factory=lambda: EndpointSpec(timeout=30.0))
+    """Endpoint connectivity, authentication, and readiness settings."""
+
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    """Launcher ownership metadata for the serving process."""
+
+
+Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec | DecisionSpec
 """Any typed model-role specification stored in :class:`ModelsConfig`."""
 
-T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec)
+T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec, DecisionSpec)
 
 
 @dataclass(frozen=True)
@@ -573,6 +589,11 @@ class ModelsConfig:
         """Return the embedding specification named *name*."""
 
         return _typed(self.entries, name, EmbeddingSpec)
+
+    def decision(self, name: str) -> DecisionSpec:
+        """Return the decision specification named *name*."""
+
+        return _typed(self.entries, name, DecisionSpec)
 
     @property
     def required_credentials(self) -> tuple[str, ...]:
@@ -695,7 +716,7 @@ def _build_spec(body: dict[str, Any]) -> Spec:
             f"entry gave {explicit_category!r}"
         )
     category = preset_category or explicit_category
-    if category not in {"llm", "vlm", "stt", "tts", "embedding"}:
+    if category not in {"llm", "vlm", "stt", "tts", "embedding", "decision"}:
         raise ValueError(
             f"missing or unknown category {category!r}; "
             "set category when not using a preset"
@@ -722,7 +743,11 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
     if kind == KIND_RIVA_GRPC and category not in ("stt", "tts"):
         raise ValueError("riva_grpc is a speech kind; use it for stt/tts only")
-    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC):
+    if kind == KIND_SYSTEMONE and category != "decision":
+        raise ValueError("systemone is a decision kind; use it for decision only")
+    if category == "decision" and kind != KIND_SYSTEMONE:
+        raise ValueError("decision category requires the systemone adapter kind")
+    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, KIND_SYSTEMONE):
         raise ValueError(f"unsupported adapter kind: {kind!r}")
 
     endpoint = EndpointSpec(
@@ -736,7 +761,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         kind=kind,
         model_name=(
             _require_str(body, "model_name")
-            if category in ("llm", "vlm", "embedding")
+            if category in ("llm", "vlm", "embedding", "decision")
             else ""
         ),
         reasoning_field=_optional_str(body, "reasoning_field"),
@@ -760,6 +785,12 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         return TTSSpec(adapter=adapter, endpoint=endpoint, deployment=deployment)
     if category == "embedding":
         return EmbeddingSpec(
+            adapter=adapter,
+            endpoint=endpoint,
+            deployment=deployment,
+        )
+    if category == "decision":
+        return DecisionSpec(
             adapter=adapter,
             endpoint=endpoint,
             deployment=deployment,
