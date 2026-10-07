@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Schema example only. Ten seconds must not be copied unless instructed.
+schema_version: 1
+task:
+  id: pause_after_placement
+  name: "Pause After Placement"
+  version: 1
+  status: draft
+  source_session: example-timer-session
+  start_step: place_workpiece
+  foreground_prompt: "Guide placement followed by the instructed elapsed wait. No claim of continuous contact."
+  complete_message: "Placement and the elapsed wait are complete."
+state:
+  placement_done:
+    type: boolean
+    description: "Placement was observed and the live clock start was saved."
+    initial: false
+  started_us:
+    type: integer
+    description: "Exact epoch_us returned by clock__now after placement, never a recording timestamp."
+    initial: 0
+  wait_done:
+    type: boolean
+    description: "The instructed elapsed wait expired."
+    initial: false
+steps:
+  - id: place_workpiece
+    title: "Place the workpiece and start the timer"
+    reads: []
+    writes: [placement_done, started_us]
+    trigger:
+      function: current_view
+      interval_s: 3
+      result_field: text
+      arguments:
+        question: "Is the workpiece resting flat inside the marked area? Answer exactly ready, not ready, or unclear."
+    agent:
+      prompt: >-
+        Only on ready, call clock__now with no arguments. Commit the exact
+        returned epoch_us to started_us and placement_done to true together
+        using workflow__commit. Never invent a timestamp or commit placement
+        without saving the returned positive timestamp. On other observations,
+        do not commit. The evidence gate requires two ready matches.
+      tools: [clock__now]
+    voice:
+      prompt: "Explain placement inside the marked area. The clock starts once placement is verified, not when the user says next."
+      tools: [current_view]
+    evidence:
+      pattern: '^ready$'
+      consecutive: 2
+    complete_when:
+      placement_done: true
+    next: wait_elapsed
+    complete_on_skip: true
+    state_on_skip: {}
+    messages:
+      enter: "Place the workpiece flat inside the marked area."
+      complete: "Placement is verified and the timer has started. Say next for the waiting step."
+      skip: "Ending this run because the timer start was not established."
+  - id: wait_elapsed
+    title: "Wait for ten elapsed seconds"
+    reads: [started_us]
+    writes: [wait_done]
+    trigger:
+      function: clock__timer
+      interval_s: 1
+      arguments:
+        started_at_us: $state.started_us
+        duration_s: 10
+      result_field: expired
+    agent:
+      prompt: "Use only the deterministic timer result; no visual check or estimated time."
+      tools: []
+    voice:
+      prompt: "Call clock__timer with started_at_us equal to state.started_us and duration_s 10. Report remaining_s or expired. Do not inspect the scene or claim continuous contact."
+      tools: [clock__timer]
+    evidence:
+      pattern: '^true$'
+      consecutive: 1
+      commit:
+        wait_done: true
+    complete_when:
+      wait_done: true
+    next: null
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: "Wait until ten seconds have elapsed since the saved placement check."
+      complete: "Ten seconds have elapsed. Say next to finish."
+      skip: "Skipping the elapsed wait without verification."

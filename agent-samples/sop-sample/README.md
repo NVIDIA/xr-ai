@@ -7,7 +7,10 @@
 
 Capture narrated demonstrations automatically while a participant's live camera
 is on. The sample saves audio, video, sampled frames, captions, and narration.
-It does not answer questions or run guides.
+It does not answer questions or run guides. A separate coding-agent skill turns
+saved captures into draft guides for human review. Refer to
+[guide generation](https://nvidia.github.io/xr-ai/latest/reference/sop-sample.html#generate-a-draft-guide)
+for the prompt, validation command, and approval workflow.
 
 ## Run
 
