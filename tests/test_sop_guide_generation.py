@@ -85,6 +85,109 @@ def test_validator_rejects_model_authoring_errors(visual, mutation, diagnostic):
         parse_workflow(yaml.safe_dump(visual))
 
 
+@pytest.mark.parametrize("path", [
+    ("steps", 0, "evidence", "pattern"),
+    ("steps", 0, "agent", "prompt"),
+    ("steps", 0, "voice", "prompt"),
+    ("steps", 0, "messages", "enter"),
+    ("steps", 0, "messages", "complete"),
+    ("steps", 0, "messages", "skip"),
+    ("task", "name"),
+    ("task", "foreground_prompt"),
+    ("task", "complete_message"),
+    ("state", "workpiece_positioned", "description"),
+])
+@pytest.mark.parametrize("value", [["ready"], {"ready": True}, True, 23, 1.5, None])
+def test_text_fields_reject_non_strings(visual, path, value):
+    target = visual
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValueError, match="must be a string"):
+        parse_workflow(yaml.safe_dump(visual))
+
+
+def test_actual_string_regex_and_whitespace_preserve_existing_meaning(visual):
+    visual["steps"][0]["evidence"]["pattern"] = "  [ready]  "
+    visual["steps"][0]["agent"]["prompt"] = "  Observe carefully.  "
+    workflow = parse_workflow(yaml.safe_dump(visual))
+    step = workflow.steps[workflow.start_step]
+    assert step.agent.prompt == "Observe carefully."
+    assert step.evidence.pattern == "[ready]"
+    assert re.fullmatch(step.evidence.pattern, "a")
+    assert not re.fullmatch(step.evidence.pattern, "ready")
+    visual["steps"][0]["evidence"]["pattern"] = " \n "
+    with pytest.raises(ValueError, match="must not be empty"):
+        parse_workflow(yaml.safe_dump(visual))
+
+
+@pytest.mark.parametrize("edit,key", [
+    (lambda source: "steps: []\n" + source, "steps"),
+    (lambda source: source.replace("    initial: false", "    initial: false\n    initial: true"), "initial"),
+    (lambda source: source.replace(
+        "    evidence:\n", "    evidence: {pattern: wrong, consecutive: 1}\n    evidence:\n"),
+     "evidence"),
+    (lambda source: source.replace("      pattern: '^ready$'", "      pattern: '^ready$'\n      pattern: '^ready$'"),
+     "pattern"),
+    (lambda source: source.replace("    initial: false", "    initial: false\n    \"initial\": true"), "initial"),
+])
+def test_duplicate_keys_rejected_at_every_level(edit, key):
+    source = (_REFERENCES / "example.guide.yaml").read_text()
+    changed = edit(source)
+    assert changed != source
+    with pytest.raises(yaml.constructor.ConstructorError, match=f"duplicate mapping key '{key}'") as error:
+        parse_workflow(changed)
+    assert error.value.problem_mark.line >= 0
+
+
+def test_safe_aliases_and_non_overlapping_merges_remain_supported():
+    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = source.replace("    type: boolean\n    description:", "    <<: {type: boolean}\n    description:")
+    source = source.replace("    agent:\n", "    agent: &policy\n")
+    # Sharing a policy is not a duplicate key in the receiving step.
+    start = source.index("    voice:\n")
+    end = source.index("    evidence:\n", start)
+    source = source[:start] + "    voice: *policy\n" + source[end:]
+    workflow = parse_workflow(source)
+    step = workflow.steps[workflow.start_step]
+    assert step.voice == step.agent
+    assert workflow.state_fields["workpiece_positioned"].type == "boolean"
+
+
+def test_merge_cannot_override_an_existing_requirement():
+    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = source.replace("    initial: false", "    <<: {initial: false}\n    initial: true")
+    with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key 'initial'"):
+        parse_workflow(source)
+
+
+def test_repeated_merge_keys_are_rejected_before_expansion():
+    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = source.replace("    type: boolean", "    <<: {type: boolean}\n    <<: {initial: false}")
+    source = source.replace("    initial: false\n", "")
+    with pytest.raises(yaml.constructor.ConstructorError, match="duplicate mapping key '<<'"):
+        parse_workflow(source)
+
+
+def test_guide_loader_is_local_and_still_safe():
+    # Guide strictness must not change YAML behavior for unrelated sample configs.
+    assert yaml.safe_load("value: 1\nvalue: 2") == {"value": 2}
+    with pytest.raises(yaml.constructor.ConstructorError):
+        parse_workflow("!!python/object/apply:builtins.str [ready]")
+
+
+def test_duplicate_diagnostic_is_reported_by_read_only_cli(tmp_path, capsys):
+    source = (_REFERENCES / "example.guide.yaml").read_text()
+    source = source.replace("    initial: false", "    initial: false\n    initial: true")
+    path = tmp_path / "duplicate.guide.yaml"
+    path.write_text(source)
+    assert main([str(path)]) == 1
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert "duplicate mapping key 'initial'" in stderr and "line" in stderr
+    assert path.read_text() == source
+
+
 @pytest.mark.parametrize("argument,value", [
     ("duration_s", 0), ("duration_s", True), ("duration_s", 1.5),
     ("duration_s", "15"), ("started_at_us", 0),
