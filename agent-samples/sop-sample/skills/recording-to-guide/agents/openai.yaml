@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Recording to Guide"
+  short_description: "Draft an evidence-linked SOP from a saved capture"
+  default_prompt: "Use $recording-to-guide to read my completed SOP capture and write a draft guide YAML and review notes."

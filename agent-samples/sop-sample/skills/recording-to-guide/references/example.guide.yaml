@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Schema example, not a recording: replace every task-specific value.
+schema_version: 1
+task:
+  id: arrange_workpiece
+  name: "Arrange Workpiece"
+  version: 1
+  status: draft
+  source_session: example-session-id
+  start_step: position_workpiece
+  foreground_prompt: "Guide the recorded workpiece arrangement, without inferring hidden conditions."
+  complete_message: "The workpiece arrangement is complete."
+state:
+  workpiece_positioned:
+    type: boolean
+    description: "The workpiece is visibly centered inside the marked area."
+    initial: false
+steps:
+  - id: position_workpiece
+    title: "Position the workpiece"
+    reads: []
+    writes: [workpiece_positioned]
+    trigger:
+      function: current_view
+      interval_s: 3
+      result_field: text
+      arguments:
+        question: >-
+          Is one workpiece resting flat and centered inside the marked area,
+          not held above it? Answer exactly ready, not ready, or unclear.
+    agent:
+      prompt: "Use the direct visual classification; do not infer hidden conditions."
+      tools: []
+    voice:
+      prompt: "Explain where to place the workpiece. For a live check ask current_view whether it rests flat and centered inside the marked area."
+      tools: [current_view]
+    evidence:
+      pattern: '^ready$'
+      consecutive: 2
+      commit:
+        workpiece_positioned: true
+    complete_when:
+      workpiece_positioned: true
+    next: null
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: "Place the workpiece flat and centered inside the marked area."
+      complete: "The workpiece looks positioned. Say next to finish."
+      skip: "Skipping the positioning check without verification."
