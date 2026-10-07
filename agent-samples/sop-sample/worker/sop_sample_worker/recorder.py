@@ -27,7 +27,8 @@ from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
-_MEDIA_FINALIZE_TIMEOUT_S = 10.0
+_MEDIA_FINALIZE_WARNING_S = 10.0
+_MEDIA_START_RETRY_S = 0.1
 
 
 @dataclass(slots=True)
@@ -258,6 +259,7 @@ class RecorderAgent(Agent):
                 await self._write_views(state)
                 raise
             self._sessions[participant_id] = state
+        await self._wait_for_media_start(state)
         async with state.lock:
             await self._write_views(state)
         state.tasks.extend(
@@ -275,6 +277,34 @@ class RecorderAgent(Agent):
             )
         )
         logger.info("recording started pid={!r} session={}", participant_id, directory)
+
+    async def _wait_for_media_start(self, state: _Session) -> None:
+        # Sending a start is not an acknowledgement: capture may still reject
+        # it after publishing the previous manifest, while finishing cleanup.
+        # Its flushed start event confirms acceptance in this unique target.
+        def started() -> bool:
+            for path in state.media_directory.glob("*/events.jsonl"):
+                with path.open(encoding="utf-8") as stream:
+                    for line in stream:
+                        if not line.endswith("\n"):
+                            break
+                        event = json.loads(line)
+                        if event.get("kind") == "recording" and event.get("state") == "started":
+                            return True
+            return False
+
+        start = state.capture_tools.get("start_recording")
+        assert start is not None
+        waiting_since = time.monotonic()
+        warned = False
+        while not await asyncio.to_thread(started):
+            if not warned and time.monotonic() - waiting_since >= _MEDIA_FINALIZE_WARNING_S:
+                warned = True
+                logger.warning("media capture start pending pid={!r}; retrying until accepted", state.participant_id)
+            await asyncio.sleep(_MEDIA_START_RETRY_S)
+            # Repeating a start is idempotent while the same session is active.
+            await start.execute(EmptyRequest())
+        state.media_status = "recording"
 
     async def finish_recording(self, participant_id: str) -> None:
         """Finalize the packet using the same path as worker shutdown."""
@@ -641,6 +671,20 @@ class RecorderAgent(Agent):
         if state.tasks:
             await asyncio.gather(*state.tasks, return_exceptions=True)
         await self._drain_writes(state)
+        # A cancelled append awaiter may have skipped the in-memory update.
+        # Rebuild derived views from the durable log after all writers finish.
+        def read_captions() -> list[dict[str, Any]]:
+            path = state.directory / "captions.jsonl"
+            if not path.exists():
+                return []
+            with path.open(encoding="utf-8") as stream:
+                return [json.loads(line) for line in stream if line.strip()]
+
+        captions = await asyncio.to_thread(read_captions)
+        state.caption_count = len(captions)
+        state.activities.clear()
+        for caption in captions:
+            self._update_hierarchy(state, caption)
         if stop_error is not None:
             await self._error(state, "media_capture_stop", str(stop_error))
         # Departure or service shutdown may finalize capture even if sending
@@ -691,17 +735,30 @@ class RecorderAgent(Agent):
                 return path, json.loads(path.read_text(encoding="utf-8"))
             return None
 
+        async def wait_for_manifest() -> tuple[Path, dict[str, Any]]:
+            while (result := await asyncio.to_thread(read_manifest)) is None:
+                await asyncio.sleep(0.05)
+            return result
+
         try:
-            async with asyncio.timeout(_MEDIA_FINALIZE_TIMEOUT_S):
-                while (result := await asyncio.to_thread(read_manifest)) is None:
-                    await asyncio.sleep(0.05)
+            try:
+                async with asyncio.timeout(_MEDIA_FINALIZE_WARNING_S):
+                    result = await wait_for_manifest()
+            except TimeoutError:
+                message = (
+                    "shared capture is still finalizing; "
+                    "keeping recording restart blocked until its manifest arrives"
+                )
+                logger.warning("media capture pending pid={!r}: {}", state.participant_id, message)
+                await self._error(state, "media_capture_pending", message)
+                result = await wait_for_manifest()
             path, manifest = result
             state.media_manifest = str(path)
             if manifest.get("complete") is not True:
                 raise ValueError(f"incomplete media capture: {manifest.get('incomplete_reason')}")
             state.media_status = "complete"
-        except (TimeoutError, OSError, ValueError) as exc:
+        except (OSError, ValueError) as exc:
             state.media_status = "finalization_failed"
-            message = str(exc) or "timed out waiting for the shared capture manifest"
+            message = str(exc)
             logger.warning("media capture finalization pid={!r}: {}", state.participant_id, message)
             await self._error(state, "media_capture_finalize", message)
