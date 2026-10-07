@@ -94,19 +94,20 @@ class _Models:
             _SpeakerConfig(
                 silence_duration=2.5 * seconds,
                 max_utterance_s=max(30.0, 4 * seconds),
-            )
+            ),
+            audio_origin_us=0,
         )
         session.selection.owner = 0
         session.selection.candidate = 0
         for second in range(ceil(3 * seconds)):
-            session._feed(bytes(32000), second * 1_000_000)
+            session._feed(bytes(32000))
 
-    def _session(self, cfg: _SpeakerConfig) -> _Session:
-        return _Session(self, cfg)
+    def _session(self, cfg: _SpeakerConfig, *, audio_origin_us: int) -> _Session:
+        return _Session(self, cfg, audio_origin_us=audio_origin_us)
 
 
 class _Session:
-    def __init__(self, models: _Models, cfg: _SpeakerConfig) -> None:
+    def __init__(self, models: _Models, cfg: _SpeakerConfig, *, audio_origin_us: int) -> None:
         import torch
         from nemo.collections.asr.parts.utils.multispk_transcribe_utils import SpeakerTaggedASR
         from nemo.collections.asr.parts.utils.streaming_utils import CacheAwareStreamingAudioBuffer
@@ -123,8 +124,7 @@ class _Session:
         self.buffer = CacheAwareStreamingAudioBuffer(model=models.asr, online_normalization=False)
         self.pending = np.zeros(models.cache_samples, dtype=np.float32)
         self.step = 0
-        self.origin_us: int | None = None
-        self.last_end_us: int | None = None
+        self.audio_origin_us = audio_origin_us
         self.last_partial = ""
         self._reset_asr()
 
@@ -177,7 +177,7 @@ class _Session:
             text = text.text
         return text or ""
 
-    def _feed(self, audio: bytes, pts_us: int) -> list[dict]:
+    def _feed(self, audio: bytes) -> list[dict]:
         import torch
 
         if len(audio) % 2:
@@ -185,12 +185,6 @@ class _Session:
         samples = np.frombuffer(audio, dtype="<i2").astype(np.float32) / 32768.0
         if samples.size > 16000:
             raise ValueError("an audio message must be at most one second")
-        # Lost chunks invalidate the speaker identity and decoder timeline.
-        if self.last_end_us is not None and abs(pts_us - self.last_end_us) > 1_000_000:
-            raise ValueError("audio timeline discontinuity; reopen the session")
-        self.last_end_us = pts_us + round(samples.size * 1_000_000 / 16000)
-        if self.origin_us is None:
-            self.origin_us = pts_us
         self.pending = np.concatenate((self.pending, samples))
         frame_samples = self.models.hop_samples + self.models.cache_samples
         events = []
@@ -221,7 +215,9 @@ class _Session:
                 recent = preds[:, -self.models.asr.encoder.streaming_cfg.valid_out_len :]
                 active_mask = recent.amax(dim=1)[0] >= self.selection.cfg.activity_threshold
                 active = set(active_mask.nonzero().flatten().tolist())
-                chunk_pts = self.origin_us + round(self.step * self.models.hop_samples * 1_000_000 / 16000)
+                chunk_pts = self.audio_origin_us + round(
+                    self.step * self.models.hop_samples * 1_000_000 / 16000
+                )
                 selected, edges, started = self.selection._activity(
                     active,
                     self.models.hop_samples / 16000,

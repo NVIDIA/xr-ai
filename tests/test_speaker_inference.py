@@ -87,15 +87,12 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
 
     models, activity, asr_calls, masks, cache_allocations, text = _streaming_models
     cfg = _SpeakerConfig(silence_duration=0.3)
-    session = _Session(models, cfg)
-    now = 1000000
+    session = _Session(models, cfg, audio_origin_us=1_000_000)
 
     def feed(speakers, transcript):
-        nonlocal now
         activity[:] = speakers
         text[0] = transcript
-        events = session._feed(bytes(5120), now)
-        now += 160000
+        events = session._feed(bytes(5120))
         assert session.adapter.instance_manager.diar_states.diar_pred_out_stream.shape == (1, 2, 8)
         return events
 
@@ -122,8 +119,8 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
     text[0] = ""
     warmed = []
 
-    def warm_session(cfg):
-        isolated = _Session(models, cfg)
+    def warm_session(cfg, *, audio_origin_us):
+        isolated = _Session(models, cfg, audio_origin_us=audio_origin_us)
         warmed.append(isolated)
         return isolated
 
@@ -140,21 +137,32 @@ def test_invalid_pcm_fails_before_model_inference(_streaming_models, audio):
     from speaker_stt._inference import _Session
 
     models, _activity, calls, _masks, _allocations, _text = _streaming_models
-    session = _Session(models, _SpeakerConfig())
+    session = _Session(models, _SpeakerConfig(), audio_origin_us=0)
     with pytest.raises(ValueError):
-        session._feed(audio, 0)
+        session._feed(audio)
     assert not calls
 
 
-def test_lost_audio_invalidates_the_session_timeline(_streaming_models):
+def test_audio_timeline_uses_origin_and_accepted_sample_count(_streaming_models):
     from speaker_stt._inference import _Session
 
-    models, _activity, calls, _masks, _allocations, _text = _streaming_models
-    session = _Session(models, _SpeakerConfig())
-    session._feed(bytes(5120), 0)
-    with pytest.raises(ValueError, match="timeline discontinuity"):
-        session._feed(bytes(5120), 2_000_000)
-    assert not calls
+    models, activity, _calls, _masks, _allocations, _text = _streaming_models
+    activity[:] = [7]
+    session = _Session(models, _SpeakerConfig(), audio_origin_us=1_234_567)
+    observed_pts = []
+    activity_step = session.selection._activity
+
+    def record_pts(active, seconds, pts_us):
+        observed_pts.append(pts_us)
+        return activity_step(active, seconds, pts_us)
+
+    session.selection._activity = record_pts
+    # Request boundaries are transport details. Two differently partitioned
+    # 2,560-sample hops still advance the media clock by exactly 160 ms each.
+    for size in (1000, 4120, 2000, 3120):
+        session._feed(bytes(size))
+
+    assert observed_pts == [1_234_567, 1_394_567]
 
 
 @pytest.mark.parametrize("owner", [None, 7])
@@ -163,11 +171,11 @@ def test_forced_truncation_cannot_enroll_or_release_a_speaker(_streaming_models,
 
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     cfg = _SpeakerConfig(silence_duration=0.16, max_utterance_s=0.32)
-    session = _Session(models, cfg)
+    session = _Session(models, cfg, audio_origin_us=0)
     session.selection.owner = owner
     activity[:] = [7]
     text[0] = cfg.start_phrase if owner is None else cfg.stop_phrase
-    events = session._feed(bytes(5120), 0)
-    events += session._feed(bytes(5120), 160_000)
+    events = session._feed(bytes(5120))
+    events += session._feed(bytes(5120))
     assert session.selection.owner == owner
     assert not any(event["kind"] in {"enrolled", "released", "transcript"} for event in events)

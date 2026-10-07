@@ -52,10 +52,19 @@ the ASR decoder after enrollment. Speaker labels are session-local identities.
 
 The process accepts mono signed 16-bit PCM at 16 kHz over its private msgpack
 IPC socket. It serializes inference because model conditioning is mutable.
-Dropped audio that breaks the timeline revokes enrollment. Utterances forced
-to end at the configured duration limit cannot enroll or release a speaker.
+Opening a session establishes the capture timestamp of its first sample.
+Subsequent audio requests form one ordered, contiguous PCM stream; the service
+derives all later timestamps from the number of samples it has accepted. The
+caller must reset the session if its capture or transport layer drops audio,
+because that layer owns the information needed to detect the loss. Utterances
+forced to end at the configured duration limit cannot enroll or release a speaker.
 Start and stop phrases can span utterances within the conversation phrase
 window; another speaker or ambiguous speech clears pending enrollment.
+
+The private protocol makes that ownership explicit: `open` supplies
+`audio_origin_us` once, and `audio` supplies only PCM bytes. Audio requests for
+a session must be serialized in capture order. The service neither reorders
+audio nor guesses whether samples are missing from wall-clock arrival times.
 
 Configure model IDs, device, precision, the socket path and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. From the repository root, start it

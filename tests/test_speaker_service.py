@@ -22,21 +22,28 @@ class _Session:
     def __init__(self):
         self.count = 0
 
-    def _feed(self, audio, pts_us):
+    def _feed(self, audio):
         self.count += 1
-        return [{"kind": "transcript", "text": str(self.count), "pts_us": pts_us}]
+        return [{"kind": "transcript", "text": str(self.count)}]
 
 
-def _open(server, identity):
-    return server._request({"op": "open", "session": identity, "config": asdict(_SpeakerConfig())})
+def _open(server, identity, *, audio_origin_us=1):
+    return server._request(
+        {
+            "op": "open",
+            "session": identity,
+            "audio_origin_us": audio_origin_us,
+            "config": asdict(_SpeakerConfig()),
+        }
+    )
 
 
 def _audio(server, identity, **overrides):
-    return server._request({"op": "audio", "session": identity, "audio": bytes(640), "pts_us": 1, **overrides})
+    return server._request({"op": "audio", "session": identity, "audio": bytes(640), **overrides})
 
 
 def test_sessions_isolate_decoder_state_and_close_idempotently():
-    server = service._Server(SimpleNamespace(_session=lambda cfg: _Session()))
+    server = service._Server(SimpleNamespace(_session=lambda cfg, *, audio_origin_us: _Session()))
     _open(server, "a")
     _open(server, "b")
     assert _audio(server, "a")["events"][0]["text"] == "1"
@@ -48,7 +55,11 @@ def test_sessions_isolate_decoder_state_and_close_idempotently():
 
 
 def test_session_expiry_and_capacity_are_bounded(monkeypatch):
-    server = service._Server(SimpleNamespace(_session=lambda cfg: _Session()), max_sessions=1, idle_timeout_s=1)
+    server = service._Server(
+        SimpleNamespace(_session=lambda cfg, *, audio_origin_us: _Session()),
+        max_sessions=1,
+        idle_timeout_s=1,
+    )
     monkeypatch.setattr(service.time, "monotonic", lambda: 0)
     _open(server, "a")
     with pytest.raises(ValueError, match="already exists"):
@@ -62,22 +73,34 @@ def test_session_expiry_and_capacity_are_bounded(monkeypatch):
     _open(server, "b")
 
 
-@pytest.mark.parametrize("overrides", [{"audio": "pcm"}, {"audio": bytes(32002)}, {"pts_us": -1}, {"pts_us": True}])
+@pytest.mark.parametrize("overrides", [{"audio": "pcm"}, {"audio": bytes(32002)}])
 def test_invalid_audio_requests_fail_before_inference(overrides):
-    server = service._Server(SimpleNamespace(_session=lambda cfg: _Session()))
+    server = service._Server(SimpleNamespace(_session=lambda cfg, *, audio_origin_us: _Session()))
     _open(server, "a")
     with pytest.raises(ValueError):
         _audio(server, "a", **overrides)
     assert server.sessions["a"][0].count == 0
 
 
+@pytest.mark.parametrize("audio_origin_us", [None, -1, True, 1.5, "1"])
+def test_open_requires_nonnegative_integer_audio_origin(audio_origin_us):
+    server = service._Server(SimpleNamespace(_session=lambda cfg, *, audio_origin_us: _Session()))
+    with pytest.raises(ValueError, match="origin timestamp"):
+        _open(server, "a", audio_origin_us=audio_origin_us)
+    assert not server.sessions
+
+
 def test_inference_failure_revokes_session():
     def fail(*_args):
-        raise ValueError("audio timeline discontinuity")
+        raise ValueError("model failure")
 
-    server = service._Server(SimpleNamespace(_session=lambda cfg: SimpleNamespace(_feed=fail)))
+    server = service._Server(
+        SimpleNamespace(
+            _session=lambda cfg, *, audio_origin_us: SimpleNamespace(_feed=fail)
+        )
+    )
     _open(server, "a")
-    with pytest.raises(ValueError, match="timeline"):
+    with pytest.raises(ValueError, match="model failure"):
         _audio(server, "a")
     assert not server.sessions
 
@@ -114,7 +137,10 @@ async def _exchange(endpoint, body):
 async def test_private_ipc_readiness_reuse_and_identity_checked_shutdown(tmp_path, monkeypatch):
     loads = []
     monkeypatch.setattr(
-        _inference, "_Models", lambda cfg: loads.append(cfg) or SimpleNamespace(_session=lambda cfg: _Session())
+        _inference,
+        "_Models",
+        lambda cfg: loads.append(cfg)
+        or SimpleNamespace(_session=lambda cfg, *, audio_origin_us: _Session()),
     )
     monkeypatch.setenv("_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT", "1")
     monkeypatch.setattr(asyncio.get_running_loop(), "add_signal_handler", lambda *_args: None)
@@ -134,12 +160,21 @@ async def test_private_ipc_readiness_reuse_and_identity_checked_shutdown(tmp_pat
         assert reused_ready.exists() and len(loads) == 1
         for identity in ("a", "b"):
             assert (
-                await _exchange(endpoint, {"op": "open", "session": identity, "config": asdict(_SpeakerConfig())}) == {}
+                await _exchange(
+                    endpoint,
+                    {
+                        "op": "open",
+                        "session": identity,
+                        "audio_origin_us": 1,
+                        "config": asdict(_SpeakerConfig()),
+                    },
+                )
+                == {}
             )
-        assert (await _exchange(endpoint, {"op": "audio", "session": "a", "audio": bytes(640), "pts_us": 1}))["events"][
+        assert (await _exchange(endpoint, {"op": "audio", "session": "a", "audio": bytes(640)}))["events"][
             0
         ]["text"] == "1"
-        assert (await _exchange(endpoint, {"op": "audio", "session": "b", "audio": bytes(640), "pts_us": 1}))["events"][
+        assert (await _exchange(endpoint, {"op": "audio", "session": "b", "audio": bytes(640)}))["events"][
             0
         ]["text"] == "1"
         assert await _exchange(endpoint, {"op": "close", "session": "a"}) == {}
