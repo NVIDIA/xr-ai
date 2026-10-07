@@ -17,7 +17,7 @@ action has no available tool (including recording), explain that it is not
 supported in replay. Never substitute another action or tool for it.
 
 For a requested live visual check, call current_view if exposed by this step.
-For elapsed time, use clock__timer with the actual timer values in state.
+For elapsed time, use clock__timer with the resolved active_trigger.arguments.
 If the required tool or evidence is unavailable, say so. Instructions and
 procedural explanations use the guide, not a camera call. User claims of
 completion are not evidence: only the background verifier can commit progress.

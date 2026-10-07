@@ -18,6 +18,8 @@ import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall, load_models_config, make_llm
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_tools.image import ImageReference
+from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
@@ -276,6 +278,115 @@ async def test_informational_and_capture_requests_have_no_mutating_tools(engine,
     assert not names.intersection({"workflow__advance", "workflow__reset", "workflow__restart"})
 
 
+@pytest.mark.parametrize("query,answer", [
+    ("What color is the lid?", "The lid is blue."),
+    ("How many bolts are attached?", "Three bolts are attached."),
+])
+async def test_visual_questions_keep_camera_and_use_its_result(engine, query, answer):
+    image = ImageReference(uri="xr-image://test-frame")
+    engine._current_frame.execute.return_value = SimpleNamespace(image=image)
+    engine._image_query.execute.return_value = ImageQueryResult(text=answer)
+
+    async def chat(messages, *, tools, **kwargs):
+        names = {tool.name for tool in tools}
+        assert names == {"current_view", "workflow__status"}
+        assert json.loads(messages[1].content)["active_trigger"] is None
+        if messages[-1].role != "tool":
+            return ChatResponse("", None, [ToolCall(
+                id="inspect", name="current_view", arguments=json.dumps({"question": query}),
+            )], "tool_calls", {})
+        assert messages[-1].content == answer
+        return ChatResponse(answer, None, None, "stop", {})
+
+    engine._llm.chat.side_effect = chat
+    before = copy.deepcopy(engine._sessions["alice"].state)
+    assert await engine._route(query, "alice") == answer
+    engine._current_frame.execute.assert_awaited_once()
+    assert engine._current_frame.execute.call_args.args[0].participant_id == "alice"
+    request = engine._image_query.execute.call_args.args[0]
+    assert (request.image, request.query) == (image, query)
+    assert engine._sessions["alice"].state == before
+
+
+async def test_read_only_filter_does_not_grant_undeclared_tools(engine, document):
+    document["steps"][0]["voice"]["tools"] = ["clock__now"]
+    engine._guide = selected(document)
+    engine._start("alice")
+    engine._llm.chat.return_value = ChatResponse("Camera checking is not available for this step.",
+                                               None, None, "stop", {})
+    await engine._route("What color is the lid?", "alice")
+    assert {tool.name for tool in engine._llm.chat.call_args.kwargs["tools"]} == {
+        "clock__now", "workflow__status",
+    }
+    engine._current_frame.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("state_references", [False, True])
+async def test_timer_question_uses_configured_arguments(engine, document, monkeypatch, state_references):
+    started = 1_800_000_000_000_000
+    arguments = {"started_at_us": started, "duration_s": 25}
+    monkeypatch.setattr("sop_sample_worker.replay.time.time_ns", lambda: (started + 7_000_000) * 1000)
+    step = document["steps"][0]
+    step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
+                       "arguments": dict(arguments)}
+    step["voice"] = {"prompt": "Answer questions about this step's timer.", "tools": ["clock__timer"]}
+    if state_references:
+        for name, value in arguments.items():
+            document["state"][name] = {"type": "integer", "description": name, "initial": value}
+        step["reads"] = list(arguments)
+        step["trigger"]["arguments"] = {name: f"$state.{name}" for name in arguments}
+    engine._guide = selected(document)
+    engine._start("alice")
+
+    async def chat(messages, *, tools, **kwargs):
+        assert {tool.name for tool in tools} == {"clock__timer", "workflow__status"}
+        context = json.loads(messages[1].content)
+        assert context["active_trigger"] == {"function": "clock__timer", "arguments": arguments}
+        if not state_references:
+            assert not set(arguments).intersection(context["state"])
+        if messages[-1].role != "tool":
+            return ChatResponse("", None, [ToolCall(
+                id="timer", name="clock__timer", arguments=json.dumps(context["active_trigger"]["arguments"]),
+            )], "tool_calls", {})
+        assert json.loads(messages[-1].content) == {"elapsed_s": 7, "remaining_s": 18, "expired": False}
+        return ChatResponse("18 seconds remain.", None, None, "stop", {})
+
+    engine._llm.chat.side_effect = chat
+    assert await engine._route("How much time remains?", "alice") == "18 seconds remain."
+    engine._current_frame.execute.assert_not_called()
+    assert not engine._sessions["alice"].state["base"]
+
+
+async def test_missing_timer_state_does_not_block_reset(engine, document):
+    document["state"]["started_us"] = {"type": "integer", "description": "Runtime timer start"}
+    step = document["steps"][0]
+    step["reads"] = ["started_us"]
+    step["trigger"] = {"function": "clock__timer", "interval_s": 1,
+                       "arguments": {"started_at_us": "$state.started_us", "duration_s": 25}}
+    engine._guide = selected(document)
+    engine._start("alice")
+    revision = engine._sessions["alice"].revision
+    engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
+        id="restart", name="workflow__restart", arguments="{}",
+    )], "tool_calls", {})
+    assert await engine._route("Restart the guide", "alice") == "Do base."
+    trigger = json.loads(engine._llm.chat.call_args.args[0][1].content)["active_trigger"]
+    assert "arguments" not in trigger
+    assert "started_us" in trigger["unavailable_reason"]
+    assert engine._sessions["alice"].revision > revision
+
+
+async def test_foreground_guide_order_follows_links_not_yaml_order(engine, document):
+    document["steps"].reverse()
+    engine._guide = selected(document)
+    engine._start("alice")
+    assert list(engine._sessions["alice"].workflow.steps) == ["lid", "base"]
+    engine._llm.chat.return_value = ChatResponse("Align the base, then the lid.", None, None, "stop", {})
+    await engine._route("What order do I follow?", "alice")
+    context = json.loads(engine._llm.chat.call_args.args[0][1].content)
+    assert context["guide_order"] == ["base", "lid"]
+
+
 async def test_model_observation_uses_guarded_commit(engine, document):
     document["steps"][0].pop("evidence")
     engine._guide = selected(document)
@@ -449,10 +560,14 @@ async def test_actual_runtime_and_aggregation_deliver_replay_and_release(documen
     ("What should I do at this step?", None, None),
     ("Tell me the weather in Paris", None, None),
     ("Start recording", None, None),
+    ("What color is the lid?", "current_view", None),
+    ("How many bolts are attached?", "current_view", None),
 ])
 async def test_live_replay_prompt_routes_intent(engine, query, expected, skip):
     """Opt-in evaluation against the configured local model; no camera or media writes."""
     model = make_llm(load_models_config(_SAMPLE / "yaml/models.replay.json"), "llm")
+    engine._current_frame.execute.return_value = SimpleNamespace(image=ImageReference(uri="xr-image://test"))
+    engine._image_query.execute.return_value = ImageQueryResult(text="The lid is blue; three bolts are attached.")
     calls = []
 
     async def chat(*args, **kwargs):
@@ -469,3 +584,31 @@ async def test_live_replay_prompt_routes_intent(engine, query, expected, skip):
     assert [call.name for call in calls] == ([] if expected is None else [expected])
     if skip is not None:
         assert json.loads(calls[0].arguments)["skip"] is skip
+
+
+@pytest.mark.gpu
+async def test_live_timer_question_uses_trigger_inputs(engine, document):
+    """The model must obtain timer inputs from configuration, not guess from speech."""
+    arguments = {"started_at_us": time.time_ns() // 1000, "duration_s": 83}
+    step = document["steps"][0]
+    step["trigger"] = {"function": "clock__timer", "interval_s": 1, "arguments": arguments,
+                       "result_field": "expired"}
+    step["voice"] = {"prompt": "Answer questions about this waiting step.", "tools": ["clock__timer"]}
+    engine._guide = selected(document)
+    engine._start("alice")
+    model = make_llm(load_models_config(_SAMPLE / "yaml/models.replay.json"), "llm")
+    calls = []
+
+    async def chat(*args, **kwargs):
+        response = await model.chat(*args, **kwargs)
+        calls.extend(response.tool_calls or ())
+        return response
+
+    engine._llm = SimpleNamespace(chat=chat)
+    try:
+        response = await asyncio.wait_for(engine._route("How much time remains?", "alice"), 60)
+    finally:
+        await model.close()
+    assert response.strip()
+    assert [call.name for call in calls] == ["clock__timer"]
+    assert json.loads(calls[0].arguments) == arguments
