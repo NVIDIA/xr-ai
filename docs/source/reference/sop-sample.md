@@ -56,11 +56,16 @@ off/on toggles, media arriving before the previous packet finishes finalizing
 is not buffered for the next packet.
 If shared capture takes longer than 10 seconds to finalize, the worker logs a
 warning and continues waiting; it does not start an unbacked packet. The wait
-also applies during shutdown. If no manifest arrives, restart and graceful
-shutdown remain blocked until capture finalization can complete.
+also applies during shutdown. For accepted recordings, if no manifest arrives,
+restart and graceful shutdown remain blocked until capture finalization can complete.
 The worker also waits for the new bundle's recorded start event, retrying the
 start command if capture is still closing the previous bundle. Frames and
 captions for the new packet begin only after that acceptance check succeeds.
+Departure and worker shutdown cancel pending starts without waiting behind the
+camera-event queue. Queued starts for that connection are discarded. A packet
+created for a start that was never accepted is finalized as `incomplete` without
+waiting for a nonexistent media manifest. If capture accepted the start before
+cancellation, normal manifest, narration, and pending-write draining still apply.
 
 ## Outputs
 

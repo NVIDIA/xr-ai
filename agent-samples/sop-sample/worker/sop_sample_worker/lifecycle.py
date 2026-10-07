@@ -19,17 +19,36 @@ class CameraRecording:
         self._sessions: dict[str, str] = {}
         self._tracks: dict[str, set[str]] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
+        self._connections: dict[str, tuple[str, asyncio.Event]] = {}
         self._closed = False
 
     def receive(self, event: ParticipantEvent | VideoTrackEvent) -> Awaitable[None]:
         # Enqueue synchronously: ProcessorEndpoint detaches the returned
         # awaitable, but event order must survive slow manifest finalization.
-        previous = self._tails.get(event.participant_id)
+        pid = event.participant_id
+        connection = self._connections.get(pid)
+        if not self._closed and isinstance(event, ParticipantEvent):
+            if event.joined:
+                if connection is None or connection[0] != event.participant_session_id:
+                    if connection is not None:
+                        connection[1].set()
+                    connection = (event.participant_session_id, asyncio.Event())
+                    self._connections[pid] = connection
+            elif connection is not None and connection[0] == event.participant_session_id:
+                # Departure must wake a pending start before joining its queue.
+                connection[1].set()
+                self._connections.pop(pid, None)
+        cancelled = connection[1] if connection and connection[0] == event.participant_session_id else None
+        previous = self._tails.get(pid)
 
         async def apply() -> None:
             if previous is not None:
                 await previous
-            await self._apply(event)
+            if isinstance(event, VideoTrackEvent) and (
+                self._closed or cancelled is None or cancelled.is_set()
+            ):
+                return
+            await self._apply(event, cancelled)
 
         async def wait() -> None:
             if task is not None:
@@ -40,7 +59,7 @@ class CameraRecording:
             self._tails[event.participant_id] = task
         return wait()
 
-    async def _apply(self, event: ParticipantEvent | VideoTrackEvent) -> None:
+    async def _apply(self, event: ParticipantEvent | VideoTrackEvent, cancelled: asyncio.Event | None) -> None:
         pid = event.participant_id
         if isinstance(event, ParticipantEvent):
             if event.joined:
@@ -59,7 +78,7 @@ class CameraRecording:
         if event.active:
             if event.track_id not in tracks:
                 tracks.add(event.track_id)
-                await self._recorder.start_recording(pid)
+                await self._recorder.start_recording(pid, cancelled=cancelled)
         else:
             tracks.discard(event.track_id)
             if not tracks:
@@ -67,6 +86,8 @@ class CameraRecording:
 
     async def close(self) -> None:
         self._closed = True
+        for _, cancelled in self._connections.values():
+            cancelled.set()
         try:
             await asyncio.gather(*self._tails.values())
         finally:

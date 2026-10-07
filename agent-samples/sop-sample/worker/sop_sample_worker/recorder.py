@@ -89,6 +89,8 @@ class _Session:
     active: bool = True
     status: str = "recording"
     ended_at: str | None = None
+    cancel_start: bool = False
+    start_done: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 def _now_us() -> int:
@@ -222,10 +224,10 @@ class RecorderAgent(Agent):
     def is_recording(self, participant_id: str) -> bool:
         return participant_id in self._sessions
 
-    async def start_recording(self, participant_id: str) -> None:
+    async def start_recording(self, participant_id: str, *, cancelled: asyncio.Event | None = None) -> None:
         """Start a fresh packet unless this participant is already recording."""
         async with self._sessions_lock:
-            if participant_id in self._sessions or self._stopped:
+            if participant_id in self._sessions or self._stopped or (cancelled is not None and cancelled.is_set()):
                 return
             now_us = _now_us()
             session_id = f"{_session_stamp()}-{_safe(participant_id)[:48]}"
@@ -248,6 +250,11 @@ class RecorderAgent(Agent):
                 ).participant_tools(participant_id),
                 media_directory=self._media_capture_dir / session_id,
             )
+            self._sessions[participant_id] = state
+        try:
+            if self._stopped or (cancelled is not None and cancelled.is_set()):
+                state.media_status = "start_cancelled"
+                return
             start = state.capture_tools.get("start_recording")
             assert start is not None
             try:
@@ -258,53 +265,66 @@ class RecorderAgent(Agent):
                 state.ended_at = _iso(_now_us())
                 await self._write_views(state)
                 raise
-            self._sessions[participant_id] = state
-        await self._wait_for_media_start(state)
-        async with state.lock:
-            await self._write_views(state)
-        state.tasks.extend(
-            (
-                asyncio.create_task(
-                    self._capture_loop(state),
-                    name=f"sop-capture:{participant_id}",
-                    context=nemo_relay.fork_asyncio_context(),
-                ),
-                asyncio.create_task(
-                    self._caption_loop(state),
-                    name=f"sop-caption:{participant_id}",
-                    context=nemo_relay.fork_asyncio_context(),
-                ),
+            if not await self._wait_for_media_start(state, cancelled):
+                return
+            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
+                return
+            async with state.lock:
+                await self._write_views(state)
+            state.tasks.extend(
+                (
+                    asyncio.create_task(
+                        self._capture_loop(state),
+                        name=f"sop-capture:{participant_id}",
+                        context=nemo_relay.fork_asyncio_context(),
+                    ),
+                    asyncio.create_task(
+                        self._caption_loop(state),
+                        name=f"sop-caption:{participant_id}",
+                        context=nemo_relay.fork_asyncio_context(),
+                    ),
+                )
             )
-        )
-        logger.info("recording started pid={!r} session={}", participant_id, directory)
+            logger.info("recording started pid={!r} session={}", participant_id, directory)
+        finally:
+            # Finalization may run concurrently with startup, but may not seal
+            # the packet while startup can still add tasks or write metadata.
+            state.start_done.set()
 
-    async def _wait_for_media_start(self, state: _Session) -> None:
+    @staticmethod
+    def _media_started(state: _Session) -> bool:
+        for path in state.media_directory.glob("*/events.jsonl"):
+            with path.open(encoding="utf-8") as stream:
+                for line in stream:
+                    if not line.endswith("\n"):
+                        break
+                    event = json.loads(line)
+                    if event.get("kind") == "recording" and event.get("state") == "started":
+                        return True
+        return False
+
+    async def _wait_for_media_start(self, state: _Session, cancelled: asyncio.Event | None) -> bool:
         # Sending a start is not an acknowledgement: capture may still reject
         # it after publishing the previous manifest, while finishing cleanup.
         # Its flushed start event confirms acceptance in this unique target.
-        def started() -> bool:
-            for path in state.media_directory.glob("*/events.jsonl"):
-                with path.open(encoding="utf-8") as stream:
-                    for line in stream:
-                        if not line.endswith("\n"):
-                            break
-                        event = json.loads(line)
-                        if event.get("kind") == "recording" and event.get("state") == "started":
-                            return True
-            return False
-
         start = state.capture_tools.get("start_recording")
         assert start is not None
         waiting_since = time.monotonic()
         warned = False
-        while not await asyncio.to_thread(started):
+        while not await asyncio.to_thread(self._media_started, state):
+            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
+                state.media_status = "start_cancelled"
+                return False
             if not warned and time.monotonic() - waiting_since >= _MEDIA_FINALIZE_WARNING_S:
                 warned = True
                 logger.warning("media capture start pending pid={!r}; retrying until accepted", state.participant_id)
             await asyncio.sleep(_MEDIA_START_RETRY_S)
+            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
+                continue
             # Repeating a start is idempotent while the same session is active.
             await start.execute(EmptyRequest())
         state.media_status = "recording"
+        return True
 
     async def finish_recording(self, participant_id: str) -> None:
         """Finalize the packet using the same path as worker shutdown."""
@@ -652,6 +672,9 @@ class RecorderAgent(Agent):
         await asyncio.shield(finalizer)
 
     async def _finalize(self, state: _Session, *, status: str) -> None:
+        state.cancel_start = True
+        await state.start_done.wait()
+        accepted = state.media_status == "recording"
         participant_id = state.participant_id
         state.ended_at = _iso(_now_us())
         stop = state.capture_tools.get("stop_recording")
@@ -687,9 +710,16 @@ class RecorderAgent(Agent):
             self._update_hierarchy(state, caption)
         if stop_error is not None:
             await self._error(state, "media_capture_stop", str(stop_error))
+        # Reconcile acceptance after the last start has settled and stop was
+        # sent. An unaccepted target has no manifest to wait for.
+        accepted = accepted or await asyncio.to_thread(self._media_started, state)
+        if not accepted:
+            state.media_status = "start_cancelled"
+            await self._error(state, "media_capture_start", "recording ended before capture accepted its start")
         # Departure or service shutdown may finalize capture even if sending
         # stop failed because the voice transport has already closed.
-        await self._wait_for_media(state)
+        if accepted:
+            await self._wait_for_media(state)
         try:
             if state.media_manifest is None:
                 raise ValueError("capture manifest unavailable; narration was not exported")
