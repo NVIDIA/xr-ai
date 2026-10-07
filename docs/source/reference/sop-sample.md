@@ -143,7 +143,10 @@ uv run --project worker python -m sop_sample_worker._validate_guide guides/<slug
 
 The read-only validator checks the same guide contract used by the SOP replay
 work: state types and write sets, linked steps, allowed tools, trigger arguments,
-result fields, and the 500-character visual question limit. It reports errors
+result fields, and the 500-character visual question limit. Text fields must be
+actual strings. Duplicate mapping keys are rejected at every level, including
+overrides introduced through YAML merges, instead of silently replacing earlier
+requirements. It reports errors
 with a nonzero exit status. It does not generate, rewrite, approve, or execute
 the guide, and it does not certify evidence coverage or physical correctness.
 
