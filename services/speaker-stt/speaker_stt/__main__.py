@@ -105,20 +105,27 @@ class _Server:
             if len(self.sessions) >= self.max_sessions:
                 raise ValueError("speaker session capacity reached")
             raw = body["config"]
+            audio_origin_us = body.get("audio_origin_us")
+            if (
+                not isinstance(audio_origin_us, int)
+                or isinstance(audio_origin_us, bool)
+                or audio_origin_us < 0
+            ):
+                raise ValueError("invalid audio origin timestamp")
             cfg = _SpeakerConfig._from_yaml({**raw, "enabled": True})
-            self.sessions[session_id] = (self.models._session(cfg), now)
+            self.sessions[session_id] = (
+                self.models._session(cfg, audio_origin_us=audio_origin_us),
+                now,
+            )
             return {}
         if op != "audio" or session_id not in self.sessions:
             raise ValueError("unknown speaker session; enrollment required")
         audio = body.get("audio")
-        pts_us = body.get("pts_us")
         if not isinstance(audio, bytes) or len(audio) > 32000:
             raise ValueError("audio must be at most one second of PCM")
-        if not isinstance(pts_us, int) or isinstance(pts_us, bool) or pts_us < 0:
-            raise ValueError("invalid audio timestamp")
         session, _ = self.sessions[session_id]
         try:
-            events = session._feed(audio, pts_us)
+            events = session._feed(audio)
         except Exception:
             self.sessions.pop(session_id, None)
             raise
