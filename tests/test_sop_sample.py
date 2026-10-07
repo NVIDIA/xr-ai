@@ -242,6 +242,131 @@ async def test_fast_restart_waits_for_previous_manifest_even_if_handler_cancelle
     assert json.loads((old.directory / "packet.json").read_text())["status"] == "complete"
 
 
+async def test_slow_media_finalization_keeps_restart_blocked(demo, monkeypatch):
+    import sop_sample_worker.recorder as module
+
+    monkeypatch.setattr(module, "_MEDIA_FINALIZE_WARNING_S", 0.02)
+    await demo.camera.receive(joined())
+    await demo.camera.receive(video())
+    old = demo.recorder._sessions["user"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.service._finish_session_owned
+
+    async def delayed(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        await original(*args, **kwargs)
+
+    monkeypatch.setattr(demo.service, "_finish_session_owned", delayed)
+    finishing = asyncio.create_task(demo.camera.receive(video(False)))
+    await asyncio.wait_for(entered.wait(), 2)
+    restarting = asyncio.create_task(demo.camera.receive(video()))
+    try:
+        await asyncio.sleep(0.15)  # Exceed the accelerated manifest deadline.
+        assert not finishing.done()
+        assert not restarting.done()
+        assert demo.recorder._sessions["user"] is old
+        assert len(list((demo.root / "sessions").iterdir())) == 1
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.gather(finishing, restarting), 2)
+
+    new = demo.recorder._sessions["user"]
+    assert new is not old
+    assert demo.service._recorder.has_session("user")
+    await demo.endpoint.send_return_data(
+        DataMessage("user", CAPTURE_STT_TOPIC, time.time_ns() // 1000, b"Second recording")
+    )
+    await demo.camera.receive(video(False))
+    packet = json.loads((new.directory / "packet.json").read_text())
+    assert packet["status"] == packet["narration_status"] == "complete"
+    assert packet["counts"]["transcripts"] == 1
+    manifest = Path(packet["media_capture"]["manifest"])
+    assert manifest.is_relative_to(new.media_directory)
+    assert json.loads(manifest.read_text())["target"] == new.session_id
+    assert json.loads((new.directory / "transcript.jsonl").read_text())["text"] == "Second recording"
+
+
+async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monkeypatch):
+    import sop_sample_worker.recorder as module
+
+    entered, release = threading.Event(), threading.Event()
+    original = module._append_jsonl
+
+    def delayed(path, record):
+        if path.name == "captions.jsonl":
+            entered.set()
+            assert release.wait(5)
+        original(path, record)
+
+    monkeypatch.setattr(module, "_append_jsonl", delayed)
+    await demo.camera.receive(joined())
+    await demo.camera.receive(video())
+    state = demo.recorder._sessions["user"]
+    finishing = None
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        finishing = asyncio.create_task(demo.camera.receive(video(False)))
+        async with asyncio.timeout(2):
+            while not any(task.cancelled() for task in state.tasks):
+                await asyncio.sleep(0.001)
+        assert not finishing.done()
+    finally:
+        release.set()
+        if finishing is not None:
+            await asyncio.wait_for(finishing, 2)
+
+    captions = [json.loads(line) for line in (state.directory / "captions.jsonl").read_text().splitlines()]
+    packet = json.loads((state.directory / "packet.json").read_text())
+    assert packet["status"] == "complete"
+    assert packet["counts"]["captions"] == len(captions) == 1
+    assert len(packet["hierarchy"]) == 1
+    activity = packet["hierarchy"][0]
+    assert activity["caption_count"] == 1
+    assert activity["phases"][0]["summary"] == captions[0]["caption"]
+    summary = (state.directory / "summary.md").read_text()
+    assert "Waiting for the first visual caption" not in summary
+    assert captions[0]["caption"] in summary
+
+
+async def test_restart_retries_if_capture_is_closing_after_manifest(demo, monkeypatch):
+    await demo.camera.receive(joined())
+    await demo.camera.receive(video())
+    old = demo.recorder._sessions["user"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.service._render
+
+    async def delayed(bundle):
+        entered.set()
+        await release.wait()
+        await original(bundle)
+
+    # end_session has published the manifest, but the service still rejects starts.
+    monkeypatch.setattr(demo.service, "_render", delayed)
+    finishing = asyncio.create_task(demo.camera.receive(video(False)))
+    await asyncio.wait_for(entered.wait(), 2)
+    restarting = asyncio.create_task(demo.camera.receive(video()))
+    try:
+        await asyncio.wait_for(finishing, 2)
+        await asyncio.sleep(0.1)
+        assert old.media_manifest is not None
+        assert not restarting.done()
+        # A participant waiting for acceptance must not hold the global lock.
+        await demo.camera.receive(joined("other"))
+        await asyncio.wait_for(demo.camera.receive(video(pid="other")), 2)
+        assert demo.service._recorder.has_session("other")
+    finally:
+        release.set()
+        await asyncio.wait_for(restarting, 2)
+    new = demo.recorder._sessions["user"]
+    assert new is not old
+    assert demo.service._recorder.has_session("user")
+    await demo.camera.receive(video(False))
+    packet = json.loads((new.directory / "packet.json").read_text())
+    assert packet["status"] == "complete"
+    assert Path(packet["media_capture"]["manifest"]).is_relative_to(new.media_directory)
+
+
 async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeypatch):
     import sop_sample_worker.recorder as module
 
@@ -335,6 +460,7 @@ async def test_app_finalizes_after_voice_shutdown_before_capture_endpoint_closes
     monkeypatch.setattr(app, "VoiceAgent", lambda **kwargs: real_voice(transport=transport, **kwargs))
 
     async def run_session(self, *args, **kwargs):
+        assert self.vad.stop_probe_after_s == 0
         await callbacks["participant"](joined())
         await callbacks["video"](video())
         # End the voice run while the participant and camera are still active.

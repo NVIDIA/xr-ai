@@ -62,7 +62,9 @@ class VoiceGateConfig:
     """Whether final or partial STOP utterances trigger the stop handler.
 
     Disable for passive transcription: STOP words then follow normal query
-    gating, without interruption or an audible stop acknowledgement.
+    gating, without invoking this gate's stop handler or stop acknowledgement.
+    This does not disable upstream VAD interruptions; passive voice consumers
+    must also disable early transcription probes in their VAD configuration.
     """
 
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)

@@ -54,6 +54,13 @@ asynchronous: turn the camera off after the last utterance has been transcribed.
 Raw audio remains available even if a transcript is missing. During rapid
 off/on toggles, media arriving before the previous packet finishes finalizing
 is not buffered for the next packet.
+If shared capture takes longer than 10 seconds to finalize, the worker logs a
+warning and continues waiting; it does not start an unbacked packet. The wait
+also applies during shutdown. If no manifest arrives, restart and graceful
+shutdown remain blocked until capture finalization can complete.
+The worker also waits for the new bundle's recorded start event, retrying the
+start command if capture is still closing the previous bundle. Frames and
+captions for the new packet begin only after that acceptance check succeeds.
 
 ## Outputs
 
@@ -96,9 +103,11 @@ an independent capture-control endpoint alive until all recordings finalize.
 a conversational agent. Filesystem writes and finalization tasks are drained
 before the capture endpoint closes.
 
-The voice gate disables its optional STOP command handling for this sample, so
-STOP words do not produce interruptions or spoken acknowledgements. The
-default for other samples remains enabled.
+The voice gate disables its optional STOP command handling, and the sample
+disables early VAD transcription probes. STOP words therefore do not produce
+early STOP interruptions or spoken acknowledgements. Final utterances still
+use the normal speech-recognition and narration path. The defaults for other
+samples remain unchanged.
 
 `yaml/worker.yaml` owns frame frequency, caption interval, speech detection, and
 the SOP artifact root. It resolves `yaml/media_capture.yaml` to locate shared
