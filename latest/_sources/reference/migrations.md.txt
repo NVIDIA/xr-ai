@@ -24,6 +24,19 @@ backend also retries its pending cleanup before opening another connection.
 A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
 satisfy the throwing protocol requirement.
 
+## Launcher failure exit statuses
+
+Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.
+
+The launcher preserves positive child exit codes, maps signal termination to
+`128 + signal number`, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+{doc}`../components/launcher-and-process-model` for failure diagnostics and
+shutdown behavior.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously

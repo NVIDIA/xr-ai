@@ -470,6 +470,18 @@ backend also retries its pending cleanup before opening another connection.
 A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
 satisfy the throwing protocol requirement.</p>
 </section>
+<section id="launcher-failure-exit-statuses">
+<h2>Launcher failure exit statuses<a class="headerlink" href="#launcher-failure-exit-statuses" title="Link to this heading">#</a></h2>
+<p>Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.</p>
+<p>The launcher preserves positive child exit codes, maps signal termination to
+<code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
+shutdown behavior.</p>
+</section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
 <p>Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -718,6 +730,7 @@ reuse the ignored caches rather than downloading them again.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>

@@ -620,10 +620,33 @@ list documents the dependency; the launcher skips it entirely and does not
 kill it on shutdown.</p></li>
 </ul>
 <p>On a clean ready-exit, <code class="docutils literal notranslate"><span class="pre">persist</span></code> and <code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes are left running. On an
-abort during startup (Ctrl-C, or a process exiting before it signals ready)
-the launcher tears down <strong>everything</strong>, including <code class="docutils literal notranslate"><span class="pre">persist</span></code> processes, so no
-half-started service is left behind.</p>
+abort during startup (Ctrl-C, a process exiting before it signals ready, or an
+unexpected exit while other members of its parallel group start), the launcher
+tears down <strong>everything</strong>, including <code class="docutils literal notranslate"><span class="pre">persist</span></code> processes, so no half-started
+service is left behind.</p>
 </section>
+</section>
+<section id="process-failures">
+<h2>Process failures<a class="headerlink" href="#process-failures" title="Link to this heading">#</a></h2>
+<p>When a managed process cannot start, exits before readiness, or exits while
+the stack is being monitored, the launcher prints the failed process,
+command, project, configuration, and exit status or spawn error. When the
+configured run-log directory exists, the summary includes its path. Inspect
+the service’s terminal output and run logs for the underlying error and any
+recovery advice. Each service controls its own log filename. Before reporting
+a terminated child’s failure, the launcher waits up to one second for its
+pending terminal output to be forwarded. A descendant that keeps an output
+pipe open cannot hold up this wait indefinitely.</p>
+<p>An unexpected monitored exit is a stack failure even when the child exits
+with code 0; the launcher returns 1 in that case. Other child exit codes are
+preserved, and signal termination maps to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>. Startup
+cancellation returns 130; cancellation after readiness follows normal
+shutdown. Summary errors do not replace the original failure. Members of a
+parallel startup group remain monitored until the entire group is ready. An
+unexpected exit during that wait triggers startup cleanup, including when the
+process had already signaled ready. With <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code>, a <code class="docutils literal notranslate"><span class="pre">persist</span></code>
+wrapper may exit successfully after signaling ready while its service keeps
+running.</p>
 </section>
 <section id="adding-a-new-managed-process">
 <h2>Adding a new managed process<a class="headerlink" href="#adding-a-new-managed-process" title="Link to this heading">#</a></h2>
@@ -733,6 +756,7 @@ pip vllm is not installed.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launch-mode-own-persist-reuse"><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-failures">Process failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-new-managed-process">Adding a new managed process</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-utils-packages">Shared <code class="docutils literal notranslate"><span class="pre">utils/</span></code> packages</a></li>
 </ul>

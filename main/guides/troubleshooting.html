@@ -453,6 +453,16 @@
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h1>
 <p>Common issues and their fixes. If you hit something not listed here, open an
 issue on the <a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
+<section id="investigating-a-failed-run">
+<h2>Investigating a failed run<a class="headerlink" href="#investigating-a-failed-run" title="Link to this heading">#</a></h2>
+<p>Start with the launcher’s failure summary to identify the failed service,
+command, configuration, and exit status. Inspect that service’s terminal
+output and the run-log directory printed in the summary for the underlying
+error and recovery advice. If the run-log directory is unavailable, use the
+terminal output.</p>
+<p>Refer to <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure behavior,
+exit codes, and process ownership.</p>
+</section>
 <section id="setup-time-issues">
 <h2>Setup-time issues<a class="headerlink" href="#setup-time-issues" title="Link to this heading">#</a></h2>
 <section id="docker-socket-permission-denied-during-model-server-cleanup">
@@ -478,10 +488,9 @@ fails, the empty-result message does not establish that no servers are running,
 and cleanup aborts because ownership could not be verified.</p>
 <p><strong>Diagnosis:</strong> run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the same login session. If
 it reports permission denied for <code class="docutils literal notranslate"><span class="pre">/var/run/docker.sock</span></code>, the launcher cannot
-inspect persistent containers. Its internal Docker check suppresses stderr,
-so running the command directly exposes the underlying error. These cleanup
-errors can have other causes; use the Docker output to confirm socket access
-is the problem.</p>
+inspect persistent containers. The ownership check includes Docker’s error
+output in the launch log. These cleanup errors can have other causes; use
+that output or the direct command to confirm socket access is the problem.</p>
 <p><strong>Fix:</strong> complete the Docker group setup and refresh the launch session as
 described in <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>. Verify that <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> succeeds without
 <code class="docutils literal notranslate"><span class="pre">sudo</span></code>, then retry the model-server command.</p>
@@ -1009,6 +1018,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#investigating-a-failed-run">Investigating a failed run</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-socket-permission-denied-during-model-server-cleanup">Docker socket permission denied during model-server cleanup</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>
