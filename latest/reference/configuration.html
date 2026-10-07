@@ -575,13 +575,21 @@ workflow.</p></li>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Every final microphone transcript is recorded before this gate. Only accepted</span>
-<span class="c1"># turns are sent to the foreground agent.</span>
+<span class="c1"># Final transcripts during an active conversation are recorded before any</span>
+<span class="c1"># optional wake gate. Only accepted turns reach the foreground agent.</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+
+<span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 </section>
@@ -739,6 +747,17 @@ workflow.</p></li>
 <span class="c1"># bypasses the gate so "hey agent" → pause → "what am I looking at?"</span>
 <span class="c1"># works as one natural interaction. Set to 0 to disable.</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+
+<span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
+<span class="c1"># A short "stop" interrupts the response without closing the conversation.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="c1"># false: speak naturally after starting. true: keep wake and follow-up rules.</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="c1"># Join exact control fragments whose onsets are within this window.</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 </section>
@@ -875,6 +894,14 @@ workflow.</p></li>
 <span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+
+<span class="c1"># Continuous dispatch after the start phrase, until the full stop phrase.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 </section>
@@ -888,6 +915,14 @@ workflow.</p></li>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+
+<span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 </section>
@@ -1346,22 +1381,28 @@ workflow.</p></li>
 
 <span class="c1"># xr-render-demo voice gate configuration.</span>
 <span class="c1">#</span>
-<span class="c1"># magic_phrases — wake-word gate. Empty list (the current default) DISABLES</span>
-<span class="c1">#                 the gate: every STT transcript is dispatched to the agent</span>
-<span class="c1">#                 (always-on, no wake word). To require a "hey agent" / "agent"</span>
-<span class="c1">#                 wake word instead, set:</span>
+<span class="c1"># magic_phrases — optional wake phrases during the active conversation.</span>
+<span class="c1">#                 To require a "hey agent" / "agent" wake word, also set</span>
+<span class="c1">#                 conversation.require_wake_phrase: true and use:</span>
 <span class="c1">#                     magic_phrases:</span>
 <span class="c1">#                       - "agent"</span>
 <span class="c1">#                       - "hey agent"</span>
-<span class="c1">#                 (matches the simple-vlm-example default). Strict-prefix match.</span>
 <span class="c1"># listening_chime — when true AND magic_phrases is non-empty, a short two-tone</span>
 <span class="c1">#                   chime plays on fresh magic-phrase matches. Inert while</span>
 <span class="c1">#                   magic_phrases is empty (no match can occur).</span>
 <span class="c1"># followup_grace_s — seconds after a phrase match during which the next</span>
 <span class="c1">#                    utterance from the same participant bypasses the gate.</span>
-<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">  </span><span class="c1"># always-on; see note above to enable a wake word</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">  </span><span class="c1"># no wake word during the conversation</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+
+<span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 </pre></div>
 </div>
 </section>

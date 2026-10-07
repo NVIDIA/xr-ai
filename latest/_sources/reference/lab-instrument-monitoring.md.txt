@@ -123,7 +123,7 @@ temporary copy named in the logs.
 |---|---|
 | `yaml/lab_instrument_monitoring_worker.yaml` | Monitor and snapshot cadence, lost-device threshold, image freshness, VAD, output directory, and event-viewer port and history |
 | `yaml/device_map.yaml` | QR payloads and ArUco IDs mapped to instrument names |
-| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, and follow-up window |
 | `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
@@ -287,14 +287,18 @@ proxy in front of it.
 ## File outputs and persistence
 
 Each non-empty final STT result delivered on `voice.transcript` is written to
-`transcript.jsonl` before voice gating, including ambient speech rejected by a
-configured wake phrase. Transcript-topic delivery is bounded and best effort;
-overflow drops the oldest pending transcript, and shutdown discards pending
-items. Wake-word gating controls dispatch to the foreground, not storage:
-delivered rejected speech is still persisted. The default gate accepts `agent`
-and `hey agent`, plays a listening chime, and allows one follow-up utterance for
-five seconds. Accepted speech reaches the foreground as a `UserQuery`. Typed
-text reaches the foreground but is not an STT transcript.
+`transcript.jsonl` during an active conversation, before optional wake gating.
+Conversation controls and closed-conversation speech are withheld. Transcript
+delivery is bounded and best effort; overflow drops the oldest pending
+transcript, and shutdown discards pending items. Speech rejected by a wake
+phrase during an active conversation is still persisted.
+
+After connecting, say `Hey agent, let's start talking`, then speak without a
+wake phrase until `Hey agent, let's stop talking`. Set
+`conversation.require_wake_phrase: true` to require `agent` or `hey agent`,
+with the optional chime and five-second follow-up window. Accepted speech reaches
+the foreground as a `UserQuery`. Typed text reaches the foreground but is not an
+STT transcript. Refer to {ref}`voice-conversation-controls`.
 
 Each connection writes to a new participant-scoped directory:
 

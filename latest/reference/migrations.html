@@ -482,6 +482,23 @@ during startup returns 130. Refer to
 <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
 shutdown behavior.</p>
 </section>
+<section id="voice-sample-conversation-defaults">
+<h2>Voice sample conversation defaults<a class="headerlink" href="#voice-sample-conversation-defaults" title="Link to this heading">#</a></h2>
+<p>The shipped voice samples now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after
+connecting, then accept speech without a wake phrase until
+<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the sample’s voice-gate YAML to
+keep wake phrases during an active conversation. Set
+<code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code> to restore the original wake-only behavior, or
+always-on dispatch when <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> is empty. Restart workers after editing
+these settings. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
+<p>Only final transcripts during an active conversation reach
+<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.</p>
+</section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
 <p>Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -731,6 +748,7 @@ reuse the ignored caches rather than downloading them again.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-sample-conversation-defaults">Voice sample conversation defaults</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>
