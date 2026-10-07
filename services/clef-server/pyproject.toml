@@ -21,6 +21,7 @@ dependencies = [
     "transformers>=5.17.0",
     "uvicorn[standard]>=0.34.0",
     "xr-ai-logging",
+    "xr-ai-vllm",
 ]
 
 [project.scripts]
@@ -28,6 +29,7 @@ clef_server = "clef_server.__main__:run"
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm = { path = "../../utils/xr-ai-vllm", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["clef_server"]

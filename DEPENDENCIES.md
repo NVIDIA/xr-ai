@@ -284,6 +284,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `transformers>=5.17.0`
   - `uvicorn[standard]>=0.34.0`
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `clef_server` → `clef_server.__main__:run`

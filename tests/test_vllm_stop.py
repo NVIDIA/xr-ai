@@ -69,20 +69,6 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
 
 
-def test_clef_process_is_identified_for_narrow_stop(tmp_path, monkeypatch) -> None:
-    proc_root = tmp_path / "proc" / "1234"
-    proc_root.mkdir(parents=True)
-    (proc_root / "cmdline").write_text("/venv/bin/clef_server\0--config\0clef.yaml")
-    monkeypatch.setattr(
-        xr_ai_vllm._docker,
-        "Path",
-        lambda _path: proc_root / _path.rsplit("/", 1)[-1],
-    )
-
-    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8120)
-    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8120)
-
-
 def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)

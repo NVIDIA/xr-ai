@@ -9,7 +9,8 @@ import argparse
 import asyncio
 import json
 import logging
-import socket
+import os
+import sys
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -17,9 +18,25 @@ from urllib.request import urlopen
 import uvicorn
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm._docker import pid_on_port_checked
 
-from ._config import load_config
+from ._config import identity, load_config
 from ._service import create_app
+
+_MANAGED_ENV = "XR_AI_CLEF_MANAGED"
+_PORT_ENV = "XR_AI_CLEF_PORT"
+
+
+def _has_clef_ownership(pid: int, port: int) -> bool:
+    """Return whether the listener carries Clef's exact exec-time ownership."""
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except OSError:
+        return False
+    return (
+        f"{_MANAGED_ENV}=1".encode() in entries
+        and f"{_PORT_ENV}={port}".encode() in entries
+    )
 
 
 def run() -> None:
@@ -27,11 +44,20 @@ def run() -> None:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ready-file", type=Path)
     args = parser.parse_args()
-    setup_logging("clef-server")
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     try:
         config = load_config(args.config)
-        if _reuse_ready_server(config.host, config.port, config.model_name, config.model_revision):
+        markers = {_MANAGED_ENV: "1", _PORT_ENV: str(config.port)}
+        if any(os.environ.get(key) != value for key, value in markers.items()):
+            # /proc/<pid>/environ records the exec-time environment. Re-exec so
+            # ownership remains independently verifiable after the launcher exits.
+            os.execvpe(
+                sys.executable,
+                [sys.executable, "-m", "clef_server", *sys.argv[1:]],
+                os.environ | markers,
+            )
+        setup_logging("clef-server")
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        if _reuse_ready_server(config):
             if args.ready_file is not None:
                 args.ready_file.parent.mkdir(parents=True, exist_ok=True)
                 args.ready_file.touch()
@@ -76,30 +102,36 @@ async def _serve(config, ready_file: Path | None) -> None:
             await task
 
 
-def _reuse_ready_server(host: str, port: int, model: str, revision: str) -> bool:
-    """Reuse an existing listener only when its ready identity matches exactly."""
-    probe_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
-    try:
-        with socket.create_connection((probe_host, port), timeout=0.25):
-            pass
-    except OSError:
+def _reuse_ready_server(config) -> bool:
+    """Reuse only an owned listener with the exact requested configuration."""
+    pid, checked, listening = pid_on_port_checked(config.port)
+    if not checked or (listening and pid is None):
+        raise RuntimeError(f"cannot inspect ownership of port {config.port}")
+    if not listening:
         return False
+    assert pid is not None
+    if not _has_clef_ownership(pid, config.port):
+        raise RuntimeError(
+            f"port {config.port} belongs to an unmanaged listener; stop it before launching"
+        )
+    probe_host = "127.0.0.1" if config.host in {"0.0.0.0", "::"} else config.host
     try:
-        with urlopen(f"http://{probe_host}:{port}/health", timeout=1.0) as response:
+        with urlopen(f"http://{probe_host}:{config.port}/health", timeout=1.0) as response:
             payload = response.read(16_384)
     except (OSError, URLError) as exc:
-        raise RuntimeError(f"port {port} is occupied by a listener without a usable Clef health endpoint") from exc
+        raise RuntimeError(
+            f"managed listener on port {config.port} has no usable Clef health endpoint"
+        ) from exc
     try:
         health = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"port {port} returned invalid health data") from exc
-    if (
-        not isinstance(health, dict)
-        or health.get("status") != "ready"
-        or health.get("model") != model
-        or health.get("model_revision") != revision
-    ):
-        raise RuntimeError(f"port {port} is occupied by a server that does not match {model}@{revision}")
+        raise RuntimeError(f"port {config.port} returned invalid health data") from exc
+    if health != identity(config):
+        raise RuntimeError(
+            f"port {config.port} serves a different Clef configuration"
+        )
+    if pid_on_port_checked(config.port) != (pid, True, True):
+        raise RuntimeError(f"listener on port {config.port} changed during inspection")
     return True
 
 

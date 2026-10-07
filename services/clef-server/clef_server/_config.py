@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,34 @@ class ServerConfig:
     dtype: str
     max_length: int
     max_body_bytes: int
+
+
+def identity(config: ServerConfig) -> dict[str, str]:
+    """Return the exact, non-secret runtime identity used for safe reuse."""
+    configuration = {
+        "model_name": config.model_name,
+        "model_revision": config.model_revision,
+        "model_path": str(config.model_path) if config.model_path is not None else None,
+        "model_cache": str(config.model_cache),
+        "host": config.host,
+        "port": config.port,
+        "device": config.device,
+        "dtype": config.dtype,
+        "max_length": config.max_length,
+        "max_body_bytes": config.max_body_bytes,
+    }
+    encoded = json.dumps(
+        configuration,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "status": "ready",
+        "service": "clef-server",
+        "model": config.model_name,
+        "model_revision": config.model_revision,
+        "configuration_fingerprint": hashlib.sha256(encoded).hexdigest(),
+    }
 
 
 def load_config(path: Path) -> ServerConfig:

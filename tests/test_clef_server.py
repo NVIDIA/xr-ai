@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import json
+import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -16,9 +19,17 @@ from fastapi.testclient import TestClient
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
 
-from clef_server.__main__ import _reuse_ready_server  # noqa: E402
-from clef_server._config import ServerConfig, load_config  # noqa: E402
+import clef_server.__main__ as clef_main  # noqa: E402
+from clef_server._config import ServerConfig, identity, load_config  # noqa: E402
 from clef_server._service import _await_without_abandoning, create_app  # noqa: E402
+
+_SAMPLE_SPEC = importlib.util.spec_from_file_location(
+    "clef_flash_sample",
+    _REPO_ROOT / "model-server-samples" / "clef-flash" / "main.py",
+)
+assert _SAMPLE_SPEC and _SAMPLE_SPEC.loader
+clef_sample = importlib.util.module_from_spec(_SAMPLE_SPEC)
+_SAMPLE_SPEC.loader.exec_module(clef_sample)
 
 REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
 
@@ -98,11 +109,7 @@ def test_health_models_and_success_include_revision(tmp_path: Path) -> None:
     config = _config(tmp_path)
     backend = _Backend(config)
     with TestClient(create_app(config, backend)) as client:
-        assert client.get("/health").json() == {
-            "status": "ready",
-            "model": config.model_name,
-            "model_revision": REVISION,
-        }
+        assert client.get("/health").json() == identity(config)
         assert client.get("/v1/models").json()["data"] == [
             {"id": config.model_name, "object": "model", "model_revision": REVISION}
         ]
@@ -175,7 +182,7 @@ def test_body_limit_is_enforced(tmp_path: Path) -> None:
     assert response.status_code == 413
 
 
-def test_matching_ready_listener_is_reused(monkeypatch) -> None:
+def _health_response(config: ServerConfig):
     class _Response:
         def __enter__(self):
             return self
@@ -184,22 +191,24 @@ def test_matching_ready_listener_is_reused(monkeypatch) -> None:
             return False
 
         def read(self, _size: int) -> bytes:
-            return f'{{"status":"ready","model":"Cloudflare/clef-flash","model_revision":"{REVISION}"}}'.encode()
-
-    class _Connection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-    monkeypatch.setattr("clef_server.__main__.socket.create_connection", lambda *_args, **_kwargs: _Connection())
-    monkeypatch.setattr("clef_server.__main__.urlopen", lambda *_args, **_kwargs: _Response())
-
-    assert _reuse_ready_server("127.0.0.1", 8120, "Cloudflare/clef-flash", REVISION)
+            return json.dumps(identity(config)).encode()
 
 
-def test_mismatched_ready_listener_is_not_reused(monkeypatch) -> None:
+    return _Response()
+
+
+def test_matching_owned_ready_listener_is_reused(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _health_response(config))
+
+    assert clef_main._reuse_ready_server(config)
+
+
+def test_mismatched_configuration_is_not_reused(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+
     class _Response:
         def __enter__(self):
             return self
@@ -208,20 +217,113 @@ def test_mismatched_ready_listener_is_not_reused(monkeypatch) -> None:
             return False
 
         def read(self, _size: int) -> bytes:
-            return b'{"status":"ready","model":"other","model_revision":"other"}'
+            mismatched = identity(config) | {"configuration_fingerprint": "other"}
+            return json.dumps(mismatched).encode()
 
-    class _Connection:
-        def __enter__(self):
-            return self
+    monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _Response())
 
-        def __exit__(self, *_exc):
-            return False
+    with pytest.raises(RuntimeError, match="different Clef configuration"):
+        clef_main._reuse_ready_server(config)
 
-    monkeypatch.setattr("clef_server.__main__.socket.create_connection", lambda *_args, **_kwargs: _Connection())
-    monkeypatch.setattr("clef_server.__main__.urlopen", lambda *_args, **_kwargs: _Response())
 
-    with pytest.raises(RuntimeError, match="does not match"):
-        _reuse_ready_server("127.0.0.1", 8120, "Cloudflare/clef-flash", REVISION)
+def test_unmanaged_listener_is_not_reused(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: False)
+    monkeypatch.setattr(
+        clef_main,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not probe unmanaged listener")),
+    )
+
+    with pytest.raises(RuntimeError, match="unmanaged listener"):
+        clef_main._reuse_ready_server(config)
+
+
+def test_listener_replacement_during_reuse_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    listeners = iter([(1234, True, True), (5678, True, True)])
+    monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: next(listeners))
+    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _health_response(config))
+
+    with pytest.raises(RuntimeError, match="changed during inspection"):
+        clef_main._reuse_ready_server(config)
+
+
+def test_clef_ownership_uses_exact_environment_not_command_line(tmp_path: Path, monkeypatch) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    (proc_root / "cmdline").write_text("python\0unrelated.py\0/tmp/clef_server.yaml")
+    (proc_root / "environ").write_bytes(b"PATH=/bin\0")
+    monkeypatch.setattr(
+        clef_main,
+        "Path",
+        lambda raw: tmp_path / str(raw).removeprefix("/"),
+    )
+    monkeypatch.setattr(
+        clef_sample,
+        "Path",
+        lambda raw: tmp_path / str(raw).removeprefix("/"),
+    )
+
+    assert not clef_main._has_clef_ownership(1234, 8120)
+    assert not clef_sample._has_clef_ownership(1234, 8120)
+    (proc_root / "environ").write_bytes(
+        b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0"
+    )
+    assert clef_main._has_clef_ownership(1234, 8120)
+    assert clef_sample._has_clef_ownership(1234, 8120)
+    assert not clef_main._has_clef_ownership(1234, 8121)
+    assert not clef_sample._has_clef_ownership(1234, 8121)
+
+
+def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch) -> None:
+    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: False)
+    monkeypatch.setattr(
+        "xr_ai_vllm._docker.container_on_port_checked",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("Clef stop must not inspect Docker")),
+    )
+    monkeypatch.setattr(
+        clef_sample.os,
+        "kill",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal unowned listener")),
+    )
+
+    assert not clef_sample._stop_clef(8120)
+
+
+def test_stop_rechecks_listener_pid_before_signalling(monkeypatch) -> None:
+    listeners = iter([(1234, True, True), (5678, True, True)])
+    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
+    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(
+        clef_sample.os,
+        "kill",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal replacement listener")),
+    )
+
+    assert not clef_sample._stop_clef(8120)
+
+
+def test_stop_signals_verified_listener_pid(monkeypatch) -> None:
+    listeners = iter(
+        [
+            (1234, True, True),
+            (1234, True, True),
+            (None, True, False),
+        ]
+    )
+    signals = []
+    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
+    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_sample.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+
+    assert clef_sample._stop_clef(8120)
+    assert signals == [(1234, signal.SIGTERM)]
 
 
 @pytest.mark.asyncio

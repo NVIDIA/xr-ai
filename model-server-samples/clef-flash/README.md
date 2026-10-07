@@ -30,6 +30,7 @@ for the remaining checked-in fields and comments.
 Run all commands from `model-server-samples/clef-flash/`:
 
 ```bash
+export UV_CONFIG_FILE=../../uv.toml
 uv sync
 uv run clef_flash_model
 ```
@@ -45,3 +46,7 @@ Stop only this model server with:
 ```bash
 uv run clef_flash_model --stop
 ```
+
+The stop command fails closed unless the configured port belongs to the
+launcher-owned Clef process; it does not stop Docker containers or unrelated
+listeners on the same port.

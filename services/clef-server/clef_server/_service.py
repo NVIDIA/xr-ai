@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from ._config import ServerConfig
+from ._config import ServerConfig, identity
 
 
 class ClefBackend:
@@ -133,11 +133,7 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {
-            "status": "ready",
-            "model": config.model_name,
-            "model_revision": instance.revision,
-        }
+        return identity(config)
 
     @app.get("/v1/models")
     async def models() -> dict[str, Any]:
