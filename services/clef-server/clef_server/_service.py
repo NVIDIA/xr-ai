@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import math
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -177,6 +178,13 @@ def create_app(
             await _await_without_abandoning(loop.run_in_executor(instance.executor, instance.validate_length, body))
             future = loop.run_in_executor(instance.executor, instance.answer, body)
             result = await _await_without_abandoning(future)
+        try:
+            result = _normalize_response(result, body)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Clef model returned an invalid response: {exc}",
+            ) from exc
         result["model"] = config.model_name
         result["model_revision"] = instance.revision
         return result
@@ -185,15 +193,90 @@ def create_app(
 
 
 async def _await_without_abandoning(future):
-    """Keep serialized executor work accounted for after client cancellation."""
-    try:
-        return await asyncio.shield(future)
-    except asyncio.CancelledError:
+    """Delay any caller cancellation until the protected work has completed."""
+    cancelled = False
+    while not future.done():
         try:
-            await asyncio.shield(future)
-        except Exception:
+            result = await asyncio.shield(future)
+        except asyncio.CancelledError:
+            cancelled = True
+        except BaseException:
+            if cancelled:
+                raise asyncio.CancelledError from None
+            raise
+        else:
+            if cancelled:
+                raise asyncio.CancelledError
+            return result
+    if cancelled:
+        # Retrieve a completed exception so asyncio does not report it as
+        # unobserved, but preserve cancellation as the caller-visible outcome.
+        try:
+            future.result()
+        except BaseException:
             pass
-        raise
+        raise asyncio.CancelledError
+    return future.result()
+
+
+def _normalize_response(
+    result: Any,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    """Translate the pinned model's rounded probabilities into our contract."""
+    if not isinstance(result, dict):
+        raise ValueError("response must be an object")
+    raw_answers = result.get("answers")
+    questions = request["questions"]
+    if not isinstance(raw_answers, dict) or raw_answers.keys() != questions.keys():
+        raise ValueError("answers must match the requested questions")
+
+    answers: dict[str, Any] = {}
+    for question_id, question in questions.items():
+        answer = raw_answers[question_id]
+        if not isinstance(answer, dict) or answer.get("type") != "choice":
+            raise ValueError(f"answer {question_id!r} must have type 'choice'")
+        choice = answer.get("choice")
+        criteria = question["criteria"]
+        if not isinstance(choice, str) or choice not in criteria:
+            raise ValueError(f"answer {question_id!r} selected an unknown choice")
+        raw_probabilities = answer.get("probabilities")
+        if (
+            not isinstance(raw_probabilities, dict)
+            or raw_probabilities.keys() != criteria.keys()
+        ):
+            raise ValueError(
+                f"answer {question_id!r} probabilities must match all choices"
+            )
+        probabilities: dict[str, float] = {}
+        for label, raw in raw_probabilities.items():
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                raise ValueError(
+                    f"answer {question_id!r} probability for {label!r} "
+                    "must be a finite non-negative number"
+                )
+            value = float(raw)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    f"answer {question_id!r} probability for {label!r} "
+                    "must be a finite non-negative number"
+                )
+            probabilities[label] = value
+        total = math.fsum(probabilities.values())
+        if not math.isfinite(total) or total <= 0:
+            raise ValueError(
+                f"answer {question_id!r} probabilities must have a positive total"
+            )
+        normalized = {
+            label: probability / total
+            for label, probability in probabilities.items()
+        }
+        answers[question_id] = {
+            **answer,
+            "confidence": normalized[choice],
+            "probabilities": normalized,
+        }
+    return {**result, "answers": answers}
 
 
 async def _warm(backend: ClefBackend) -> None:
@@ -211,6 +294,7 @@ async def _warm(backend: ClefBackend) -> None:
     loop = asyncio.get_running_loop()
     future = loop.run_in_executor(backend.executor, backend.answer, request)
     result = await _await_without_abandoning(future)
+    result = _normalize_response(result, request)
     if "ready" not in result.get("answers", {}):
         raise RuntimeError("Clef warmup returned no answer")
 

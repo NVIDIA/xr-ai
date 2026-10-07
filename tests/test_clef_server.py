@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import math
 import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +22,11 @@ sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
 
 import clef_server.__main__ as clef_main  # noqa: E402
 from clef_server._config import ServerConfig, identity, load_config  # noqa: E402
-from clef_server._service import _await_without_abandoning, create_app  # noqa: E402
+from clef_server._service import (  # noqa: E402
+    _await_without_abandoning,
+    _normalize_response,
+    create_app,
+)
 
 _SAMPLE_SPEC = importlib.util.spec_from_file_location(
     "clef_flash_sample",
@@ -49,12 +54,22 @@ class _Backend:
 
     def answer(self, body: dict) -> dict:
         self.calls.append(body)
+        answers = {}
+        for key, question in body["questions"].items():
+            labels = list(question["criteria"])
+            probabilities = {
+                label: 0.9 if index == 0 else 0.1 / (len(labels) - 1)
+                for index, label in enumerate(labels)
+            }
+            answers[key] = {
+                "type": "choice",
+                "choice": labels[0],
+                "confidence": probabilities[labels[0]],
+                "probabilities": probabilities,
+            }
         return {
             "model": body["model"],
-            "answers": {
-                key: {"type": "choice", "choice": "yes", "confidence": 0.9, "probabilities": {"yes": 0.9, "no": 0.1}}
-                for key in body["questions"]
-            },
+            "answers": answers,
             "usage": {"input_tokens": 3, "output_tokens": 0},
         }
 
@@ -327,17 +342,134 @@ def test_stop_signals_verified_listener_pid(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancelled_inference_waits_for_worker_completion() -> None:
+async def test_repeated_cancellation_keeps_lock_until_worker_completion() -> None:
+    lock = asyncio.Lock()
+    started = asyncio.Event()
+    release = asyncio.Event()
     finished = asyncio.Event()
 
     async def work() -> None:
-        await asyncio.sleep(0.02)
+        started.set()
+        await release.wait()
         finished.set()
 
-    task = asyncio.create_task(_await_without_abandoning(asyncio.create_task(work())))
-    await asyncio.sleep(0)
+    async def request() -> None:
+        async with lock:
+            await _await_without_abandoning(asyncio.create_task(work()))
+
+    task = asyncio.create_task(request())
+    await started.wait()
+    assert lock.locked()
+
     task.cancel()
+    await asyncio.sleep(0)
+    assert lock.locked()
+    assert not task.done()
+
+    task.cancel()
+    await asyncio.sleep(0)
+    assert lock.locked()
+    assert not task.done()
+
+    release.set()
     with pytest.raises(asyncio.CancelledError):
         await task
 
     assert finished.is_set()
+    assert not lock.locked()
+
+
+def test_vendor_rounded_probabilities_are_normalized() -> None:
+    criteria = {f"choice-{index}": f"Choice {index}" for index in range(60)}
+    request = {
+        "questions": {
+            "q": {
+                "type": "choice",
+                "instructions": "Choose.",
+                "criteria": criteria,
+            }
+        }
+    }
+    result = {
+        "answers": {
+            "q": {
+                "type": "choice",
+                "choice": "choice-7",
+                "confidence": 0.0167,
+                "probabilities": dict.fromkeys(criteria, 0.0167),
+            }
+        },
+        "usage": {},
+    }
+
+    normalized = _normalize_response(result, request)
+    answer = normalized["answers"]["q"]
+
+    assert math.fsum(answer["probabilities"].values()) == pytest.approx(1.0)
+    assert answer["confidence"] == answer["probabilities"]["choice-7"]
+    assert answer["confidence"] == pytest.approx(1 / 60)
+    assert math.fsum(result["answers"]["q"]["probabilities"].values()) == pytest.approx(1.002)
+
+
+@pytest.mark.parametrize(
+    ("probabilities", "error"),
+    [
+        ({"yes": True, "no": 0.0}, "finite non-negative"),
+        ({"yes": float("nan"), "no": 1.0}, "finite non-negative"),
+        ({"yes": float("inf"), "no": 0.0}, "finite non-negative"),
+        ({"yes": -0.1, "no": 1.1}, "finite non-negative"),
+        ({"yes": 0.0, "no": 0.0}, "positive total"),
+    ],
+)
+def test_malformed_vendor_probabilities_are_rejected(
+    probabilities: dict[str, float],
+    error: str,
+) -> None:
+    request = {
+        "questions": {
+            "q": {
+                "type": "choice",
+                "instructions": "Choose.",
+                "criteria": {"yes": "Yes", "no": "No"},
+            }
+        }
+    }
+    result = {
+        "answers": {
+            "q": {
+                "type": "choice",
+                "choice": "yes",
+                "confidence": 1.0,
+                "probabilities": probabilities,
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match=error):
+        _normalize_response(result, request)
+
+
+def test_malformed_vendor_response_returns_bad_gateway(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+
+    class _MalformedBackend(_Backend):
+        def answer(self, body: dict) -> dict:
+            if body["state"] == "warmup":
+                return super().answer(body)
+            return {
+                "answers": {
+                    "activate": {
+                        "type": "choice",
+                        "choice": "yes",
+                        "confidence": 0.0,
+                        "probabilities": {"yes": 0.0, "no": 0.0},
+                    }
+                },
+                "usage": {},
+            }
+
+    with TestClient(create_app(config, _MalformedBackend(config))) as client:
+        response = client.post("/v1/systemone", json=_request())
+
+    assert response.status_code == 502
+    assert "positive total" in response.json()["detail"]

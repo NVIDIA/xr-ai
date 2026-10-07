@@ -23,7 +23,9 @@ upstream encoder.
 The server loads weights once, runs a two-choice warmup, and signals launcher
 readiness only after the model and HTTP listener are ready. Inference executes
 one request at a time on a dedicated worker thread; HTTP health and model
-metadata remain responsive while requests wait. `GET /health` and
+metadata remain responsive while requests wait. Client cancellation, including
+repeated cancellation, does not release the inference lock until the running
+worker call finishes. `GET /health` and
 `GET /v1/models` include model and `model_revision` provenance.
 `POST /v1/systemone` returns the standard answers and usage object with the
 same provenance fields.
@@ -64,7 +66,10 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 `POST /v1/systemone` accepts the SystemOne request fields `model`, `state`,
 and `questions`. The response contains the configured model name, one choice
 answer per question, input-token usage, and the pinned revision. The service
-does not accept images, videos, `noul`, or `score` questions.
+does not accept images, videos, `noul`, or `score` questions. The pinned model
+rounds native probabilities to four decimal places. Before returning them, the
+service validates their shape and values, normalizes them to a complete
+distribution, and derives confidence from the selected normalized probability.
 
 `GET /health` reports the Clef service, model and revision, plus a deterministic
 fingerprint of the active non-secret server configuration. The launcher uses
