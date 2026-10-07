@@ -107,6 +107,7 @@ def test_inference_runs_one_target_stream_and_bounds_diarization_history(_stream
     assert masks[-1][0].shape == (1, 2)
     assert masks[-1][0].all() and masks[-1][1].all()
     feed([1], "what is that?")
+    assert not masks[-1][0].any() and masks[-1][1].all()
     assert feed([1], "what is that?")[-1]["kind"] == "transcript"
     assert len(asr_calls) == count + 3
     assert all(call["drop_extra_pre_encoded"] == 2 for call in asr_calls)
@@ -165,17 +166,46 @@ def test_audio_timeline_uses_origin_and_accepted_sample_count(_streaming_models)
     assert observed_pts == [1_234_567, 1_394_567]
 
 
-@pytest.mark.parametrize("owner", [None, 7])
-def test_forced_truncation_cannot_enroll_or_release_a_speaker(_streaming_models, owner):
+def test_forced_truncation_cannot_enroll_an_unowned_speaker(_streaming_models):
     from speaker_stt._inference import _Session
 
     models, activity, _calls, _masks, _allocations, text = _streaming_models
     cfg = _SpeakerConfig(silence_duration=0.16, max_utterance_s=0.32)
     session = _Session(models, cfg, audio_origin_us=0)
-    session.selection.owner = owner
     activity[:] = [7]
-    text[0] = cfg.start_phrase if owner is None else cfg.stop_phrase
+    text[0] = cfg.start_phrase
     events = session._feed(bytes(5120))
     events += session._feed(bytes(5120))
-    assert session.selection.owner == owner
+    assert session.selection.owner is None
     assert not any(event["kind"] in {"enrolled", "released", "transcript"} for event in events)
+    assert session.selection.candidate is None
+    assert session.selection.duration == 0
+    assert session.selection._controls._words == ""
+
+
+def test_forced_truncation_emits_owner_transcript_without_releasing(_streaming_models):
+    from speaker_stt._inference import _Session
+
+    models, activity, _calls, _masks, _allocations, text = _streaming_models
+    cfg = _SpeakerConfig(silence_duration=0.16, max_utterance_s=0.32)
+    session = _Session(models, cfg, audio_origin_us=1_000_000)
+    session.selection.owner = 7
+    activity[:] = [7]
+    text[0] = cfg.stop_phrase
+    events = session._feed(bytes(5120))
+    events += session._feed(bytes(5120))
+
+    assert events[-2:] == [
+        {"kind": "speech_stop"},
+        {
+            "kind": "transcript",
+            "text": cfg.stop_phrase,
+            "pts_us": 1_000_000,
+            "speaker_id": 7,
+        },
+    ]
+    assert session.selection.owner == 7
+    assert session.selection.candidate is None
+    assert session.selection.duration == 0
+    assert session.selection._controls._words == ""
+    assert session.last_partial == ""
