@@ -134,17 +134,27 @@ def serve_nim(
     try:
         nim_cache.mkdir(parents=True, exist_ok=True)
         nim_cache.chmod(0o777)
-    except PermissionError:
+    except PermissionError as exc:
         # On a shared machine the dir may belong to another OS user; that is
         # fine when their wrapper already made it world-writable.
         if not nim_cache.is_dir() or nim_cache.stat().st_mode & 0o777 != 0o777:
             log.error(
                 "cannot make NIM cache %s world-writable; it is likely owned "
                 "by another user of this machine: chmod 777 it (or pick a "
-                "different nim_cache in the server YAML) and retry",
+                "different nim_cache in the server YAML) and retry: %s",
                 nim_cache,
+                exc,
             )
             sys.exit(1)
+    except OSError as exc:
+        log.error(
+            "cannot prepare NIM cache %s for container %s (image %s): %s",
+            nim_cache,
+            container_name,
+            image,
+            exc,
+        )
+        raise
     endpoint = (
         f"grpc localhost:{grpc_port} (health http:{http_port})"
         if grpc_port is not None else f"http://localhost:{http_port}/v1"

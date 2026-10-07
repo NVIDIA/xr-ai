@@ -232,15 +232,30 @@ def build_run_argv(
 
 def _docker_available() -> bool:
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            check=False,
+            capture_output=True,
+            text=True,
+            errors="replace",
         )
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError as exc:
+        log.error(
+            "docker backend requires Docker Engine and the NVIDIA Container "
+            "Toolkit; could not run `docker version`: %s",
+            exc,
+        )
         return False
+    if result.returncode == 0:
+        return True
+    detail = (result.stderr or result.stdout or "no command output").strip()
+    log.error(
+        "docker backend requires Docker Engine and the NVIDIA Container "
+        "Toolkit; `docker version` failed (rc=%d): %s",
+        result.returncode,
+        detail,
+    )
+    return False
 
 
 def container_exists(name: str) -> bool:
@@ -359,7 +374,17 @@ def start_container(name: str) -> bool:
             stderr=subprocess.PIPE,
         )
         return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or b"").decode(errors="replace").strip()
+        log.warning(
+            "`docker start %s` failed (rc=%d): %s",
+            name,
+            exc.returncode,
+            detail or "no command output",
+        )
+        return False
+    except FileNotFoundError as exc:
+        log.warning("could not run `docker start %s`: %s", name, exc)
         return False
 
 
@@ -480,15 +505,22 @@ def _maybe_ngc_login(image: str) -> None:
             stderr=subprocess.PIPE,
             check=False,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
+        log.warning(
+            "could not run `docker login %s` for image %s: %s",
+            registry,
+            image,
+            exc,
+        )
         return
     if result.returncode == 0:
         _LOGIN_DONE.add(registry)
         log.debug("docker login %s succeeded via NGC_API_KEY", registry)
     else:
         log.warning(
-            "docker login %s failed: %s — pull may fail",
+            "`docker login %s` for image %s failed: %s",
             registry,
+            image,
             (result.stderr or b"").decode(errors="replace").strip(),
         )
 
@@ -758,11 +790,6 @@ def run_container(
     post-mortem capture behave identically for both backends.
     """
     if not _docker_available():
-        log.error(
-            "docker backend requires docker on PATH and a running daemon "
-            "(`docker version` failed). Install Docker Engine and the NVIDIA "
-            "Container Toolkit, then retry."
-        )
         sys.exit(2)
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
@@ -819,12 +846,6 @@ def run_container(
     # versa). Evict it by label before any reuse probe: a foreign server can
     # answer the health probe and be silently mistaken for ours.
     holder, checked = container_on_port_checked(port)
-    if not checked:
-        print(
-            f"[{log_prefix}] could not inspect port {port} ownership; if the "
-            f"launch fails to bind, stop whatever holds the port",
-            flush=True,
-        )
     if checked and holder and holder != container_name:
         print(
             f"[{log_prefix}] port {port} is held by container {holder}; "
@@ -926,7 +947,18 @@ def run_container(
         _maybe_ngc_login(image)
         print(f"[{log_prefix}] {launch_banner}", flush=True)
         _state["cleanup_mode"] = "remove"
-        proc = subprocess.Popen(argv, start_new_session=True)
+        try:
+            proc = subprocess.Popen(argv, start_new_session=True)
+        except OSError as exc:
+            log.error(
+                "could not invoke Docker for image %s as container %s: %s",
+                image,
+                container_name,
+                exc,
+            )
+            signal.signal(signal.SIGINT, orig_int)
+            signal.signal(signal.SIGTERM, orig_term)
+            raise
         owns_attempt = True
     _state["proc"] = proc
 
@@ -1028,8 +1060,10 @@ def run_container(
             if diagnosis:
                 log.error("%s", diagnosis)
             log.error(
-                "container %s failed — see %s",
+                "container %s (image %s) failed before readiness at %s; see %s",
                 container_name,
+                image,
+                health_url,
                 streamer.log_path,
             )
             raise
@@ -1056,7 +1090,9 @@ def run_container(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port_checked(port: int) -> tuple[str | None, bool]:
+def container_on_port_checked(
+    port: int, *, warn_on_failure: bool = True,
+) -> tuple[str | None, bool]:
     """Return a labelled container and whether Docker discovery succeeded."""
     try:
         out = subprocess.check_output(
@@ -1064,7 +1100,8 @@ def container_on_port_checked(port: int) -> tuple[str | None, bool]:
              f"--filter=label=xr-ai-vllm.port={port}",
              "--format", "{{.Names}}"],
             text=True,
-            stderr=subprocess.DEVNULL,
+            errors="replace",
+            stderr=subprocess.PIPE,
         ).strip()
         names = out.splitlines()
         return (names[0] if names else None), True
@@ -1072,7 +1109,15 @@ def container_on_port_checked(port: int) -> tuple[str | None, bool]:
         # Without the Docker CLI, a local Docker container cannot be managed;
         # pip-mode ownership is still established from the listener process.
         return None, True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "no command output").strip()
+        report = log.warning if warn_on_failure else log.debug
+        report(
+            "could not inspect Docker ownership for port %d (rc=%d): %s",
+            port,
+            exc.returncode,
+            detail,
+        )
         return None, False
 
 
