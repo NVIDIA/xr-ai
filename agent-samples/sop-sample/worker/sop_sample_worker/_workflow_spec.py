@@ -167,9 +167,37 @@ def load_workflow(path: Path) -> Workflow:
     return parse_workflow(path.read_bytes())
 
 
+class _GuideLoader(yaml.SafeLoader):
+    """Safe YAML loading without silent replacement of guide requirements."""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[str, Any]:
+        self._check_keys(node)
+        self.flatten_mapping(node)
+        self._check_keys(node)
+        return super().construct_mapping(node, deep=deep)
+
+    def _check_keys(self, node: yaml.MappingNode) -> None:
+        keys: set[str] = set()
+        for key_node, _ in node.value:
+            # Merge keys disappear during flattening; check both the source
+            # mapping and its expanded requirements before constructing values.
+            key = key_node.value if key_node.tag == "tag:yaml.org,2002:merge" else self.construct_object(key_node)
+            if not isinstance(key, str):
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a guide mapping", node.start_mark,
+                    "mapping keys must be strings", key_node.start_mark,
+                )
+            if key in keys:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a guide mapping", node.start_mark,
+                    f"duplicate mapping key {key!r}", key_node.start_mark,
+                )
+            keys.add(key)
+
+
 def parse_workflow(content: bytes | str) -> Workflow:
     """Validate one captured guide snapshot without rereading its source file."""
-    root = _mapping(yaml.safe_load(content) or {}, "workflow")
+    root = _mapping(yaml.load(content, Loader=_GuideLoader) or {}, "workflow")
     _only(root, _ROOT_KEYS, "workflow")
     if root.get("schema_version") != 1:
         raise ValueError("schema_version must be 1")
@@ -408,7 +436,9 @@ def _identifier(value: Any, label: str) -> str:
 
 
 def _required_text(value: Any, label: str) -> str:
-    result = str(value or "").strip()
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string")
+    result = value.strip()
     if not result:
         raise ValueError(f"{label} must not be empty")
     return result

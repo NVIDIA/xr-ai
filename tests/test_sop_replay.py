@@ -8,6 +8,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -136,6 +137,86 @@ def test_invalid_trigger_rejected_before_replay(tmp_path, document, trigger):
     write_guide(tmp_path, document)
     with pytest.raises(ValueError, match="Invalid guides"):
         select_guide(tmp_path, "Align Parts")
+
+
+@pytest.mark.parametrize("path", [
+    ("steps", 0, "evidence", "pattern"),
+    ("steps", 0, "agent", "prompt"),
+    ("steps", 0, "voice", "prompt"),
+    ("steps", 0, "messages", "enter"),
+    ("steps", 0, "messages", "complete"),
+    ("steps", 0, "messages", "skip"),
+    ("task", "name"),
+    ("task", "foreground_prompt"),
+    ("task", "complete_message"),
+    ("state", "base", "description"),
+])
+@pytest.mark.parametrize("value", [["YES"], {"YES": True}, True, 23, 1.5, None])
+def test_non_string_text_rejected_before_replay(tmp_path, document, path, value):
+    target = document
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    write_guide(tmp_path, document)
+    with pytest.raises(ValueError, match="must be a string"):
+        select_guide(tmp_path, "Align Parts")
+
+
+def test_string_regex_and_whitespace_keep_their_meaning(document):
+    document["steps"][0]["evidence"]["pattern"] = "  [YES]  "
+    document["steps"][0]["agent"]["prompt"] = "  Observe carefully.  "
+    step = parse_workflow(yaml.safe_dump(document)).steps["base"]
+    assert step.agent.prompt == "Observe carefully."
+    assert step.evidence.pattern == "[YES]"
+    assert re.fullmatch(step.evidence.pattern, "Y")
+    assert not re.fullmatch(step.evidence.pattern, "YES")
+    document["steps"][0]["evidence"]["pattern"] = " \n "
+    with pytest.raises(ValueError, match="must not be empty"):
+        parse_workflow(yaml.safe_dump(document))
+
+
+@pytest.mark.parametrize("original,replacement,key", [
+    ("steps:\n", "steps: []\nsteps:\n", "steps"),
+    ("    initial: false", "    initial: false\n    initial: true", "initial"),
+    ("    initial: false", '    initial: false\n    "initial": true', "initial"),
+    ("  evidence:\n", "  evidence: {pattern: wrong, consecutive: 1}\n  evidence:\n", "evidence"),
+    ("    consecutive: 2", "    consecutive: 2\n    consecutive: 2", "consecutive"),
+    ("  complete_when:\n    base: true", "  complete_when:\n    base: true\n  complete_when:\n    base: false",
+     "complete_when"),
+    ("    initial: false", "    <<: {initial: false}\n    initial: true", "initial"),
+    ("    initial: false", "    <<: {initial: false}\n    <<: {description: Merged}", "<<"),
+])
+def test_duplicate_requirements_rejected_before_replay(tmp_path, document, original, replacement, key):
+    source = yaml.safe_dump(document, sort_keys=False)
+    assert original in source
+    changed = source.replace(original, replacement, 1)
+    if key == "complete_when":
+        # The permissive loader would accept the initial state as already complete.
+        assert yaml.safe_load(changed)["steps"][0]["complete_when"] == {"base": False}
+    with pytest.raises(yaml.constructor.ConstructorError, match=f"duplicate mapping key '{key}'") as error:
+        parse_workflow(changed)
+    assert error.value.problem_mark.line >= 0
+    path = tmp_path / "invalid.guide.yaml"
+    path.write_text(changed)
+    with pytest.raises(ValueError, match=f"duplicate mapping key '{key}'"):
+        select_guide(tmp_path, "Align Parts")
+    assert path.read_text() == changed
+
+
+def test_safe_aliases_and_non_overlapping_merges_remain_supported(document):
+    document["steps"][0]["voice"] = document["steps"][0]["agent"]
+    source = yaml.safe_dump(document, sort_keys=False)
+    assert "&id" in source and "*id" in source
+    source = source.replace("    type: boolean", "    <<: {type: boolean}")
+    workflow = parse_workflow(source)
+    assert workflow.steps["base"].voice == workflow.steps["base"].agent
+    assert workflow.state_fields["base"].type == "boolean"
+
+
+def test_guide_loader_is_local_and_still_safe():
+    assert yaml.safe_load("value: 1\nvalue: 2") == {"value": 2}
+    with pytest.raises(yaml.constructor.ConstructorError):
+        parse_workflow("!!python/object/apply:builtins.str [YES]")
 
 
 async def test_starts_on_connect_and_completes_twice_without_disconnect(engine):

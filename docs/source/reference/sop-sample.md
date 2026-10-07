@@ -153,6 +153,11 @@ The declarative shape follows the tea-making workflow: a task, typed sparse
 state, and ordered steps with separate observation and voice policies. Existing
 schema-version-1 guides from the workflow-recorder sample are supported.
 
+Text fields must be actual strings. Duplicate mapping keys are rejected at
+every level, including overrides introduced through YAML merges, instead of
+silently replacing earlier requirements. Invalid guides cannot start replay,
+even when their `task.status` is `approved`.
+
 - `schema_version` must be `1`.
 - `task` declares `id`, `name`, positive `version`, `status` (`draft` or
   `approved`), `source_session`, `start_step`, `foreground_prompt`, and
