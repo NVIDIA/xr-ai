@@ -113,13 +113,17 @@ restart `xr_render_demo` to apply a change.
 |---|---|
 | `yaml/cloudxr_runtime.yaml` | CloudXR install state, EULA acceptance, client profile, compositor GPU, and environment overrides |
 | `yaml/xr_render_demo_worker.yaml` | Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection |
-| `yaml/voice_gate.yaml` | Always-on speech or wake phrases, listening chime, and follow-up window |
+| `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit, web and token servers, networking, and video recording |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `yaml/video_memory_service.yaml` | Recorded-query endpoint, output directory, and GPU |
 | `yaml/openxr_service.yaml` | OpenXR endpoint, CloudXR environment, and eval-only simulated pose |
 | `scene/scene_service.yaml` | LOVR binary and app, scene endpoint, and CloudXR environment |
+
+After connecting, say `Hey agent, let's start talking`, then speak without a
+wake phrase until `Hey agent, let's stop talking`. Refer to
+{ref}`voice-conversation-controls` for configurable phrases and wake gating.
 
 `NV_DEVICE_PROFILE` in the environment overrides
 `cloudxr_env.NV_DEVICE_PROFILE` in `cloudxr_runtime.yaml`. `LOVR_BIN` similarly

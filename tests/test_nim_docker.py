@@ -163,13 +163,17 @@ def test_serve_nim_exits_on_unwritable_foreign_cache_dir(tmp_path, monkeypatch):
         )
 
 
-def test_serve_nim_exits_when_cache_dir_cannot_be_created(tmp_path, monkeypatch):
+def test_serve_nim_exits_when_cache_dir_cannot_be_created(
+    tmp_path, monkeypatch, caplog,
+):
     # Shared machine: the parent nim_cache belongs to another OS user and the
     # per-container subdir does not exist yet, so mkdir raises.
     monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
     monkeypatch.setattr(
         Path, "mkdir",
-        lambda self, *a, **kw: (_ for _ in ()).throw(PermissionError()),
+        lambda self, *a, **kw: (_ for _ in ()).throw(
+            PermissionError("permission denied by cache owner")
+        ),
     )
     with pytest.raises(SystemExit):
         serve_nim(
@@ -179,6 +183,32 @@ def test_serve_nim_exits_when_cache_dir_cannot_be_created(tmp_path, monkeypatch)
             http_port=8106,
             nim_cache=tmp_path / "nim",
         )
+    assert "permission denied by cache owner" in caplog.text
+    assert str(tmp_path / "nim" / "xr-ai-nim-llama") in caplog.text
+
+
+def test_serve_nim_preserves_non_permission_cache_error(
+    tmp_path, monkeypatch, caplog,
+):
+    monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+    error = OSError("read-only filesystem")
+    monkeypatch.setattr(
+        Path, "mkdir",
+        lambda self, *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(OSError) as raised:
+        serve_nim(
+            image="nvcr.io/nim/meta/llama-3.1-8b-instruct:latest",
+            container_name="xr-ai-nim-llama",
+            log_prefix="x",
+            http_port=8106,
+            nim_cache=tmp_path / "nim",
+        )
+
+    assert raised.value is error
+    assert "read-only filesystem" in caplog.text
+    assert str(tmp_path / "nim" / "xr-ai-nim-llama") in caplog.text
 
 
 def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):

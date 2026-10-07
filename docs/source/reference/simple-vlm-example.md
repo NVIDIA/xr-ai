@@ -74,7 +74,7 @@ layout works without command-line configuration arguments.
 | File | Owns |
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
-| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
@@ -83,8 +83,9 @@ layout works without command-line configuration arguments.
 Edit the owning file, preserve the field's YAML type, and restart
 `simple_vlm_example`; configuration is loaded only at process startup. For
 example, lower `silero_threshold` in the worker YAML if quieter speech is being
-missed, or change `magic_phrases` in the voice-gate YAML to choose the required
-wake phrases. Relative paths in the worker YAML are resolved from `yaml/`, not
+missed, or change `conversation.start_phrase` and `conversation.stop_phrase`
+in the voice-gate YAML. Set `conversation.require_wake_phrase: true` to require
+its configured `magic_phrases` during an active conversation. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
@@ -95,6 +96,11 @@ persistent stack, and start it again before restarting this sample.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
+
+After connecting, say `Hey agent, let's start talking`, then ask questions
+without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
+controls work with the sample's existing STT endpoint, including NIM. Refer to
+{ref}`voice-conversation-controls` for paused phrases and the legacy wake mode.
 
 ## Opt-in session capture
 

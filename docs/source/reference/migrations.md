@@ -24,6 +24,38 @@ backend also retries its pending cleanup before opening another connection.
 A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
 satisfy the throwing protocol requirement.
 
+## Launcher failure exit statuses
+
+Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.
+
+The launcher preserves positive child exit codes, maps signal termination to
+`128 + signal number`, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+{doc}`../components/launcher-and-process-model` for failure diagnostics and
+shutdown behavior.
+
+## Voice sample conversation defaults
+
+The shipped voice samples now require `Hey agent, let's start talking` after
+connecting, then accept speech without a wake phrase until
+`Hey agent, let's stop talking`. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.
+
+Set `conversation.require_wake_phrase: true` in the sample's voice-gate YAML to
+keep wake phrases during an active conversation. Set
+`conversation.enabled: false` to restore the original wake-only behavior, or
+always-on dispatch when `magic_phrases` is empty. Restart workers after editing
+these settings. Refer to {ref}`voice-conversation-controls`.
+
+Only final transcripts during an active conversation reach
+`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously
