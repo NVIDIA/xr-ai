@@ -13,3 +13,4 @@ for configuration and startup instructions.
 Its private IPC contract accepts serialized, capture-ordered PCM. Session
 creation supplies the first sample's capture timestamp; later event timing is
 derived from accepted sample counts rather than packet arrival times.
+The default socket lives in an owner-only per-user runtime directory.

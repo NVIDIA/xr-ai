@@ -397,7 +397,8 @@ def test_private_model_service_projects_preserve_their_local_contracts() -> None
 
         assert metadata["project"]["name"] == package
         assert command in metadata["project"]["scripts"]
-        assert config["endpoint"].startswith("ipc:///")
+        assert "endpoint" not in config  # per-user private runtime default
+        assert "cuda_visible_devices" not in config  # hardware profile owns placement
         assert "port" not in config
         assert Path(os.path.normpath(project / config["model_cache"])) == _ROOT / "models", (
             f"{directory}: model_cache must target the repo models directory"

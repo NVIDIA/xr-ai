@@ -36,7 +36,9 @@ class _Selection:
             else:
                 # Ambiguous onset blocks enrollment until an entire silence gap.
                 self.ambiguous = self.ambiguous or bool(active)
-                if not active:
+                if active:
+                    self.silence = 0.0
+                else:
                     self.silence += seconds
                     if self.silence >= self.cfg.silence_duration:
                         self._clear_utterance()
@@ -54,12 +56,16 @@ class _Selection:
         selected = None if self.ambiguous else self.candidate
         return selected, events, started
 
-    def _finish(self, text: str) -> list[dict]:
+    def _finish(self, text: str, *, allow_control: bool = True) -> list[dict]:
         events = []
         if self.owner is not None:
             events.append({"kind": "speech_stop"})
         if self.candidate is not None and not self.ambiguous and text.strip():
-            action = self._controls._feed(text, key=self.candidate, at_s=self.pts_us / 1_000_000)
+            if allow_control:
+                action = self._controls._feed(text, key=self.candidate, at_s=self.pts_us / 1_000_000)
+            else:
+                self._controls._reset()
+                action = None
             if self.owner is None:
                 if action == "start":
                     self.owner = self.candidate

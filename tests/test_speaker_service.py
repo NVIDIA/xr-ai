@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import stat
 from dataclasses import asdict
 from types import SimpleNamespace
 
@@ -40,6 +42,35 @@ def _open(server, identity, *, audio_origin_us=1):
 
 def _audio(server, identity, **overrides):
     return server._request({"op": "audio", "session": identity, "audio": bytes(640), **overrides})
+
+
+def test_default_endpoint_uses_an_owner_only_runtime_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    endpoint = _SpeakerConfig().endpoint
+    assert endpoint == f"ipc://{tmp_path}/xr-ai/speaker-stt.sock"
+    path = service._socket_path(endpoint, create_parent=True)
+    assert path.parent.stat().st_uid == os.getuid()
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_ipc_endpoint_rejects_an_untrusted_parent_or_file(tmp_path, monkeypatch):
+    public = tmp_path / "public"
+    public.mkdir(mode=0o755)
+    public.chmod(0o755)
+    with pytest.raises(RuntimeError, match="parent directory"):
+        service._socket_path(f"ipc://{public}/speaker.sock")
+
+    endpoint = f"ipc://{tmp_path}/speaker.sock"
+    path = service._socket_path(endpoint)
+    path.write_bytes(b"not a socket")
+    with pytest.raises(RuntimeError, match="owner-only socket"):
+        service._validate_socket(path)
+    path.unlink()
+
+    uid = os.getuid()
+    monkeypatch.setattr(service.os, "getuid", lambda: uid + 1)
+    with pytest.raises(RuntimeError, match="parent directory"):
+        service._socket_path(endpoint)
 
 
 def test_sessions_isolate_decoder_state_and_close_idempotently():
@@ -136,6 +167,9 @@ async def _exchange(endpoint, body):
 @pytest.mark.asyncio
 async def test_private_ipc_readiness_reuse_and_identity_checked_shutdown(tmp_path, monkeypatch):
     loads = []
+    monkeypatch.setenv("HF_HOME", "operator-hf")
+    monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "0")
+    monkeypatch.delenv("NEMO_CACHE_DIR", raising=False)
     monkeypatch.setattr(
         _inference,
         "_Models",
@@ -153,6 +187,9 @@ async def test_private_ipc_readiness_reuse_and_identity_checked_shutdown(tmp_pat
             while not ready.exists():
                 await asyncio.sleep(0.01)
         assert (tmp_path / "speaker.sock").stat().st_mode & 0o777 == 0o600
+        assert os.environ["HF_HOME"] == "operator-hf"
+        assert os.environ["HF_XET_HIGH_PERFORMANCE"] == "0"
+        assert os.environ["NEMO_CACHE_DIR"] == str((tmp_path / "models" / "nemo").resolve())
         status = await service._status(endpoint)
         assert status["fingerprint"] == service._fingerprint(cfg)
         reused_ready = tmp_path / "reused.ready"
@@ -193,14 +230,22 @@ async def test_private_ipc_readiness_reuse_and_identity_checked_shutdown(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_status_refuses_foreign_endpoint(tmp_path):
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {"service": "foreign", "protocol": service._PROTOCOL},
+        {"service": service._SERVICE, "protocol": service._PROTOCOL - 1},
+    ],
+)
+async def test_status_refuses_foreign_or_old_protocol_endpoint(tmp_path, identity):
     endpoint = f"ipc://{tmp_path}/foreign.sock"
     socket = zmq.asyncio.Context.instance().socket(zmq.REP)
     socket.bind(endpoint)
+    (tmp_path / "foreign.sock").chmod(0o600)
 
     async def reply():
         await socket.recv()
-        await socket.send(msgpack.packb({"service": "foreign", "protocol": 1}))
+        await socket.send(msgpack.packb(identity))
 
     task = asyncio.create_task(reply())
     try:
@@ -211,3 +256,23 @@ async def test_status_refuses_foreign_endpoint(tmp_path):
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         socket.close(linger=0)
+
+
+@pytest.mark.asyncio
+async def test_reuse_watcher_requires_three_consecutive_status_failures(monkeypatch):
+    expected = {"service": service._SERVICE, "protocol": service._PROTOCOL, "fingerprint": "same"}
+    responses = iter([None, None, expected, None, None, None])
+    calls = []
+
+    async def status(endpoint):
+        calls.append(endpoint)
+        return next(responses)
+
+    async def no_sleep(_seconds):
+        pass
+
+    monkeypatch.setattr(service, "_status", status)
+    monkeypatch.setattr(service.asyncio, "sleep", no_sleep)
+    with pytest.raises(RuntimeError, match="no longer available"):
+        await service._watch_reused("ipc:///unused", "same")
+    assert len(calls) == 6

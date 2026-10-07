@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import signal
+import stat
 import time
 from pathlib import Path
 
@@ -24,7 +25,8 @@ from xr_ai_logging import setup_logging
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
-_PROTOCOL = 1
+_PROTOCOL = 2
+_REUSE_STATUS_FAILURE_LIMIT = 3
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 
 
@@ -38,7 +40,42 @@ def _fingerprint(cfg: dict) -> str:
     return hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()
 
 
+def _socket_path(endpoint: str, *, create_parent: bool = False) -> Path:
+    path = Path(endpoint.removeprefix("ipc://"))
+    parent = path.parent
+    if create_parent:
+        parent.mkdir(mode=0o700, exist_ok=True)
+    try:
+        info = parent.lstat()
+    except FileNotFoundError as exc:
+        raise RuntimeError("speaker IPC parent directory does not exist") from exc
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+    ):
+        raise RuntimeError("speaker IPC parent directory must be owned by this user with mode 0700")
+    return path
+
+
+def _validate_socket(path: Path) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    if (
+        not stat.S_ISSOCK(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o600
+    ):
+        raise RuntimeError("speaker IPC endpoint must be an owner-only socket owned by this user")
+    return True
+
+
 async def _status(endpoint: str) -> dict | None:
+    path = _socket_path(endpoint)
+    if not _validate_socket(path):
+        return None
     socket = zmq.asyncio.Context.instance().socket(zmq.REQ)
     socket.setsockopt(zmq.LINGER, 0)
     socket.setsockopt(zmq.IMMEDIATE, 1)
@@ -56,10 +93,29 @@ async def _status(endpoint: str) -> dict | None:
         socket.close()
 
 
-async def _reuse(cfg: dict, ready_file: Path | None) -> bool:
+async def _watch_reused(endpoint: str, fingerprint: str) -> None:
+    failures = 0
+    while True:
+        await asyncio.sleep(5)
+        current = await _status(endpoint)
+        if current is None:
+            failures += 1
+            if failures < _REUSE_STATUS_FAILURE_LIMIT:
+                logger.warning(
+                    "reused speaker STT status timed out ({}/{}); retrying",
+                    failures,
+                    _REUSE_STATUS_FAILURE_LIMIT,
+                )
+                continue
+            raise RuntimeError("reused speaker STT service is no longer available")
+        failures = 0
+        if current["fingerprint"] != fingerprint:
+            raise RuntimeError("reused speaker STT service identity changed")
+
+
+async def _reuse(cfg: dict, ready_file: Path | None, socket_path: Path) -> bool:
     endpoint = cfg.get("endpoint", _SpeakerConfig().endpoint)
-    path = Path(endpoint.removeprefix("ipc://"))
-    if not path.exists():
+    if not _validate_socket(socket_path):
         return False
     status = await _status(endpoint)
     if status is None:
@@ -72,11 +128,7 @@ async def _reuse(cfg: dict, ready_file: Path | None) -> bool:
     # Persistent-only stacks permit this readiness proxy to exit. Monitored
     # stacks need it to remain alive until the reused service is lost.
     if os.environ.get(_READY_PROCESS_MAY_EXIT_ENV) != "1":
-        while True:
-            await asyncio.sleep(5)
-            current = await _status(endpoint)
-            if current is None or current["fingerprint"] != status["fingerprint"]:
-                raise RuntimeError("reused speaker STT service is no longer available")
+        await _watch_reused(endpoint, status["fingerprint"])
     return True
 
 
@@ -137,19 +189,20 @@ async def _serve(cfg: dict, ready_file: Path | None) -> None:
     endpoint = cfg.get("endpoint", _SpeakerConfig().endpoint)
     _SpeakerConfig._from_yaml({"enabled": True, "endpoint": endpoint})
     max_sessions = _validate_capacity(cfg.get("max_sessions", 16))
-    if await _reuse(cfg, ready_file):
+    socket_path = _socket_path(endpoint, create_parent=True)
+    if await _reuse(cfg, ready_file, socket_path):
         return
     from ._inference import _Models
 
-    socket_path = Path(endpoint.removeprefix("ipc://"))
-    socket_path.parent.mkdir(parents=True, exist_ok=True)
     # ZMQ allows a second binder to replace an IPC socket. Keep the lock for
     # the lifetime of the service so an existing server cannot be displaced.
     with socket_path.with_suffix(socket_path.suffix + ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         cache = Path(cfg.get("model_cache", "../../models"))
         cache.mkdir(parents=True, exist_ok=True)
-        os.environ["HF_HOME"] = str(cache.resolve())
+        os.environ.setdefault("NEMO_CACHE_DIR", str((cache / "nemo").resolve()))
+        os.environ.setdefault("HF_HOME", str((cache / "huggingface").resolve()))
+        os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
         os.environ.setdefault("NEMO_LOGGING_LEVEL", "ERROR")
         models = await asyncio.to_thread(_Models, cfg)
         server = _Server(models, max_sessions=max_sessions)

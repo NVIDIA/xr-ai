@@ -6,14 +6,27 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields
+import os
+from dataclasses import dataclass, field, fields
+from pathlib import Path
 
 from ._conversation import _ConversationConfig
 
 
+def _default_endpoint() -> str:
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    runtime_path = Path(runtime) if runtime else None
+    root = (
+        runtime_path / "xr-ai"
+        if runtime_path is not None and runtime_path.is_absolute()
+        else Path("/tmp") / f"xr-ai-{os.getuid()}"
+    )
+    return f"ipc://{root / 'speaker-stt.sock'}"
+
+
 @dataclass(frozen=True)
 class _SpeakerConfig(_ConversationConfig):
-    endpoint: str = "ipc:///tmp/xr-ai-speaker-stt.sock"
+    endpoint: str = field(default_factory=_default_endpoint)
     activity_threshold: float = 0.7
     silence_duration: float = 0.6
     max_utterance_s: float = 30.0

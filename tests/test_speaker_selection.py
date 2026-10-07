@@ -38,6 +38,21 @@ def test_ambiguous_onset_cannot_be_enrolled_from_later_single_speaker():
     _enroll(selection, 1)
 
 
+def test_ambiguous_onset_requires_one_consecutive_silence_gap():
+    selection = _Selection(_SpeakerConfig(silence_duration=0.6))
+    for active in ({1, 2}, set(), {1, 2}, set(), {1, 2}, set()):
+        assert selection._activity(active, 0.2, 10)[0] is None
+    assert selection.ambiguous
+    assert selection.silence == pytest.approx(0.2)
+    assert selection._activity({1}, 0.2, 20)[0] is None
+    assert selection._finish(selection.cfg.start_phrase) == []
+    assert selection.owner is None
+
+    for _ in range(3):
+        selection._activity(set(), 0.2, 30)
+    _enroll(selection, 1)
+
+
 def test_only_owner_reaches_asr_and_release_requires_owner():
     selection = _Selection(_SpeakerConfig())
     _enroll(selection, 6)

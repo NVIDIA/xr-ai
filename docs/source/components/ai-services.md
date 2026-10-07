@@ -48,16 +48,19 @@ Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
 while keeping each session's diarization history, enrollment and ASR caches
 separate. A session enrolls one speaker with the configured start phrase and
 releases that identity with the stop phrase. Background voices do not reach
-the ASR decoder after enrollment. Speaker labels are session-local identities.
+the transcript as separate speakers after enrollment: the decoder receives the
+mixed audio with owner and interference masks and is conditioned on the owner.
+Speaker labels are session-local identities.
 
 The process accepts mono signed 16-bit PCM at 16 kHz over its private msgpack
 IPC socket. It serializes inference because model conditioning is mutable.
 Opening a session establishes the capture timestamp of its first sample.
 Subsequent audio requests form one ordered, contiguous PCM stream; the service
 derives all later timestamps from the number of samples it has accepted. The
-caller must reset the session if its capture or transport layer drops audio,
-because that layer owns the information needed to detect the loss. Utterances
-forced to end at the configured duration limit cannot enroll or release a speaker.
+caller must close and reopen the session if its capture or transport layer drops
+audio, because that layer owns the information needed to detect the loss.
+Utterances forced to end at the configured duration limit cannot enroll or
+release a speaker; an enrolled owner's forced segment is still transcribed.
 Start and stop phrases can span utterances within the conversation phrase
 window; another speaker or ambiguous speech clears pending enrollment.
 
@@ -66,9 +69,12 @@ The private protocol makes that ownership explicit: `open` supplies
 a session must be serialized in capture order. The service neither reorders
 audio nor guesses whether samples are missing from wall-clock arrival times.
 
-Configure model IDs, device, precision, the socket path and session capacity
-in `services/speaker-stt/speaker_stt.yaml`. From the repository root, start it
-with:
+Configure model IDs, device, precision, an optional socket path and session
+capacity in `services/speaker-stt/speaker_stt.yaml`. By default the socket is
+created in an owner-only directory below `$XDG_RUNTIME_DIR`, or
+`/tmp/xr-ai-<uid>` when that variable is unset. Hardware profiles or
+`CUDA_VISIBLE_DEVICES` select a GPU; the generic configuration uses the first
+visible GPU. From the repository root, start it with:
 
 ```bash
 uv --config-file uv.toml run --project services/speaker-stt speaker_stt
@@ -81,7 +87,8 @@ ASR cache and one diarization cache. Idle sessions expire after 60 seconds
 when subsequent requests arrive; `max_sessions` bounds retained sessions.
 The model environment is isolated from workers and the existing batch STT
 service. Model weights are downloaded on first use and then reused from the
-configured cache, with `HF_HOME` set directly to `model_cache`.
+configured cache. As with the sibling NeMo services, existing `HF_HOME` and
+`NEMO_CACHE_DIR` values take precedence over cache defaults.
 
 ## Two HuggingFace cache roots
 

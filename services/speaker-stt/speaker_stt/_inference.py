@@ -244,10 +244,10 @@ class _Session:
                 if self.selection._finished:
                     # Forced truncation cannot enroll a voice from a prefix or
                     # release enrollment before the complete phrase is known.
+                    # It remains a valid transcript boundary for the owner.
                     text = self.selection.text
-                    if self.selection.duration >= self.selection.cfg.max_utterance_s:
-                        text = ""
-                    events.extend(self.selection._finish(text))
+                    truncated = self.selection.duration >= self.selection.cfg.max_utterance_s
+                    events.extend(self.selection._finish(text, allow_control=not truncated))
                     self._reset_asr()
                 self.step += 1
         return events
