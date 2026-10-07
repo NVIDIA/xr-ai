@@ -395,6 +395,20 @@ class ReplayAgent(Agent):
             step = session.step
             revision = session.revision
             state = session.workflow.project(step, session.state)
+            active_trigger: dict[str, Any] | None = None
+            if step.trigger.function == "clock__timer":
+                active_trigger = {"function": step.trigger.function}
+                try:
+                    active_trigger["arguments"] = self._resolve(step.trigger.arguments, state)
+                except ValueError as exc:
+                    # Missing runtime state must not prevent questions or reset controls.
+                    active_trigger["unavailable_reason"] = str(exc)
+            guide_order = []
+            step_id = session.workflow.start_step
+            while step_id is not None:
+                ordered_step = session.workflow.steps[step_id]
+                guide_order.append(ordered_step.title)
+                step_id = ordered_step.next_step
             tools = self._named_tools(session.participant_id, step.voice.tools)
             controls, control_results = self._guide_tools(session.participant_id)
             tools = _tools_for_query(ToolSet({**dict(tools.items()), **dict(controls.items())}), query)
@@ -411,12 +425,14 @@ class ReplayAgent(Agent):
                 "Decline unrelated requests without revealing their answer or exiting the guide. "
                 "Unqualified visual checks refer to the current step: use current_view for a requested "
                 "check of whether this looks correct. Procedural explanations use supplied context.\n\n"
+                "For the active timer, call clock__timer with the exact resolved active_trigger.arguments. "
+                "If these arguments are unavailable, explain why; never invent timer inputs.\n\n"
                 f"{session.workflow.foreground_prompt}\n"
                 f"Current step: {step.title}.\n{step.voice.prompt}\n\n{policy}"
             )
             user = json.dumps(
-                {"request": query, "guide_order": [item.title for item in session.workflow.steps.values()],
-                 "state": state},
+                {"request": query, "guide_order": guide_order,
+                 "state": state, "active_trigger": active_trigger},
                 ensure_ascii=False,
             )
         result = await self._tool_loop(system, user, tools, foreground=True)
@@ -747,16 +763,13 @@ class ReplayAgent(Agent):
 def _tools_for_query(tools: ToolSet, query: str) -> ToolSet:
     """Keep non-action speech away from mutating controls, as in the tea frontend."""
     text = " ".join(query.casefold().split()).replace("’", "'")
-    if re.search(r"\b(?:record|recording|capture)\b", text):
-        return ToolSet(())
+    unsupported_capture = re.search(r"\b(?:record|recording|capture)\b", text)
     informational = re.search(
         r"\b(?:don't|do not|never|not yet|said|says|told|quoted|hypothetical)\b|"
         r"^(?:if|suppose|imagine|why|how|what|should i|would it|can i|could i)\b",
         text,
     )
-    if informational:
-        if not re.search(r"\b(?:look|visible|see|camera|time|timer|remaining|elapsed|status)\b", text):
-            return ToolSet(())
+    if informational or unsupported_capture:
         return ToolSet(tool for name, tool in tools.items() if name not in {
             "workflow__advance", "workflow__restart", "workflow__reset",
         })
