@@ -39,7 +39,7 @@ _MODEL_NAME = "meta/llama-3.1-8b-instruct"
 _CONTAINER = "xr-ai-nim-llama-3.1-8b-instruct"
 
 # Cold start = image pull + NGC engine download + load; must stay under the
-# nightly workflow's per-test --timeout=1200. Warm (cached engine) is 1-3 min.
+# nightly workflow's per-test --timeout=1500. Warm (cached engine) is 1-3 min.
 _READY_TIMEOUT_S = 1100.0
 _CHAT_TIMEOUT_S = 120.0
 
@@ -139,10 +139,15 @@ async def test_nim_container_serves_profile_llm(tmp_path) -> None:
             await llm.close()
         assert resp.content.strip()
 
-        stop_persistent_servers([("llm-nim", port)])
+        assert stop_persistent_servers([("llm-nim", port)]), (
+            f"stop_persistent_servers failed; wrapper output tail:\n{_tail(wrapper_log)}"
+        )
         ps = subprocess.run(
             ["docker", "ps", "-aq", "--filter", f"name=^{_CONTAINER}$"],
             capture_output=True, text=True, timeout=20,
+        )
+        assert ps.returncode == 0, (
+            f"docker ps failed (rc={ps.returncode}): {ps.stderr.strip()}"
         )
         assert ps.stdout.strip() == "", "container survived stop_persistent_servers"
     finally:
