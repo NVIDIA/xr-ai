@@ -640,8 +640,10 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
   - `pyyaml>=6.0`
+  - `pydantic>=2.0,<3.0`
 - Optional dependency groups: none
 - Commands:
+  - `sop_sample_replay` → `sop_sample_worker.replay_app:run`
   - `sop_sample_worker` → `sop_sample_worker.__main__:run`
 
 #### `tea-making-sample` — [`agent-samples/tea-making-sample/`](agent-samples/tea-making-sample/)

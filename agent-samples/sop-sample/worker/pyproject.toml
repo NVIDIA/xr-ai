@@ -20,6 +20,7 @@ dependencies = [
     "xr-ai-voicegate",
     "loguru>=0.7",
     "pyyaml>=6.0",
+    "pydantic>=2.0,<3.0",
 ]
 
 [tool.uv.sources]
@@ -33,6 +34,7 @@ xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
 sop_sample_worker = "sop_sample_worker.__main__:run"
+sop_sample_replay = "sop_sample_worker.replay_app:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sop_sample_worker"]

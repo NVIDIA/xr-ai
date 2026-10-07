@@ -5,9 +5,9 @@
 
 # SOP sample
 
-Capture narrated demonstrations automatically while a participant's live camera
-is on. The sample saves audio, video, sampled frames, captions, and narration.
-It does not answer questions or run guides.
+Capture narrated demonstrations while a participant's live camera is on, or
+replay one approved local SOP with spoken guidance and step verification.
+Capture and replay are separate, mutually exclusive launch modes.
 
 ## Run
 
@@ -36,6 +36,19 @@ microphone, and turn on **live video**. Turn the camera off to finalize the
 recording; turn it on again for another recording. No spoken commands are
 required. Disconnecting also finalizes the recording.
 
+To replay a reviewed guide instead, use its exact task name or ID:
+
+```bash
+uv run main.py --replay "Guide Name"
+```
+
+Place the local `*.guide.yaml` file under `guides/` and review it before setting
+`task.status: approved`. Connect with microphone and camera access. The agent
+starts step one, announces verified completion, and waits for “next.” Finishing
+the final step with “next” resets the guide for another run. Refer to the
+[replay reference](https://nvidia.github.io/xr-ai/latest/reference/sop-sample.html#replay-an-approved-guide)
+for the schema, controls, and verification limits.
+
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
@@ -51,6 +64,9 @@ uv run --project ../../model-server-samples/model-servers model_servers --stop
 | `yaml/models.json` | STT and VLM endpoints; the voice runtime's unused TTS adapter |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
+| `yaml/replay.yaml` | Local guide directory, replay models, voice gate, and vision timeouts |
+| `yaml/models.replay.json` | Replay LLM, VLM, STT, and TTS endpoints |
+| `yaml/voice_gate.replay.yaml` | Wake-word-free guide questions and controls |
 
 For example, increase the interval between captions in `yaml/worker.yaml`:
 

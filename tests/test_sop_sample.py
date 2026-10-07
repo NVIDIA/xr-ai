@@ -43,7 +43,8 @@ def test_config_and_cli():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module._parser().parse_args(["--capture"]).capture
-    for args in ([], ["--replay", "any guide"], ["--capture", "--replay", "guide"]):
+    assert module._parser().parse_args(["--replay", "any guide"]).replay == "any guide"
+    for args in ([], ["--replay"], ["--capture", "--replay", "guide"]):
         with pytest.raises(SystemExit):
             module._parser().parse_args(args)
     assert [process.name for process in module.PROCESSES] == ["hub", "capture", "worker"]
