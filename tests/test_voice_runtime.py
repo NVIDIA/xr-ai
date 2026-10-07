@@ -790,7 +790,7 @@ async def test_voice_agent_drops_inactive_non_client_and_empty_text() -> None:
     assert session.queries == []
 
 
-async def test_untopiced_hub_data_reaches_voice_as_typed_query(
+async def test_untopiced_hub_data_bypasses_speech_gate_as_typed_queries(
     hub,
     make_connector,
     make_processor,
@@ -813,19 +813,27 @@ async def test_untopiced_hub_data_reaches_voice_as_typed_query(
             await asyncio.sleep(0.05)
         assert "alice" in endpoint.subscribed_participants
 
-        await connector.push_data(
-            DataMessage("alice", "", 2, b"describe the room")
+        typed_queries = (
+            (2, b"describe the room"),
+            (3, b"hey agent describe the room"),
+            (4, b"hey agent let's start talking"),
         )
+        for pts_us, data in typed_queries:
+            await connector.push_data(DataMessage("alice", "", pts_us, data))
         for _ in range(20):
-            if session.queries:
+            if len(session.queries) == len(typed_queries):
                 break
             await asyncio.sleep(0.05)
         await connector.push_data(
-            DataMessage("alice", "agent.control", 3, b"ignored")
+            DataMessage("alice", "agent.control", 5, b"ignored")
         )
         await asyncio.sleep(0.1)
 
-    assert session.queries == [("alice", "describe the room", 2)]
+    assert session.queries == [
+        ("alice", "describe the room", 2),
+        ("alice", "hey agent describe the room", 3),
+        ("alice", "hey agent let's start talking", 4),
+    ]
 
 
 async def test_voice_agent_unregisters_typed_input_callback() -> None:

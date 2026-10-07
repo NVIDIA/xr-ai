@@ -266,6 +266,13 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
         "magic_phrases": ["agent", "hey agent"],
         "listening_chime": True,
         "followup_grace_s": 5.0,
+        "conversation": {
+            "enabled": True,
+            "start_phrase": "Hey agent, let's start talking",
+            "stop_phrase": "Hey agent, let's stop talking",
+            "require_wake_phrase": False,
+            "phrase_window_s": 6.0,
+        },
     }
     device_1 = config.device_map.resolve(MarkerType.QR_CODE, "device-1")
     device_5 = config.device_map.resolve(MarkerType.QR_CODE, "device-5")

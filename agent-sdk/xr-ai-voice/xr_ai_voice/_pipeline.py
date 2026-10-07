@@ -64,6 +64,10 @@ def _build_voice_pipeline(
     silently drop idle sessions.
     """
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
+    # Closed conversations and control phrases must not reach transcript sinks.
+    if voice_gate_cfg._conversation is not None:
+        voice_gate_proc._on_conversation_transcript = on_final_transcript
+        on_final_transcript = None
     streaming_tts   = StreamingTtsProcessor(
         tts        = tts,
         voice_gate = voice_gate_proc.gate,
@@ -78,11 +82,13 @@ def _build_voice_pipeline(
         vad_cfg=vad_cfg,
         on_partial_transcript=(
             voice_gate_proc.handle_partial_transcript
-            if voice_gate_cfg.magic_phrases
+            if voice_gate_cfg.magic_phrases or voice_gate_cfg._conversation is not None
             else None
         ),
         on_final_transcript=on_final_transcript,
     )
+
+    vad_stt._gate_controls_partial_stop = voice_gate_cfg._conversation is not None
 
     pipeline = Pipeline([
         transport.input(),
