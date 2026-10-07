@@ -402,6 +402,124 @@ async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeyp
     assert not demo.recorder.is_recording("user")
 
 
+@pytest.mark.parametrize("boundary", ["departure", "camera_shutdown", "recorder_shutdown"])
+async def test_unaccepted_restart_can_be_aborted_without_manifest(demo, monkeypatch, boundary):
+    await demo.camera.receive(joined())
+    await demo.camera.receive(video())
+    old = demo.recorder._sessions["user"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.service._render
+
+    async def delayed(bundle):
+        entered.set()
+        await release.wait()
+        await original(bundle)
+
+    monkeypatch.setattr(demo.service, "_render", delayed)
+    monkeypatch.setattr(demo.service._returns, "wait_for_departure", AsyncMock())
+    finishing = asyncio.create_task(demo.camera.receive(video(False)))
+    await asyncio.wait_for(entered.wait(), 2)
+    restarting = asyncio.create_task(demo.camera.receive(video()))
+    try:
+        await asyncio.wait_for(finishing, 2)
+        async with asyncio.timeout(2):
+            while demo.recorder._sessions.get("user") in (None, old):
+                await asyncio.sleep(0.001)
+        pending = demo.recorder._sessions["user"]
+        assert not pending.start_done.is_set()
+        assert not list(pending.media_directory.glob("*/manifest.json"))
+        if boundary == "departure":
+            departure = ParticipantEvent("user", False, 2, participant_session_id="session")
+            await demo.service._on_participant(departure)
+            await asyncio.wait_for(demo.camera.receive(departure), 2)
+        elif boundary == "camera_shutdown":
+            await asyncio.wait_for(demo.camera.close(), 2)
+        else:
+            await asyncio.wait_for(demo.recorder.stop(), 2)
+        await asyncio.wait_for(restarting, 2)
+        assert not demo.recorder.is_recording("user")
+        packet = json.loads((pending.directory / "packet.json").read_text())
+        assert packet["status"] == "incomplete"
+        assert packet["media_capture"]["control_status"] == "start_cancelled"
+        assert packet["media_capture"]["manifest"] is None
+        assert packet["counts"] == {"frames": 0, "transcripts": 0, "captions": 0}
+        assert not pending.tasks
+        assert json.loads((old.directory / "packet.json").read_text())["status"] == "complete"
+        assert not release.is_set()  # Old capture cleanup still has not finished.
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.gather(finishing, restarting), 2)
+    if boundary == "departure":
+        async with asyncio.timeout(2):
+            while "user" in demo.service._closing_participants:
+                await asyncio.sleep(0.001)
+        # Old departure must not cancel a new connection's startup.
+        await demo.service._on_participant(joined(session="new"))
+        await demo.camera.receive(joined(session="new"))
+        await demo.camera.receive(ParticipantEvent("user", False, 3, participant_session_id="session"))
+        await asyncio.wait_for(demo.camera.receive(video(session="new")), 2)
+        assert demo.recorder.is_recording("user")
+
+
+async def test_departure_skips_queued_restart_but_drains_accepted_recording(demo, monkeypatch):
+    await demo.camera.receive(joined())
+    await demo.camera.receive(video())
+    state = demo.recorder._sessions["user"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.recorder._wait_for_media
+
+    async def delayed(state):
+        entered.set()
+        await release.wait()
+        await original(state)
+
+    monkeypatch.setattr(demo.recorder, "_wait_for_media", delayed)
+    finishing = asyncio.create_task(demo.camera.receive(video(False)))
+    await asyncio.wait_for(entered.wait(), 2)
+    restarting = asyncio.create_task(demo.camera.receive(video()))
+    leaving = asyncio.create_task(demo.camera.receive(
+        ParticipantEvent("user", False, 2, participant_session_id="session"),
+    ))
+    try:
+        await asyncio.sleep(0.02)
+        assert not leaving.done()
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.gather(finishing, restarting, leaving), 2)
+    assert len(list((demo.root / "sessions").iterdir())) == 1
+    assert json.loads((state.directory / "packet.json").read_text())["status"] == "complete"
+    await asyncio.wait_for(demo.camera.close(), 2)
+
+
+async def test_departure_after_acceptance_before_start_returns_drains_capture(demo, monkeypatch):
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.recorder._wait_for_media_start
+
+    async def delayed(state, cancelled):
+        entered.set()
+        await release.wait()
+        return await original(state, cancelled)
+
+    monkeypatch.setattr(demo.recorder, "_wait_for_media_start", delayed)
+    await demo.camera.receive(joined())
+    starting = asyncio.create_task(demo.camera.receive(video()))
+    await asyncio.wait_for(entered.wait(), 2)
+    state = demo.recorder._sessions["user"]
+    assert demo.service._recorder.has_session("user")
+    await demo.endpoint.send_return_data(
+        DataMessage("user", CAPTURE_STT_TOPIC, time.time_ns() // 1000, b"Preserve this narration"),
+    )
+    leaving = asyncio.create_task(demo.camera.receive(
+        ParticipantEvent("user", False, 2, participant_session_id="session"),
+    ))
+    release.set()
+    await asyncio.wait_for(asyncio.gather(starting, leaving), 2)
+    packet = json.loads((state.directory / "packet.json").read_text())
+    assert packet["status"] == packet["narration_status"] == "complete"
+    assert packet["counts"]["transcripts"] == 1
+    assert packet["media_capture"]["manifest"] is not None
+
+
 async def test_app_finalizes_after_voice_shutdown_before_capture_endpoint_closes(demo, monkeypatch):
     from dataclasses import replace
 
