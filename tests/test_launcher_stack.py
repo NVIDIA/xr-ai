@@ -143,10 +143,13 @@ class TestRunStackShutdownContract:
             *,
             ready_process_may_exit=False,
             failure_contexts=None,
+            output_readers=None,
         ):
             spawn_options[proc.name] = ready_process_may_exit
             if failure_contexts is not None:
                 failure_contexts[proc.name] = Mock(service=proc.name)
+            if output_readers is not None:
+                output_readers[proc.name] = ()
             return _FakePopen(proc.name)
 
         monkeypatch.setattr(_stack, "_spawn", _fake_spawn)
@@ -206,6 +209,37 @@ class TestRunStackShutdownContract:
         assert stub_stack["no_kill"] == {"vlm"}
         assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
         assert "Process failure:" not in capsys.readouterr().err
+
+    def test_parallel_exit_after_ready_allows_only_persist_zero_exit(
+        self, stub_stack, tmp_path, monkeypatch,
+    ):
+        allowed_exits = []
+
+        def _wait(group, ready_processes_may_exit):
+            allowed_exits.append(ready_processes_may_exit)
+
+        monkeypatch.setattr(_stack, "_wait_ready_parallel", _wait)
+
+        _stack.run_stack(
+            [
+                _stack.Parallel(
+                    [
+                        _stack.Process(
+                            "vlm",
+                            "../../vlm",
+                            "vlm_server",
+                            launch_mode="persist",
+                        ),
+                        _stack.Process("worker", "../../worker", "worker"),
+                    ]
+                )
+            ],
+            tmp_path,
+            exit_after_ready=True,
+        )
+
+        assert allowed_exits == [{"vlm"}]
+        assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
 
     def test_runtime_summary_interrupt_preserves_exit_and_persist_ownership(
         self, stub_stack, tmp_path, monkeypatch,

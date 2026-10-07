@@ -4,6 +4,7 @@
 """Failure-summary tests for the stack launcher."""
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -41,9 +42,33 @@ def _run_python_module(monkeypatch, tmp_path: Path, module: str) -> None:
     _stack.run_stack([_stack.Process("test-service", tmp_path, module)], tmp_path)
 
 
+@pytest.fixture
+def gated_output_forwarders(monkeypatch):
+    forward = _stack._forward
+    drain_output_readers = _stack._drain_output_readers
+    release_forwarders = threading.Event()
+    drain_started = threading.Event()
+
+    def gated_forward(*args, **kwargs):
+        release_forwarders.wait()
+        forward(*args, **kwargs)
+
+    def releasing_drain(*args, **kwargs):
+        drain_started.set()
+        release_forwarders.set()
+        return drain_output_readers(*args, **kwargs)
+
+    monkeypatch.setattr(_stack, "_forward", gated_forward)
+    monkeypatch.setattr(_stack, "_drain_output_readers", releasing_drain)
+    try:
+        yield drain_started
+    finally:
+        release_forwarders.set()
+
+
 @pytest.mark.integration
 def test_real_readiness_failure_forwards_output_and_prints_summary(
-    monkeypatch, tmp_path, capsys
+    monkeypatch, tmp_path, capsys, gated_output_forwarders
 ):
     log_dir = _set_log_dir(monkeypatch, tmp_path / "logs")
     _write_module(
@@ -59,6 +84,7 @@ def test_real_readiness_failure_forwards_output_and_prints_summary(
         _run_python_module(monkeypatch, tmp_path, "readiness_failure")
 
     assert excinfo.value.code == 7
+    assert gated_output_forwarders.is_set()
     captured = capsys.readouterr()
     assert "[test-service] opaque stdout detail" in captured.out
     assert "[test-service] opaque stderr detail" in captured.out
@@ -72,7 +98,7 @@ def test_real_readiness_failure_forwards_output_and_prints_summary(
 
 @pytest.mark.integration
 def test_real_foreground_runtime_exit_prints_summary_and_stays_nonzero(
-    monkeypatch, tmp_path, capsys
+    monkeypatch, tmp_path, capsys, gated_output_forwarders
 ):
     _clear_log_dir(monkeypatch)
     _write_module(
@@ -90,6 +116,7 @@ def test_real_foreground_runtime_exit_prints_summary_and_stays_nonzero(
         _run_python_module(monkeypatch, tmp_path, "runtime_failure")
 
     assert excinfo.value.code == 9
+    assert gated_output_forwarders.is_set()
     captured = capsys.readouterr()
     assert "[test-service] runtime stopped unexpectedly" in captured.out
     assert "Process failure: test-service (runtime)" in captured.err
@@ -170,41 +197,137 @@ def test_summary_error_is_debug_logged_without_escaping(monkeypatch, tmp_path):
     debug.assert_called_once_with("Failure summary generation failed", exc_info=True)
 
 
-def test_parallel_readiness_failure_releases_other_waiters(tmp_path):
-    dead = Mock()
-    dead.poll.return_value = 5
-    dead.returncode = 5
-    alive = Mock()
-    alive.poll.return_value = None
-    alive_ready = tmp_path / "alive.ready"
-    failures: list[BaseException] = []
+@pytest.mark.parametrize("ready_before_exit", [False, True])
+@pytest.mark.parametrize("returncode", [0, 5])
+def test_parallel_readiness_detects_member_exit_before_group_ready(
+    monkeypatch, tmp_path, ready_before_exit, returncode
+):
+    failed = Mock()
+    failed.poll.side_effect = (
+        [None, returncode] if ready_before_exit else [returncode]
+    )
+    failed.returncode = returncode
+    dead_ready = tmp_path / "dead.ready"
+    if ready_before_exit:
+        dead_ready.touch()
+    sibling = Mock()
+    sibling.poll.return_value = None
+    sibling_ready = tmp_path / "sibling.ready"
+    waits = []
 
-    def wait() -> None:
-        try:
-            _stack._wait_ready_parallel(
-                [
-                    ("alive", alive_ready, alive),
-                    ("dead", tmp_path / "dead.ready", dead),
-                ]
-            )
-        except BaseException as exc:
-            failures.append(exc)
+    def advance_sibling(_seconds):
+        waits.append(True)
+        sibling_ready.touch()
+
+    monkeypatch.setattr(_stack.time, "sleep", advance_sibling)
+
+    with pytest.raises(_stack._ReadinessFailure) as excinfo:
+        _stack._wait_ready_parallel(
+            [
+                ("failed", dead_ready, failed),
+                ("sibling", sibling_ready, sibling),
+            ]
+        )
+
+    assert excinfo.value.name == "failed"
+    assert excinfo.value.code == (1 if returncode == 0 else returncode)
+    assert len(waits) == int(ready_before_exit)
+
+
+def test_parallel_readiness_allows_ready_persist_wrapper_zero_exit(
+    monkeypatch, tmp_path
+):
+    persist = Mock()
+    persist.poll.return_value = 0
+    persist.returncode = 0
+    persist_ready = tmp_path / "persist.ready"
+    persist_ready.touch()
+    sibling = Mock()
+    sibling.poll.return_value = None
+    sibling_ready = tmp_path / "sibling.ready"
+    monkeypatch.setattr(_stack.time, "sleep", lambda _seconds: sibling_ready.touch())
+
+    _stack._wait_ready_parallel(
+        [
+            ("persist", persist_ready, persist),
+            ("sibling", sibling_ready, sibling),
+        ],
+        {"persist"},
+    )
+
+
+def test_parallel_readiness_rejects_ready_persist_wrapper_nonzero_exit(tmp_path):
+    persist = Mock()
+    persist.poll.return_value = 6
+    persist.returncode = 6
+    persist_ready = tmp_path / "persist.ready"
+    persist_ready.touch()
+
+    with pytest.raises(_stack._ReadinessFailure) as excinfo:
+        _stack._wait_ready_parallel(
+            [("persist", persist_ready, persist)],
+            {"persist"},
+        )
+
+    assert excinfo.value.name == "persist"
+    assert excinfo.value.code == 6
+
+
+def test_output_reader_drain_has_one_deadline_when_inherited_pipes_stay_open():
+    pipes = [os.pipe(), os.pipe()]
+    streams = [os.fdopen(read_fd, "rb") for read_fd, _ in pipes]
+    readers = [
+        threading.Thread(
+            target=_stack._forward,
+            args=(stream, "[test]"),
+            daemon=True,
+        )
+        for stream in streams
+    ]
+    for reader in readers:
+        reader.start()
 
     started = time.monotonic()
-    waiter = threading.Thread(target=wait, daemon=True)
-    waiter.start()
-    waiter.join(timeout=2.0)
-    released = not waiter.is_alive()
-    if not released:
-        alive_ready.touch()
-        waiter.join(timeout=2.0)
+    try:
+        _stack._drain_output_readers(readers, timeout=0.05)
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.0
+        assert all(reader.is_alive() for reader in readers)
+    finally:
+        for _, write_fd in pipes:
+            os.close(write_fd)
+        for reader in readers:
+            reader.join(timeout=1.0)
+        for stream in streams:
+            stream.close()
 
-    assert not waiter.is_alive(), "readiness waiter did not stop during test cleanup"
-    assert released, "parallel readiness did not release the live sibling"
-    assert len(failures) == 1
-    assert isinstance(failures[0], SystemExit)
-    assert failures[0].code == 5
-    assert time.monotonic() - started < 2.0
+
+def test_output_reader_drain_shares_timeout_budget(monkeypatch):
+    now = [10.0]
+    join_budgets = []
+
+    def join_first(timeout):
+        join_budgets.append(timeout)
+        now[0] += 0.04
+
+    def join_second(timeout):
+        join_budgets.append(timeout)
+
+    readers = [Mock(join=Mock(side_effect=join_first)),
+               Mock(join=Mock(side_effect=join_second))]
+    monkeypatch.setattr(_stack.time, "monotonic", lambda: now[0])
+
+    _stack._drain_output_readers(readers, timeout=0.05)
+
+    assert join_budgets == pytest.approx([0.05, 0.01])
+
+
+@pytest.mark.parametrize("error", [RuntimeError("join failed"), KeyboardInterrupt()])
+def test_output_reader_drain_errors_do_not_escape(error):
+    reader = Mock()
+    reader.join.side_effect = error
+
+    _stack._drain_output_readers([reader], timeout=0.05)
 
 
 @pytest.mark.parametrize("returncode,status", [(0, 1), (-15, 143), (-9, 137)])

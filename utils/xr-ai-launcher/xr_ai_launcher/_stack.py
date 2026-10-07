@@ -53,6 +53,7 @@ from ._failure import FailureContext, emit_failure_summary, failure_exit_status
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_OUTPUT_DRAIN_TIMEOUT = 1.0
 _PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 
@@ -116,8 +117,11 @@ class Parallel:
 
     The launcher spawns every member at once and waits for *all* of them to
     signal readiness before advancing to the next item in the stack sequence.
-    If any member exits before signaling ready the launcher shuts everything
-    down, just as it would for a serial process.
+    A member that signals readiness remains monitored until the whole group is
+    ready. An unexpected exit during that interval shuts everything down. A
+    successful ``persist`` process may exit after readiness only when
+    ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
+    outlive the launcher.
 
     Example::
 
@@ -209,6 +213,7 @@ def _spawn(
     *,
     ready_process_may_exit: bool = False,
     failure_contexts: dict[str, FailureContext] | None = None,
+    output_readers: dict[str, tuple[threading.Thread, ...]] | None = None,
 ) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
@@ -275,14 +280,38 @@ def _spawn(
     if failure_contexts is not None:
         failure_contexts[proc.name] = failure_context
     prefix = f"[{proc.name}]"
+    readers: list[threading.Thread] = []
     for stream in (p.stdout, p.stderr):
-        threading.Thread(
+        reader = threading.Thread(
             target=_forward,
             args=(stream, prefix),
             kwargs={"quiet_native": proc.quiet_native_output},
             daemon=True,
-        ).start()
+        )
+        reader.start()
+        readers.append(reader)
+    if output_readers is not None:
+        output_readers[proc.name] = tuple(readers)
     return p
+
+
+def _drain_output_readers(
+    readers: Sequence[threading.Thread],
+    timeout: float = _OUTPUT_DRAIN_TIMEOUT,
+) -> None:
+    """Give a terminated child's output readers one shared deadline to finish."""
+    deadline = time.monotonic() + timeout
+    for reader in readers:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            reader.join(remaining)
+        except (Exception, KeyboardInterrupt):
+            try:
+                log.debug("Output reader drain failed", exc_info=True)
+            except (Exception, KeyboardInterrupt):
+                pass
 
 
 # ── readiness wait ─────────────────────────────────────────────────────────────
@@ -298,15 +327,12 @@ def _wait_ready(
     name: str,
     ready_file: Path,
     proc: subprocess.Popen,
-    stop: threading.Event | None = None,
 ) -> None:
     """Block until *ready_file* exists. Print a progress line every 5 s."""
     t0          = time.monotonic()
     last_report = -_READY_INTERVAL  # force first line immediately
 
     while True:
-        if stop is not None and stop.is_set():
-            return
         elapsed = time.monotonic() - t0
 
         if ready_file.exists():
@@ -327,31 +353,44 @@ def _wait_ready(
 
 _ReadyEntry = tuple[str, Path, subprocess.Popen]
 
-def _wait_ready_parallel(group: list[_ReadyEntry]) -> None:
-    """Wait for all processes in *group* concurrently; raise if any fails."""
-    failed: list[SystemExit] = []
-    lock = threading.Lock()
-    stop = threading.Event()
 
-    def _one(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
-        try:
-            _wait_ready(name, ready_file, proc, stop)
-        except SystemExit as exc:
-            with lock:
-                failed.append(exc)
-                stop.set()
+def _wait_ready_parallel(
+    group: list[_ReadyEntry],
+    ready_processes_may_exit: set[str] | None = None,
+) -> None:
+    """Wait for the whole group while monitoring members that are already ready."""
+    allowed_exits = ready_processes_may_exit or set()
+    ready: set[str] = set()
+    t0 = time.monotonic()
+    last_report = {name: -_READY_INTERVAL for name, _, _ in group}
 
-    threads = [
-        threading.Thread(target=_one, args=entry, daemon=True)
-        for entry in group
-    ]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    while len(ready) < len(group):
+        elapsed = time.monotonic() - t0
+        for name, ready_file, proc in group:
+            if name not in ready and ready_file.exists():
+                ready.add(name)
+                log.info("[%s] ready (%.0fs)", name, elapsed)
 
-    if failed:
-        raise failed[0]
+            rc = proc.poll()
+            if rc is not None:
+                if name in ready and name in allowed_exits and rc == 0:
+                    continue
+                if name in ready:
+                    log.error(
+                        "[%s] exited (rc=%s) before its parallel group was ready",
+                        name,
+                        rc,
+                    )
+                else:
+                    log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
+                raise _ReadinessFailure(name, rc)
+
+            if name not in ready and elapsed - last_report[name] >= _READY_INTERVAL:
+                log.debug("[%s] waiting... (%.0fs)", name, elapsed)
+                last_report[name] = elapsed
+
+        if len(ready) < len(group):
+            time.sleep(0.5)
 
 
 # ── monitor + shutdown ─────────────────────────────────────────────────────────
@@ -543,6 +582,7 @@ def run_stack(
 
     launched: dict[str, subprocess.Popen] = {}
     failure_contexts: dict[str, FailureContext] = {}
+    output_readers: dict[str, tuple[threading.Thread, ...]] = {}
 
     # Tracks whether startup got interrupted before/at the "All processes ready"
     # milestone. On abort we must tear down EVERYTHING — including persist
@@ -571,11 +611,19 @@ def run_stack(
                                 exit_after_ready and proc.launch_mode == "persist"
                             ),
                             failure_contexts=failure_contexts,
+                            output_readers=output_readers,
                         )
                         group.append((proc.name, ready_file, launched[proc.name]))
                     print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
                           flush=True)
-                    _wait_ready_parallel(group)
+                    _wait_ready_parallel(
+                        group,
+                        {
+                            proc.name
+                            for proc in to_spawn
+                            if exit_after_ready and proc.launch_mode == "persist"
+                        },
+                    )
                 else:
                     if item.launch_mode == "reuse":
                         continue
@@ -588,6 +636,7 @@ def run_stack(
                             exit_after_ready and item.launch_mode == "persist"
                         ),
                         failure_contexts=failure_contexts,
+                        output_readers=output_readers,
                     )
                     _wait_ready(item.name, ready_file, launched[item.name])
 
@@ -599,6 +648,7 @@ def run_stack(
             if exited is not None:
                 name, proc = exited
                 failure_status = failure_exit_status(proc.returncode)
+                _drain_output_readers(output_readers[name])
                 _emit_failure_summary(
                     failure_contexts[name],
                     "runtime",
@@ -608,6 +658,7 @@ def run_stack(
         except _ReadinessFailure as exc:
             aborted = True
             failure_status = failure_exit_status(exc.returncode)
+            _drain_output_readers(output_readers[exc.name])
             _emit_failure_summary(
                 failure_contexts[exc.name],
                 "readiness",
