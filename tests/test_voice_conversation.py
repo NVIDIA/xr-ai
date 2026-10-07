@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import yaml
-from pipecat.frames.frames import InputAudioRawFrame, InterruptionFrame, TranscriptionFrame
+from pipecat.frames.frames import InputAudioRawFrame, InterruptionFrame
 from pipecat.processors.frame_processor import FrameDirection
 from xr_ai_voice._frames import ParticipantLeftFrame
 from xr_ai_voice._pipeline import _build_voice_pipeline
@@ -171,18 +171,6 @@ async def test_failed_stt_and_disconnect_reset_only_affected_participant(harness
     await h.gate.process_frame(ParticipantLeftFrame(participant_id="a"), FrameDirection.DOWNSTREAM)
     await h.speak("let's start talking", "a")
     assert h.gate._conversation_active == {"b"}
-
-
-async def test_typed_input_retains_wake_rules_without_opening_conversation(harness):
-    h = harness
-    for text in ("describe this", "hey agent describe this", "hey agent let's start talking"):
-        frame = TranscriptionFrame(text=text, user_id="a", timestamp="")
-        await h.gate.process_frame(frame, FrameDirection.DOWNSTREAM)
-        if h.output._input_tasks:
-            await asyncio.gather(*h.output._input_tasks)
-    assert [query.text for query in h.accepted] == ["describe this", "let's start talking"]
-    assert not h.gate._conversation_active
-    h.captions.assert_not_awaited()
 
 
 async def test_closed_participant_cannot_interrupt_another_conversation(harness):

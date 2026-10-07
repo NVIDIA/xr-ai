@@ -169,8 +169,9 @@ queries or transcript-topic events.
 These controls use the sample's existing STT service, including the independent
 NIM model stack. They do not identify speakers or reject other voices on the
 same microphone. Conversation state is scoped to each connected participant.
-Typed messages retain their existing wake-gate behavior and cannot open or close
-a microphone conversation.
+Untopiced typed messages bypass speech gating and are delivered as queries even
+while the microphone conversation is closed. They cannot open or close a
+microphone conversation.
 
 Set `conversation.require_wake_phrase: true` to require `magic_phrases` during
 an active conversation, preserving the optional chime and follow-up grace
@@ -190,12 +191,16 @@ With wake phrases or conversation controls configured, one utterance can make
 up to three bounded partial STT requests plus the authoritative final request. Set `stop_probe_after_s` to
 zero to disable the additional requests and early interruption path.
 
-A wake phrase is accepted at the beginning of a transcript or after
-sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a closing
-quote. Text before the boundary and the phrase are removed. A phrase after a
-comma, semicolon, or inside ordinary prose does not activate the gate. Partial
-STOP classification checks both raw text and the tail after a configured wake
-phrase, so `stop` and `hey agent stop` interrupt equally early.
+When wake gating is active, a wake phrase is accepted at the beginning of a
+transcript or after sentence-final `.`, `?`, or `!` punctuation followed by
+whitespace or a closing quote. Text before the boundary and the phrase are
+removed. A phrase after a comma, semicolon, or inside ordinary prose does not
+activate the gate. In that mode, partial STOP classification checks both raw
+text and the tail after a configured wake phrase, so `stop` and
+`hey agent stop` interrupt equally early. With natural speech enabled by
+`conversation.require_wake_phrase: false`, final transcripts remain intact and
+only a standalone short stop uses the global-stop path; `hey agent stop`
+remains a query.
 
 Global STOP uses a closed imperative grammar for direct requests such as
 `stop`, `stop it`, `stop talking`, `be quiet`, and `shut up`, with a bounded set
