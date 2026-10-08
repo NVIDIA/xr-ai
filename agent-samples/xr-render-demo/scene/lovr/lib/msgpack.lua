@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
 -- Minimal msgpack decoder for the LuaJIT scene bridge.
 --
 -- Covers the subset emitted by Python's msgpack.packb(..., use_bin_type=True):
