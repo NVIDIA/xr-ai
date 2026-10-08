@@ -267,11 +267,14 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
-Say the start phrase while other speakers are quiet. Before enrollment, the
-service transcribes one unambiguous candidate solely to recognize that phrase,
-without dispatching a query. Enrollment is refused when another voice appears
-during the utterance. Split controls must retain the same speaker label, and a
-competing voice before enrollment clears a pending prefix. After enrollment,
+Say the exact start phrase to nominate its speaker. Other speech can continue:
+the service conditions each candidate transcript on that speaker's target and
+interference masks. Candidate phrases finalize on each speaker's configured
+inactivity boundary, without requiring global silence. A tie means multiple
+exact matches completed in the same accepted audio step, not a claim about
+absolute acoustic simultaneity. Split controls retain the same speaker label;
+truncated candidate episodes cannot nominate from their continuing tail. No
+candidate transcript dispatches a query before enrollment. After enrollment,
 only the selected speaker can send queries or release the conversation. Wake
 phrases remain optional through `conversation.require_wake_phrase`; filtering
 cannot determine whom the wearer is addressing.
