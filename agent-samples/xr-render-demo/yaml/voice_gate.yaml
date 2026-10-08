@@ -25,3 +25,10 @@ conversation:
   stop_phrase: "Hey agent, let's stop talking"
   require_wake_phrase: false
   phrase_window_s: 6.0
+
+# Probe once at worker startup. Ordinary STT keeps the same controls when the
+# diarization service is unavailable; use required to demand speaker filtering.
+speaker:
+  enabled: true
+  backend: auto
+  base_url: http://127.0.0.1:8102

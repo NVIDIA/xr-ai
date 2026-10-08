@@ -32,13 +32,49 @@ selects the deployment profile independently.
 
 ## Start from a shipped deployment profile
 
-The default `yaml/models.default.json` profile starts local Parakeet STT,
+The default `yaml/models.default.json` profile starts local speaker ASR,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run `model_servers` without `--models` to use it.
 
 NIM launch support belongs to the separate {doc}`/reference/model-servers-nim`
 sample, which provides Magpie TTS and compatible endpoints for existing agents.
 The `model-servers` service catalog contains only local server wrappers.
+
+The default profile starts Nemotron 3 Diarization and Multitalker Parakeet with the
+normal model-stack command:
+
+```bash
+uv run --project model-server-samples/model-servers model_servers
+```
+
+The stack uses `yaml/<gpu-profile>/speaker_stt.yaml` for model placement and
+capacity. It stops unselected STT services, waits for speaker ASR readiness,
+reuses matching warm instances, and includes the service in `--stop` cleanup.
+The shipped voice samples enable `speaker.enabled` in their voice-gate YAML.
+Out-of-tree workers must enable enrollment and restart, or select batch STT
+explicitly in a custom server profile. Refer to
+{doc}`/reference/agent-sdk-voice` for enrollment configuration and interaction
+with wake phrases. This streaming HTTP service does not change the workers' batch model
+adapter JSON.
+
+Speaker ASR is an operator-owned HTTP service on port 8102. The default profile
+declares it outside the typed model-client entries:
+
+```json
+"services": {
+  "speaker-stt": {"ownership": "managed"}
+}
+```
+
+The model-stack launcher owns this declaration; it does not change the shared
+model-client or launcher SDK schemas. Its host, port and model settings live in
+`speaker_stt.yaml`. The profile's `models.stt` entry remains an external
+batch-STT adapter for consumers of the existing SDK, and does not launch an HTTP
+STT server. To run batch STT instead, remove the private `speaker-stt`
+declaration and change `models.stt.deployment.ownership` to `managed`. Set
+`speaker.enabled: false` in the consuming workers. To serve both paths, retain
+the private declaration and manage batch STT too; this retains both sets of
+model weights.
 
 Copy the default profile to customize it:
 

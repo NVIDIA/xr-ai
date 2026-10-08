@@ -14,6 +14,7 @@ dependency paths, operational ownership, and standalone commands predictable.
 | `device-io-hub/` | DeviceIOHub and its internal LiveKit transport | 8080 (HTTPS and WSS proxy) |
 | `cloudxr-runtime/` | CloudXR OpenXR runtime and WebRTC signaling proxy | 49100 (native), 48322 (WSS) |
 | `vlm-server/` | Cosmos vision-language inference | 8100 |
+| `speaker-stt/` | Speaker-conditioned streaming speech recognition | 8102 |
 | `stt-server/` | Parakeet speech recognition | 8103 |
 | `magpie-tts/` | Magpie speech synthesis | 8104 |
 | `magpie-nim-tts/` | OpenAI-compatible Magpie Riva speech adapter | 8105 (alternative to Pocket) |
