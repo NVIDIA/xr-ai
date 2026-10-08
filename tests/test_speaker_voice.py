@@ -52,8 +52,12 @@ async def test_empty_speaker_utterance_invalidates_control_without_dropping_next
     processor.push_frame = to_gate
 
     async def utterance(text, pts_us):
-        selection._activity({7}, 0.2, pts_us)
-        for event in selection._finish(text):
+        if selection.owner is None:
+            events = selection._enroll_completed([(7, text, pts_us, False)])
+        else:
+            selection._activity({7}, 0.2, pts_us)
+            events = selection._finish(text)
+        for event in events:
             await processor._event("wearer", event)
 
     try:
@@ -578,8 +582,12 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         nonlocal now
         now += 1_000_000
         if use_speaker:
-            selection._activity({7}, 0.3, now)
-            for event in selection._finish(text):
+            if selection.owner is None:
+                events = selection._enroll_completed([(7, text, now, False)])
+            else:
+                selection._activity({7}, 0.3, now)
+                events = selection._finish(text)
+            for event in events:
                 await audio._event("a", event)
         else:
             stt.transcribe.return_value = text
