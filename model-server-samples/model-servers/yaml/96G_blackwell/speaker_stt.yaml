@@ -3,7 +3,8 @@
 
 # Speaker-conditioned ASR on a single Blackwell GPU.
 # GPU memory and latency require live qualification on this hardware.
-endpoint: ipc:///tmp/xr-ai-speaker-stt.sock
+host: 127.0.0.1
+port: 8102
 asr_model: nvidia/multitalker-parakeet-streaming-0.6b-v1
 diar_model: nvidia/Nemotron-3-Diarization
 device: cuda

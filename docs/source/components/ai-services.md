@@ -375,11 +375,12 @@ that survived a previous stack run, and is stopped by the same
 `model_servers --stop` cleanup.
 
 The default model profile starts speaker ASR through its private `services`
-declaration. The launcher waits for model loading, decoder warmup and IPC binding
+declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. `--stop`
-verifies the IPC protocol and configuration fingerprint before requesting
-shutdown. The speaker service has no HTTP port and is excluded from HTTP cleanup.
+uses the same port discovery and verified process ownership as the other model
+services. The speaker service listens on port 8102 and supports streaming audio
+over a private WebSocket.
 The NIM model profile retains its existing STT server. Refer to
 {doc}`/reference/agent-sdk-voice` for worker backend selection and enrollment.
 
