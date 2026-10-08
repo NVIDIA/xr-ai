@@ -280,6 +280,83 @@ available at:
 Each upstream project repository linked above includes its own canonical
 license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).
 
+## Bundled license file index
+
+The following index links all 62 preserved license files under
+`third_party_licenses/`, including licenses for bundled native libraries, fonts,
+and other upstream components. The upstream texts are preserved unchanged;
+refer to the component disclosures above for applicable license elections.
+
+| Component | Preserved license file |
+|---|---|
+| `certifi-2026.7.22` | [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) |
+| `flashinfer-python-0.6.18.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.6.18.post1/LICENSE) |
+| `huggingface-hub-1.32.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.32.0/LICENSE) |
+| `humming-kernels-0.1.12` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.12/LICENSE) |
+| `instanttensor-0.2.0` | [`LICENSE`](third_party_licenses/instanttensor-0.2.0/LICENSE) |
+| `libsndfile-1.2.2` | [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING) |
+| `llvmlite-0.47.0` | [`LICENSE`](third_party_licenses/llvmlite-0.47.0/LICENSE) |
+| `llvmlite-0.47.0` | [`LICENSE.thirdparty`](third_party_licenses/llvmlite-0.47.0/LICENSE.thirdparty) |
+| `matplotlib-3.11.1` | [`FTL.TXT`](third_party_licenses/matplotlib-3.11.1/FTL.TXT) |
+| `matplotlib-3.11.1` | [`LICENSE`](third_party_licenses/matplotlib-3.11.1/LICENSE) |
+| `matplotlib-3.11.1` | [`LICENSE_AMSFONTS`](third_party_licenses/matplotlib-3.11.1/LICENSE_AMSFONTS) |
+| `matplotlib-3.11.1` | [`LICENSE_BAKOMA`](third_party_licenses/matplotlib-3.11.1/LICENSE_BAKOMA) |
+| `matplotlib-3.11.1` | [`LICENSE_COLORBREWER`](third_party_licenses/matplotlib-3.11.1/LICENSE_COLORBREWER) |
+| `matplotlib-3.11.1` | [`LICENSE_COURIERTEN`](third_party_licenses/matplotlib-3.11.1/LICENSE_COURIERTEN) |
+| `matplotlib-3.11.1` | [`LICENSE_DEJAVU`](third_party_licenses/matplotlib-3.11.1/LICENSE_DEJAVU) |
+| `matplotlib-3.11.1` | [`LICENSE_FONT_AWESOME`](third_party_licenses/matplotlib-3.11.1/LICENSE_FONT_AWESOME) |
+| `matplotlib-3.11.1` | [`LICENSE_FREETYPE`](third_party_licenses/matplotlib-3.11.1/LICENSE_FREETYPE) |
+| `matplotlib-3.11.1` | [`LICENSE_HARFBUZZ`](third_party_licenses/matplotlib-3.11.1/LICENSE_HARFBUZZ) |
+| `matplotlib-3.11.1` | [`LICENSE_JSXTOOLS_RESIZE_OBSERVER`](third_party_licenses/matplotlib-3.11.1/LICENSE_JSXTOOLS_RESIZE_OBSERVER) |
+| `matplotlib-3.11.1` | [`LICENSE_LAST_RESORT_FONT`](third_party_licenses/matplotlib-3.11.1/LICENSE_LAST_RESORT_FONT) |
+| `matplotlib-3.11.1` | [`LICENSE_LIBRAQM`](third_party_licenses/matplotlib-3.11.1/LICENSE_LIBRAQM) |
+| `matplotlib-3.11.1` | [`LICENSE_QT4_EDITOR`](third_party_licenses/matplotlib-3.11.1/LICENSE_QT4_EDITOR) |
+| `matplotlib-3.11.1` | [`LICENSE_SHEENBIDI`](third_party_licenses/matplotlib-3.11.1/LICENSE_SHEENBIDI) |
+| `matplotlib-3.11.1` | [`LICENSE_SOLARIZED`](third_party_licenses/matplotlib-3.11.1/LICENSE_SOLARIZED) |
+| `matplotlib-3.11.1` | [`LICENSE_STIX`](third_party_licenses/matplotlib-3.11.1/LICENSE_STIX) |
+| `matplotlib-3.11.1` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.1/LICENSE_YORICK) |
+| `matplotlib-3.11.1` | [`copying`](third_party_licenses/matplotlib-3.11.1/copying) |
+| `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
+| `nvidia-cutlass-dsl-4.6.2` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.6.2/LICENSE) |
+| `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
+| `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
+| `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
+| `opencv-python-headless-5.0.0.93` | [`LICENSE.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE.txt) |
+| `protobuf-7.36.0` | [`LICENSE`](third_party_licenses/protobuf-7.36.0/LICENSE) |
+| `pycountry-26.2.16` | [`LICENSE.txt`](third_party_licenses/pycountry-26.2.16/LICENSE.txt) |
+| `pyjwt-2.15.1` | [`LICENSE`](third_party_licenses/pyjwt-2.15.1/LICENSE) |
+| `pyzmq-27.2.0` | [`LICENSE`](third_party_licenses/pyzmq-27.2.0/LICENSE) |
+| `pyzmq-27.2.0` | [`LICENSE.libsodium`](third_party_licenses/pyzmq-27.2.0/LICENSE.libsodium) |
+| `pyzmq-27.2.0` | [`LICENSE.tornado`](third_party_licenses/pyzmq-27.2.0/LICENSE.tornado) |
+| `pyzmq-27.2.0` | [`LICENSE.zeromq`](third_party_licenses/pyzmq-27.2.0/LICENSE.zeromq) |
+| `quack-kernels-0.6.4` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.4/LICENSE) |
+| `quack-kernels-0.6.5` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.5/LICENSE) |
+| `regex-2026.7.19` | [`LICENSE.txt`](third_party_licenses/regex-2026.7.19/LICENSE.txt) |
+| `soundfile-0.14.0` | [`LICENSE`](third_party_licenses/soundfile-0.14.0/LICENSE) |
+| `soxr-1.0.0` | [`COPYING.LGPL`](third_party_licenses/soxr-1.0.0/COPYING.LGPL) |
+| `soxr-1.0.0` | [`LICENSE`](third_party_licenses/soxr-1.0.0/LICENSE) |
+| `soxr-1.0.0` | [`LICENSE-PFFFT`](third_party_licenses/soxr-1.0.0/LICENSE-PFFFT) |
+| `soxr-1.0.0` | [`LICENSE-libsoxr`](third_party_licenses/soxr-1.0.0/LICENSE-libsoxr) |
+| `supervisor-4.3.0` | [`LICENSES.txt`](third_party_licenses/supervisor-4.3.0/LICENSES.txt) |
+| `text-unidecode-1.3` | [`LICENSE`](third_party_licenses/text-unidecode-1.3/LICENSE) |
+| `torchcodec-0.16.0` | [`COPYING.dav1d`](third_party_licenses/torchcodec-0.16.0/COPYING.dav1d) |
+| `torchcodec-0.16.0` | [`LICENSE`](third_party_licenses/torchcodec-0.16.0/LICENSE) |
+| `torchcodec-0.16.0` | [`LICENSE.libavif`](third_party_licenses/torchcodec-0.16.0/LICENSE.libavif) |
+| `torchcodec-0.16.0` | [`LICENSE.libjpeg-turbo`](third_party_licenses/torchcodec-0.16.0/LICENSE.libjpeg-turbo) |
+| `torchcodec-0.16.0` | [`LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt`](third_party_licenses/torchcodec-0.16.0/LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt) |
+| `torchcodec-0.16.0` | [`LICENSE.libpng`](third_party_licenses/torchcodec-0.16.0/LICENSE.libpng) |
+| `torchcodec-0.16.0` | [`LICENSE.libwebp`](third_party_licenses/torchcodec-0.16.0/LICENSE.libwebp) |
+| `torchcodec-0.16.0` | [`LICENSE.libyuv`](third_party_licenses/torchcodec-0.16.0/LICENSE.libyuv) |
+| `torchcodec-0.16.0` | [`LICENSE.zlib`](third_party_licenses/torchcodec-0.16.0/LICENSE.zlib) |
+| `tqdm-4.70.0` | [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) |
+| `urllib3-2.8.0` | [`LICENSE.txt`](third_party_licenses/urllib3-2.8.0/LICENSE.txt) |
+| `vllm-0.30.0` | [`LICENSE`](third_party_licenses/vllm-0.30.0/LICENSE) |
+
+Additional attribution and native-library notices are preserved in
+[`pycountry COPYRIGHT.txt`](third_party_licenses/pycountry-26.2.16/COPYRIGHT.txt),
+[`PyJWT AUTHORS.rst`](third_party_licenses/pyjwt-2.15.1/AUTHORS.rst), and
+[`SoundFile license notes`](third_party_licenses/soundfile-0.14.0/license_notes.md).
+
 ## Updating this file
 
 When adding, removing, or upgrading a third-party dependency:
