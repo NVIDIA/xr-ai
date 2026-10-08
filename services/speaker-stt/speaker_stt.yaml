@@ -10,5 +10,5 @@ device: cuda
 precision: bf16
 # Hardware profiles or CUDA_VISIBLE_DEVICES own GPU placement.
 model_cache: ../../models
-# Each session holds one ASR cache and one diarization cache.
+# Before enrollment, each session holds up to eight ASR caches plus diarization state.
 max_sessions: 16
