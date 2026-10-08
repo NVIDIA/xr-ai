@@ -11,46 +11,40 @@ from xr_ai_voicegate._speaker import _SpeakerConfig
 
 
 def _enroll(selection, speaker=5):
-    selection._activity({speaker}, 0.2, 123)
-    events = selection._finish(selection.cfg.start_phrase)
+    events = selection._enroll_completed([(speaker, selection.cfg.start_phrase, 123, False)])
     assert events == [{"kind": "enrolled"}]
 
 
-def test_enrollment_needs_exact_phrase_and_unambiguous_speaker():
+def test_enrollment_needs_one_attributed_exact_phrase():
     cfg = _SpeakerConfig()
     selection = _Selection(cfg)
-    selection._activity({2}, 0.2, 10)
-    assert selection._finish("someone said hey agent let's start talking") == []
+    assert selection._enroll_completed([(2, "someone said hey agent let's start talking", 10, False)]) == []
     assert selection.owner is None
-    selection._activity({2}, 0.2, 10)
-    selection._activity({2, 4}, 0.2, 20)
-    assert selection._finish(cfg.start_phrase) == []
+    assert selection._activity({2, 4}, 0.2, 20) == (None, [], False)
     assert selection.owner is None
     _enroll(selection, 7)
     assert selection.owner == 7
 
 
-def test_ambiguous_onset_cannot_be_enrolled_from_later_single_speaker():
+@pytest.mark.parametrize("speakers", [(1, 2), (2, 1)])
+def test_same_step_exact_phrase_tie_cannot_choose_by_label_order(speakers):
     selection = _Selection(_SpeakerConfig())
-    assert selection._activity({1, 2}, 0.2, 10)[0] is None
-    assert selection._activity({1}, 0.2, 20)[0] is None
-    assert selection._finish(selection.cfg.start_phrase) == []
-    _enroll(selection, 1)
-
-
-def test_ambiguous_onset_requires_one_consecutive_silence_gap():
-    selection = _Selection(_SpeakerConfig(silence_duration=0.6))
-    for active in ({1, 2}, set(), {1, 2}, set(), {1, 2}, set()):
-        assert selection._activity(active, 0.2, 10)[0] is None
-    assert selection.ambiguous
-    assert selection.silence == pytest.approx(0.2)
-    assert selection._activity({1}, 0.2, 20)[0] is None
-    assert selection._finish(selection.cfg.start_phrase) == []
+    assert selection._enroll_completed([
+        (speaker, selection.cfg.start_phrase, 10, False) for speaker in speakers
+    ]) == []
     assert selection.owner is None
-
-    for _ in range(3):
-        selection._activity(set(), 0.2, 30)
     _enroll(selection, 1)
+
+
+def test_unique_phrase_completion_wins_and_later_start_cannot_take_over():
+    selection = _Selection(_SpeakerConfig())
+    assert selection._enroll_completed([
+        (1, "random ongoing conversation", 10, False),
+        (2, selection.cfg.start_phrase, 20, False),
+    ]) == [{"kind": "enrolled"}]
+    assert selection.owner == 2
+    assert selection._enroll_completed([(1, selection.cfg.start_phrase, 30, False)]) == []
+    assert selection.owner == 2
 
 
 def test_only_owner_reaches_asr_and_release_requires_owner():
@@ -104,31 +98,29 @@ def test_invalid_speaker_settings_fail_early(settings):
         _SpeakerConfig._from_yaml({"enabled": True, **settings})
 
 
-@pytest.mark.parametrize("interference", ["other-speaker", "overlap", "unrelated", "timeout"])
-def test_enrollment_fragments_require_same_speaker_without_interference(interference):
+@pytest.mark.parametrize("interference", ["other-speaker", "unrelated", "timeout", "truncated"])
+def test_enrollment_fragments_remain_attributed_and_bounded(interference):
     selection = _Selection(_SpeakerConfig())
-    selection._activity({7}, 0.3, 0)
-    assert selection._finish("hey agent") == []
+    assert selection._enroll_completed([(7, "hey agent", 0, False)]) == []
     if interference == "other-speaker":
-        selection._activity({1}, 0.3, 1_000_000)
-    elif interference == "overlap":
-        selection._activity({7, 1}, 0.3, 1_000_000)
+        assert selection._enroll_completed([(1, "let's start talking", 1_000_000, False)]) == []
+        return
     elif interference == "unrelated":
-        selection._activity({7}, 0.3, 1_000_000)
-        selection._finish("what time is it")
-        selection._activity({7}, 0.3, 2_000_000)
+        selection._enroll_completed([(7, "what time is it", 1_000_000, False)])
+        at_us = 2_000_000
+    elif interference == "truncated":
+        selection._enroll_completed([(7, "uncompleted", 1_000_000, True)])
+        at_us = 2_000_000
     else:
-        selection._activity({7}, 0.3, 6_100_000)
-    assert selection._finish("let's start talking") == []
+        at_us = 6_100_000
+    assert selection._enroll_completed([(7, "let's start talking", at_us, False)]) == []
     assert selection.owner is None
 
 
 def test_start_and_stop_controls_can_span_utterances():
     selection = _Selection(_SpeakerConfig())
-    selection._activity({7}, 0.3, 0)
-    assert selection._finish("hey agent") == []
-    selection._activity({7}, 0.3, 1_000_000)
-    assert selection._finish("let us start talking") == [{"kind": "enrolled"}]
+    assert selection._enroll_completed([(7, "hey agent", 0, False)]) == []
+    assert selection._enroll_completed([(7, "let us start talking", 1_000_000, False)]) == [{"kind": "enrolled"}]
     selection._activity({7}, 0.3, 2_000_000)
     assert selection._finish("hey agent")[-1]["kind"] == "control_pending"
     selection._activity({7}, 0.3, 3_000_000)

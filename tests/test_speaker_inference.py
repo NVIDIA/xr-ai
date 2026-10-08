@@ -150,6 +150,7 @@ def test_audio_timeline_uses_origin_and_accepted_sample_count(_streaming_models)
     models, activity, _calls, _masks, _allocations, _text = _streaming_models
     activity[:] = [7]
     session = _Session(models, _SpeakerConfig(), audio_origin_us=1_234_567)
+    session.selection.owner = 7
     observed_pts = []
     activity_step = session.selection._activity
 
@@ -209,3 +210,110 @@ def test_forced_truncation_emits_owner_transcript_without_releasing(_streaming_m
     assert session.selection.duration == 0
     assert session.selection._controls._words == ""
     assert session.last_partial == ""
+
+
+def _attributed_session(streaming_models, cfg):
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, masks, allocations, text = streaming_models
+    session = _Session(models, cfg, audio_origin_us=1_000_000)
+    decoded = []
+    original = session._decode
+    phrases = {}
+
+    def decode(encoded, lengths, predictions, selected, drop, stream, finished):
+        decoded.append(selected)
+        text[0] = phrases.get(selected, "")
+        return original(encoded, lengths, predictions, selected, drop, stream, finished)
+
+    session._decode = decode
+
+    def feed(speakers, transcripts, *, audio=None):
+        activity[:] = speakers
+        phrases.update(transcripts)
+        return session._feed(bytes(5120) if audio is None else audio)
+
+    return session, feed, decoded
+
+
+def test_phrase_speaker_enrolls_over_an_already_talking_nonowner(_streaming_models):
+    cfg = _SpeakerConfig(silence_duration=0.3)
+    session, feed, decoded = _attributed_session(_streaming_models, cfg)
+    assert feed([1], {1: "ordinary conversation"}) == []
+    assert feed([1, 2], {2: cfg.start_phrase}) == []
+    assert feed([1], {}) == []
+    assert feed([1], {}) == [{"kind": "enrolled"}]
+    assert session.selection.owner == 2 and 2 in decoded
+    assert not session._candidate_streams
+    assert session._asr is None  # candidates were released before owner decoding starts
+    feed([1, 2], {1: cfg.start_phrase, 2: "owner query"})
+    assert session.selection.owner == 2
+    assert decoded[-1] == 2
+
+
+def test_simultaneous_step_matches_are_rejected_without_global_noise_silence(_streaming_models):
+    cfg = _SpeakerConfig(silence_duration=0.3)
+    session, feed, decoded = _attributed_session(_streaming_models, cfg)
+    feed([1, 2], {1: cfg.start_phrase, 2: cfg.start_phrase})
+    feed([], {})
+    assert feed([], {}, audio=b"\xff\x3f" * 2560) == []
+    assert session.selection.owner is None and {1, 2} <= set(decoded)
+    assert not session._candidate_streams
+    feed([2], {2: cfg.start_phrase})
+    feed([], {})
+    assert feed([], {}) == [{"kind": "enrolled"}]
+    assert session.selection.owner == 2
+
+
+def test_candidate_cache_budget_is_diarizer_bound_and_encoding_is_shared(_streaming_models):
+    cfg = _SpeakerConfig()
+    session, feed, decoded = _attributed_session(_streaming_models, cfg)
+    encoded = []
+    allocated = []
+    original = session.adapter.forward_pre_encoded
+    new_asr = session._new_asr
+
+    def encode(*args):
+        encoded.append(True)
+        return original(*args)
+
+    session.adapter.forward_pre_encoded = encode
+    def allocate():
+        allocated.append(True)
+        return new_asr()
+
+    session._new_asr = allocate
+    feed(list(range(8)), {})
+    assert len(session._candidate_streams) == 8
+    assert len(allocated) == 8
+    assert decoded == list(range(8)) and encoded == [True]
+
+
+def test_candidate_failure_is_not_silently_dropped_from_arbitration(_streaming_models):
+    cfg = _SpeakerConfig(silence_duration=0.3)
+    session, feed, _decoded = _attributed_session(_streaming_models, cfg)
+    original = session._decode
+
+    def fail_one(encoded, lengths, predictions, selected, *args):
+        if selected == 2:
+            raise RuntimeError("candidate failed")
+        return original(encoded, lengths, predictions, selected, *args)
+
+    session._decode = fail_one
+    with pytest.raises(RuntimeError, match="candidate failed"):
+        feed([1, 2], {1: cfg.start_phrase, 2: cfg.start_phrase})
+    assert session.selection.owner is None
+
+
+def test_truncated_candidate_cannot_restart_from_same_speech_tail(_streaming_models):
+    cfg = _SpeakerConfig(silence_duration=0.16, max_utterance_s=0.48)
+    session, feed, decoded = _attributed_session(_streaming_models, cfg)
+    for _ in range(3):
+        assert feed([7], {7: cfg.start_phrase}) == []
+    count = len(decoded)
+    for _ in range(3):
+        assert feed([7], {}) == []
+    assert len(decoded) == count and session.selection.owner is None
+    feed([], {})  # this speaker's existing inactivity interval ends its episode
+    feed([7], {7: cfg.start_phrase})
+    assert feed([], {}) == [{"kind": "enrolled"}]

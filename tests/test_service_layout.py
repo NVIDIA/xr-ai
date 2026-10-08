@@ -53,7 +53,6 @@ _MODEL_SERVICES = {
     "stt-server": ("stt-server", "stt_server", 8103),
     "vlm-server": ("vlm-server", "vlm_server", 8100),
 }
-_PRIVATE_MODEL_SERVICES = {}
 _LEGACY_PROJECTS = (
     "agent-samples/model-servers",
     "ai-services/embedding-server",
@@ -168,7 +167,7 @@ def test_reusable_services_are_direct_children() -> None:
             for config in project.glob("*.yaml")
         )
     }
-    assert _MODEL_SERVICES.keys() | _PRIVATE_MODEL_SERVICES.keys() == discovered
+    assert _MODEL_SERVICES.keys() == discovered
     assert _REQUIRED_SERVICES <= {
         path.name for path in services.iterdir() if path.is_dir()
     }
@@ -385,22 +384,6 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         default = _model_cache_default(project / command / "__main__.py")
         assert Path(os.path.normpath(project / default)) == _ROOT / "models", (
             f"{directory}: default model cache must target the repo models directory"
-        )
-
-
-def test_private_model_service_projects_preserve_their_local_contracts() -> None:
-    for directory, (package, command) in _PRIVATE_MODEL_SERVICES.items():
-        project = _ROOT / "services" / directory
-        metadata = tomllib.loads((project / "pyproject.toml").read_text())
-        config = yaml.safe_load((project / f"{command}.yaml").read_text())
-
-        assert metadata["project"]["name"] == package
-        assert command in metadata["project"]["scripts"]
-        assert "endpoint" not in config  # per-user private runtime default
-        assert "cuda_visible_devices" not in config  # hardware profile owns placement
-        assert "port" not in config
-        assert Path(os.path.normpath(project / config["model_cache"])) == _ROOT / "models", (
-            f"{directory}: model_cache must target the repo models directory"
         )
 
 

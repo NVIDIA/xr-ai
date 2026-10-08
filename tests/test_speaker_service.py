@@ -10,8 +10,10 @@ import json
 import os
 import socket
 import sys
+import threading
 from dataclasses import asdict
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
@@ -28,6 +30,15 @@ _CFG = {
     "asr_model": "test-asr",
     "diar_model": "test-diar",
 }
+
+
+@pytest.fixture(autouse=True)
+def _restore_model_environment(monkeypatch):
+    for name in ("HF_HOME", "NEMO_CACHE_DIR", "HF_XET_HIGH_PERFORMANCE", "NEMO_LOGGING_LEVEL"):
+        if name in os.environ:
+            monkeypatch.setenv(name, os.environ[name])
+        else:
+            monkeypatch.delenv(name, raising=False)
 
 
 class _Session:
@@ -83,16 +94,13 @@ def test_sessions_isolate_decoder_state_and_close_idempotently():
     assert list(server.sessions) == [second]
 
 
-def test_session_expiry_and_capacity_are_bounded(monkeypatch):
-    server = service._Server(_models(), max_sessions=1, idle_timeout_s=1)
-    monkeypatch.setattr(service.time, "monotonic", lambda: 0)
+def test_connected_session_retains_capacity_until_explicit_close():
+    server = service._Server(_models(), max_sessions=1)
     first = server._open(_opening())
     with pytest.raises(ValueError, match="capacity"):
         server._open(_opening())
-    monkeypatch.setattr(service.time, "monotonic", lambda: 2)
-    with pytest.raises(ValueError, match="unknown"):
-        server._audio(first, bytes(640))
-    assert not server.sessions
+    assert server._audio(first, bytes(640))[0]["text"] == "1"
+    server._close(first)
     assert server._open(_opening()) in server.sessions
 
 
@@ -102,7 +110,7 @@ def test_invalid_audio_fails_before_inference(audio):
     session = server._open(_opening())
     with pytest.raises(ValueError, match="one second"):
         server._audio(session, audio)
-    assert server.sessions[session][0].count == 0
+    assert server.sessions[session].count == 0
 
 
 @pytest.mark.parametrize("audio_origin_us", [None, -1, True, 1.5, "1"])
@@ -189,25 +197,166 @@ def test_websocket_inference_error_is_stable_and_revokes_session():
     assert not server.sessions
 
 
+@pytest.mark.parametrize("frame", [b"binary", "not json", "[1,2]"])
+def test_malformed_opening_is_a_protocol_error(frame):
+    server = service._Server(_models())
+    with TestClient(service._build_app(server, _CFG)) as client:
+        with client.websocket_connect(service._STREAM_PATH) as websocket:
+            if isinstance(frame, bytes):
+                websocket.send_bytes(frame)
+            else:
+                websocket.send_text(frame)
+            assert "error" in websocket.receive_json()
+            with pytest.raises(WebSocketDisconnect) as closed:
+                websocket.receive_json()
+            assert closed.value.code == 1008
+    assert not server.sessions
+
+
+def test_odd_pcm_is_rejected_before_model_inference():
+    server = service._Server(_models())
+    with TestClient(service._build_app(server, _CFG)) as client:
+        with client.websocket_connect(service._STREAM_PATH) as websocket:
+            websocket.send_json(_opening())
+            websocket.receive_json()
+            websocket.send_bytes(b"x")
+            assert "complete signed 16-bit" in websocket.receive_json()["error"]
+            with pytest.raises(WebSocketDisconnect) as closed:
+                websocket.receive_json()
+            assert closed.value.code == 1008
+    assert not server.sessions
+
+
+class _WebSocket:
+    def __init__(self):
+        self.incoming = asyncio.Queue()
+        self.outgoing = asyncio.Queue()
+
+    async def accept(self):
+        pass
+
+    async def receive(self):
+        return await self.incoming.get()
+
+    async def send_json(self, body):
+        self.outgoing.put_nowait(body)
+
+    async def close(self, code):
+        pass
+
+
+def _handler(server):
+    app = service._build_app(server, _CFG)
+    return next(route.endpoint for route in app.routes if route.path == service._STREAM_PATH)
+
+
+@pytest.mark.asyncio
+async def test_native_inference_open_and_close_share_one_serialization_boundary():
+    entered, release = threading.Event(), threading.Event()
+    second_opened = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    allocating_threads = []
+
+    class Session:
+        def _feed(self, audio):
+            entered.set()
+            release.wait(5)
+            entered.clear()
+            return []
+
+    def allocate(*_args, **_kwargs):
+        allocating_threads.append(threading.get_ident())
+        assert not entered.is_set(), "session allocation overlaps native model inference"
+        if len(allocating_threads) == 2:
+            loop.call_soon_threadsafe(second_opened.set)
+        return Session()
+
+    server = service._Server(SimpleNamespace(_session=allocate), max_sessions=2)
+    handler = _handler(server)
+    first, second = _WebSocket(), _WebSocket()
+    first.incoming.put_nowait({"type": "websocket.receive", "text": json.dumps(_opening())})
+    first.incoming.put_nowait({"type": "websocket.receive", "bytes": bytes(640)})
+    second.incoming.put_nowait({"type": "websocket.receive", "text": json.dumps(_opening())})
+    second.incoming.put_nowait({"type": "websocket.disconnect"})
+    request = asyncio.create_task(handler(first))
+    competitor = None
+    try:
+        await asyncio.wait_for(first.outgoing.get(), 1)
+        assert await asyncio.to_thread(entered.wait, 2)
+        competitor = asyncio.create_task(handler(second))
+        request.cancel()
+        await asyncio.sleep(0)
+        request.cancel()
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(second_opened.wait(), 0.05)
+        assert not request.done() and len(server.sessions) == 1
+        release.set()
+        await asyncio.wait_for(asyncio.gather(request, competitor, return_exceptions=True), 2)
+        assert second_opened.is_set()
+        assert len(allocating_threads) == 2 and loop_thread not in allocating_threads
+        assert not server.sessions
+    finally:
+        release.set()
+        request.cancel()
+        if competitor is not None:
+            competitor.cancel()
+        await asyncio.gather(request, *( [competitor] if competitor is not None else []), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_native_allocation_is_drained_and_closed():
+    entered, release = threading.Event(), threading.Event()
+
+    def allocate(*_args, **_kwargs):
+        entered.set()
+        release.wait(5)
+        return _Session()
+
+    server = service._Server(SimpleNamespace(_session=allocate), max_sessions=1)
+    websocket = _WebSocket()
+    websocket.incoming.put_nowait({"type": "websocket.receive", "text": json.dumps(_opening())})
+    request = asyncio.create_task(_handler(server)(websocket))
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        request.cancel()
+        await asyncio.sleep(0)
+        request.cancel()
+        await asyncio.sleep(0)
+        assert not request.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(request, return_exceptions=True), 2)
+        assert not server.sessions and not websocket.outgoing.qsize()
+    finally:
+        release.set()
+        request.cancel()
+        await asyncio.gather(request, return_exceptions=True)
+
+
 @pytest.mark.asyncio
 async def test_cancelled_request_keeps_model_work_owned_until_completion():
-    started = asyncio.Event()
-    release = asyncio.Event()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
 
-    async def model_work():
+    def model_work():
         started.set()
-        await release.wait()
+        release.wait(5)
+        finished.set()
 
-    work = asyncio.create_task(model_work())
+    work = asyncio.create_task(asyncio.to_thread(model_work))
     request = asyncio.create_task(service._await_without_abandoning(work))
-    await started.wait()
+    await asyncio.to_thread(started.wait, 2)
+    request.cancel()
+    await asyncio.sleep(0)
     request.cancel()
     await asyncio.sleep(0)
     assert not request.done()
+    assert not work.cancelled() and not finished.is_set()
     release.set()
     with pytest.raises(asyncio.CancelledError):
         await request
-    assert work.done()
+    assert work.done() and not work.cancelled() and finished.is_set()
 
 
 @pytest.mark.asyncio
@@ -228,21 +377,28 @@ async def test_invalid_capacity_fails_before_model_loading_or_readiness(tmp_path
 @pytest.mark.asyncio
 async def test_model_environment_precedence_and_readiness_cleanup(tmp_path, monkeypatch):
     loads = []
+    listeners = []
     monkeypatch.setenv("HF_HOME", "operator-hf")
     monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "0")
     monkeypatch.delenv("NEMO_CACHE_DIR", raising=False)
     monkeypatch.setattr(service, "_reuse", lambda *_args: asyncio.sleep(0, result=False))
-    monkeypatch.setattr(
-        _inference,
-        "_Models",
-        lambda cfg: loads.append(cfg) or _models(),
-    )
+    def load(cfg):
+        assert listeners, "model loading precedes listener ownership"
+        loads.append(cfg)
+        return _models()
+
+    monkeypatch.setattr(_inference, "_Models", load)
 
     class Listener:
         def close(self):
             pass
 
-    monkeypatch.setattr(service, "_listener", lambda _cfg: Listener())
+    def listener(_cfg):
+        owned = Listener()
+        listeners.append(owned)
+        return owned
+
+    monkeypatch.setattr(service, "_listener", listener)
     ready = tmp_path / "ready"
     observed = []
 
@@ -296,10 +452,12 @@ async def test_real_loopback_server_exchanges_ordered_pcm(tmp_path, monkeypatch)
         assert status == service._identity(cfg)
         monkeypatch.setenv(service._READY_PROCESS_MAY_EXIT_ENV, "1")
         reused_ready = tmp_path / "reused.ready"
-        await service._serve(cfg, reused_ready)
+        monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (os.getpid(), True, True))
+        monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+        assert await service._reuse(cfg, reused_ready)
         assert reused_ready.exists()
         with pytest.raises(RuntimeError, match="configuration changed"):
-            await service._serve({**cfg, "precision": "float32"}, tmp_path / "changed.ready")
+            await service._reuse({**cfg, "precision": "float32"}, tmp_path / "changed.ready")
         uri = f"ws://127.0.0.1:{port}{service._STREAM_PATH}"
         async with connect(uri) as websocket:
             await websocket.send(json.dumps(_opening(audio_origin_us=123)))
@@ -322,6 +480,7 @@ def test_wrapper_execs_owned_listener_with_configured_port(tmp_path, monkeypatch
     config.write_text(yaml.safe_dump({**_CFG, "port": 8123, "model_cache": "models"}))
     monkeypatch.setattr(service, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(sys, "argv", ["speaker_stt", "--config", str(config)])
+    monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (None, True, False))
     captured = {}
 
     class Executed(Exception):
@@ -340,6 +499,60 @@ def test_wrapper_execs_owned_listener_with_configured_port(tmp_path, monkeypatch
     assert captured["env"]["XR_AI_VLLM_MANAGED"] == "1"
     assert captured["env"]["XR_AI_VLLM_PORT"] == "8123"
     assert service._READY_PROCESS_MAY_EXIT_ENV not in captured["env"]
+
+
+def test_persistent_reuse_returns_before_exec_or_clearing_launcher_flag(tmp_path, monkeypatch):
+    config = tmp_path / "speaker.yaml"
+    cfg = {**_CFG, "model_cache": str(tmp_path / "models")}
+    config.write_text(yaml.safe_dump(cfg))
+    ready = tmp_path / "ready"
+    monkeypatch.setattr(sys, "argv", ["speaker_stt", "--config", str(config), "--ready-file", str(ready)])
+    monkeypatch.setenv(service._READY_PROCESS_MAY_EXIT_ENV, "1")
+    monkeypatch.setattr(service, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (123, True, True))
+    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "_status", AsyncMock(return_value=service._identity(cfg)))
+    watcher = AsyncMock()
+    monkeypatch.setattr(service, "_watch_reused", watcher)
+    monkeypatch.setattr(service.os, "execvpe", lambda *_args: pytest.fail("reused service was exec'd"))
+    service._run()
+    assert ready.exists() and os.environ[service._READY_PROCESS_MAY_EXIT_ENV] == "1"
+    watcher.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("inspection,marked,error", [
+    ((None, False, False), False, "cannot inspect"),
+    ((None, True, True), False, "cannot inspect"),
+    ((123, True, True), False, "unmanaged listener"),
+])
+async def test_reuse_requires_verified_managed_listener_before_http_probe(monkeypatch, inspection, marked, error):
+    status = AsyncMock()
+    monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: inspection)
+    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: marked)
+    monkeypatch.setattr(service, "_status", status)
+    with pytest.raises(RuntimeError, match=error):
+        await service._reuse(_CFG, None)
+    status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_owned_warming_listener_does_not_allocate_another_model(monkeypatch):
+    monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (123, True, True))
+    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "_status", AsyncMock(return_value=None))
+    with pytest.raises(RuntimeError, match="not ready"):
+        await service._reuse(_CFG, None)
+
+
+@pytest.mark.asyncio
+async def test_reuse_detects_listener_replacement_during_health_probe(monkeypatch):
+    pids = iter([123, 456])
+    monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (next(pids), True, True))
+    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "_status", AsyncMock(return_value=service._identity(_CFG)))
+    with pytest.raises(RuntimeError, match="changed during inspection"):
+        await service._reuse(_CFG, None)
 
 
 def test_status_refuses_foreign_or_old_protocol_endpoint(monkeypatch):

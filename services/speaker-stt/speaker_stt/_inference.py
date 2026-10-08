@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
+from loguru import logger
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 from ._selection import _Selection
@@ -26,6 +27,22 @@ class _AsrState:
     cache: tuple[Tensor, Tensor, Tensor]
     previous_hypotheses: list[Hypothesis] | None = None
     previous_pred: list[Tensor] | None = None
+
+
+@dataclass
+class _DecodedStream:
+    asr: _AsrState
+    pts_us: int
+    duration: float = 0.0
+    silence: float = 0.0
+    text: str = ""
+
+
+@dataclass(frozen=True)
+class _CompletedStream:
+    pts_us: int
+    duration: float
+    text: str
 
 
 class _Models:
@@ -126,11 +143,91 @@ class _Session:
         self.step = 0
         self.audio_origin_us = audio_origin_us
         self.last_partial = ""
+        self._candidate_streams: dict[int, _DecodedStream] = {}
+        self._candidate_completed: list[tuple[int, _CompletedStream]] = []
+        self._truncated_episodes: dict[int, float] = {}
         self._reset_asr()
 
+    def _new_asr(self) -> _AsrState:
+        return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
+
     def _reset_asr(self) -> None:
-        self._asr = _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
+        self._asr = self._new_asr() if self.selection.owner is not None else None
         self.last_partial = ""
+
+    def _decode_streams(
+        self, features, lengths, predictions, drop: int, active: set[int], pts_us: int,
+        streams: dict[int, _DecodedStream], *, required: set[int],
+    ) -> tuple[dict[int, str], list[tuple[int, _DecodedStream]]]:
+        """Share encoding while retaining independent attributed decoder state."""
+        speakers = active | streams.keys()
+        if not speakers:
+            return {}, []
+        try:
+            encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+        except Exception:
+            if required:
+                raise
+            streams.clear()
+            logger.exception("optional speaker stream encoding failed")
+            return {}, []
+        texts, completed = {}, []
+        seconds = self.models.hop_samples / 16000
+        for speaker in sorted(speakers, key=lambda speaker: (speaker not in required, speaker)):
+            try:
+                if speaker not in streams:
+                    streams[speaker] = _DecodedStream(self._new_asr(), pts_us)
+                stream = streams[speaker]
+                stream.duration += seconds
+                stream.silence = 0.0 if speaker in active else stream.silence + seconds
+                finished = stream.silence >= self.selection.cfg.silence_duration or (
+                    stream.duration >= self.selection.cfg.max_utterance_s
+                )
+                stream.text = self._decode(encoded, encoded_lengths, predictions, speaker, drop, stream.asr, finished)
+            except Exception:
+                if speaker in required:
+                    raise
+                streams.pop(speaker, None)
+                logger.exception("optional speaker stream failed speaker={}", speaker)
+                continue
+            texts[speaker] = stream.text
+            if finished:
+                completed.append((speaker, stream))
+                del streams[speaker]
+        return texts, completed
+
+    def _candidate_step(self, features, lengths, predictions, drop: int, active: set[int], pts_us: int) -> list[dict]:
+        """Decode attributed candidates before resolving this step's enrollment."""
+        self._candidate_completed = []
+        cfg = self.selection.cfg
+        seconds = self.models.hop_samples / 16000
+        for speaker, quiet in list(self._truncated_episodes.items()):
+            quiet = 0.0 if speaker in active else quiet + seconds
+            if quiet >= cfg.silence_duration:
+                del self._truncated_episodes[speaker]
+            else:
+                self._truncated_episodes[speaker] = quiet
+        speakers = (active | self._candidate_streams.keys()) - self._truncated_episodes.keys()
+        if not speakers:
+            return []
+        # All pre-enrollment streams are required: losing one could turn a
+        # simultaneous phrase tie into a false unique nomination.
+        _, finished = self._decode_streams(
+            features, lengths, predictions, drop, active - self._truncated_episodes.keys(), pts_us,
+            self._candidate_streams, required=speakers,
+        )
+        completed = []
+        for speaker, stream in finished:
+            truncated = stream.duration >= cfg.max_utterance_s
+            completed.append((speaker, stream.text, stream.pts_us, truncated))
+            self._candidate_completed.append((speaker, _CompletedStream(stream.pts_us, stream.duration, stream.text)))
+            if truncated:
+                self._truncated_episodes[speaker] = 0.0
+        events = self.selection._enroll_completed(completed)
+        if self.selection.owner is not None:
+            self._candidate_streams.clear()
+            self._truncated_episodes.clear()
+        return events
 
     def _decode(
         self,
@@ -218,13 +315,17 @@ class _Session:
                 chunk_pts = self.audio_origin_us + round(
                     self.step * self.models.hop_samples * 1_000_000 / 16000
                 )
+                if self.selection.owner is None:
+                    events.extend(self._candidate_step(features, lengths, preds, drop, active, chunk_pts))
+                    self.step += 1
+                    continue
                 selected, edges, started = self.selection._activity(
                     active,
                     self.models.hop_samples / 16000,
                     chunk_pts,
                 )
                 events.extend(edges)
-                if started:
+                if started or self._asr is None:
                     self._reset_asr()
                 if selected is not None:
                     encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)

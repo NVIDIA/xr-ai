@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import hashlib
 import json
 import os
 import socket
 import sys
-import time
 import urllib.error
 import urllib.request
 from contextlib import asynccontextmanager
@@ -20,9 +20,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import yaml
+from anyio import CancelScope
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
@@ -100,11 +102,20 @@ async def _status(base_url: str) -> dict | None:
 
 async def _await_without_abandoning(task: asyncio.Task):
     """Keep serialized model work owned until its thread finishes."""
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        await asyncio.gather(task, return_exceptions=True)
-        raise
+    cancelled = False
+    with CancelScope(shield=True):
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+            except Exception:
+                break
+    if cancelled:
+        if not task.cancelled():
+            task.exception()
+        raise asyncio.CancelledError
+    return task.result()
 
 
 async def _watch_reused(base_url: str, fingerprint: str) -> None:
@@ -128,12 +139,22 @@ async def _watch_reused(base_url: str, fingerprint: str) -> None:
 
 
 async def _reuse(cfg: dict, ready_file: Path | None) -> bool:
+    port = _validate_port(cfg.get("port", _DEFAULT_PORT))
+    pid, checked, listening = await asyncio.to_thread(pid_on_port_checked, port)
+    if not checked or (listening and pid is None):
+        raise RuntimeError(f"cannot inspect ownership of port {port}")
+    if not listening:
+        return False
+    if not has_xr_ai_ownership_marker(pid, port):
+        raise RuntimeError(f"port {port} belongs to an unmanaged listener; stop it before launching")
     base_url = _base_url(cfg)
     status = await _status(base_url)
     if status is None:
-        return False
+        raise RuntimeError(f"owned speaker service on port {port} is not ready; wait for startup before retrying")
     if status["fingerprint"] != _fingerprint(cfg):
         raise RuntimeError("speaker STT configuration changed; stop the existing speaker service before restarting")
+    if await asyncio.to_thread(pid_on_port_checked, port) != (pid, True, True):
+        raise RuntimeError(f"listener on port {port} changed during inspection")
     logger.info("speaker ASR already running at {}; reusing", base_url)
     if ready_file is not None:
         ready_file.touch()
@@ -149,20 +170,12 @@ async def _reuse(cfg: dict, ready_file: Path | None) -> bool:
 
 
 class _Server:
-    def __init__(self, models, *, max_sessions: int = 16, idle_timeout_s: float = 60.0) -> None:
+    def __init__(self, models, *, max_sessions: int = 16) -> None:
         self.models = models
         self.max_sessions = _validate_capacity(max_sessions)
-        self.idle_timeout_s = idle_timeout_s
-        self.sessions: dict[str, tuple[object, float]] = {}
-
-    def _expire(self, now: float) -> None:
-        for session_id, (_, touched) in list(self.sessions.items()):
-            if now - touched > self.idle_timeout_s:
-                del self.sessions[session_id]
+        self.sessions: dict[str, object] = {}
 
     def _open(self, body: object) -> str:
-        now = time.monotonic()
-        self._expire(now)
         if not isinstance(body, dict):
             raise _ProtocolError("opening message must be a JSON object")
         raw = body.get("config")
@@ -182,24 +195,22 @@ class _Server:
         except ValueError as exc:
             raise _ProtocolError(str(exc)) from exc
         session_id = uuid4().hex
-        self.sessions[session_id] = (self.models._session(cfg, audio_origin_us=audio_origin_us), now)
+        self.sessions[session_id] = self.models._session(cfg, audio_origin_us=audio_origin_us)
         return session_id
 
     def _audio(self, session_id: str, audio: object) -> list[dict]:
-        now = time.monotonic()
-        self._expire(now)
-        entry = self.sessions.get(session_id)
-        if entry is None:
+        session = self.sessions.get(session_id)
+        if session is None:
             raise _ProtocolError("unknown speaker session; open a new stream")
-        session, _ = entry
         if not isinstance(audio, bytes) or len(audio) > 32000:
             raise _ProtocolError("audio must be at most one second of PCM")
+        if len(audio) % 2:
+            raise _ProtocolError("audio must contain complete signed 16-bit PCM samples")
         try:
             events = session._feed(audio)
         except Exception:
             self.sessions.pop(session_id, None)
             raise
-        self.sessions[session_id] = (session, now)
         return events
 
     def _close(self, session_id: str) -> None:
@@ -239,10 +250,31 @@ def _build_app(server: _Server, cfg: dict, ready_file: Path | None = None):
     @app.websocket(_STREAM_PATH)
     async def stream(websocket: WebSocket) -> None:
         await websocket.accept()
-        session_id = None
-        try:
-            opening = await websocket.receive_json()
+        allocated: list[str] = []
+
+        def open_session(opening):
             session_id = server._open(opening)
+            allocated.append(session_id)
+            return session_id
+
+        async def close_session():
+            async with inference_lock:
+                work = asyncio.create_task(asyncio.to_thread(server._close, allocated[0]))
+                await _await_without_abandoning(work)
+
+        try:
+            first = await websocket.receive()
+            if first["type"] == "websocket.disconnect":
+                return
+            if first.get("text") is None:
+                raise _ProtocolError("opening frame must be a JSON text message")
+            try:
+                opening = json.loads(first["text"])
+            except json.JSONDecodeError as exc:
+                raise _ProtocolError("opening frame must be valid JSON") from exc
+            async with inference_lock:
+                work = asyncio.create_task(asyncio.to_thread(open_session, opening))
+                session_id = await _await_without_abandoning(work)
             await websocket.send_json({"service": _SERVICE, "protocol": _PROTOCOL})
             while True:
                 message = await websocket.receive()
@@ -271,8 +303,9 @@ def _build_app(server: _Server, cfg: dict, ready_file: Path | None = None):
             except (RuntimeError, WebSocketDisconnect):
                 pass
         finally:
-            if session_id is not None:
-                server._close(session_id)
+            if allocated:
+                cleanup = asyncio.create_task(close_session())
+                await _await_without_abandoning(cleanup)
 
     return app
 
@@ -298,9 +331,6 @@ async def _serve(cfg: dict, ready_file: Path | None) -> None:
 
     max_sessions = _validate_capacity(cfg.get("max_sessions", 16))
     _base_url(cfg)
-    if await _reuse(cfg, ready_file):
-        return
-
     # Own the port before loading models so concurrent starts cannot allocate a
     # second GPU copy while the first process is still warming.
     listener = _listener(cfg)
@@ -340,6 +370,11 @@ def _run() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg["cuda_visible_devices"])
     setup_logging("speaker-stt")
     if not args._serve:
+        try:
+            if asyncio.run(_reuse(cfg, args.ready_file)):
+                return
+        except RuntimeError as exc:
+            raise SystemExit(f"[speaker_stt] {exc}") from exc
         port = _validate_port(cfg.get("port", _DEFAULT_PORT))
         cmd = [sys.executable, "-m", "speaker_stt", "--_serve", "--config", str(args.config)]
         if args.ready_file is not None:
@@ -352,6 +387,10 @@ def _run() -> None:
         os.execvpe(sys.executable, cmd, child_env)
     try:
         asyncio.run(_serve(cfg, args.ready_file))
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            raise SystemExit("[speaker_stt] port is already in use; wait for the managed service startup") from exc
+        raise
     except asyncio.CancelledError:
         pass
 

@@ -10,8 +10,8 @@ name = "xr-ai-speaker-stt"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "fastapi>=0.115.0", "uvicorn[standard]>=0.34.0", "numpy>=1.24", "pyyaml>=6.0",
-    "xr-ai-voicegate", "xr-ai-logging",
+    "fastapi>=0.115.0", "uvicorn[standard]>=0.34.0", "anyio>=4.8.0", "numpy>=1.24", "pyyaml>=6.0",
+    "xr-ai-voicegate", "xr-ai-logging", "xr-ai-vllm",
     "nemo-toolkit[asr]", "lightning>2.2.1,<=2.4.0", "lhotse==2.0.0a6",
 ]
 
@@ -29,6 +29,7 @@ lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "
 lhotse = { url = "https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl" }
 xr-ai-voicegate = { path = "../../utils/xr-ai-voicegate", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm = { path = "../../utils/xr-ai-vllm", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["speaker_stt"]
