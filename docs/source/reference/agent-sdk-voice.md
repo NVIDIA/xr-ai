@@ -254,7 +254,13 @@ each event response before sending the next frame. The service derives timestamp
 from accepted sample counts; reconnecting starts a fresh timeline and requires
 enrollment again. Other voices contribute to
 diarization and interference conditioning, but are not transcribed after
-enrollment. Start the inference process separately from the repository root:
+enrollment. Before enrollment, the service independently decodes each detected
+speaker and enrolls the one whose conditioned transcript completes the start
+phrase, including during overlapping speech. If multiple speakers complete the
+phrase in the same accepted audio step, neither is selected. Once enrolled,
+another voice's later start phrase cannot take over the connection.
+
+Start the inference process separately from the repository root:
 
 ```bash
 uv --config-file uv.toml run --project services/speaker-stt \
