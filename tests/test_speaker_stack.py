@@ -33,12 +33,12 @@ def test_speaker_config_requires_http_port(tmp_path, monkeypatch):
     }))
     monkeypatch.setattr(stack, "_BASE", tmp_path)
     with pytest.raises(ValueError, match="must declare port"):
-        stack._build_processes(str(profile), "custom")
+        stack._build_processes(profile, "custom")
 
 
 @pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "spark"])
 def test_normal_profile_selects_speaker_asr_and_uses_hardware_profile(hardware):
-    processes, credentials = stack._build_processes("default", hardware)
+    processes, credentials = stack._build_processes(gpu_profile=hardware)
     names = [p.name for p in processes]
     assert "stt" not in names and "stt-nim" not in names
     assert names.count("speaker-stt") == 1
@@ -55,12 +55,12 @@ def test_normal_profile_selects_speaker_asr_and_uses_hardware_profile(hardware):
 def test_custom_batch_profile_remains_supported(tmp_path):
     profile = tmp_path / "models.speech.json"
     profile.write_text(json.dumps({"models": {"stt": {
-        "adapter": {"kind": "riva_grpc"}, "endpoint": {"base_url": "localhost:50051"},
-        "deployment": {"ownership": "managed", "service": "stt-nim", "credentials": ["NGC_API_KEY"]},
+        "adapter": {"preset": "parakeet_stt"}, "endpoint": {"base_url": "http://localhost:8103"},
+        "deployment": {"ownership": "managed", "service": "stt"},
     }}}))
-    processes, credentials = stack._build_processes(str(profile), "dual_48G_ada")
-    assert [p.name for p in processes] == ["stt-nim"]
-    assert credentials == ("NGC_API_KEY",)
+    processes, credentials = stack._build_processes(profile, "dual_48G_ada")
+    assert [p.name for p in processes] == ["stt"]
+    assert credentials == ()
 
 
 @pytest.mark.parametrize("declaration", [
@@ -71,7 +71,7 @@ def test_invalid_operator_service_declaration_fails_before_launch(tmp_path, decl
     profile = tmp_path / "models.invalid.json"
     profile.write_text(json.dumps({"models": {}, "services": declaration}))
     with pytest.raises(ValueError, match="services"):
-        stack._build_processes(str(profile), "dual_48G_ada")
+        stack._build_processes(profile, "dual_48G_ada")
 
 
 def test_normal_cli_passes_only_profile_selection(monkeypatch):
@@ -81,25 +81,25 @@ def test_normal_cli_passes_only_profile_selection(monkeypatch):
     monkeypatch.setattr(stack, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(stack, "run_stack", lambda *_a, **_kw: None)
     monkeypatch.setattr(stack, "_build_processes", lambda *a, **kw: (selected.append((a, kw)) or [], ()))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "models.custom.json"])
     stack.run()
-    assert selected == [(("vlm_llm_nim", None), {})]
+    assert selected == [((Path("models.custom.json"), None), {})]
 
 
 def test_profile_switches_stop_only_unselected_ports(tmp_path, monkeypatch):
     stopped = []
     monkeypatch.setattr(stack, "stop_persistent_servers", lambda services: stopped.extend(services) or True)
-    processes, _ = stack._build_processes("default", "dual_48G_ada")
+    processes, _ = stack._build_processes(gpu_profile="dual_48G_ada")
     stack._stop_unselected_services(processes)
     assert ("speaker-stt", 8102) not in stopped
-    assert {8103, 9010} <= {port for _, port in stopped}
+    assert {8103, 8107} <= {port for _, port in stopped}
     stopped.clear()
     profile = tmp_path / "models.batch.json"
-    body = json.loads(stack._profile_path("default").read_text())
+    body = json.loads((stack._BASE / "yaml/models.default.json").read_text())
     body.pop("services")
     body["models"]["stt"]["deployment"]["ownership"] = "managed"
     profile.write_text(json.dumps(body))
-    processes, _ = stack._build_processes(str(profile), "dual_48G_ada")
+    processes, _ = stack._build_processes(profile, "dual_48G_ada")
     stack._stop_unselected_services(processes)
     assert ("speaker-stt", 8102) in stopped
     assert ("stt", 8103) not in stopped
@@ -117,7 +117,7 @@ def test_speaker_cleanup_uses_configured_port_not_default(tmp_path, monkeypatch)
         "models": {}, "services": {"speaker-stt": {"ownership": "managed"}},
     }))
     monkeypatch.setattr(stack, "_BASE", tmp_path)
-    processes, _ = stack._build_processes(str(profile), "custom")
+    processes, _ = stack._build_processes(profile, "custom")
     assert processes[0].port == 12345
     assert stack._known_service_ports() == [("speaker-stt", 12345)]
 

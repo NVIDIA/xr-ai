@@ -129,7 +129,7 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
     ("service", "config_name", "gpu"),
     [
         ("embedding", "embedding_server.yaml", "0"),
-        ("stt", "stt_server.yaml", "1"),
+        ("speaker-stt", "speaker_stt.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(

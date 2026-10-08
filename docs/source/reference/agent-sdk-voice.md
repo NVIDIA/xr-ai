@@ -277,8 +277,8 @@ uv --config-file uv.toml run --project model-server-samples/model-servers \
 It uses `model-server-samples/model-servers/yaml/<gpu-profile>/speaker_stt.yaml`
 for placement and capacity, waits for decoder warmup, and reuses matching warm
 instances. `model_servers --stop` includes the speaker service. Stop the stack
-before changing its speaker-service YAML. The `vlm_llm_nim` profile and independent
-`model-servers-nim` stack retain ordinary STT. Auto-selected workers use their
+before changing its speaker-service YAML. The separate `model-servers-nim`
+stack retains its existing speech services. Auto-selected workers use their
 existing NIM adapters when speaker ASR is unavailable.
 
 The default profile does not start batch STT. Consumers that require it can
