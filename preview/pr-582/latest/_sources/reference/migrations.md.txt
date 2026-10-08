@@ -5,6 +5,57 @@
 
 # Release migration
 
+## LiveKit sample credentials
+
+Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to {doc}`/getting_started/credentials` for fixed-pair configuration.
+
+## Swift microphone cleanup errors
+
+`StreamSession.disconnect()` and `StreamingBackend.disconnect()` now throw
+cleanup errors after closing the transport. Update callers to use `try await`
+and handle failures: capture may still be running even though the connection
+has closed. Retain the same session and retry `disconnect()` or `stopAudio()`
+until cleanup succeeds before discarding it. Connecting that same LiveKit
+backend also retries its pending cleanup before opening another connection.
+A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
+satisfy the throwing protocol requirement.
+
+## Launcher failure exit statuses
+
+Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.
+
+The launcher preserves positive child exit codes, maps signal termination to
+`128 + signal number`, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+{doc}`../components/launcher-and-process-model` for failure diagnostics and
+shutdown behavior.
+
+## Voice sample conversation defaults
+
+The shipped voice samples now require `Hey agent, let's start talking` after
+connecting, then accept speech without a wake phrase until
+`Hey agent, let's stop talking`. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.
+
+Set `conversation.require_wake_phrase: true` in the sample's voice-gate YAML to
+keep wake phrases during an active conversation. Set
+`conversation.enabled: false` to restore the original wake-only behavior, or
+always-on dispatch when `magic_phrases` is empty. Restart workers after editing
+these settings. Refer to {ref}`voice-conversation-controls`.
+
+Only final transcripts during an active conversation reach
+`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -78,8 +129,9 @@ that require the former behavior can explicitly pass
   timeouts fail startup. Check the registration error in the hub logs rather
   than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
-  Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
-  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
+  The YAML loader generates a fresh pair when both values are missing or blank.
+  Set both `api_key` and `api_secret` in a private `device_io_hub.yaml`, or inject
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, to use a fixed pair.
 - Boolean service settings now require YAML booleans or the strings `true`,
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of

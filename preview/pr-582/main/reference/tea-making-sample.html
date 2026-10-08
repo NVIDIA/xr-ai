@@ -516,7 +516,12 @@ Agent, start recording the transcript.
 </table>
 </div>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
-behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.</p>
+behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
+Both presets now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
+then accept speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
+Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the normal preset to require its
+configured wake phrases. Disable conversation controls in the always-on preset
+to restore immediate speech dispatch. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
 host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
 development network and restrict TCP port 8092 accordingly. Durable JSONL
@@ -551,9 +556,10 @@ events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
 The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances; it
 does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
-Wake-word gating is the sample default; callers can explicitly select
-always-on speech. Every spoken response is also sent to the connection client
-on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.
+The sample accepts speech without a wake phrase during an active conversation;
+callers can enable its configured wake phrases. Every spoken response is also
+sent to the connection client on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render
+accessible text alongside audio.
 Raw streamed responses are finalized there as soon as their content completes,
 and batched responses are finalized as soon as their rewrite completes. The
 voice aggregator’s playback reservation affects only subsequent speech
@@ -734,7 +740,7 @@ temporary worker configuration with absolute paths. Edit the files under
 <td><p>Typed state, steps, triggers, evidence, tool access, transitions, and user messages</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.always-on.yaml</span></code></p></td>
-<td><p>Wake-word and always-on speech presets</p></td>
+<td><p>Conversation controls and optional wake phrases</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/rag_service.yaml</span></code></p></td>
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>

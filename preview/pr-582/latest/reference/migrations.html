@@ -427,6 +427,54 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="livekit-sample-credentials">
+<h2>LiveKit sample credentials<a class="headerlink" href="#livekit-sample-credentials" title="Link to this heading">#</a></h2>
+<p>Shipped DeviceIOHub YAML files now leave <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for fixed-pair configuration.</p>
+</section>
+<section id="swift-microphone-cleanup-errors">
+<h2>Swift microphone cleanup errors<a class="headerlink" href="#swift-microphone-cleanup-errors" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">StreamSession.disconnect()</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingBackend.disconnect()</span></code> now throw
+cleanup errors after closing the transport. Update callers to use <code class="docutils literal notranslate"><span class="pre">try</span> <span class="pre">await</span></code>
+and handle failures: capture may still be running even though the connection
+has closed. Retain the same session and retry <code class="docutils literal notranslate"><span class="pre">disconnect()</span></code> or <code class="docutils literal notranslate"><span class="pre">stopAudio()</span></code>
+until cleanup succeeds before discarding it. Connecting that same LiveKit
+backend also retries its pending cleanup before opening another connection.
+A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
+satisfy the throwing protocol requirement.</p>
+</section>
+<section id="launcher-failure-exit-statuses">
+<h2>Launcher failure exit statuses<a class="headerlink" href="#launcher-failure-exit-statuses" title="Link to this heading">#</a></h2>
+<p>Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.</p>
+<p>The launcher preserves positive child exit codes, maps signal termination to
+<code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
+shutdown behavior.</p>
+</section>
+<section id="voice-sample-conversation-defaults">
+<h2>Voice sample conversation defaults<a class="headerlink" href="#voice-sample-conversation-defaults" title="Link to this heading">#</a></h2>
+<p>The shipped voice samples now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after
+connecting, then accept speech without a wake phrase until
+<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the sample’s voice-gate YAML to
+keep wake phrases during an active conversation. Set
+<code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code> to restore the original wake-only behavior, or
+always-on dispatch when <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> is empty. Restart workers after editing
+these settings. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
+<p>Only final transcripts during an active conversation reach
+<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.</p>
+</section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
 <p>Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -496,8 +544,9 @@ segments trigger bounded recreation; incompatible layouts and acknowledgement
 timeouts fail startup. Check the registration error in the hub logs rather
 than treating a running process as ready.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
-Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
-<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
+The YAML loader generates a fresh pair when both values are missing or blank.
+Set both <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in a private <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code>, to use a fixed pair.</p></li>
 <li><p>Boolean service settings now require YAML booleans or the strings <code class="docutils literal notranslate"><span class="pre">true</span></code>,
 <code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
@@ -672,6 +721,10 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-sample-conversation-defaults">Voice sample conversation defaults</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>

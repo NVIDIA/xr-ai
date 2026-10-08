@@ -517,6 +517,8 @@ set <code class="docutils literal notranslate"><span class="pre">listening_chime
 <dd><p>Load + parse a voice_gate YAML file into a <a class="reference internal" href="#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code></a>.</p>
 <p>Schema: a top-level mapping with keys <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> (list[str] or
 bare str), <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code> (bool), <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> (float).
+An optional <code class="docutils literal notranslate"><span class="pre">conversation</span></code> mapping configures microphone start and stop
+controls in the unified voice pipeline.
 Missing file or empty file → returns the dataclass defaults (gate
 disabled / always-on). <code class="docutils literal notranslate"><span class="pre">magic_phrases:</span> <span class="pre">null</span></code> and trailing whitespace
 in phrases are normalized the same way the inline-block parser did.</p>

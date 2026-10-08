@@ -600,7 +600,7 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 <td><p>Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
-<td><p>Always-on speech or wake phrases, listening chime, and follow-up window</p></td>
+<td><p>Conversation controls, optional wake phrases, listening chime, and follow-up window</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Model adapters and shared endpoints</p></td>
@@ -623,6 +623,9 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 </tbody>
 </table>
 </div>
+<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
+wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for configurable phrases and wake gating.</p>
 <p><code class="docutils literal notranslate"><span class="pre">NV_DEVICE_PROFILE</span></code> in the environment overrides
 <code class="docutils literal notranslate"><span class="pre">cloudxr_env.NV_DEVICE_PROFILE</span></code> in <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code>. <code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code> similarly
 overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin</span></code> in <code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code>. Use a GPU index reported by

@@ -654,13 +654,17 @@ to tell the launcher not to kill the wrapper on shutdown.</p>
 <p><em>container_name</em> is only consulted in docker mode. Use a stable,
 service-specific name (e.g. <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-&lt;entry-point&gt;</span></code>) so the stop
 helper can find it.</p>
-<p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
-missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
+<p>Docker mode resolves <em>model</em> from the mounted <em>model_cache</em> inside the
+container and serves the cached snapshot directory under
+<code class="docutils literal notranslate"><span class="pre">--served-model-name</span></code> without contacting the Hub. Only when the snapshot
+is absent or incomplete does it verify a Xet-capable Hub, repairing a
+missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel, and download the snapshot before
+CUDA starts. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code> a missing snapshot fails startup
+instead. <em>extra_pip</em> is an additional
 docker-only list of pip-installable package specs for model architectures
 whose wheels the image doesn’t bundle. Silently ignored in pip mode (deps
 belong in the wrapper’s pyproject.toml there).</p>
-<p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
-prefetching and syncing the Hugging Face snapshot before CUDA starts, and
+<p><em>spark_uma</em> enables the DGX Spark cold-start safeguard in docker mode:
 one bounded restart of a container attempt launched by this wrapper after
 a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
 Docker lifecycle option, preserving the one-field backend switch used by

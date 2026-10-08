@@ -486,8 +486,11 @@ session remains private. Applications that need a shared public
 <p>For the startup probe contract, refer to <a class="reference internal" href="python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.
 For deployment order and migration of existing applications, refer to
 <a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
-<p>Each non-empty final STT result is queued for publication on
-<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before wake-phrase filtering. Accepted speech and
+<p>Each non-empty final STT result during an active conversation is queued for
+publication on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before optional wake-phrase filtering.
+Conversation control phrases and speech while the conversation is closed are
+withheld. With conversation controls disabled, all non-empty final results are
+published before wake-phrase filtering. Accepted speech and
 untopiced typed text become <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages
 are never interpreted as user text. Optional participant join, leave, and
 interruption topics let application agents own their state cleanup.</p>
@@ -564,22 +567,62 @@ its terminator or idle expiry so stale fragments cannot reopen speech.</p>
 runtime shutdown. The aggregator logs accepted contributions discarded during
 release or shutdown.</p>
 </section>
+<section id="conversation-controls">
+<span id="voice-conversation-controls"></span><h2>Conversation controls<a class="headerlink" href="#conversation-controls" title="Link to this heading">#</a></h2>
+<p>The shipped voice samples start with their microphone conversation closed.
+After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak naturally
+without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the
+conversation and interrupt the current response. A short <code class="docutils literal notranslate"><span class="pre">stop</span></code> interrupts the
+response while keeping the conversation open.</p>
+<p>Configure the phrases in each sample’s voice-gate YAML:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+</pre></div>
+</div>
+<p>Matching ignores case, punctuation, and apostrophes; <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">us</span></code> also matches
+<code class="docutils literal notranslate"><span class="pre">let's</span></code>. Exact control prefixes can span final STT results: <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code>, followed
+by <code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, starts the conversation if their speech onsets fall
+within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>. An unrelated or unrecognized utterance, an expired
+window, or a disconnect discards pending fragments. Quoting the phrase inside a
+longer utterance does not activate it. Control phrases never become agent
+queries or transcript-topic events.</p>
+<p>These controls use the sample’s existing STT service, including the independent
+NIM model stack. They do not identify speakers or reject other voices on the
+same microphone. Conversation state is scoped to each connected participant.
+Untopiced typed messages bypass speech gating and are delivered as queries even
+while the microphone conversation is closed. They cannot open or close a
+microphone conversation.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> during
+an active conversation, preserving the optional chime and follow-up grace
+window. Set <code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code>, or omit the mapping, for the original
+wake-only behavior. An empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> list in that mode restores
+immediate always-on speech dispatch.</p>
+</section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
 <p>VAD and STT probe the opening audio while the user is still speaking. Probe
-audio includes a silent tail so offline STT can finalize a phrase. A partial
-global-STOP match interrupts active output immediately, but it does not commit
+audio includes a silent tail so offline STT can finalize a phrase. During an
+active conversation, a partial global-STOP match interrupts output immediately,
+but it does not commit
 the user’s intent: final STT remains authoritative for global-stop versus query
 routing. A slow probe receives a short grace period and is then cancelled.
-With wake phrases configured, one utterance can make up to three bounded partial
-STT requests plus the authoritative final request. Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to
+With wake phrases or conversation controls configured, one utterance can make
+up to three bounded partial STT requests plus the authoritative final request. Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to
 zero to disable the additional requests and early interruption path.</p>
-<p>A wake phrase is accepted at the beginning of a transcript or after
-sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
-quote. Text before the boundary and the phrase are removed. A phrase after a
-comma, semicolon, or inside ordinary prose does not activate the gate. Partial
-STOP classification checks both raw text and the tail after a configured wake
-phrase, so <code class="docutils literal notranslate"><span class="pre">stop</span></code> and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> interrupt equally early.</p>
+<p>When wake gating is active, a wake phrase is accepted at the beginning of a
+transcript or after sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by
+whitespace or a closing quote. Text before the boundary and the phrase are
+removed. A phrase after a comma, semicolon, or inside ordinary prose does not
+activate the gate. In that mode, partial STOP classification checks both raw
+text and the tail after a configured wake phrase, so <code class="docutils literal notranslate"><span class="pre">stop</span></code> and
+<code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> interrupt equally early. With natural speech enabled by
+<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">false</span></code>, final transcripts remain intact and
+only a standalone short stop uses the global-stop path; <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code>
+remains a query.</p>
 <p>Global STOP uses a closed imperative grammar for direct requests such as
 <code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code>, with a bounded set
 of conversational prefixes and punctuation. Up to two prefixes may be drawn
@@ -659,6 +702,7 @@ not client playback.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-agent">Voice agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-and-interruption">Voice output and interruption</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-controls">Conversation controls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gating-and-early-probes">Voice gating and early probes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relay-telemetry">Relay telemetry</a></li>
 </ul>

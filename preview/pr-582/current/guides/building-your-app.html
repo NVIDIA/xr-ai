@@ -648,10 +648,10 @@ and the “Simple VLM example” and “This sample” descriptions, and remove 
 the Simple VLM sample reference. In particular, make sure the name replacements
 did not leave a nonexistent <code class="docutils literal notranslate"><span class="pre">/reference/my-app.html</span></code> link. Change its working
 directory to <code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code> and use the model-server command shown below.</p>
-<p>The copied DeviceIOHub YAML contains development-only credential placeholders.
-They can remain in place: <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> from the
-environment overwrite them at startup. Never put actual keys or tokens in
-source files. Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for the supported
+<p>The copied DeviceIOHub YAML leaves credentials blank, so the hub generates a
+fresh pair at startup. To use a fixed pair, set <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> in the launch environment. Never put actual keys or tokens
+in source files. Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for the supported
 credential sources.</p>
 <p>Frame selection and vision inference use separate public paths: import
 live-frame selection from <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.current_frame</span></code> and image inference from

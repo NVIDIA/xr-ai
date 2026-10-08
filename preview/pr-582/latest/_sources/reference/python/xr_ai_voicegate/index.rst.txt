@@ -108,6 +108,8 @@ Package Contents
 
    Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+   An optional ``conversation`` mapping configures microphone start and stop
+   controls in the unified voice pipeline.
    Missing file or empty file → returns the dataclass defaults (gate
    disabled / always-on). ``magic_phrases: null`` and trailing whitespace
    in phrases are normalized the same way the inline-block parser did.

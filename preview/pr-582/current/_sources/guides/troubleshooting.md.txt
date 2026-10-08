@@ -8,6 +8,17 @@
 Common issues and their fixes. If you hit something not listed here, open an
 issue on the [repository](https://github.com/NVIDIA/xr-ai).
 
+## Investigating a failed run
+
+Start with the launcher's failure summary to identify the failed service,
+command, configuration, and exit status. Inspect that service's terminal
+output and the run-log directory printed in the summary for the underlying
+error and recovery advice. If the run-log directory is unavailable, use the
+terminal output.
+
+Refer to {doc}`../components/launcher-and-process-model` for failure behavior,
+exit codes, and process ownership.
+
 ## Setup-time issues
 
 (dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
@@ -41,10 +52,9 @@ and cleanup aborts because ownership could not be verified.
 
 **Diagnosis:** run `docker ps` without `sudo` from the same login session. If
 it reports permission denied for `/var/run/docker.sock`, the launcher cannot
-inspect persistent containers. Its internal Docker check suppresses stderr,
-so running the command directly exposes the underlying error. These cleanup
-errors can have other causes; use the Docker output to confirm socket access
-is the problem.
+inspect persistent containers. The ownership check includes Docker's error
+output in the launch log. These cleanup errors can have other causes; use
+that output or the direct command to confirm socket access is the problem.
 
 **Fix:** complete the Docker group setup and refresh the launch session as
 described in {ref}`docker-host-setup`. Verify that `docker ps` succeeds without
@@ -101,12 +111,12 @@ If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.
 
-**Fix:** the bundled `spark` profile enables `spark_uma` for each Docker-backed
-vLLM service. The wrapper downloads and syncs the complete Hugging Face
-snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
-writeback allocations do not overlap the CUDA context allocation. If the
-driver allocation still fails, the wrapper waits for reclamation and restarts
-the stopped container once. Only the wrapper that launched the current
+**Fix:** every Docker-backed vLLM service resolves its Hugging Face snapshot
+before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
+that point, so transfer, reconstruction, and dirty writeback allocations do not
+overlap the CUDA context allocation. The bundled `spark` profile also enables
+`spark_uma` for each of these services: if the driver allocation still fails,
+the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
 container attempt may restart it; another wrapper that adopts the running
 container observes it without taking ownership. The retry applies only when
 Docker reports that the container was not OOM-killed and the traceback reaches
@@ -175,8 +185,8 @@ Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
 settings into a custom Spark profile. Do not flush the filesystem cache
 routinely for this symptom: doing so makes the next checkpoint read cold and
 can reproduce the profiling variation. An explicit KV cache cannot bypass an
-earlier CUDA driver-allocation failure; the prefetch and bounded retry are
-separate safeguards for that stage.
+earlier CUDA driver-allocation failure; the pre-CUDA snapshot download and
+bounded retry are separate safeguards for that stage.
 
 ### DGX Spark — LOVR auto-download is not supported
 
@@ -499,6 +509,22 @@ produce the first buffer before publication. The current client enables prepared
 recording mode before publishing to make that first buffer available. Stopping
 the microphone then disables prepared input while leaving output active, so the
 orange microphone indicator clears without silencing agent audio.
+
+Stopping the microphone unpublishes its audio track; starting it creates a new
+publication instead of unmuting the old one. The hub therefore observes
+`track_unsubscribed` and `track_subscribed` events, and a new audio `track_id`
+after each restart. These events are expected during manual stops and microphone
+recovery; the room connection stays open.
+
+If microphone cleanup fails while connected, the client reports that capture
+may still be running, shows “Cleanup required,” and keeps Stop available.
+Retry Stop before starting again. If Stop keeps failing, use Disconnect to close
+the transport. Retrying a partial teardown does not guarantee recovery.
+If cleanup fails during Disconnect, the connection still closes, but the client
+reports the cleanup failure and retains the old session's cleanup resources.
+Reconnect retries that cleanup before creating another session; if it still
+fails, the client stays disconnected. A failed manual Start retains the user's
+microphone intent, so later interruption recovery can retry capture.
 
 Phone calls, Siri, route changes, media-service resets, another capture app, or
 closing an XR space can interrupt audio or camera while the control still shows

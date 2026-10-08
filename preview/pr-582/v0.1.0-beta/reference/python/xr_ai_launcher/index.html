@@ -723,8 +723,11 @@ otherwise the child inherits the parent’s.</p>
 <dd><p>A group of processes that start simultaneously.</p>
 <p>The launcher spawns every member at once and waits for <em>all</em> of them to
 signal readiness before advancing to the next item in the stack sequence.
-If any member exits before signaling ready the launcher shuts everything
-down, just as it would for a serial process.</p>
+A member that signals readiness remains monitored until the whole group is
+ready. An unexpected exit during that interval shuts everything down. A
+successful <code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
+<code class="docutils literal notranslate"><span class="pre">run_stack(...,</span> <span class="pre">exit_after_ready=True)</span></code> permits bootstrap wrappers to
+outlive the launcher.</p>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Parallel</span><span class="p">([</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
@@ -824,7 +827,12 @@ it must <code class="docutils literal notranslate"><span class="pre">Path(ready_
 is printed every five seconds so model-loading or CloudXR start-up
 remains visible.</p>
 <p>After all processes are ready the launcher monitors them: if any exits,
-all others are terminated and the launcher exits.  Pass
+the remaining foreground processes are terminated. The launcher preserves
+a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an
+unexpected zero exit to 1.
+Spawn errors, readiness failures, and unexpected monitored exits print a
+concise summary with the constructed command and an existing configured
+run-log directory when available. Pass
 <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to return immediately once everything is ready
 instead — useful for launchers whose processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code>
 and should outlive the orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>
