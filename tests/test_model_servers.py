@@ -21,12 +21,6 @@ _model_servers = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_model_servers)
 
 
-@pytest.fixture(autouse=True)
-def _isolate_speaker_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stack unit tests must never contact an operator's persisted IPC service.
-    monkeypatch.setattr(_model_servers, "_stop_speaker_endpoint", lambda _endpoint: None)
-
-
 _OMNI_PATH = (
     _REPO_ROOT
     / "services/nemotron-omni-llm/nemotron_omni_llm_server/__main__.py"
@@ -65,7 +59,7 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, g
     assert [process.name for process in processes] == [
         "speaker-stt", "tts", "omni", "vlm", "embedding",
     ]
-    assert [process.port for process in processes] == [None, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8102, 8105, 8108, 8100, 8109]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -122,6 +116,7 @@ def test_read_service_port_rejects_invalid_values(
 def test_known_ports_are_discovered_from_service_yaml() -> None:
     assert set(_model_servers._known_service_ports()) == {
         ("stt", 8103),
+        ("speaker-stt", 8102),
         ("tts", 8105),
         ("agent-llm", 8107),
         ("omni", 8108),
@@ -238,6 +233,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     _model_servers._stop_models()
 
     assert set(stopped) == {
+        ("speaker-stt", 8102),
         ("stt", 8103),
         ("tts", 8105),
         ("agent-llm", 8107),
@@ -274,7 +270,7 @@ def test_starting_profile_stops_unselected_services(
     processes, _ = _model_servers._build_processes()
     _model_servers._stop_unselected_services(processes)
 
-    assert {port for _, port in stopped} == {8107}
+    assert {port for _, port in stopped} == {8103, 8107}
 
 
 @pytest.mark.parametrize(
@@ -359,7 +355,7 @@ def test_selected_service_config_must_declare_http_port(
     config = tmp_path / "yaml" / "custom" / "pocket_tts_server.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("host: 0.0.0.0\n", encoding="utf-8")
-    (config.parent / "speaker_stt.yaml").write_text("endpoint: ipc:///tmp/test-speaker.sock\n")
+    (config.parent / "speaker_stt.yaml").write_text("host: 127.0.0.1\nport: 8102\n")
     profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 

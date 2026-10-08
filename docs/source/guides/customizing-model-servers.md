@@ -54,10 +54,10 @@ The shipped voice samples enable `speaker.enabled` in their voice-gate YAML.
 Out-of-tree workers must enable enrollment and restart, or select batch STT
 explicitly in a custom server profile. Refer to
 {doc}`/reference/agent-sdk-voice` for enrollment configuration and interaction
-with wake phrases. This local IPC service does not change the workers' model
+with wake phrases. This streaming HTTP service does not change the workers' batch model
 adapter JSON.
 
-Speaker ASR is an operator-owned private IPC service. The default profile
+Speaker ASR is an operator-owned HTTP service on port 8102. The default profile
 declares it outside the typed model-client entries:
 
 ```json
@@ -67,7 +67,7 @@ declares it outside the typed model-client entries:
 ```
 
 The model-stack launcher owns this declaration; it does not change the shared
-model-client or launcher SDK schemas. Its endpoint and model settings live in
+model-client or launcher SDK schemas. Its host, port and model settings live in
 `speaker_stt.yaml`. The profile's `models.stt` entry remains an external
 batch-STT adapter for consumers of the existing SDK, and does not launch an HTTP
 STT server. To run batch STT instead, remove the private `speaker-stt`
