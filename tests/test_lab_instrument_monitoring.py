@@ -276,7 +276,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
         "speaker": {
             "enabled": True,
             "backend": "auto",
-            "endpoint": "ipc:///tmp/xr-ai-speaker-stt.sock",
+            "base_url": "http://127.0.0.1:8102",
         },
     }
     device_1 = config.device_map.resolve(MarkerType.QR_CODE, "device-1")

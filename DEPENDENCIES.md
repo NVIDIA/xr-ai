@@ -133,6 +133,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `riva`:
     - `nvidia-riva-client>=2.17`
     - `urllib3>=2.8.0`
+  - `speaker`:
+    - `websockets>=13.0`
 - Commands: none
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
@@ -190,15 +192,13 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `pipecat-ai>=1.6`
   - `nltk!=3.10.1`
   - `numpy>=1.24`
   - `scipy>=1.11`
-  - `pyzmq>=27.0`
-  - `msgpack>=1.0`
 - Optional dependency groups: none
 - Commands: none
 
@@ -968,7 +968,8 @@ Keep non-obvious fan-out in the same change:
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
   SDKs, with one scoped exception: the optional `riva` extra adds
   `nvidia-riva-client` for gRPC-only Riva speech NIMs (see AGENTS.md); the
-  base install is unchanged.
+  base install is unchanged. The `speaker` extra adds `websockets` for the
+  private ordered speaker-ASR stream used by `xr-ai-voice`.
 - `agent-sdk/xr-ai-tools/` keeps capability-specific dependencies optional;
   spatial math remains CPU-only.
 - Agent workers use public SDK packages and task-specific libraries. They never
