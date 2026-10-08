@@ -44,6 +44,9 @@ from .._frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
     TextResponseEndFrame,
+    _SpeakerEnrollmentFrame,
+    _SpeakerGatedQueryFrame,
+    _SpeakerTranscriptionFrame,
     _UnrecognizedSpeechFrame,
 )
 
@@ -83,6 +86,7 @@ class VoiceGateProcessor(FrameProcessor):
         self._wake_phrase = max(cfg.magic_phrases, key=len, default="")
         self._conversation_active: set[str] = set()
         self._controls: dict[str, _ControlMatcher] = {}
+        self._use_speaker_asr = cfg._speaker is not None
         self._on_conversation_transcript: Callable[[str, str, int], Awaitable[None]] | None = None
         self._gate = gate or VoiceGate(cfg, audio_sink=self, tts=tts)
         self._gate.bind(
@@ -98,6 +102,7 @@ class VoiceGateProcessor(FrameProcessor):
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
         # so the value is read back inside that callback.
         self._feeding_pts_us: int | None = None
+        self._feeding_speaker_id: int | None = None
 
     @property
     def gate(self) -> VoiceGate:
@@ -163,6 +168,18 @@ class VoiceGateProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, _SpeakerEnrollmentFrame):
+            if frame.state == "reset":
+                self._conversation_active.discard(frame.participant_id)
+                self._controls.pop(frame.participant_id, None)
+                self._gate.forget(frame.participant_id)
+                self._early_wake_ack.discard(frame.participant_id)
+            elif frame.state in {"enrolled", "released"}:
+                await self._set_conversation_active(frame.participant_id, frame.state == "enrolled")
+            else:
+                raise ValueError(f"unknown speaker enrollment state: {frame.state}")
+            return
+
         if isinstance(frame, _UnrecognizedSpeechFrame):
             self._controls.pop(frame.participant_id, None)
             return
@@ -202,6 +219,7 @@ class VoiceGateProcessor(FrameProcessor):
         # Gate callbacks run synchronously with feed, so capture metadata belongs
         # to this transcript until that call completes.
         self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
+        self._feeding_speaker_id = frame.speaker_id if isinstance(frame, _SpeakerTranscriptionFrame) else None
         self._feeding_speech_transcript = bool(
             frame.transport_source and frame.transport_source == frame.user_id
         )
@@ -212,6 +230,7 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._gate.feed(frame.user_id, frame.text)
         finally:
             self._feeding_pts_us = None
+            self._feeding_speaker_id = None
             self._feeding_speech_transcript = False
             self._early_wake_ack.discard(frame.user_id)
 
@@ -219,10 +238,20 @@ class VoiceGateProcessor(FrameProcessor):
         cfg = self._conversation_cfg
         assert cfg is not None
         pid = frame.user_id
+        active = pid in self._conversation_active
+        if self._use_speaker_asr:
+            # The inference service sees unrecognized and competing speech too.
+            # Its matcher alone decides whether a fragment is a control.
+            if not isinstance(frame, _SpeakerTranscriptionFrame):
+                return
+            if frame._control_pending:
+                await self._handle_pending_control(pid, frame.text)
+            elif active:
+                await self._dispatch_conversation_transcript(frame)
+            return
         matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
         action = matcher._feed(frame.text, key=pid, at_s=at_s)
-        active = pid in self._conversation_active
         if action == "start":
             if not active:
                 await self._set_conversation_active(pid, True)
@@ -232,13 +261,19 @@ class VoiceGateProcessor(FrameProcessor):
                 await self._set_conversation_active(pid, False)
             return
         if action == "pending":
-            # A standalone wake phrase can also start a control. Preserve its
-            # follow-up window while withholding the possible control prefix.
-            if active and cfg.require_wake_phrase and strip_magic(self._gate._magic_re, frame.text) == "":
-                await self._gate.feed(pid, frame.text)
+            await self._handle_pending_control(pid, frame.text)
             return
         if active:
             await self._dispatch_conversation_transcript(frame)
+
+    async def _handle_pending_control(self, pid: str, text: str) -> None:
+        cfg = self._conversation_cfg
+        assert cfg is not None
+        # A standalone wake phrase can also start a control. Preserve its
+        # follow-up window while withholding the possible control prefix.
+        if (pid in self._conversation_active and cfg.require_wake_phrase
+                and strip_magic(self._gate._magic_re, text) == ""):
+            await self._gate.feed(pid, text)
 
     async def _dispatch_conversation_transcript(self, frame: TranscriptionFrame) -> None:
         cfg = self._conversation_cfg
@@ -266,7 +301,8 @@ class VoiceGateProcessor(FrameProcessor):
         self._early_wake_ack.discard(pid)
         if active:
             self._conversation_active.add(pid)
-            await self._emit_text_response(pid, "I'm listening now.")
+            text = "I'm listening to you now." if self._use_speaker_asr else "I'm listening now."
+            await self._emit_text_response(pid, text)
             return
         self._conversation_active.discard(pid)
         stop = InterruptionFrame()
@@ -277,7 +313,9 @@ class VoiceGateProcessor(FrameProcessor):
     async def _on_gate_query(self, pid: str, text: str, fresh_match: bool) -> None:
         if fresh_match and not self._feeding_speech_transcript:
             await self._emit_chime(pid, early=False)
-        await self.push_frame(GatedQueryFrame(
+        query_type = _SpeakerGatedQueryFrame if self._feeding_speaker_id is not None else GatedQueryFrame
+        speaker = {"speaker_id": self._feeding_speaker_id} if self._feeding_speaker_id is not None else {}
+        await self.push_frame(query_type(
             participant_id = pid,
             text           = text,
             fresh_match    = fresh_match,
@@ -289,6 +327,7 @@ class VoiceGateProcessor(FrameProcessor):
                 if self._feeding_pts_us is not None
                 else time.time_ns() // 1_000
             ),
+            **speaker,
         ))
 
     async def _on_gate_stop(self, pid: str) -> None:

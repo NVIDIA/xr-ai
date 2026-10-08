@@ -81,6 +81,21 @@ also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
 proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
 EULA. The lock also retains protobuf 6.33.5 for a separate dependency branch.
 
+### Speaker enrollment runtime and models
+
+The optional `services/speaker-stt` inference environment uses NVIDIA NeMo
+Speech at commit `1688cc3d6a9ade854f544987810c53f605dc86fc` under Apache-2.0,
+and its required Lhotse `2.0.0a6` release under Apache-2.0. The Lhotse wheel
+SHA-256 is `15145bd072a3d6c5f6b52b07e40f0425f7189ec3a409fedd416c04331422cac3`.
+No upstream implementation source or model weights are redistributed in XR AI.
+
+The inference process downloads
+[`nvidia/Nemotron-3-Diarization`](https://huggingface.co/nvidia/Nemotron-3-Diarization)
+under OpenMDW-1.1 and
+[`nvidia/multitalker-parakeet-streaming-0.6b-v1`](https://huggingface.co/nvidia/multitalker-parakeet-streaming-0.6b-v1)
+under the NVIDIA Open Model License. Refer to the corresponding model
+repositories for their license texts and download terms.
+
 ### Pocket TTS model and voice
 
 Pocket TTS 3.0.2 pins the following downloaded artifacts for the default

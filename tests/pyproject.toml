@@ -71,9 +71,9 @@ packages = ["xr_ai_tests"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["."]
-# stt-server is on pythonpath (not a dependency) so the endpoint tests can
-# import its FastAPI app without pulling the NeMo dependency tree.
-pythonpath   = ["../services/openxr-service", "../services/stt-server"]
+# Inference services are on pythonpath rather than dependencies so synthetic
+# endpoint and routing tests do not install the NeMo inference environments.
+pythonpath   = ["../services/openxr-service", "../services/stt-server", "../services/speaker-stt"]
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     "integration: spawns a real server subprocess (CPU-only); runs in CI",

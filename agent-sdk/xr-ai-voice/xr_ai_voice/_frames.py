@@ -13,7 +13,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pipecat.frames.frames import DataFrame
+from pipecat.frames.frames import DataFrame, TranscriptionFrame
+
+
+@dataclass(kw_only=True)
+class _SpeakerTranscriptionFrame(TranscriptionFrame):
+    """An accepted speaker-ASR transcript with its session-local label."""
+
+    speaker_id: int | None
+    _control_pending: bool = False
+
+
+@dataclass
+class _SpeakerEnrollmentFrame(DataFrame):
+    """Private enrollment transition consumed by the conversation gate."""
+
+    participant_id: str
+    state: str
+
+
+@dataclass
+class _SpeakerDiagnosticFrame(DataFrame):
+    """Display-only speaker activity or ignored text; never an agent query."""
+
+    participant_id: str
+    speaker_id: int
+    status: str
+    text: str
+    pts_us: int
 
 
 @dataclass
@@ -59,6 +86,13 @@ class GatedQueryFrame(DataFrame):
     text: str
     fresh_match: bool
     pts_us: int
+
+
+@dataclass(kw_only=True)
+class _SpeakerGatedQueryFrame(GatedQueryFrame):
+    """Keep the speaker label attached through asynchronous query delivery."""
+
+    speaker_id: int
 
 
 @dataclass

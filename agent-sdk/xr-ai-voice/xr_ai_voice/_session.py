@@ -21,6 +21,7 @@ from ._pipeline import _build_voice_pipeline
 from ._processors.io import _VoiceIOProcessor
 from ._processors.vad_stt import VadConfig
 from ._readiness import ProbeFn, wait_for_services
+from ._speaker_client import _select_speaker_asr
 from ._transport import HubVoiceTransport
 from ._types import VoiceInputSink, VoiceResponse
 
@@ -111,6 +112,10 @@ class _VoiceSession:
         """Run media input/output until the pipeline exits."""
         if self._io_processor is not None:
             raise RuntimeError("voice session is already running")
+        use_speaker_asr = await _select_speaker_asr(self.voice_gate._speaker)
+        logger.info("speech backend={} conversation_controls={}",
+                    "diarization" if use_speaker_asr else "ordinary STT (no speaker filtering)",
+                    self.voice_gate._conversation is not None)
         io_processor = _VoiceIOProcessor(
             input_sink,
             transport=self.transport,
@@ -119,7 +124,6 @@ class _VoiceSession:
             on_interrupted=on_interrupted,
             interrupt_on_supersede=interrupt_on_supersede,
         )
-        self._io_processor = io_processor
         _, task = _build_voice_pipeline(
             transport=self.transport,
             stt=self.stt,
@@ -130,7 +134,9 @@ class _VoiceSession:
             on_final_transcript=on_transcript,
             text_topic=self.text_topic,
             idle_timeout_secs=self.idle_timeout_secs,
+            use_speaker_asr=use_speaker_asr,
         )
+        self._io_processor = io_processor
         loop = asyncio.get_running_loop()
         cancel_requested = False
 

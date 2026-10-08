@@ -37,6 +37,17 @@ during startup returns 130. Refer to
 {doc}`../components/launcher-and-process-model` for failure diagnostics and
 shutdown behavior.
 
+## Shared model-stack speaker filtering
+
+The default shared model profile starts Nemotron 3 Diarization with Multitalker
+Parakeet through its private `services` declaration. It stops unselected managed
+batch-STT services and reuses matching warm speaker-ASR instances. Samples with
+`speaker.backend: auto` select the ready speaker service at worker startup.
+The separate NIM sample retains its existing speech configuration.
+To serve batch STT from the default stack, copy its profile, remove
+`services.speaker-stt`, and set `models.stt.deployment.ownership: managed`.
+Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
+
 ## Voice sample conversation defaults
 
 The shipped voice samples now require `Hey agent, let's start talking` after
