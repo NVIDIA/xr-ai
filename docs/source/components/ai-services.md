@@ -22,7 +22,7 @@ recorded video, and document retrieval.
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `services/speaker-stt/` | `speaker_stt` | local IPC | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
+| `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
@@ -52,8 +52,10 @@ the transcript as separate speakers after enrollment: the decoder receives the
 mixed audio with owner and interference masks and is conditioned on the owner.
 Speaker labels are session-local identities.
 
-The process accepts mono signed 16-bit PCM at 16 kHz over its private msgpack
-IPC socket. It serializes inference because model conditioning is mutable.
+The process exposes the same loopback HTTP health and model identity endpoints
+as the other model services. A private WebSocket carries mono signed 16-bit PCM
+at 16 kHz and returns enrollment and transcription events. It serializes
+inference because model conditioning is mutable.
 Opening a session establishes the capture timestamp of its first sample.
 Subsequent audio requests form one ordered, contiguous PCM stream; the service
 derives all later timestamps from the number of samples it has accepted. The
@@ -64,17 +66,19 @@ release a speaker; an enrolled owner's forced segment is still transcribed.
 Start and stop phrases can span utterances within the conversation phrase
 window; another speaker or ambiguous speech clears pending enrollment.
 
-The private protocol makes that ownership explicit: `open` supplies
-`audio_origin_us` once, and `audio` supplies only PCM bytes. Audio requests for
-a session must be serialized in capture order. The service neither reorders
-audio nor guesses whether samples are missing from wall-clock arrival times.
+The private protocol makes that ownership explicit: the opening JSON message
+supplies `audio_origin_us` once, and subsequent binary WebSocket messages
+supply only PCM bytes. Each connection owns one session, and the caller waits
+for the event response before sending the next audio message. Audio must be
+serialized in capture order. The service neither reorders audio nor guesses
+whether samples are missing from wall-clock arrival times.
 
-Configure model IDs, device, precision, an optional socket path and session
-capacity in `services/speaker-stt/speaker_stt.yaml`. By default the socket is
-created in an owner-only directory below `$XDG_RUNTIME_DIR`, or
-`/tmp/xr-ai-<uid>` when that variable is unset. Hardware profiles or
-`CUDA_VISIBLE_DEVICES` select a GPU; the generic configuration uses the first
-visible GPU. From the repository root, start it with:
+Configure model IDs, device, precision, host, port and session capacity
+in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
+`http://127.0.0.1:8102`. Keep the unauthenticated private streaming endpoint on
+a loopback or trusted interface. Hardware profiles or `CUDA_VISIBLE_DEVICES`
+select a GPU; the generic configuration uses the first visible GPU. From the
+repository root, start it with:
 
 ```bash
 uv --config-file uv.toml run --project services/speaker-stt speaker_stt
@@ -89,6 +93,10 @@ The model environment is isolated from workers and the existing batch STT
 service. Model weights are downloaded on first use and then reused from the
 configured cache. As with the sibling NeMo services, existing `HF_HOME` and
 `NEMO_CACHE_DIR` values take precedence over cache defaults.
+
+The WebSocket session is not a public model API. It is reserved for the private
+typed voice integration; applications continue to use the public voice and
+model interfaces rather than connecting to this route directly.
 
 ## Two HuggingFace cache roots
 

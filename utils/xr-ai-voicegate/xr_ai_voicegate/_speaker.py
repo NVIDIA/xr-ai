@@ -6,27 +6,15 @@
 from __future__ import annotations
 
 import math
-import os
-from dataclasses import dataclass, field, fields
-from pathlib import Path
+from dataclasses import dataclass, fields
+from urllib.parse import urlsplit
 
 from ._conversation import _ConversationConfig
 
 
-def _default_endpoint() -> str:
-    runtime = os.environ.get("XDG_RUNTIME_DIR")
-    runtime_path = Path(runtime) if runtime else None
-    root = (
-        runtime_path / "xr-ai"
-        if runtime_path is not None and runtime_path.is_absolute()
-        else Path("/tmp") / f"xr-ai-{os.getuid()}"
-    )
-    return f"ipc://{root / 'speaker-stt.sock'}"
-
-
 @dataclass(frozen=True)
 class _SpeakerConfig(_ConversationConfig):
-    endpoint: str = field(default_factory=_default_endpoint)
+    base_url: str = "http://127.0.0.1:8102"
     activity_threshold: float = 0.7
     silence_duration: float = 0.6
     max_utterance_s: float = 30.0
@@ -45,8 +33,20 @@ class _SpeakerConfig(_ConversationConfig):
             raise ValueError("speaker.enabled must be a boolean")
         cfg = cls(**{k: v for k, v in raw.items() if k != "enabled"})
         cfg._validate()
-        if not isinstance(cfg.endpoint, str) or (not cfg.endpoint.startswith("ipc:///") or cfg.endpoint == "ipc:///"):
-            raise ValueError("speaker.endpoint must be an absolute local ipc:// path")
+        if not isinstance(cfg.base_url, str):
+            raise ValueError("speaker.base_url must be an HTTP origin")
+        parsed = urlsplit(cfg.base_url)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname is None
+            or parsed.port is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("speaker.base_url must be an HTTP origin")
         for name in ("activity_threshold", "silence_duration", "max_utterance_s"):
             value = getattr(cfg, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
