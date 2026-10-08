@@ -22,6 +22,7 @@ recorded video, and document retrieval.
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
@@ -39,6 +40,98 @@ YAML and resolved relative to the YAML file. Self-hosted NIM containers use
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
+
+## Speaker-conditioned STT
+
+`services/speaker-stt` is a private local inference process. It shares
+Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
+while keeping each session's diarization history, enrollment and ASR caches
+separate. A session enrolls one speaker with the configured start phrase and
+releases that identity with the stop phrase. Background voices do not reach
+the transcript as separate speakers after enrollment: the decoder receives the
+mixed audio with owner and interference masks and is conditioned on the owner.
+Before enrollment, each detected speaker has independent conditioned decoding
+and phrase-matching state. Someone already talking does not reserve ownership:
+another speaker can say the start phrase over that conversation and enroll when
+their own utterance completes. Non-speech background noise does not impose a
+silence gate. Each speaker's existing inactivity interval ends their utterance;
+there is no requirement that every speaker become quiet together.
+
+All complete start phrases finalized in one accepted audio step are considered
+before ownership changes. One match enrolls its speaker; multiple matches in
+that step enroll nobody and require a fresh attempt. A phrase finalized later
+cannot take over an existing owner. This is a streaming decision boundary, not
+a guarantee of distinguishing all acoustically simultaneous requests. Speaker
+labels are session-local identities; actual attribution and interference
+suppression require qualification on the intended microphones.
+
+The process follows the model-service HTTP pattern and exposes health and model
+identity endpoints. A private WebSocket carries mono signed 16-bit PCM
+at 16 kHz and returns enrollment and transcription events. It serializes
+inference because model conditioning is mutable.
+Opening a session establishes the capture timestamp of its first sample.
+Subsequent audio requests form one ordered, contiguous PCM stream; the service
+derives all later timestamps from the number of samples it has accepted. The
+caller must close and reopen the session if its capture or transport layer drops
+audio, because that layer owns the information needed to detect the loss.
+Utterances forced to end at the configured duration limit cannot enroll or
+release a speaker; an enrolled owner's forced segment is still transcribed.
+Start and stop phrases can span utterances within the conversation phrase
+window, retaining separate enrollment fragments for each speaker. A truncated
+candidate cannot enroll from the tail of the same continuing speech episode;
+that speaker must end its episode before making another attempt.
+
+The private protocol makes that ownership explicit: the opening JSON message
+supplies `audio_origin_us` once, and subsequent binary WebSocket messages
+supply only PCM bytes. Each connection owns one session, and the caller waits
+for the event response before sending the next audio message. Audio must be
+serialized in capture order. The service neither reorders audio nor guesses
+whether samples are missing from wall-clock arrival times.
+Binary messages retain the existing limit of one second of audio (16,000
+complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
+or incomplete PCM samples are protocol errors. The server's standard transport
+message-size and heartbeat defaults are retained; JSON controls do not inherit
+an unrelated audio-duration limit.
+
+Configure model IDs, device, precision, host, port and session capacity
+in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
+`http://127.0.0.1:8102`. Keep the unauthenticated private streaming endpoint on
+a loopback or trusted interface. Hardware profiles or `CUDA_VISIBLE_DEVICES`
+select a GPU; the generic configuration uses the first visible GPU. From the
+repository root, start it with:
+
+```bash
+uv --config-file uv.toml run --project services/speaker-stt speaker_stt
+```
+
+The service warms both streaming and final decoding before signaling ready.
+Reuse verifies the local listener's managed-process ownership and resolved
+configuration before launching a child; a changed configuration requires
+stopping that process first. A matching listener still warming its models
+refuses another launch rather than allocating a duplicate GPU copy. Persistent
+reuse exits after signaling readiness; monitored reuse keeps its readiness
+proxy alive.
+
+Each session owns one diarization cache and at most eight temporary ASR caches
+before enrollment, bounded by the model's speaker-label capacity. Features and
+model weights are shared. After enrollment only the owner's ASR cache is needed
+unless the dependent diagnostics layer requests other transcripts. With the
+default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
+GPU memory and latency at that bound have not been qualified. Candidate-decoding
+failure revokes the session because dropping a candidate could conceal a phrase
+tie. All cache allocation, inference, and release use one serialization boundary.
+A connected session may pause without losing enrollment. Disconnect, transport
+liveness failure, or inference failure releases it; `max_sessions` bounds
+retained sessions. Cancelled model work finishes before its cache and
+serialization ownership are released, including repeated cancellation.
+The model environment is isolated from workers and the existing batch STT
+service. Model weights are downloaded on first use and then reused from the
+configured cache. As with the sibling NeMo services, existing `HF_HOME` and
+`NEMO_CACHE_DIR` values take precedence over cache defaults.
+
+The WebSocket session is not a public model API. It is reserved for the private
+typed voice integration; applications continue to use the public voice and
+model interfaces rather than connecting to this route directly.
 
 ## Two HuggingFace cache roots
 

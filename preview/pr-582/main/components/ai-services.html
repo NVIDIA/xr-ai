@@ -484,61 +484,67 @@ recorded video, and document retrieval.</p>
 <td><p>parakeet-tdt-0.6b-v3</p></td>
 <td><p>NeMo ASR in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-tts/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">speaker_stt</span></code></p></td>
+<td><p>8102</p></td>
+<td><p>Nemotron 3 Diarization + Multitalker Parakeet</p></td>
+<td><p>NeMo streaming ASR</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts_server</span></code></p></td>
 <td><p>8104</p></td>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code></p></td>
 <td><p>8105</p></td>
 <td><p>Magpie speech NIM</p></td>
 <td><p>HTTP adapter over Riva gRPC</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 <td><p>kyutai/pocket-tts</p></td>
 <td><p>Pocket TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
 <td><p>8106</p></td>
 <td><p>Llama-3.1-Nemotron-Nano-8B-v1</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 <td><p>NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108</p></td>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nim_server</span></code></p></td>
 <td><p>configured per YAML</p></td>
 <td><p>selected NVIDIA NIM</p></td>
 <td><p>persistent Docker container</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
 <td><p>8340</p></td>
 <td><p>—</p></td>
@@ -553,6 +559,90 @@ YAML and resolved relative to the YAML file. Self-hosted NIM containers use
 weights in this repository. Every <code class="docutils literal notranslate"><span class="pre">models/</span></code> tree is excluded from version
 control. The model-servers profiles share <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root;
 the exact layout per launch style is below.</p>
+<section id="speaker-conditioned-stt">
+<h2>Speaker-conditioned STT<a class="headerlink" href="#speaker-conditioned-stt" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt</span></code> is a private local inference process. It shares
+Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
+while keeping each session’s diarization history, enrollment and ASR caches
+separate. A session enrolls one speaker with the configured start phrase and
+releases that identity with the stop phrase. Background voices do not reach
+the transcript as separate speakers after enrollment: the decoder receives the
+mixed audio with owner and interference masks and is conditioned on the owner.
+Before enrollment, each detected speaker has independent conditioned decoding
+and phrase-matching state. Someone already talking does not reserve ownership:
+another speaker can say the start phrase over that conversation and enroll when
+their own utterance completes. Non-speech background noise does not impose a
+silence gate. Each speaker’s existing inactivity interval ends their utterance;
+there is no requirement that every speaker become quiet together.</p>
+<p>All complete start phrases finalized in one accepted audio step are considered
+before ownership changes. One match enrolls its speaker; multiple matches in
+that step enroll nobody and require a fresh attempt. A phrase finalized later
+cannot take over an existing owner. This is a streaming decision boundary, not
+a guarantee of distinguishing all acoustically simultaneous requests. Speaker
+labels are session-local identities; actual attribution and interference
+suppression require qualification on the intended microphones.</p>
+<p>The process follows the model-service HTTP pattern and exposes health and model
+identity endpoints. A private WebSocket carries mono signed 16-bit PCM
+at 16 kHz and returns enrollment and transcription events. It serializes
+inference because model conditioning is mutable.
+Opening a session establishes the capture timestamp of its first sample.
+Subsequent audio requests form one ordered, contiguous PCM stream; the service
+derives all later timestamps from the number of samples it has accepted. The
+caller must close and reopen the session if its capture or transport layer drops
+audio, because that layer owns the information needed to detect the loss.
+Utterances forced to end at the configured duration limit cannot enroll or
+release a speaker; an enrolled owner’s forced segment is still transcribed.
+Start and stop phrases can span utterances within the conversation phrase
+window, retaining separate enrollment fragments for each speaker. A truncated
+candidate cannot enroll from the tail of the same continuing speech episode;
+that speaker must end its episode before making another attempt.</p>
+<p>The private protocol makes that ownership explicit: the opening JSON message
+supplies <code class="docutils literal notranslate"><span class="pre">audio_origin_us</span></code> once, and subsequent binary WebSocket messages
+supply only PCM bytes. Each connection owns one session, and the caller waits
+for the event response before sending the next audio message. Audio must be
+serialized in capture order. The service neither reorders audio nor guesses
+whether samples are missing from wall-clock arrival times.
+Binary messages retain the existing limit of one second of audio (16,000
+complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
+or incomplete PCM samples are protocol errors. The server’s standard transport
+message-size and heartbeat defaults are retained; JSON controls do not inherit
+an unrelated audio-duration limit.</p>
+<p>Configure model IDs, device, precision, host, port and session capacity
+in <code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code>. The default HTTP base URL is
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8102</span></code>. Keep the unauthenticated private streaming endpoint on
+a loopback or trusted interface. Hardware profiles or <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code>
+select a GPU; the generic configuration uses the first visible GPU. From the
+repository root, start it with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/speaker-stt<span class="w"> </span>speaker_stt
+</pre></div>
+</div>
+<p>The service warms both streaming and final decoding before signaling ready.
+Reuse verifies the local listener’s managed-process ownership and resolved
+configuration before launching a child; a changed configuration requires
+stopping that process first. A matching listener still warming its models
+refuses another launch rather than allocating a duplicate GPU copy. Persistent
+reuse exits after signaling readiness; monitored reuse keeps its readiness
+proxy alive.</p>
+<p>Each session owns one diarization cache and at most eight temporary ASR caches
+before enrollment, bounded by the model’s speaker-label capacity. Features and
+model weights are shared. After enrollment only the owner’s ASR cache is needed
+unless the dependent diagnostics layer requests other transcripts. With the
+default <code class="docutils literal notranslate"><span class="pre">max_sessions:</span> <span class="pre">16</span></code>, up to 128 enrollment decoder caches can coexist;
+GPU memory and latency at that bound have not been qualified. Candidate-decoding
+failure revokes the session because dropping a candidate could conceal a phrase
+tie. All cache allocation, inference, and release use one serialization boundary.
+A connected session may pause without losing enrollment. Disconnect, transport
+liveness failure, or inference failure releases it; <code class="docutils literal notranslate"><span class="pre">max_sessions</span></code> bounds
+retained sessions. Cancelled model work finishes before its cache and
+serialization ownership are released, including repeated cancellation.
+The model environment is isolated from workers and the existing batch STT
+service. Model weights are downloaded on first use and then reused from the
+configured cache. As with the sibling NeMo services, existing <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and
+<code class="docutils literal notranslate"><span class="pre">NEMO_CACHE_DIR</span></code> values take precedence over cache defaults.</p>
+<p>The WebSocket session is not a public model API. It is reserved for the private
+typed voice integration; applications continue to use the public voice and
+model interfaces rather than connecting to this route directly.</p>
+</section>
 <section id="two-huggingface-cache-roots">
 <h2>Two HuggingFace cache roots<a class="headerlink" href="#two-huggingface-cache-roots" title="Link to this heading">#</a></h2>
 <p>The servers use two different <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> values, so HuggingFace weights live in
@@ -1144,6 +1234,7 @@ under <code class="docutils literal notranslate"><span class="pre">model-server-
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speaker-conditioned-stt">Speaker-conditioned STT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-sample-to-shared-model-services">Connecting a sample to shared model services</a></li>
