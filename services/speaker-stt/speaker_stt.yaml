@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The private IPC endpoint defaults to the current user's 0700 runtime directory.
+# Loopback HTTP serves health/model identity; a private WebSocket carries PCM.
+host: 127.0.0.1
+port: 8102
 asr_model: nvidia/multitalker-parakeet-streaming-0.6b-v1
 diar_model: nvidia/Nemotron-3-Diarization
 device: cuda

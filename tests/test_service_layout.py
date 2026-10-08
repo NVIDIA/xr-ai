@@ -49,12 +49,11 @@ _MODEL_SERVICES = {
         8107,
     ),
     "pocket-tts": ("pocket-tts-server", "pocket_tts_server", 8105),
+    "speaker-stt": ("xr-ai-speaker-stt", "speaker_stt", 8102),
     "stt-server": ("stt-server", "stt_server", 8103),
     "vlm-server": ("vlm-server", "vlm_server", 8100),
 }
-_PRIVATE_MODEL_SERVICES = {
-    "speaker-stt": ("xr-ai-speaker-stt", "speaker_stt"),
-}
+_PRIVATE_MODEL_SERVICES = {}
 _LEGACY_PROJECTS = (
     "agent-samples/model-servers",
     "ai-services/embedding-server",

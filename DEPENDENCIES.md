@@ -493,8 +493,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `pyzmq>=27.0`
-  - `msgpack>=1.0`
+  - `fastapi>=0.115.0`
+  - `uvicorn[standard]>=0.34.0`
   - `numpy>=1.24`
   - `pyyaml>=6.0`
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
