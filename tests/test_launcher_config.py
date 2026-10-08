@@ -269,17 +269,8 @@ def test_invalid_deployment_credentials_rejected(
 _MODEL_SERVERS_YAML = _ROOT / "model-server-samples" / "model-servers" / "yaml"
 
 
-@pytest.mark.parametrize(
-    "profile_name",
-    [
-        "models.default.json",
-        "models.vlm_llm_nim.json",
-    ],
-)
-def test_bundled_model_servers_profiles_have_launcher_sdk_parity(
-    profile_name,
-) -> None:
-    profile = _MODEL_SERVERS_YAML / profile_name
+def test_bundled_model_servers_profile_has_launcher_sdk_parity() -> None:
+    profile = _MODEL_SERVERS_YAML / "models.default.json"
     deployment = load_deployment_profile(profile)
     models = load_models_config(profile)
     expected_services = {

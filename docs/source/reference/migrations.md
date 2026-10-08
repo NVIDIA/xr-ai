@@ -56,6 +56,29 @@ Only final transcripts during an active conversation reach
 that need all final transcripts retain that behavior by disabling conversation
 controls.
 
+## Local model-server CLI
+
+The `model-servers` sample launches only local server wrappers. Its default
+Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+Named `--models` selections are retired:
+
+- Replace `model_servers --models default` with `model_servers`.
+- Replace `model_servers --models vlm_llm_nim` with the separate
+  {doc}`NIM sample </reference/model-servers-nim>`. That stack uses Magpie TTS
+  and the original agent endpoints; it is not the former mixed NIM profile.
+- Pass custom deployments by JSON path, such as
+  `model_servers --models ./yaml/models.my-stack.json`, instead of a bare name.
+  Custom deployments can no longer select `llm-nim`, `vlm-nim`, `stt-nim`, or
+  `tts-nim` through the local launcher.
+
+Before updating a checkout that ran the former NIM profile, stop it with the
+old checkout's `uv run model_servers --stop`. The updated local launcher no
+longer discovers the removed NIM-only ports. Stop the old stack before starting
+the separate NIM sample because they share client ports. Caches are not removed.
+
+`--help` now displays usage and exits. Unknown options are rejected instead of
+being silently ignored; `--dry-run` remains unsupported by `model-servers`.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously

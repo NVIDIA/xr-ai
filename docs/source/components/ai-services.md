@@ -203,41 +203,24 @@ file. The worker reads the endpoint credential named in `api_key_env`; export
 it or configure the credential store. Consumer sample launchers do not inspect
 model profiles to choose model processes.
 
-### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
+(self-hosted-nim-containers-models-vlm-llm-nim-json)=
+### Self-hosted NIM containers
 
-Compatible models can be pulled from NGC and served as **optimized NIM
-containers on your own GPUs**: same APIs as hosted NIM and no network hop.
-
-The NIM containers are owned by the shared model-servers stack, exactly
-like the local vLLM servers. Its deployment profiles pick the mix: every
-`managed` entry launches as a `nim_server` process (`services/nim-server`, a
-generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
-image and ports) or as a local server:
+Compatible models can be pulled from NGC and served as optimized NIM
+containers on your own GPUs. Use the separate
+{doc}`/reference/model-servers-nim` sample:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
+uv run --project model-server-samples/model-servers-nim model_servers_nim
 ```
 
-- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-  containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
-  these endpoints; they never launch or stop the containers.
+Its hardware profiles select the container images, ports, and GPU placement;
+its compatibility adapters preserve the endpoints consumed by existing agent
+samples. The `model-servers` sample launches local server wrappers only.
+Refer to the NIM sample guide for model selection, hardware qualification,
+cache behavior, and shutdown commands.
 
-To configure a sample with these endpoints, refer to
-{doc}`/guides/customizing-model-servers`.
-
-The container `image:` is the model, so swapping models is a
-`nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
-per entry, not per profile: each model role independently picks a local
-server, a self-hosted NIM container, or a hosted endpoint through its own
-`adapter` and `endpoint` sections. The model-server launcher also requires
-`deployment` metadata; consumer profiles omit it. The shipped profiles are
-presets, not a closed set; a mixed setup is a copy of a shipped profile
-with the relevant entries changed, saved under any name and selected with
-`--models` (model-servers) or `models_config` (workers). When mixing, mind
-port overlaps: give a NIM container a free port or drop the overlapping
-local server from the profile.
-
-A custom model-server profile can still launch self-hosted Riva speech NIMs.
+Self-hosted Riva speech NIMs also expose a direct gRPC interface.
 Workers reach them through the optional `riva_grpc` model kind:
 
 ```yaml
@@ -272,8 +255,7 @@ endpoint directly.
 With `ownership: external` (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry's
 `deployment.service` must name a process row in that orchestrator's service
-table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
-a service name with no row fails fast at startup, and adding one row plus
+table; a service name with no row fails fast at startup, and adding one row plus
 its config YAML is the only orchestrator edit the profile system ever
 needs.
 
@@ -284,8 +266,9 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 and self-hosted NIM containers (`nim_server`)
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. `model_servers --stop` is the
-teardown. Switching profiles needs no manual teardown: at startup a wrapper
+serving so the next start reuses hot weights. Use `model_servers --stop`
+for the local stack or `model_servers_nim --stop` for the NIM stack. When
+switching between these samples, stop the current stack first. At startup a wrapper
 that finds a *different* persistent xr-ai container holding its port (found
 by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -583,6 +566,6 @@ cleanup.
   `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
+  under `model-server-samples/model-servers-nim/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
   `../../../../models/nim` from that location.

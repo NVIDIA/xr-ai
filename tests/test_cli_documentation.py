@@ -57,7 +57,7 @@ def test_catalog_builds_sample_directory_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert commands["model_servers"].invocation == (
-        "uv run model_servers [--stop] [--models NAME_OR_PATH] "
+        "uv run model_servers [--stop] [--models PATH] "
         "[--allow-anonymous] [--gpu-profile NAME]"
     )
 
