@@ -15,6 +15,7 @@ import types
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import numpy as np
 import pytest
@@ -62,6 +63,27 @@ def _minimal_fast_start_mp4() -> bytes:
         return (8).to_bytes(4, "big") + kind
 
     return box(b"ftyp") + box(b"moov") + box(b"mdat")
+
+
+async def test_capture_main_logs_fatal_exception_before_cleanup(tmp_path, monkeypatch):
+    from device_io_hub.capture import __main__ as capture_main
+
+    error = RuntimeError("capture worker failed")
+    service = Mock(start=AsyncMock(), run=AsyncMock(side_effect=error), stop=AsyncMock())
+    monkeypatch.setattr(capture_main, "CaptureService", lambda _config: service)
+    monkeypatch.setattr(capture_main, "load_capture_config", lambda _path: object())
+    monkeypatch.setattr(capture_main, "setup_logging", lambda *_args: None)
+    monkeypatch.setattr(asyncio.get_running_loop(), "add_signal_handler", Mock())
+    records = []
+    sink = capture_main.logger.add(lambda message: records.append(message.record))
+    try:
+        with pytest.raises(RuntimeError, match="capture worker failed"):
+            await capture_main.main(config_path=tmp_path / "capture.yaml")
+    finally:
+        capture_main.logger.remove(sink)
+    failure = next(record for record in records if record["message"] == "media capture failed")
+    assert failure["exception"].value is error
+    service.stop.assert_awaited_once()
 
 
 @pytest.fixture(autouse=True)
