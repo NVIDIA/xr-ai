@@ -71,6 +71,80 @@ async def test_empty_speaker_utterance_invalidates_control_without_dropping_next
 
 
 @pytest.mark.asyncio
+async def test_overlapping_start_phrase_enrolls_its_speaker_and_routes_only_owner_queries(tmp_path):
+    cfg = _voice_cfg(tmp_path)
+    selection = _Selection(cfg._speaker)
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._use_speaker_asr = True
+    gate.push_frame = AsyncMock()
+
+    async def to_gate(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+
+    async def deliver(events):
+        for event in events:
+            await processor._event("wearer", event)
+
+    try:
+        # A's ongoing ordinary speech cannot reserve enrollment. The service
+        # recognizes B's phrase in B's own conditioned stream during overlap.
+        selection._activity({1}, 0.2, 0)
+        selection._activity({1, 7}, 0.2, 200_000)
+        await deliver(selection._enroll_completed([
+            (1, "what time is it", 0, False),
+            (7, cfg._speaker.start_phrase, 200_000, False),
+        ]))
+        assert selection.owner == 7
+        assert "wearer" in processor._enrolled and "wearer" in gate._conversation_active
+
+        # Later phrases cannot take ownership away from the enrolled speaker.
+        assert not selection._enroll_completed([(1, cfg._speaker.start_phrase, 800_000, False)])
+        assert selection.owner == 7
+        gate.push_frame.reset_mock()
+        selected, events, _ = selection._activity({1}, 0.2, 1_000_000)
+        assert selected is None
+        await deliver(events)
+        assert not gate.push_frame.called
+
+        selected, events, _ = selection._activity({1, 7}, 0.2, 1_200_000)
+        assert selected == 7
+        await deliver(events)
+        await deliver(selection._finish("look around"))
+        queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        assert len(queries) == 1
+        assert queries[0].text == "look around" and queries[0].participant_id == "wearer"
+        assert queries[0].pts_us == 1_200_000
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("speakers", [(1, 7), (7, 1)])
+async def test_same_step_start_phrase_tie_does_not_enable_voice_gate(tmp_path, speakers):
+    cfg = _voice_cfg(tmp_path)
+    selection = _Selection(cfg._speaker)
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    processor.push_frame = AsyncMock()
+    try:
+        events = selection._enroll_completed([
+            (speaker, cfg._speaker.start_phrase, 0, False) for speaker in speakers
+        ])
+        for event in events:
+            await processor._event("wearer", event)
+        assert selection.owner is None and not processor._enrolled
+        await processor._event("wearer", {
+            "kind": "transcript", "text": "look around", "pts_us": 1_000_000, "speaker_id": 1,
+        })
+        assert not processor.push_frame.called
+    finally:
+        await processor.cleanup()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_op", ["open", "audio"])
 async def test_cancelled_request_closes_connection_and_releases_session(cancel_op):
     allocated, release_reply = asyncio.Event(), asyncio.Event()
