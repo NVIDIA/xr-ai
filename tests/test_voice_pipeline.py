@@ -670,6 +670,45 @@ async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["stop", "stop recording"])
+async def test_passive_narration_disables_probes_but_keeps_final_stop_transcript(monkeypatch, text):
+    _StagedVad.instances.clear()
+    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
+    stt = _StagedStt(texts=[text])
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0))
+    gate_proc = VoiceGateProcessor(cfg=VoiceGateConfig(stop_commands_enabled=False), tts=Mock())
+    sink = _CaptureSink()
+    worker = PipelineWorker(
+        Pipeline([proc, gate_proc, sink]), cancel_on_idle_timeout=False, enable_rtvi=False
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    async def drive():
+        await worker.queue_frame(frame)
+        async with asyncio.timeout(2):
+            while not _StagedVad.instances:
+                await asyncio.sleep(0.001)
+        await asyncio.sleep(0.3)  # Beyond the default early-probe interval.
+        assert not stt.calls
+        assert not proc._probe_task
+        await _StagedVad.instances[-1].trigger_utterance()
+        async with asyncio.timeout(2):
+            while not any(isinstance(f, GatedQueryFrame) for f in sink.frames):
+                await asyncio.sleep(0.001)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+    assert len(stt.calls) == 1
+    assert [f.text for f in sink.frames if isinstance(f, GatedQueryFrame)] == [text]
+    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames)
+    assert not any(isinstance(f, TextFrame) and f.text == "Okay, I will stop." for f in sink.frames)
+
+
+@pytest.mark.asyncio
 async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_command(
     monkeypatch,
 ):

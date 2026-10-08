@@ -70,6 +70,10 @@ class VoiceGate:
     multi-action commands such as ``stop monitoring`` are ordinary queries,
     not global stops.
 
+    Set ``stop_commands_enabled=False`` for passive transcription. In that
+    mode neither partial nor final transcripts trigger STOP; their words
+    instead follow the ordinary query-gating rules.
+
     Handler exceptions are logged and swallowed so one bad handler does
     not kill the gate.
     """
@@ -184,7 +188,7 @@ class VoiceGate:
         """Match a partial STOP on raw text or its wake-stripped tail."""
         stripped = strip_magic(self._magic_re, text)
         candidate = stripped if stripped else text
-        return STOP_RE.match(candidate) is not None
+        return self._cfg.stop_commands_enabled and STOP_RE.match(candidate) is not None
 
     def could_match_magic_phrase(self, text: str) -> bool:
         """Return whether the current partial sentence can become a match."""
@@ -206,9 +210,9 @@ class VoiceGate:
         # Always-on mode: no phrases configured, so the magic-phrase /
         # follow-up / phrase-only / drop branches don't apply. STOP still
         # wins (interrupts must work even without a phrase), and every
-        # other utterance is a fresh query.
+        # other utterance is a fresh query. Passive capture disables STOP.
         if self._magic_re is None:
-            if STOP_RE.match(text):
+            if self._cfg.stop_commands_enabled and STOP_RE.match(text):
                 logger.info(
                     "gate decision pid=%r kind=STOP fresh_match=False "
                     "followup_window_open=False",
@@ -239,7 +243,7 @@ class VoiceGate:
         # 1. STOP — always wins. Matched on both the raw transcript
         #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
         #    stop") so the fast path triggers either way.
-        if STOP_RE.match(stop_candidate):
+        if self._cfg.stop_commands_enabled and STOP_RE.match(stop_candidate):
             logger.info(
                 "gate decision pid=%r kind=STOP fresh_match=%s "
                 "followup_window_open=%s",

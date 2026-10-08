@@ -49,7 +49,7 @@ from loguru import logger
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
                        ControlMessage, DataMessage, FileMessage, FrameData, MsgType,
-                       ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
+                       ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView, VideoTrackEvent,
                        decode, encode)
 from xr_ai_hub._capture import CAPTURE_PUBLISH_PREFIX, CAPTURE_TOPICS
 from xr_ai_hub._file_ordering import FileRoute, FileSessionOrderer
@@ -174,6 +174,7 @@ class HubEndpoint:
         self._participant_sessions: dict[str, str] = {}
         self._file_orderer = FileSessionOrderer(file_hwm)
         self._file_session_events: asyncio.Queue[ParticipantEvent] = asyncio.Queue()
+        self._video_tracks: dict[tuple[str, str], VideoTrackEvent] = {}
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
         # The slot is held open (not released) until the next frame for the same
         # track arrives, the participant disconnects, or the hub shuts down — so
@@ -722,8 +723,28 @@ class HubEndpoint:
                 encode(MsgType.IMAGE_CAPTURE_DATA, msg),
             ])
 
+        elif type_id == MsgType.VIDEO_TRACK_EVENT:
+            if (
+                msg.participant_id not in self._participant_connector
+                or self._participant_sessions.get(msg.participant_id)
+                != msg.participant_session_id
+            ):
+                return
+            key = (msg.participant_id, msg.track_id)
+            if msg.active:
+                self._video_tracks[key] = msg
+            else:
+                self._video_tracks.pop(key, None)
+            await self._pub.send_multipart([
+                b"participant.video", encode(MsgType.VIDEO_TRACK_EVENT, msg),
+            ])
+
         elif type_id == MsgType.PARTICIPANT_EVENT:
             if msg.joined:
+                if self._participant_sessions.get(msg.participant_id) != msg.participant_session_id:
+                    for key in list(self._video_tracks):
+                        if key[0] == msg.participant_id:
+                            del self._video_tracks[key]
                 self._participant_connector[msg.participant_id] = msg.connector_id
                 self._participant_sessions[msg.participant_id] = (
                     msg.participant_session_id
@@ -742,6 +763,9 @@ class HubEndpoint:
                     return
                 self._participant_connector.pop(msg.participant_id, None)
                 self._participant_sessions.pop(msg.participant_id, None)
+                for key in list(self._video_tracks):
+                    if key[0] == msg.participant_id:
+                        del self._video_tracks[key]
                 departed_session = msg.participant_session_id or active_session
                 self._published_status.pop(msg.participant_id, None)
                 for per_participant in self._agent_status.values():
@@ -859,6 +883,13 @@ class HubEndpoint:
             )
             await self._pub.send_multipart([
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
+            ])
+
+        for event in tuple(self._video_tracks.values()):
+            if self._video_tracks.get((event.participant_id, event.track_id)) is not event:
+                continue
+            await self._pub.send_multipart([
+                b"participant.video", encode(MsgType.VIDEO_TRACK_EVENT, event),
             ])
 
     async def _acknowledge_registration(

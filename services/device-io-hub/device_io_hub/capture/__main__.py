@@ -37,6 +37,11 @@ async def main(*, config_path: Path, ready_file: Path | None = None) -> None:
         )
         if run_task in done:
             run_task.result()
+    except Exception:
+        # The launcher forwards raw stderr to the terminal, not capture.log.
+        # Preserve the fatal traceback before the shutdown messages obscure it.
+        logger.exception("media capture failed")
+        raise
     finally:
         run_task.cancel()
         stop_task.cancel()

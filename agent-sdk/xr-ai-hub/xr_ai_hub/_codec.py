@@ -31,6 +31,7 @@ from ._types import (
     ImageCaptureRequest,
     MsgType,
     ParticipantEvent,
+    VideoTrackEvent,
     PixelFormat,
     ReturnAudioFlush,
     RosterRequest,
@@ -155,6 +156,11 @@ register_decoder(
 )
 
 register_encoder(MsgType.CONNECTOR_REGISTER, lambda m: [m.connector_id, m.shm_name])
+register_encoder(
+    MsgType.VIDEO_TRACK_EVENT,
+    lambda m: [m.participant_id, m.track_id, m.active, m.pts_us, m.participant_session_id],
+)
+register_decoder(MsgType.VIDEO_TRACK_EVENT, lambda p: VideoTrackEvent(*p))
 register_decoder(MsgType.CONNECTOR_REGISTER, lambda p: ConnectorRegistration(p[0], p[1]))
 
 register_encoder(MsgType.FRAME_REQUEST, lambda m: [m.participant_id, m.track_id])
