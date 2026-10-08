@@ -10,6 +10,6 @@ device: cuda
 precision: bf16
 # Hardware profiles or CUDA_VISIBLE_DEVICES own GPU placement.
 model_cache: ../../models
-# Before enrollment, each session holds up to eight ASR caches plus diarization state.
-# Worker diagnostics add temporary ASR caches for other active speakers.
+# Each session holds one diarization cache and up to eight candidate ASR caches.
+# After enrollment, diagnostics add temporary ASR caches for non-owner speakers.
 max_sessions: 16
