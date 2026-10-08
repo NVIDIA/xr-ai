@@ -712,37 +712,20 @@ with the hosted entry, and point <code class="docutils literal notranslate"><spa
 file. The worker reads the endpoint credential named in <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>; export
 it or configure the credential store. Consumer sample launchers do not inspect
 model profiles to choose model processes.</p>
-<section id="self-hosted-nim-containers-models-vlm-llm-nim-json">
-<h3>Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)<a class="headerlink" href="#self-hosted-nim-containers-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
-<p>Compatible models can be pulled from NGC and served as <strong>optimized NIM
-containers on your own GPUs</strong>: same APIs as hosted NIM and no network hop.</p>
-<p>The NIM containers are owned by the shared model-servers stack, exactly
-like the local vLLM servers. Its deployment profiles pick the mix: every
-<code class="docutils literal notranslate"><span class="pre">managed</span></code> entry launches as a <code class="docutils literal notranslate"><span class="pre">nim_server</span></code> process (<code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code>, a
-generic wrapper; the per-GPU-profile <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> picks the
-image and ports) or as a local server:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
+<section id="self-hosted-nim-containers">
+<span id="self-hosted-nim-containers-models-vlm-llm-nim-json"></span><h3>Self-hosted NIM containers<a class="headerlink" href="#self-hosted-nim-containers" title="Link to this heading">#</a></h3>
+<p>Compatible models can be pulled from NGC and served as optimized NIM
+containers on your own GPUs. Use the separate
+<a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a> sample:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers-nim<span class="w"> </span>model_servers_nim
 </pre></div>
 </div>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
-these endpoints; they never launch or stop the containers.</p></li>
-</ul>
-<p>To configure a sample with these endpoints, refer to
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
-<p>The container <code class="docutils literal notranslate"><span class="pre">image:</span></code> is the model, so swapping models is a
-<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> edit plus the matching profile entry. Selection is
-per entry, not per profile: each model role independently picks a local
-server, a self-hosted NIM container, or a hosted endpoint through its own
-<code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> sections. The model-server launcher also requires
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata; consumer profiles omit it. The shipped profiles are
-presets, not a closed set; a mixed setup is a copy of a shipped profile
-with the relevant entries changed, saved under any name and selected with
-<code class="docutils literal notranslate"><span class="pre">--models</span></code> (model-servers) or <code class="docutils literal notranslate"><span class="pre">models_config</span></code> (workers). When mixing, mind
-port overlaps: give a NIM container a free port or drop the overlapping
-local server from the profile.</p>
-<p>A custom model-server profile can still launch self-hosted Riva speech NIMs.
+<p>Its hardware profiles select the container images, ports, and GPU placement;
+its compatibility adapters preserve the endpoints consumed by existing agent
+samples. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> sample launches local server wrappers only.
+Refer to the NIM sample guide for model selection, hardware qualification,
+cache behavior, and shutdown commands.</p>
+<p>Self-hosted Riva speech NIMs also expose a direct gRPC interface.
 Workers reach them through the optional <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> model kind:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
@@ -773,8 +756,7 @@ endpoint directly.
 With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry’s
 <code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service
-table (<code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in model-servers, <code class="docutils literal notranslate"><span class="pre">_MODEL_PROCESSES</span></code> in a sample);
-a service name with no row fails fast at startup, and adding one row plus
+table; a service name with no row fails fast at startup, and adding one row plus
 its config YAML is the only orchestrator edit the profile system ever
 needs.</p>
 </section>
@@ -786,8 +768,9 @@ needs.</p>
 and self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">nim_server</span></code>)
 <strong>survive stack restarts by design</strong>, including when a deployment profile
 marks them <code class="docutils literal notranslate"><span class="pre">managed</span></code>: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> is the
-teardown. Switching profiles needs no manual teardown: at startup a wrapper
+serving so the next start reuses hot weights. Use <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
+for the local stack or <code class="docutils literal notranslate"><span class="pre">model_servers_nim</span> <span class="pre">--stop</span></code> for the NIM stack. When
+switching between these samples, stop the current stack first. At startup a wrapper
 that finds a <em>different</em> persistent xr-ai container holding its port (found
 by the <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code> label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -1105,7 +1088,7 @@ hardware-specific YAML under
 <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
 resulting endpoints through their models JSON.</p></li>
 <li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
-under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
+under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers-nim/yaml/&lt;gpu-profile&gt;/</span></code>; its
 <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
 <code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>
@@ -1166,7 +1149,7 @@ under <code class="docutils literal notranslate"><span class="pre">model-server-
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-sample-to-shared-model-services">Connecting a sample to shared model services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers-models-vlm-llm-nim-json">Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers">Self-hosted NIM containers</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-server-persistence">Model-server persistence</a></li>

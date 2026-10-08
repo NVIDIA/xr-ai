@@ -21,7 +21,7 @@ the sample at the resulting endpoints.
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Deployment profile | `model-server-samples/model-servers/yaml/models.<name>.json` | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
+| Deployment profile | `model-server-samples/model-servers/yaml/models.default.json` or a custom JSON path | Logical roles, client adapters, endpoints, credentials, and shared-service ownership |
 | Hardware profile | `model-server-samples/model-servers/yaml/<gpu-profile>/` | Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings |
 | Sample models JSON | `agent-samples/<sample>/yaml/models*.json` | The roles that worker consumes and the endpoints it reuses |
 | Sample worker YAML | `agent-samples/<sample>/yaml/<worker>.yaml` | Application behavior such as prompts, voice gating, timeouts, and capability-service endpoints |
@@ -32,28 +32,26 @@ selects the deployment profile independently.
 
 ## Start from a shipped deployment profile
 
-The shipped profiles are:
+The default `yaml/models.default.json` profile starts local Parakeet STT,
+Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
+services. Run `model_servers` without `--models` to use it.
 
-- `default`: local Parakeet STT, Pocket TTS, Nemotron Omni, Cosmos3-Nano
-  Reasoner, and Nemotron embedding services.
-- `vlm_llm_nim`: local STT, Pocket TTS, and embedding plus self-hosted
-  Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner NIM containers.
+NIM launch support belongs to the separate {doc}`/reference/model-servers-nim`
+sample, which provides Magpie TTS and compatible endpoints for existing agents.
+The `model-servers` service catalog contains only local server wrappers.
 
-The shared profiles use Pocket TTS. Magpie remains available as a standalone
-service, but is not integrated into the persistent model stack.
-
-Copy the closest profile under a new name:
+Copy the default profile to customize it:
 
 ```bash
 cp model-server-samples/model-servers/yaml/models.default.json \
   model-server-samples/model-servers/yaml/models.my-stack.json
 ```
 
-Run it by filename stem:
+Run it by JSON path:
 
 ```bash
 uv run --project model-server-samples/model-servers \
-  model_servers --models my-stack
+  model_servers --models model-server-samples/model-servers/yaml/models.my-stack.json
 ```
 
 You can also pass an absolute JSON path or a path relative to the current
@@ -97,36 +95,18 @@ cuda_visible_devices: "0"
 gpu_memory_utilization: 0.55
 ```
 
-NIM services use `image`, `http_port`, `nim_cache`, and optional `NIM_*`
-environment settings instead:
-
-```yaml
-image: nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0
-http_port: 8100
-nim_cache: ../../../../models/nim
-cuda_visible_devices: "0"
-env:
-  NIM_MODEL_SIZE: "nano"
-  NIM_MAX_MODEL_LEN: "16384"
-```
-
-The Cosmos 3 Reasoner container serves Nano as
-`nvidia/cosmos3-nano-reasoner`. Keep the model ID in the deployment profile's
-adapter synchronized with the NIM model size.
-
 When one deployment profile needs a different launch configuration, add a
 variant beside the base YAML:
 
 ```text
-nim_vlm_server.yaml
-nim_vlm_server_my-stack.yaml
+vlm_server.yaml
+vlm_server_my-stack.yaml
 ```
 
 The suffix is the deployment profile filename without `models.` or `.json`.
 Only add a variant when the base configuration is not valid for that profile.
 Review GPU placement and aggregate memory before running several services
-together; the checked-in non-Ada NIM settings are estimates where their YAML
-comments say so.
+together. A custom configuration needs validation on its target hardware.
 
 ## Adapt a sample to the shared stack
 
@@ -137,47 +117,14 @@ omitting their `deployment` objects. Keep adapter settings and endpoint
 credentials needed by the client; server-only credentials stay in the shared
 stack's deployment profile.
 
-For the shipped `vlm_llm_nim` stack:
-
-1. Copy its `llm` entry when the sample needs language or tool calling.
-2. Copy its `vlm` entry when the sample needs vision.
-3. Remove the `deployment` object and endpoint `readiness` and `health_path`
-   settings from the copied LLM and VLM entries. Keep the LLM endpoint on port
-   8110 and the VLM endpoint on port 8100. The server profile keeps its settings.
-4. If the sample uses `agent_llm`, duplicate the `llm` entry under that role.
-5. Preserve the sample's STT, TTS, embedding, and other roles unless the shared
-   stack provides intentional replacements.
-
-The active files and NIM-relevant roles are:
-
-| Sample | Active models file | Roles to replace for `vlm_llm_nim` |
-|---|---|---|
-| Simple VLM | `agent-samples/simple-vlm-example/yaml/models.json` | `vlm` |
-| Lab instrument monitoring | `agent-samples/lab-instrument-monitoring/yaml/models.json` | `llm`, `vlm` |
-| Tea making | `agent-samples/tea-making-sample/yaml/models.local.json` | `llm`, `vlm` |
-| XR Render | `agent-samples/xr-render-demo/yaml/models.json` | `llm`, `agent_llm`, `vlm` |
-
-For example, a sample reusing the Cosmos3-Nano Reasoner NIM uses:
-
-```json
-{
-  "category": "vlm",
-  "adapter": {
-    "kind": "openai_compat",
-    "model_name": "nvidia/cosmos3-nano-reasoner",
-    "capabilities": {
-      "streaming": true,
-      "vision": true,
-      "video": true
-    }
-  },
-  "endpoint": {"base_url": "http://localhost:8100"}
-}
-```
+The standard local stack and the separate `model-servers-nim` stack work with
+existing samples' checked-in models JSON. For custom deployments, change only
+the roles whose model adapters or endpoints differ. Preserve the sample's other
+roles and any required RAG embedding health settings described below.
 
 Sample launchers declare only their application processes; model endpoints
-are specified in the client profile. Starting or stopping the sample never
-changes the shared NIM container. For startup ordering, refer to
+are specified in the client profile. Starting or stopping a sample never
+changes the shared model servers. For startup ordering, refer to
 {ref}`consumer-model-readiness`.
 
 ## Use an endpoint at another address
@@ -231,12 +178,11 @@ can prevent RAG startup even when embedding inference works.
 
 ## Riva speech boundary
 
-The generic model-server service table and NIM YAMLs still support custom Riva
-STT and TTS profiles through the `stt-nim` and `tts-nim` service names. No
-shipped model-server profile selects them, and the samples intentionally do not
-install the optional Riva client. Adding Riva to a sample therefore requires an
-explicit worker dependency and models configuration change; it is not an
-endpoint-only customization.
+The `model-servers` launcher does not launch Riva NIMs. Refer to
+{doc}`/reference/model-servers-nim` for the NIM stack and its HTTP compatibility
+adapters. Direct Riva gRPC clients require the optional Riva SDK dependency and
+an explicit models configuration change; that is not an endpoint-only
+customization.
 
 ## Validate and switch profiles
 
@@ -247,8 +193,7 @@ jq empty model-server-samples/model-servers/yaml/models.my-stack.json
 
 uv run --project tests pytest -q \
   tests/test_model_servers.py \
-  tests/test_launcher_config.py \
-  tests/test_nim_docker.py
+  tests/test_launcher_config.py
 ```
 
 Model servers persist after the `model_servers` command reports readiness.
@@ -259,7 +204,7 @@ stop the old stack once so it cannot continue serving stale configuration:
 ```bash
 uv run --project model-server-samples/model-servers model_servers --stop
 uv run --project model-server-samples/model-servers \
-  model_servers --models my-stack
+  model_servers --models model-server-samples/model-servers/yaml/models.my-stack.json
 ```
 
 For adapter fields and model capabilities, refer to

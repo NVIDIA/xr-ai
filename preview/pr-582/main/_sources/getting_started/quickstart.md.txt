@@ -76,17 +76,14 @@ assuming a fallback.
 On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-Which servers start is a deployment profile selected with
-`--models <name|path>`. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
-(8105), and embeddings (8109). `vlm_llm_nim` serves the LLM and VLM as
-self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
-requires Docker and `NGC_API_KEY`). Starting a profile stops persisted servers
-outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.
+The default starts Nemotron-3 Nano Omni (8108, serving both LLM roles),
+Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS (8105), and embeddings
+(8109). Use `--models PATH` only for a custom local deployment JSON. Starting
+a profile stops persisted servers outside it first and aborts if they cannot
+be stopped, avoiding GPU overcommit.
 
-```bash
-uv run model_servers --models vlm_llm_nim
-```
+For NVIDIA NIM models, use the separate {doc}`/reference/model-servers-nim`
+sample. The `model-servers` launcher no longer selects NIM deployments.
 
 `HF_TOKEN` is required by default: without it the large first-run download
 can stall indefinitely. Refer to the

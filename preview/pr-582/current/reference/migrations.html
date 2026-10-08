@@ -475,6 +475,28 @@ these settings. Refer to <a class="reference internal" href="agent-sdk-voice.htm
 that need all final transcripts retain that behavior by disabling conversation
 controls.</p>
 </section>
+<section id="local-model-server-cli">
+<h2>Local model-server CLI<a class="headerlink" href="#local-model-server-cli" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> sample launches only local server wrappers. Its default
+Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+Named <code class="docutils literal notranslate"><span class="pre">--models</span></code> selections are retired:</p>
+<ul class="simple">
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">default</span></code> with <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>.</p></li>
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">vlm_llm_nim</span></code> with the separate
+<a class="reference internal" href="model-servers-nim.html"><span class="doc">NIM sample</span></a>. That stack uses Magpie TTS
+and the original agent endpoints; it is not the former mixed NIM profile.</p></li>
+<li><p>Pass custom deployments by JSON path, such as
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">./yaml/models.my-stack.json</span></code>, instead of a bare name.
+Custom deployments can no longer select <code class="docutils literal notranslate"><span class="pre">llm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">stt-nim</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">tts-nim</span></code> through the local launcher.</p></li>
+</ul>
+<p>Before updating a checkout that ran the former NIM profile, stop it with the
+old checkout’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code>. The updated local launcher no
+longer discovers the removed NIM-only ports. Stop the old stack before starting
+the separate NIM sample because they share client ports. Caches are not removed.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--help</span></code> now displays usage and exits. Unknown options are rejected instead of
+being silently ignored; <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> remains unsupported by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>.</p>
+</section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
 <p>Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -725,6 +747,7 @@ reuse the ignored caches rather than downloading them again.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-sample-conversation-defaults">Voice sample conversation defaults</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-server-cli">Local model-server CLI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>
