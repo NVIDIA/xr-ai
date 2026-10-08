@@ -487,6 +487,27 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `rag_service` → `rag_service.__main__:run`
 
+#### `xr-ai-speaker-stt` — [`services/speaker-stt/`](services/speaker-stt/)
+
+- Python: `>=3.12,<3.14`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `fastapi>=0.115.0`
+  - `uvicorn[standard]>=0.34.0`
+  - `anyio>=4.8.0`
+  - `numpy>=1.24`
+  - `pyyaml>=6.0`
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
+  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
+- Optional dependency groups: none
+- Commands:
+  - `speaker_stt` → `speaker_stt.__main__:_run`
+
 #### `stt-server` — [`services/stt-server/`](services/stt-server/)
 
 - Python: `>=3.11,<3.15`
@@ -879,6 +900,7 @@ Python dependency metadata, so they remain curated here.
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
 | `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
+| `services/speaker-stt/` | `xr-ai-speaker-stt` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/pocket-tts/` | `pocket-tts-server` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |

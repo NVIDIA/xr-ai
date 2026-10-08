@@ -24,6 +24,7 @@ _REQUIRED_SERVICES = {
     "openxr-service",
     "pocket-tts",
     "rag-service",
+    "speaker-stt",
     "stt-server",
     "video-memory-service",
     "vlm-server",
@@ -48,6 +49,7 @@ _MODEL_SERVICES = {
         8107,
     ),
     "pocket-tts": ("pocket-tts-server", "pocket_tts_server", 8105),
+    "speaker-stt": ("xr-ai-speaker-stt", "speaker_stt", 8102),
     "stt-server": ("stt-server", "stt_server", 8103),
     "vlm-server": ("vlm-server", "vlm_server", 8100),
 }
