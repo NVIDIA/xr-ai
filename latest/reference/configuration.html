@@ -1509,100 +1509,6 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml">
-<h3>yaml/96G_blackwell/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
-<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
-<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># Verify startup and memory use on the target 96 GB Blackwell GPU before</span>
-<span class="c1"># deployment.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.4</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">
-<h3>yaml/96G_blackwell/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
-<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
-<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">
-<h3>yaml/96G_blackwell/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">
-<h3>yaml/96G_blackwell/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Cosmos3-Nano Reasoner VLM.</span>
-<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
-<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
-<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
-<span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Nano is the smaller model served as nvidia/cosmos3-nano-reasoner.</span>
-<span class="w">  </span><span class="nt">NIM_MODEL_SIZE</span><span class="p">:</span><span class="w"> </span><span class="s">"nano"</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
-<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
-<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.2"</span>
-</pre></div>
-</div>
-</section>
 <section id="config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">
 <h3>yaml/96G_blackwell/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -1725,99 +1631,6 @@ workflow.</p></li>
 
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml">
-<h3>yaml/dual_48G_ada/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
-<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
-<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># RTX Ada is not listed for this Omni NIM; verify startup and memory use on</span>
-<span class="c1"># target hardware before deployment.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.8</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">
-<h3>yaml/dual_48G_ada/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
-<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
-<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">
-<h3>yaml/dual_48G_ada/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">
-<h3>yaml/dual_48G_ada/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Cosmos3-Nano Reasoner VLM.</span>
-<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
-<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
-<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
-<span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># GPU 0 with the embedding server and a demo's CloudXR + LOVR; the</span>
-<span class="c1"># Nemotron NIM and local STT share GPU 1.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Nano is the smaller model served as nvidia/cosmos3-nano-reasoner.</span>
-<span class="w">  </span><span class="nt">NIM_MODEL_SIZE</span><span class="p">:</span><span class="w"> </span><span class="s">"nano"</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
-<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
-<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.7"</span>
 </pre></div>
 </div>
 </section>
@@ -2003,97 +1816,6 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-models-vlm-llm-nim-json">
-<h3>yaml/models.vlm_llm_nim.json<a class="headerlink" href="#config-model-servers-yaml-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"reasoning_field"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reasoning"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8110"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm-nim"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
-<span class="w">        </span><span class="p">]</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">"video"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
-<span class="w">        </span><span class="p">}</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"health_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/v1/health/ready"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm-nim"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"credentials"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">          </span><span class="s2">"NGC_API_KEY"</span>
-<span class="w">        </span><span class="p">]</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</section>
 <section id="config-model-servers-yaml-spark-embedding-server-yaml">
 <h3>yaml/spark/embedding_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-embedding-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2155,100 +1877,6 @@ workflow.</p></li>
 <span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
 <span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
 <span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-nim-llm-server-yaml">
-<h3>yaml/spark/nim_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted Nemotron-3-Nano-Omni NIM (serves both the `llm` and</span>
-<span class="c1"># `agent_llm` roles). This matches the model family used by the default local</span>
-<span class="c1"># deployment. Swap in any compatible NIM from https://catalog.ngc.nvidia.com.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># GB10 is not listed for this Omni NIM; verify startup and memory use on target</span>
-<span class="c1"># hardware before deployment.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:2.0.4-variant</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8110</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"32768"</span>
-<span class="w">  </span><span class="c1"># Match the local Omni deployment's reasoning and tool-call parsers.</span>
-<span class="w">  </span><span class="nt">NIM_PASSTHROUGH_ARGS</span><span class="p">:</span><span class="w"> </span><span class="s">"--gpu-memory-utilization</span><span class="nv"> </span><span class="s">0.35</span><span class="nv"> </span><span class="s">--enable-auto-tool-choice</span><span class="nv"> </span><span class="s">--tool-call-parser</span><span class="nv"> </span><span class="s">qwen3_coder</span><span class="nv"> </span><span class="s">--reasoning-parser</span><span class="nv"> </span><span class="s">nemotron_v3"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-nim-stt-server-yaml">
-<h3>yaml/spark/nim_stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-stt-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva ASR (parakeet). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/parakeet-tdt-0.6b-v2:1.2.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9010</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50051</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Single-process inference: the default multiprocessing mode runs two</span>
-<span class="w">  </span><span class="c1"># CUDA processes; one is plenty for demo traffic. ~14 GB VRAM either way.</span>
-<span class="w">  </span><span class="nt">NIM_USE_MULTIPROCESSING_FOR_INFERENCE</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-nim-tts-server-yaml">
-<h3>yaml/spark/nim_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-tts-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the</span>
-<span class="c1"># riva_grpc model kind; http_port serves /v1/health/ready only.</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9011</span>
-<span class="nt">grpc_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50052</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-nim-vlm-server-yaml">
-<h3>yaml/spark/nim_vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Self-hosted NIM: Cosmos3-Nano Reasoner VLM.</span>
-<span class="c1"># Swap in any vision NIM from https://catalog.ngc.nvidia.com, but check its</span>
-<span class="c1"># engine accepts a full image prompt: the nemotron-nano-vl NIM builds a</span>
-<span class="c1"># 3200-token input cap on this class of GPU, below its own ~3330-token</span>
-<span class="c1"># per-image cost, so every image request 500s.</span>
-<span class="c1"># For sample configuration, refer to</span>
-<span class="c1"># https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html</span>
-<span class="c1"># UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.</span>
-<span class="nt">image</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nim/nvidia/cosmos3-reasoner:1.7.0</span>
-<span class="nt">http_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-
-<span class="nt">nim_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models/nim</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Nano is the smaller model served as nvidia/cosmos3-nano-reasoner.</span>
-<span class="w">  </span><span class="nt">NIM_MODEL_SIZE</span><span class="p">:</span><span class="w"> </span><span class="s">"nano"</span>
-<span class="w">  </span><span class="nt">NIM_MAX_MODEL_LEN</span><span class="p">:</span><span class="w"> </span><span class="s">"16384"</span>
-<span class="w">  </span><span class="c1"># Fraction of total GPU memory despite the PERCENT name (0..1]; leaves</span>
-<span class="w">  </span><span class="c1"># headroom for whatever shares the GPU.</span>
-<span class="w">  </span><span class="nt">NIM_KVCACHE_PERCENT</span><span class="p">:</span><span class="w"> </span><span class="s">"0.15"</span>
 </pre></div>
 </div>
 </section>
@@ -3368,30 +2996,17 @@ workflow.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers">model-servers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-embedding-server-yaml">yaml/96G_blackwell/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml">yaml/96G_blackwell/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-llm-server-yaml">yaml/96G_blackwell/nim_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-stt-server-yaml">yaml/96G_blackwell/nim_stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-tts-server-yaml">yaml/96G_blackwell/nim_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nim-vlm-server-yaml">yaml/96G_blackwell/nim_vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">yaml/96G_blackwell/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml">yaml/dual_48G_ada/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-llm-server-yaml">yaml/dual_48G_ada/nim_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-stt-server-yaml">yaml/dual_48G_ada/nim_stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-tts-server-yaml">yaml/dual_48G_ada/nim_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nim-vlm-server-yaml">yaml/dual_48G_ada/nim_vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml">yaml/dual_48G_ada/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-default-json">yaml/models.default.json</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-vlm-llm-nim-json">yaml/models.vlm_llm_nim.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-embedding-server-yaml">yaml/spark/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">yaml/spark/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-llm-server-yaml">yaml/spark/nim_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-stt-server-yaml">yaml/spark/nim_stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-tts-server-yaml">yaml/spark/nim_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nim-vlm-server-yaml">yaml/spark/nim_vlm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-pocket-tts-server-yaml">yaml/spark/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>

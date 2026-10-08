@@ -90,7 +90,7 @@ inference endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` send
 it as the `Authorization: Bearer` token (refer to
 {doc}`AI services — hosting models on NVIDIA NIM </components/ai-services>`).
 
-The `vlm_llm_nim` model-server profile calls
+The `model-servers-nim` sample calls
 `require_credentials("NGC_API_KEY")`. This check is non-interactive and exits
 when the key is unavailable, so provide the key before starting the profile.
 Get a key at <https://ngc.nvidia.com/setup/api-key>, then export it:

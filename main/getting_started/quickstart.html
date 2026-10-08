@@ -516,16 +516,13 @@ configuration, startup stops with the detected per-GPU capacity instead of
 assuming a fallback.
 On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>Which servers start is a deployment profile selected with
-<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">&lt;name|path&gt;</span></code>. The default starts Nemotron-3 Nano Omni (8108,
-serving both LLM roles), Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS
-(8105), and embeddings (8109). <code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code> serves the LLM and VLM as
-self-hosted NIM containers (Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner;
-requires Docker and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>). Starting a profile stops persisted servers
-outside it first and aborts if they cannot be stopped, avoiding GPU overcommit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
-</pre></div>
-</div>
+<p>The default starts Nemotron-3 Nano Omni (8108, serving both LLM roles),
+Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS (8105), and embeddings
+(8109). Use <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> only for a custom local deployment JSON. Starting
+a profile stops persisted servers outside it first and aborts if they cannot
+be stopped, avoiding GPU overcommit.</p>
+<p>For NVIDIA NIM models, use the separate <a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a>
+sample. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher no longer selects NIM deployments.</p>
 <p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
