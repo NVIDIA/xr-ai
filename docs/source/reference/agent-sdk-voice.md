@@ -253,17 +253,16 @@ message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
 each event response before sending the next frame. The service derives timestamps
 from accepted sample counts; reconnecting starts a fresh timeline and requires
 enrollment again. Other voices contribute to
-diarization and interference conditioning, but are not transcribed after
+diarization and interference conditioning, but by default are not transcribed after
 enrollment. Before enrollment, the service independently decodes each detected
 speaker and enrolls the one whose conditioned transcript completes the start
 phrase, including during overlapping speech. If multiple speakers complete the
 phrase in the same accepted audio step, neither is selected. Once enrolled,
 another voice's later start phrase cannot take over the connection.
 
-
 Optional `speaker.diagnostics: true` displays candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
-and returns activity and ignored text on `voice.speaker-diagnostic` through the
+returns activity and ignored text on `voice.speaker-diagnostic` through the
 existing participant-routed data channel. These messages cannot invoke or
 interrupt an agent or change enrollment. Before enrollment, display reuses the
 required candidate decoding without additional caches or decoding. After
