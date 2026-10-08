@@ -231,10 +231,10 @@ filtering. Add `speaker` alongside `conversation` in the worker's voice-gate YAM
 speaker:
   enabled: true
   backend: auto
-  endpoint: ipc:///tmp/xr-ai-speaker-stt.sock
+  base_url: http://127.0.0.1:8102
 ```
 
-The worker probes this private endpoint once before starting its media pipeline.
+The worker probes the service's HTTP `/health` endpoint once before starting its media pipeline.
 A ready compatible service selects diarization; an absent or unresponsive endpoint
 selects the configured ordinary `STTService`, including the unchanged NIM stack's
 HTTP STT adapter. The worker logs its selection. Ordinary STT cannot identify or
@@ -245,8 +245,14 @@ Loss of a selected diarization service resets enrollment instead of switching to
 unfiltered STT.
 
 Speaker filtering uses Nemotron 3 Diarization with Multitalker Parakeet. A private
-inference process shares model weights across workers and keeps one
-speaker-conditioned ASR stream per participant. Other voices contribute to
+inference process shares model weights across workers. The private model adapter
+opens one WebSocket at `/v1/audio/transcriptions/stream` per participant. The
+connection owns that participant's enrollment and closes when the participant
+leaves or its audio worker resets. After one configuration and audio-origin
+message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
+each event response before sending the next frame. The service derives timestamps
+from accepted sample counts; reconnecting starts a fresh timeline and requires
+enrollment again. Other voices contribute to
 diarization and interference conditioning, but are not transcribed after
 enrollment. Start the inference process separately from the repository root:
 
@@ -265,12 +271,13 @@ phrases remain optional through `conversation.require_wake_phrase`; filtering
 cannot determine whom the wearer is addressing.
 
 Conversation state belongs to a participant connection. Disconnect, inference
-failure, processing overload or an audio-timeline discontinuity requires
+failure or processing overload requires
 enrollment again. Per-participant queues retain at most two seconds or 200 audio
 frames; overload drops pending audio and revokes enrollment. Workers wait two
-seconds before retrying after failure or overload. Abandoned sessions expire and
-the service bounds their count. An unfinished utterance at `max_utterance_s` is
-dropped instead of acting on a truncated control phrase.
+seconds before retrying after failure or overload. Closing the WebSocket releases
+its inference session, and the service bounds their count. At `max_utterance_s`,
+an enrolled speaker's final transcript is retained, but the incomplete utterance
+cannot activate a conversation control or enroll a new speaker.
 
 Worker phrase settings do not require restarting the model service. When both
 `conversation` and `speaker` are present, `conversation` owns the control settings.

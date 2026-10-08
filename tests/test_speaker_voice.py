@@ -1,23 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Synthetic voice routing and IPC tests without downloaded models or recorded audio."""
+"""Synthetic voice routing and streaming tests without downloaded models or recorded audio."""
 
 from __future__ import annotations
 
 import asyncio
+import json
+import socket
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
-import msgpack
+import httpx
 import pytest
+import uvicorn
 import yaml
-import zmq
-import zmq.asyncio
 from pipecat.frames.frames import CancelFrame, InputAudioRawFrame, InterruptionFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection
-from speaker_stt.__main__ import _Server
+from speaker_stt.__main__ import _build_app, _Server
 from speaker_stt._selection import _Selection
+from websockets.asyncio.server import serve
+from xr_ai_models._speaker_stream import _SpeakerStream
 from xr_ai_voice._frames import (
     GatedQueryFrame,
     ParticipantLeftFrame,
@@ -68,71 +71,66 @@ async def test_empty_speaker_utterance_invalidates_control_without_dropping_next
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("retry", ["reconnect", "shutdown"])
-async def test_timed_out_cleanup_is_retried_without_reusing_enrollment(retry):
-    server = _Server(SimpleNamespace(_session=lambda cfg: SimpleNamespace(_feed=lambda *_args: [])))
-    client = _SpeakerClient(_SpeakerConfig())
-    fail_close = True
+@pytest.mark.parametrize("cancel_op", ["open", "audio"])
+async def test_cancelled_request_closes_connection_and_releases_session(cancel_op):
+    allocated, release_reply = asyncio.Event(), asyncio.Event()
+    released = asyncio.Event()
+    sessions = set()
 
-    async def request(body):
-        nonlocal fail_close
-        if body["op"] == "close" and fail_close:
-            fail_close = False
-            raise TimeoutError()
-        return server._request(body)
+    async def handler(socket):
+        await socket.recv()
+        sessions.add(socket)
+        try:
+            if cancel_op == "open":
+                allocated.set()
+                await release_reply.wait()
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+            await socket.recv()
+            if cancel_op == "audio":
+                allocated.set()
+                await release_reply.wait()
+            await socket.send(json.dumps({"events": []}))
+            await socket.wait_closed()
+        finally:
+            sessions.discard(socket)
+            released.set()
 
-    client._request = request
-    await client._feed("wearer", bytes(640), 1)
-    old_session = client._sessions["wearer"]
-    with pytest.raises(TimeoutError):
-        await client._forget("wearer")
-    assert not client._sessions
-    assert old_session in client._retired and old_session in server.sessions
-    if retry == "reconnect":
-        await client._feed("wearer", bytes(640), 2)
-        assert client._sessions["wearer"] != old_session
-        assert old_session not in server.sessions
-        assert len(server.sessions) == 1
-    await client._close()
-    assert not client._retired and not server.sessions
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        client = _SpeakerClient(_SpeakerConfig(base_url=f"http://127.0.0.1:{port}", timeout_s=1))
+        feed = asyncio.create_task(client._feed("wearer", bytes(640), 1))
+        try:
+            await asyncio.wait_for(allocated.wait(), timeout=1)
+            assert len(sessions) == 1
+            feed.cancel()
+            await asyncio.gather(feed, return_exceptions=True)
+            release_reply.set()
+            await client._close()
+            await asyncio.wait_for(released.wait(), timeout=1)
+            assert not sessions and not client._sessions
+        finally:
+            release_reply.set()
+            feed.cancel()
+            await asyncio.gather(feed, return_exceptions=True)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cancel_op", ["open", "audio"])
-async def test_cancelled_request_retains_identity_for_server_cleanup(tmp_path, cancel_op):
-    cfg = _SpeakerConfig(endpoint=f"ipc://{tmp_path}/cancel.sock", timeout_s=1)
-    server = _Server(SimpleNamespace(_session=lambda cfg: SimpleNamespace(_feed=lambda *_args: [])))
-    socket = zmq.asyncio.Context.instance().socket(zmq.REP)
-    socket.bind(cfg.endpoint)
-    allocated, release_reply = asyncio.Event(), asyncio.Event()
+async def test_cancelled_stream_close_still_disconnects_the_transport():
+    closing = asyncio.Event()
 
-    async def serve():
-        while True:
-            request = msgpack.unpackb(await socket.recv(), raw=False)
-            response = server._request(request)
-            if request["op"] == cancel_op:
-                allocated.set()
-                await release_reply.wait()
-            await socket.send(msgpack.packb(response, use_bin_type=True))
+    async def delayed_close():
+        closing.set()
+        await asyncio.Future()
 
-    task = asyncio.create_task(serve())
-    client = _SpeakerClient(cfg)
-    feed = asyncio.create_task(client._feed("wearer", bytes(640), 1))
-    try:
-        await asyncio.wait_for(allocated.wait(), timeout=1)
-        assert len(server.sessions) == 1
-        feed.cancel()
-        await asyncio.gather(feed, return_exceptions=True)
-        release_reply.set()
-        await client._close()
-        assert not server.sessions
-        assert not client._sessions
-    finally:
-        release_reply.set()
-        feed.cancel()
-        task.cancel()
-        await asyncio.gather(feed, task, return_exceptions=True)
-        socket.close(linger=0)
+    transport = SimpleNamespace(abort=Mock())
+    stream = _SpeakerStream("http://127.0.0.1:8102", 1)
+    stream._socket = SimpleNamespace(close=delayed_close, transport=transport)
+    task = asyncio.create_task(stream._close())
+    await closing.wait()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert stream._socket is None
+    transport.abort.assert_called_once()
 
 
 def _voice_cfg(tmp_path, **overrides):
@@ -264,37 +262,94 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
 
 
 @pytest.mark.asyncio
-async def test_local_ipc_isolates_participants_and_cleans_up(tmp_path):
-    cfg = _SpeakerConfig(endpoint=f"ipc://{tmp_path}/speaker.sock", timeout_s=1)
+async def test_stream_isolates_participants_and_reconnects_with_new_origin():
+    sessions = {}
+    closed = asyncio.Queue()
+
+    async def handler(socket):
+        opening = json.loads(await socket.recv())
+        assert socket.request.path == "/v1/audio/transcriptions/stream"
+        sessions[socket] = opening["audio_origin_us"]
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+        count, samples = 0, 0
+        try:
+            async for audio in socket:
+                assert isinstance(audio, bytes) and audio == bytes(640)
+                count += 1
+                pts_us = opening["audio_origin_us"] + samples * 1_000_000 // 16000
+                samples += len(audio) // 2
+                events = [{"kind": "transcript", "text": str(count), "pts_us": pts_us}]
+                await socket.send(json.dumps({"events": events}))
+        finally:
+            sessions.pop(socket)
+            closed.put_nowait(True)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        client = _SpeakerClient(_SpeakerConfig(base_url=f"http://127.0.0.1:{port}", timeout_s=1))
+        try:
+            assert (await client._feed("a", bytes(640), 1))[0]["text"] == "1"
+            assert (await client._feed("b", bytes(640), 2))[0]["text"] == "1"
+            event = (await client._feed("a", bytes(640), 20_001))[0]
+            assert event["text"] == "2" and event["pts_us"] == 20_001
+            assert len(sessions) == 2
+            await client._forget("a")
+            await asyncio.wait_for(closed.get(), timeout=1)
+            assert len(sessions) == 1
+            event = (await client._feed("a", bytes(640), 1_000_000))[0]
+            assert event["text"] == "1" and event["pts_us"] == 1_000_000
+        finally:
+            await client._close()
+            while sessions:
+                await asyncio.wait_for(closed.get(), timeout=1)
+        assert not client._sessions
+
+
+@pytest.mark.asyncio
+async def test_voice_client_uses_actual_service_health_and_stream_contract():
+    closed = asyncio.Queue()
+
+    class Server(_Server):
+        def _close(self, session_id):
+            super()._close(session_id)
+            closed.put_nowait(True)
+
     class Session:
-        def __init__(self):
-            self.count = 0
-        def _feed(self, audio, pts_us):
-            self.count += 1
-            return [{"kind": "transcript", "text": str(self.count), "pts_us": pts_us}]
-    server = _Server(SimpleNamespace(_session=lambda cfg: Session()))
-    socket = zmq.asyncio.Context.instance().socket(zmq.REP)
-    socket.bind(cfg.endpoint)
-    async def serve():
-        while True:
-            body = msgpack.unpackb(await socket.recv(), raw=False)
-            response = server._request(body)
-            await socket.send(msgpack.packb(response, use_bin_type=True))
-    task = asyncio.create_task(serve())
-    client = _SpeakerClient(cfg)
+        def __init__(self, audio_origin_us):
+            self.origin = audio_origin_us
+            self.samples = 0
+
+        def _feed(self, audio):
+            pts_us = self.origin + self.samples * 1_000_000 // 16000
+            self.samples += len(audio) // 2
+            return [{"kind": "transcript", "text": str(self.samples), "pts_us": pts_us}]
+
+    models = SimpleNamespace(_session=lambda cfg, *, audio_origin_us: Session(audio_origin_us))
+    service = Server(models)
+    cfg = {"host": "127.0.0.1", "port": 8102, "asr_model": "asr", "diar_model": "diar"}
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    http = uvicorn.Server(uvicorn.Config(_build_app(service, cfg), log_level="error", ws="websockets-sansio"))
+    task = asyncio.create_task(http.serve(sockets=[listener]))
+    client = _SpeakerClient(_SpeakerConfig(base_url=f"http://127.0.0.1:{port}", timeout_s=1))
     try:
-        assert (await client._feed("a", bytes(640), 1))[0]["text"] == "1"
-        assert (await client._feed("b", bytes(640), 2))[0]["text"] == "1"
-        assert (await client._feed("a", bytes(640), 3))[0]["text"] == "2"
-        assert len(server.sessions) == 2
-        await client._forget("a")
-        assert len(server.sessions) == 1
-        await client._close()
-        assert not server.sessions
+        async with asyncio.timeout(2):
+            while not http.started:
+                await asyncio.sleep(0)
+        assert await client._available()
+        assert (await client._feed("wearer", bytes(640), 1_000_000))[0]["pts_us"] == 1_000_000
+        assert (await client._feed("wearer", bytes(640), 1_020_000))[0]["pts_us"] == 1_020_000
+        assert len(service.sessions) == 1
+        await client._forget("wearer")
+        await asyncio.wait_for(closed.get(), timeout=1)
+        assert not service.sessions
+        assert (await client._feed("wearer", bytes(640), 5_000_000))[0]["pts_us"] == 5_000_000
     finally:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-        socket.close(linger=0)
+        await client._close()
+        http.should_exit = True
+        await asyncio.wait_for(task, timeout=2)
+        listener.close()
 
 
 @pytest.mark.asyncio
@@ -441,16 +496,16 @@ async def test_backend_is_selected_once_at_startup(monkeypatch, backend, availab
 
 
 @pytest.mark.asyncio
-async def test_missing_or_incompatible_speaker_endpoint(tmp_path):
-    path = tmp_path / "speaker.sock"
-    client = _SpeakerClient(_SpeakerConfig(endpoint=f"ipc://{path}"))
-    client._request = AsyncMock(return_value={"service": "unrelated", "protocol": 1})
+async def test_missing_or_incompatible_speaker_endpoint(monkeypatch):
+    client = _SpeakerClient(_SpeakerConfig())
+    get = AsyncMock(side_effect=httpx.ConnectError("absent"))
+    monkeypatch.setattr(httpx.AsyncClient, "get", get)
     assert not await client._available()
-    client._request.assert_not_awaited()
-    path.touch()
+    get.side_effect = None
+    get.return_value = httpx.Response(200, json={"service": "unrelated", "protocol": 3}, request=httpx.Request("GET", "http://localhost/health"))
     with pytest.raises(RuntimeError, match="incompatible service"):
         await client._available()
-    client._request = AsyncMock(side_effect=TimeoutError())
+    get.side_effect = httpx.ReadTimeout("unresponsive")
     assert not await client._available()
 
 
