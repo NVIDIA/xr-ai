@@ -65,6 +65,7 @@ repos:
           - shell
           - swift
           - kotlin
+          - lua
           - javascript
           - ts
           - tsx

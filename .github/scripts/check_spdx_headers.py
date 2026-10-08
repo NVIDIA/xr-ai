@@ -92,6 +92,7 @@ def _copyright_line(path: Path | None = None) -> str:
 _HASH_EXTS = {".py", ".yaml", ".yml", ".toml", ".properties", ".sh", ".pro"}
 _HASH_NAMES = {".gitignore", ".gitattributes", "requirements.txt"}
 _SLASH_EXTS = {".swift", ".kt", ".kts", ".js", ".ts", ".tsx"}
+_DASH_EXTS = {".lua"}
 _HTML_EXTS = {".xml", ".html", ".plist", ".entitlements", ".md"}
 
 # ── Files to skip (not ours to license, can't carry comments, or third party) ──
@@ -129,7 +130,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def comment_style(path: Path) -> str | None:
-    """Return ``"hash"`` / ``"slash"`` / ``"html"`` for ``path``, or ``None`` to skip."""
+    """Return the comment style for ``path``, or ``None`` to skip."""
     name = path.name
     suffix = path.suffix
     s = str(path).replace("\\", "/")
@@ -150,6 +151,8 @@ def comment_style(path: Path) -> str | None:
         return "hash"
     if suffix in _SLASH_EXTS:
         return "slash"
+    if suffix in _DASH_EXTS:
+        return "dash"
     if suffix in _HTML_EXTS:
         return "html"
     return None
@@ -232,6 +235,10 @@ def check(path: Path) -> tuple[bool, str]:
     elif style == "slash":
         if not lstripped.startswith("//"):
             return False, f"SPDX line must start with '//' (got: {spdx_line!r})"
+    elif style == "dash":
+        for line in window_lines:
+            if "SPDX-" in line and not line.lstrip().startswith("--"):
+                return False, f"SPDX line must start with '--' (got: {line!r})"
     elif style == "html":
         # The header must sit inside an HTML comment block somewhere in the window.
         if "<!--" not in window or "-->" not in window:
@@ -247,6 +254,8 @@ def _build_header(path: Path, style: str) -> str:
         return f"# {cline}\n# {_LICENSE_LINE}\n\n"
     if style == "slash":
         return f"// {cline}\n// {_LICENSE_LINE}\n\n"
+    if style == "dash":
+        return f"-- {cline}\n-- {_LICENSE_LINE}\n\n"
     if style == "html":
         return (
             "<!--\n"
