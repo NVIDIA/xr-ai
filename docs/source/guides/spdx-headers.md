@@ -26,6 +26,7 @@ any other content, with one blank line separating it from the body:
 |---|---|
 | `# …` | `.py`, `.yaml`/`.yml`, `.toml`, `.properties`, `.sh`, `.pro`, `.gitignore`, `.gitattributes`, `requirements.txt` |
 | `// …` | `.swift`, `.kt`/`.kts`, `.js`, `.ts`/`.tsx` |
+| `-- …` | `.lua` |
 | `<!-- … -->` | `.xml`, `.html`, `.plist`, `.entitlements`, `.md` |
 
 Insert the header **after** these required first-line directives when present:
