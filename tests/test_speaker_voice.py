@@ -145,6 +145,77 @@ async def test_same_step_start_phrase_tie_does_not_enable_voice_gate(tmp_path, s
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tie", [False, True])
+async def test_candidate_decoding_arbitration_and_voice_gate_with_synthetic_models(
+    tmp_path, _streaming_models, monkeypatch, tie,
+):
+    from speaker_stt._inference import _Session
+
+    cfg = _voice_cfg(tmp_path, silence_duration=0.3)
+    models, activity, calls, _masks, _allocations, text = _streaming_models
+    session = _Session(models, cfg._speaker, audio_origin_us=0)
+    processor = _SpeakerSttProcessor(cfg=cfg._speaker)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._use_speaker_asr = True
+    gate.push_frame = AsyncMock()
+    recognized = {1: cfg._speaker.start_phrase if tie else "ordinary unrelated speech", 7: cfg._speaker.start_phrase}
+    original_decode = session._decode
+
+    def decode(*args):
+        # Synthetic model text is label-specific; retain the real server's
+        # feature conditioning, cache handling, and candidate finalization.
+        text[0] = recognized[args[3]]
+        return original_decode(*args)
+
+    monkeypatch.setattr(session, "_decode", decode)
+
+    async def to_gate(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+
+    async def feed(speakers):
+        activity[:] = speakers
+        events = session._feed(bytes(5120))
+        for event in events:
+            await processor._event("wearer", event)
+        return events
+
+    try:
+        await feed([1])
+        await feed([1, 7])
+        assert len(calls) >= 3  # Both conditioned streams actually decoded.
+        if tie:
+            await feed([])
+            await feed([])
+            assert session.selection.owner is None and not processor._enrolled
+            assert "wearer" not in gate._conversation_active
+            return
+
+        # A stays acoustically active while B's complete start phrase ends.
+        await feed([1])
+        await feed([1])
+        assert session.selection.owner == 7
+        assert "wearer" in processor._enrolled and "wearer" in gate._conversation_active
+        assert not [c for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        recognized[1] = cfg._speaker.start_phrase
+        await feed([1])
+        assert session.selection.owner == 7
+
+        recognized[7] = "look around"
+        gate.push_frame.reset_mock()
+        await feed([1, 7])
+        await feed([1])
+        await feed([1])
+        queries = [c.args[0] for c in gate.push_frame.call_args_list if isinstance(c.args[0], GatedQueryFrame)]
+        assert len(queries) == 1
+        assert queries[0].text == "look around" and queries[0].participant_id == "wearer"
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_op", ["open", "audio"])
 async def test_cancelled_request_closes_connection_and_releases_session(cancel_op):
     allocated, release_reply = asyncio.Event(), asyncio.Event()
