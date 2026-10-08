@@ -125,7 +125,7 @@ def test_read_service_port_rejects_invalid_values(
     ("service", "config_name", "gpu"),
     [
         ("embedding", "embedding_server.yaml", "0"),
-        ("stt", "stt_server.yaml", "1"),
+        ("speaker-stt", "speaker_stt.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(
