@@ -344,8 +344,9 @@ def test_simultaneous_step_matches_are_rejected_without_global_noise_silence(_st
     assert session.selection.owner == 2
 
 
-def test_candidate_cache_budget_is_diarizer_bound_and_encoding_is_shared(_streaming_models):
-    cfg = _SpeakerConfig()
+@pytest.mark.parametrize("diagnostics", [False, True])
+def test_candidate_cache_budget_is_diarizer_bound_and_encoding_is_shared(_streaming_models, diagnostics):
+    cfg = _SpeakerConfig(diagnostics=diagnostics)
     session, feed, decoded = _attributed_session(_streaming_models, cfg)
     encoded = []
     allocated = []
@@ -365,11 +366,13 @@ def test_candidate_cache_budget_is_diarizer_bound_and_encoding_is_shared(_stream
     feed(list(range(8)), {})
     assert len(session._candidate_streams) == 8
     assert len(allocated) == 8
+    assert not session._diagnostic_streams
     assert decoded == list(range(8)) and encoded == [True]
 
 
-def test_candidate_failure_is_not_silently_dropped_from_arbitration(_streaming_models):
-    cfg = _SpeakerConfig(silence_duration=0.3)
+@pytest.mark.parametrize("diagnostics", [False, True])
+def test_candidate_failure_is_not_silently_dropped_from_arbitration(_streaming_models, diagnostics):
+    cfg = _SpeakerConfig(diagnostics=diagnostics, silence_duration=0.3)
     session, feed, _decoded = _attributed_session(_streaming_models, cfg)
     original = session._decode
 
@@ -382,6 +385,27 @@ def test_candidate_failure_is_not_silently_dropped_from_arbitration(_streaming_m
     with pytest.raises(RuntimeError, match="candidate failed"):
         feed([1, 2], {1: cfg.start_phrase, 2: cfg.start_phrase})
     assert session.selection.owner is None
+
+
+@pytest.mark.parametrize("diagnostics", [False, True])
+@pytest.mark.parametrize("tie", [False, True])
+def test_candidate_display_reuses_overlap_decode_without_changing_nomination(_streaming_models, diagnostics, tie):
+    models, _activity, calls, _masks, _allocations, _text = _streaming_models
+    cfg = _SpeakerConfig(diagnostics=diagnostics, silence_duration=0.16)
+    session, feed, decoded = _attributed_session(_streaming_models, cfg)
+    feed([1], {1: cfg.start_phrase if tie else "ordinary conversation"})
+    feed([1, 2], {2: cfg.start_phrase})
+    events = feed([] if tie else [1], {})
+    assert len(calls) == len(decoded) == 5
+    assert len(models.encodes) == 3
+    assert not session._diagnostic_streams
+    assert session.selection.owner == (None if tie else 2)
+    assert [e for e in events if e["kind"] == "enrolled"] == ([] if tie else [{"kind": "enrolled"}])
+    display = [e for e in events if e["kind"] == "diagnostic"]
+    assert bool(display) is diagnostics
+    if diagnostics and tie:
+        assert {e["speaker_id"] for e in display if e["text"]} == {1, 2}
+        assert {e["pts_us"] for e in display if e["text"]} == {1_000_000, 1_160_000}
 
 
 def test_truncated_candidate_cannot_restart_from_same_speech_tail(_streaming_models):
