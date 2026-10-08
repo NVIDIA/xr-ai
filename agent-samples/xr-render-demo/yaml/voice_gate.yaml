@@ -31,4 +31,4 @@ conversation:
 speaker:
   enabled: true
   backend: auto
-  endpoint: ipc:///tmp/xr-ai-speaker-stt.sock
+  base_url: http://127.0.0.1:8102
