@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Consumer configuration for independently deployed NIMs, not a launch profile.
+# Replace the example hosts with addresses reachable from the agent process.
+# HTTP base URLs exclude /v1; gRPC addresses are host:port without a scheme.
+# External ownership never grants a consumer permission to start or stop a NIM.
+models:
+  llm:
+    adapter:
+      preset: nemotron_omni
+      model_name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      reasoning_field: reasoning
+    endpoint:
+      base_url: https://llm.example.com
+      # This is an inference gateway credential, not a container-pull key.
+      api_key_env: NIM_ENDPOINT_API_KEY
+      health_path: /v1/health/ready
+    deployment:
+      ownership: external
+  agent_llm:
+    adapter:
+      preset: nemotron_omni
+      model_name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      reasoning_field: reasoning
+    endpoint:
+      base_url: https://llm.example.com
+      api_key_env: NIM_ENDPOINT_API_KEY
+      health_path: /v1/health/ready
+    deployment:
+      ownership: external
+  vlm:
+    adapter:
+      preset: cosmos3_nano_reasoner
+      model_name: nvidia/cosmos3-nano-reasoner
+      default_extras:
+        chat_template_kwargs:
+          enable_thinking: false
+    endpoint:
+      base_url: https://vlm.example.com
+      api_key_env: NIM_ENDPOINT_API_KEY
+      health_path: /v1/health/ready
+    deployment:
+      ownership: external
+  stt:
+    category: stt
+    adapter:
+      kind: riva_grpc
+      # The Parakeet v3 NIM used by the bundled stack advertises en-GB.
+      # Select a language supported by your deployed model.
+      language: en-GB
+      use_ssl: true
+    endpoint:
+      base_url: stt.example.com:443
+      api_key_env: NIM_ENDPOINT_API_KEY
+    deployment:
+      ownership: external
+  tts:
+    category: tts
+    adapter:
+      kind: riva_grpc
+      language: en-US
+      voice: Magpie-Multilingual.EN-US.Aria
+      sample_rate: 44100
+      use_ssl: true
+    endpoint:
+      base_url: tts.example.com:443
+      api_key_env: NIM_ENDPOINT_API_KEY
+      timeout: 60
+    deployment:
+      ownership: external
+  embedding:
+    adapter:
+      preset: nemotron_embedding
+      model_name: nvidia/llama-nemotron-embed-1b-v2
+      # Existing request defaults select the asymmetric embedding dialect.
+      # The SDK strips query:/passage: labels and groups by input_type.
+      # Unprefixed inputs are passages; local profiles omit these extras.
+      default_extras:
+        input_type: passage
+    endpoint:
+      base_url: https://embedding.example.com
+      api_key_env: NIM_ENDPOINT_API_KEY
+      health_path: /v1/health/ready
+    deployment:
+      ownership: external

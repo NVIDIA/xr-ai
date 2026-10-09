@@ -157,6 +157,15 @@ succeed without a request; `health_path` selects the HTTP route when probing is
 enabled. Tea making's RAG service requires this configuration for hosted embedding
 endpoints; refer to {ref}`rag-embedding-health`.
 
+## Deployment profiles
+
+Use the same factories and typed interfaces for local development and native
+NIM deployment. The example in `deployment/nim/models.yaml` selects native HTTP
+chat and embedding endpoints and Riva gRPC speech, without compatibility servers.
+The embedding factory honors existing request defaults, including asymmetric
+`input_type` batches. Refer to {doc}`/guides/deploying-with-nim` for deployment
+ownership, sample configuration paths, and validation commands.
+
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
 
@@ -176,7 +185,9 @@ STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts `voice` and `sample_rate`. A hosted NVCF endpoint uses TLS,
 `api_key_env`, and its `function_id`. If custom code explicitly calls `health()`,
 set `health_check: false` for a hosted endpoint without a channel-ready health
-surface. Existing gRPC request deadlines and error propagation are unchanged.
+surface. Recognition timeout and cancellation cancel the native RPC and join
+its pending client read; synthesis uses the same cleanup rule for streamed
+audio.
 
 ## Tests
 

@@ -70,8 +70,8 @@ Refer to the
 [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html) and
 configure the required credentials before starting the stack.
 
-For NVIDIA NIM models, refer to the separate
-[model-servers-nim sample](../model-servers-nim/README.md).
+For deployment using NVIDIA NIM endpoints, refer to
+[Deploying samples with NIM endpoints](https://nvidia.github.io/xr-ai/latest/guides/deploying-with-nim.html).
 
 The services persist across agent-sample restarts. Stop them explicitly when
 they are no longer needed:

@@ -17,14 +17,12 @@ dependency paths, operational ownership, and standalone commands predictable.
 | `speaker-stt/` | Speaker-conditioned streaming speech recognition | 8102 |
 | `stt-server/` | Parakeet speech recognition | 8103 |
 | `magpie-tts/` | Magpie speech synthesis | 8104 |
-| `magpie-nim-tts/` | OpenAI-compatible Magpie Riva speech adapter | 8105 (alternative to Pocket) |
 | `pocket-tts/` | Pocket TTS speech synthesis | 8105 |
 | `llama-nemotron-llm/` | Llama Nemotron text generation | 8106 |
 | `nemotron3-nano-llm/` | Nemotron 3 Nano text generation | 8107 |
 | `nemotron-omni-llm/` | Nemotron Omni multimodal generation | 8108 |
 | `clef-server/` | Clef-Flash SystemOne choice decisions | 8120 |
 | `embedding-server/` | Nemotron text embeddings | 8109 |
-| `nim-server/` | Generic self-hosted NVIDIA NIM launcher | configured HTTP and optional gRPC ports |
 | `video-memory-service/` | Recorded-video queries and historical frame decoding | `tcp://localhost:8310` |
 | `openxr-service/` | Headless OpenXR session and current head pose | `tcp://localhost:8330` |
 | `rag-service/` | Dense document retrieval | `tcp://localhost:8340` |

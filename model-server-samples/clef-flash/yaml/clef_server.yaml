@@ -11,7 +11,7 @@ model_cache: ../../../models
 host: 127.0.0.1
 # 810x contains shared client endpoints, including NIM compatibility adapters.
 # 811x is used by native NIM chat and embedding backends; Clef uses 8120.
-# Port inventory: docs/source/reference/model-servers-nim.md.
+# Port inventory: docs/source/components/ai-services.md.
 port: 8120
 device: cuda:0
 dtype: bfloat16

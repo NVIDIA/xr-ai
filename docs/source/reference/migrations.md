@@ -5,6 +5,20 @@
 
 # Release migration
 
+## Native NIM endpoint profiles
+
+The managed `model_servers_nim` command and its hardware profiles are removed,
+along with `nim_model_adapter`, `nim_riva_server`, `nim_server`,
+`magpie_nim_tts`, and `xr_ai_vllm.serve_nim`. Deploy model containers with the
+operator's tooling and configure native endpoint addresses in consumer profiles.
+Use native chat model IDs with `openai_compat`, `riva_grpc` for speech, and
+embedding `default_extras.input_type: passage` for prefix-aware asymmetric
+inputs. Local model-server defaults remain unchanged.
+
+Native Magpie speech does not append the compatibility wrapper's 300 ms pause.
+Riva client readiness checks channel connectivity; validate inference separately.
+Refer to {doc}`/guides/deploying-with-nim` for migration and validation commands.
+
 ## LiveKit sample credentials
 
 Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
@@ -63,9 +77,8 @@ Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
 Named `--models` selections are retired:
 
 - Replace `model_servers --models default` with `model_servers`.
-- Replace `model_servers --models vlm_llm_nim` with the separate
-  {doc}`NIM sample </reference/model-servers-nim>`. That stack uses Magpie TTS
-  and the original agent endpoints; it is not the former mixed NIM profile.
+- Replace `model_servers --models vlm_llm_nim` with an independently deployed
+  NIM endpoint profile. Refer to {doc}`/guides/deploying-with-nim`.
 - Pass custom deployments by JSON path, such as
   `model_servers --models ./yaml/models.my-stack.json`, instead of a bare name.
   Custom deployments can no longer select `llm-nim`, `vlm-nim`, `stt-nim`, or

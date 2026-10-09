@@ -92,12 +92,12 @@ def _request_headers(
     return result
 
 
-async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
+async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool, api_key: str | None = None) -> bool:
     # Disabling explicit health probes returns success without an HTTP request.
     if not enabled:
         return True
     try:
-        resp = await client.get(url, timeout=3.0)
+        resp = await client.get(url, timeout=3.0, headers=_auth_headers(api_key))
         return resp.is_success
     except httpx.HTTPError:
         return False
@@ -580,7 +580,7 @@ class OpenAICompatLLM:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -883,7 +883,7 @@ class OpenAICompatSTT:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -955,7 +955,7 @@ class OpenAICompatTTS:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -1073,10 +1073,15 @@ class OpenAICompatEmbedding:
         number of vectors raises :class:`ValueError`.
         """
 
+        return await self._embed_payload(texts, {}, timeout=timeout)
+
+    async def _embed_payload(
+        self, texts: Sequence[str], extras: Mapping[str, Any], *, timeout: float | None,
+    ) -> list[list[float]]:
         if not texts:
             return []
         kwargs: dict[str, Any] = {
-            "json": {"model": self._model, "input": list(texts)},
+            "json": {**extras, "model": self._model, "input": list(texts)},
             "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
@@ -1097,7 +1102,7 @@ class OpenAICompatEmbedding:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -1110,3 +1115,43 @@ class OpenAICompatEmbedding:
 
     async def __aexit__(self, *exc: Any) -> None:
         await self.close()
+
+
+class _EmbeddingWithExtras(OpenAICompatEmbedding):
+    """Profile-only payload defaults and asymmetric input normalization."""
+
+    def __init__(self, *, default_extras: Mapping[str, Any], **kwargs: Any) -> None:
+        extras = dict(default_extras)
+        if {"model", "input"} & extras.keys():
+            raise ValueError("embedding default_extras cannot replace model or input")
+        if "input_type" in extras and extras["input_type"] not in ("query", "passage"):
+            raise ValueError("embedding input_type must be query or passage")
+        self._extras = extras
+        super().__init__(**kwargs)
+
+    async def embed(
+        self, texts: Sequence[str], *, timeout: float | None = None,
+    ) -> list[list[float]]:
+        if "input_type" not in self._extras:
+            return await self._embed_payload(texts, self._extras, timeout=timeout)
+        groups: dict[str, list[tuple[int, str]]] = {"query": [], "passage": []}
+        for index, text in enumerate(texts):
+            kind = self._extras["input_type"]
+            for candidate in groups:
+                prefix = candidate + ": "
+                if text.startswith(prefix):
+                    kind, text = candidate, text[len(prefix):]
+                    break
+            groups[kind].append((index, text))
+        results: list[list[float]] = [[] for _ in texts]
+        # The wire field applies to the entire batch. Split mixed inputs and
+        # restore original positions; one client owns both requests and cleanup.
+        for kind, group in groups.items():
+            if not group:
+                continue
+            vectors = await self._embed_payload(
+                [text for _, text in group], {**self._extras, "input_type": kind}, timeout=timeout,
+            )
+            for (index, _), vector in zip(group, vectors, strict=True):
+                results[index] = vector
+        return results
