@@ -25,8 +25,10 @@ from xr_render_demo_worker.agents.memory.agent import DESCRIPTION as memory_desc
 from xr_render_demo_worker.agents.object.agent import DESCRIPTION as object_description
 from xr_render_demo_worker.agents.placement.agent import DESCRIPTION as placement_description
 from xr_render_demo_worker.agents.vision.agent import (
-    DESCRIPTION as vision_description,
     _LIVE_ONLY_DESCRIPTION,
+)
+from xr_render_demo_worker.agents.vision.agent import (
+    DESCRIPTION as vision_description,
 )
 from xr_render_demo_worker.models import SceneRequest, SubagentResult, SubagentTask
 from xr_render_demo_worker.supervisor import SceneSupervisor

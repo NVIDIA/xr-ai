@@ -20,6 +20,7 @@ from xr_ai_tools.text_memory import (
     RecallConversationRequest,
     RecallConversationResult,
 )
+from xr_ai_tools.types import EmptyRequest as TrackingEmptyRequest
 from xr_ai_tools.types import SpatialFrame, Vector3
 from xr_render_demo_worker.config import load_config
 from xr_render_demo_worker.models import SceneRequest
@@ -34,6 +35,7 @@ from xr_render_scene import (
     SceneState,
     UpdatePrimitiveRequest,
 )
+from xr_render_scene.schemas import SceneHealth, StartXRResult
 
 from .cases import CASES as CORPUS_CASES
 
@@ -110,24 +112,63 @@ _DEFAULT_POSE = {
 class _FakeSceneTools:
     def __init__(self, fake: "FakeScene") -> None:
         self._fake = fake
-        self.get_scene_state = Tool("get_scene_state", "Return scene.", EmptyRequest, SceneState, fake.get_scene_state)
+        self.get_scene_state = Tool(
+            "get_scene_state",
+            "Return every current XR object with its ID, type, world position, color, and size.",
+            EmptyRequest,
+            SceneState,
+            fake.get_scene_state,
+        )
         self.update_primitive = Tool(
-            "update_primitive", "Update.", UpdatePrimitiveRequest, MutationResult, fake.update_primitive)
+            "update_primitive",
+            "Partially update an existing XR object by ID. Omitted fields remain unchanged.",
+            UpdatePrimitiveRequest,
+            MutationResult,
+            fake.update_primitive,
+        )
         self.add_primitive = Tool(
-            "add_primitive", "Add.", AddPrimitiveRequest, AddPrimitiveResult, fake.add_primitive)
+            "add_primitive",
+            "Create a sphere or box at a world position and return its new object ID. Position and size use metres.",
+            AddPrimitiveRequest,
+            AddPrimitiveResult,
+            fake.add_primitive,
+        )
         self.remove_primitive = Tool(
-            "remove_primitive", "Remove.", RemovePrimitiveRequest, MutationResult, fake.remove_primitive)
+            "remove_primitive",
+            "Permanently remove one XR scene object by ID.",
+            RemovePrimitiveRequest,
+            MutationResult,
+            fake.remove_primitive,
+        )
         async def _noop(req: Any) -> None:
             return None
-        self.start_xr = Tool("start_xr", "Start.", EmptyRequest, None, _noop)
-        self.get_health = Tool("get_health", "Health.", EmptyRequest, None, _noop)
+        self.start_xr = Tool(
+            "start_xr",
+            "Start the sample's LOVR OpenXR renderer if needed.",
+            EmptyRequest,
+            StartXRResult,
+            _noop,
+        )
+        self.get_health = Tool(
+            "get_health",
+            "Return LOVR lifecycle and scene-delivery status.",
+            EmptyRequest,
+            SceneHealth,
+            _noop,
+        )
         self.tools = (self.get_scene_state, self.update_primitive, self.add_primitive,
                       self.remove_primitive, self.start_xr, self.get_health)
 
 
 class _FakeTrackingTools:
     def __init__(self, pose: SpatialFrame) -> None:
-        self.get_user_frame = Tool("get_user_frame", "User frame.", EmptyRequest, SpatialFrame, lambda _: pose)
+        self.get_user_frame = Tool(
+            "get_user_frame",
+            "Get the user's current world-space origin and forward, right, and up axes.",
+            TrackingEmptyRequest,
+            SpatialFrame,
+            lambda _: pose,
+        )
 
 
 class _FakeTextMemoryTools:
@@ -1459,13 +1500,6 @@ async def main() -> None:
     corpus = [case for case in CORPUS_CASES if not wanted or case["name"] in wanted]
     precision = [case for case in CASES if not wanted or case.name in wanted]
     utterances = [case for case in UTTERANCES if not wanted or case.name in wanted]
-    deferred_corpus = [
-        case for case in corpus
-        if not _CONFIG.video_history_enabled and "look_at_past_frame" in case.get("required_tools", ())
-    ]
-    for case in deferred_corpus:
-        print(f"DEFERRED {case['name']}: recorded-video tool is disabled by the worker profile")
-    corpus = [case for case in corpus if case not in deferred_corpus]
     deferred_precision = [
         case for case in precision
         if not _CONFIG.video_history_enabled and "look_at_past_frame" in case.required_tools
@@ -1482,9 +1516,8 @@ async def main() -> None:
         print(f"precision: {sum(precision_results)}/{len(precision_results)} passed")
     if utterances_results:
         print(f"utterances: {sum(utterances_results)}/{len(utterances_results)} passed")
-    deferred_count = len(deferred_corpus) + len(deferred_precision)
-    if deferred_count:
-        print(f"deferred: {deferred_count} (recorded-video capability disabled)")
+    if deferred_precision:
+        print(f"deferred: {len(deferred_precision)} (recorded-video capability disabled)")
     if not all(corpus_results + precision_results + utterances_results):
         raise SystemExit(1)
 

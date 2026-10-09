@@ -433,13 +433,14 @@ The evaluation project derives schemas from the worker's native tools. Offline
 tiers call the live agent LLM but apply tool effects to deterministic fixtures,
 so they do not mutate the LOVR scene.
 
-The offline corpus contains 69 end-to-end scenarios (68 active, one deferred),
-16 precision cases, and 40 utterance variants, plus 46 supervisor-routing cases
-and 74 leaf-agent cases (72 active, two deferred). The checked-in worker profile
-disables recorded-video history, so cases requiring `look_at_past_frame` are
-reported as deferred. The harness omits that tool and uses the production
-live-only vision description; it does not simulate a capability the profile
-does not expose. The active baseline has 446 cases across Tea, Lab, and XR.
+The offline corpus contains 69 end-to-end scenarios, 16 precision cases (15
+active, one deferred), and 40 utterance variants, plus 46 supervisor-routing
+cases and 74 leaf-agent cases (72 active, two deferred). The checked-in worker
+profile disables recorded-video history, so cases requiring
+`look_at_past_frame` are reported as deferred. The harness omits that tool and
+uses the production live-only vision description; it does not simulate a
+capability the profile does not expose. The active baseline has 446 cases
+across Tea, Lab, and XR.
 
 Each offline case reports the model identifier returned by the endpoint, the
 system-prompt hash, per-call sampling settings, total LLM wall time, and full
