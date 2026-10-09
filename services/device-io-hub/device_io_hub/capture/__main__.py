@@ -18,19 +18,23 @@ from .config import DEFAULT_CONFIG_NAME, load_capture_config
 
 async def main(*, config_path: Path, ready_file: Path | None = None) -> None:
     setup_logging("capture")
-    config = load_capture_config(config_path)
-    service = CaptureService(config)
-    await service.start()
-    if ready_file is not None:
-        ready_file.touch()
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
-    run_task = asyncio.create_task(service.run(), name="capture-service")
-    stop_task = asyncio.create_task(stop.wait(), name="capture-stop")
+    service = None
+    tasks = []
     try:
+        config = load_capture_config(config_path)
+        service = CaptureService(config)
+        await service.start()
+        if ready_file is not None:
+            ready_file.touch()
+
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+        run_task = asyncio.create_task(service.run(), name="capture-service")
+        tasks.append(run_task)
+        stop_task = asyncio.create_task(stop.wait(), name="capture-stop")
+        tasks.append(stop_task)
         done, _pending = await asyncio.wait(
             (run_task, stop_task),
             return_when=asyncio.FIRST_COMPLETED,
@@ -43,11 +47,12 @@ async def main(*, config_path: Path, ready_file: Path | None = None) -> None:
         logger.exception("media capture failed")
         raise
     finally:
-        run_task.cancel()
-        stop_task.cancel()
-        await asyncio.gather(run_task, stop_task, return_exceptions=True)
-        logger.info("media capture shutting down")
-        await service.stop()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if service is not None:
+            logger.info("media capture shutting down")
+            await service.stop()
 
 
 def run() -> None:

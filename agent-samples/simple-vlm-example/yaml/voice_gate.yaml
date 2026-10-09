@@ -20,6 +20,11 @@ magic_phrases:
 # before STT+VLM finish — so the user knows the agent is processing.
 listening_chime: false
 
+# Enable global STOP interruption and final-transcript acknowledgement.
+# Set false for passive narration; probes and conversation controls stay independent.
+# Scoped commands such as "stop recording" remain ordinary agent queries.
+stop_commands_enabled: true
+
 # Follow-up grace window. After a successful magic-phrase match, the
 # next utterance from the same participant within this many seconds
 # bypasses the gate so "hey agent" → pause → "what am I looking at?"
