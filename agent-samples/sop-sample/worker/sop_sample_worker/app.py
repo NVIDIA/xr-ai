@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Silent narration input and camera-controlled multimodal capture."""
+"""Voice-controlled SOP recording, independent of optional media capture."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from xr_ai_voice import UserQuery, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
-from .lifecycle import CameraRecording
+from .lifecycle import CaptureRecording
 from .recorder import RecorderAgent
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
@@ -30,8 +30,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     setup_logging("worker")
     models = load_models_config(config.models_config)
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
-    # Capture control has its own endpoint so VoiceAgent can own its transport
-    # lifecycle without closing the path needed to finalize pending recordings.
+    # Keep frame and participant delivery independent of the voice transport.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     images = ImageRegistry()
     frames = CurrentFrameTool(
@@ -39,17 +38,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     recorder = RecorderAgent(
         sessions_dir=config.artifacts_dir / "sessions",
-        capture_endpoint=endpoint,
-        media_capture_dir=config.media_capture_dir,
         current_frame=frames,
         images=images,
         query_image=ImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt),
         capture_fps=config.capture_fps,
         caption_interval_s=config.caption_interval_s,
     )
-    camera = CameraRecording(recorder)
-    endpoint.on_participant(camera.receive)
-    endpoint.on_video_track(camera.receive)
+    capture = CaptureRecording(recorder)
+    endpoint.on_participant(capture.receive)
     voice = VoiceAgent(
         query_topic=Topic("sop.narration", UserQuery),
         stt=stt,
@@ -68,7 +64,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     )
     runtime = AgentRuntime()
     runtime.register("voice", voice)
-    # No query subscriber or voice output producer: all speech is narration.
+    runtime.register("capture", capture)
+    # Final transcripts control SOP boundaries and narration; no voice output producer.
     receiver = asyncio.create_task(endpoint.run())
     try:
         await endpoint.wait_until_running()
@@ -76,7 +73,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             await voice.run(runtime)
     finally:
         try:
-            await camera.close()
+            await capture.close()
         finally:
             # stop() alone cannot wake an idle ZMQ receive. Drain recordings
             # first, then cancel the receiver before closing its sockets.

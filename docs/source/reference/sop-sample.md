@@ -5,9 +5,9 @@
 
 # SOP sample
 
-The SOP sample captures narrated demonstrations. It records the source evidence
-for a later procedural guide; it does not generate, approve, or execute guides.
-The only supported mode is `--capture`. Guide replay is not implemented.
+The SOP sample records narrated demonstrations between spoken commands. It saves
+source evidence for a later procedural guide; it does not generate, approve,
+or execute guides. Guide replay is not implemented in this capture-only branch.
 
 ## Run a demonstration
 
@@ -15,109 +15,122 @@ Run commands from `agent-samples/sop-sample/`:
 
 ```bash
 uv run --project ../../model-server-samples/model-servers model_servers
+uv run main.py
+```
+
+Wait for the shared models to be ready before starting the sample. Open the
+authenticated web-client URL printed by DeviceIOHub, enable the microphone,
+and connect. Say **start recording**, demonstrate and narrate, then say
+**stop recording**. Say **start recording** again for another SOP packet without
+reconnecting. The worker logs each finalized packet's path and status.
+
+Live video and on-demand image capture are both supported. Camera-off does not
+stop recording. The worker makes no spoken replies, including during narration;
+there is no wake phrase or command acknowledgement.
+
+To additionally save participant-wide video, bidirectional audio, and data-channel
+traffic, use the same optional flag as Simple VLM and XR Render:
+
+```bash
 uv run main.py --capture
 ```
 
-Wait for the shared models to be ready before starting the sample. Use the
-authenticated web-client URL printed by DeviceIOHub, allow microphone and
-camera access, connect, and wait for readiness. Enable the microphone and live
-video, then demonstrate and narrate the procedure. Pause after your last
-sentence so speech recognition can finish, then turn live video off. The
-worker logs the finalized packet's path and status. Starting live video again
-creates a separate recording without requiring reconnection.
+This flag enables the shared capture service in participant mode. Its bundle
+starts on participant connection and ends on disconnect or service shutdown,
+independently of SOP recording commands. One bundle may span several SOP packets.
+The default demo profile produces MP4 output when video is available and retains
+the shared source media and timeline. With no streamed video, it may contain only
+audio, transcripts, and metadata. On-demand stills are not synthesized into video.
 
-Refer to {doc}`/getting_started/requirements` for the model and hub deployment
-requirements and {doc}`/components/server-runtime` for shared media capture.
-Video recording uses the shared NVENC capture service and requires a supported
-NVIDIA GPU. External STT and VLM endpoints are configured in `yaml/models.json`.
-The sample creates a TTS client to satisfy the shared voice runtime contract,
-but has no speech-output producer and makes no TTS synthesis requests.
+Refer to {doc}`/getting_started/requirements` for model and hub deployment and
+{doc}`/components/server-runtime` for shared media capture. Optional video
+recording uses the shared NVENC encoder and requires supported NVIDIA hardware.
+Without `--capture`, the SOP worker saves snapshots, captions, and narration
+without launching that encoder. STT and VLM endpoints are configured in
+`yaml/models.json`. The worker creates an unused TTS client to satisfy the shared
+voice runtime contract, but makes no TTS synthesis requests.
 
 ## Recording boundaries
 
-- Connecting with the camera off does not begin recording.
-- The first live camera frame starts a participant-local recording. Unmuting
-  an existing camera track also starts recording.
-- Muting or unpublishing the last active camera track finalizes that recording.
-  Disconnect and worker shutdown also finalize open recordings.
-- A temporary pause in incoming frames does not end a recording. The boundary
-  comes from the camera lifecycle, not an inactivity timeout.
-- On-demand still images and screen-sharing tracks do not start a recording.
-- Repeated active-track notifications do not create duplicate sessions. A new
-  recording waits for the previous recording's finalization before starting.
-- There are no voice controls or agent replies. All user speech during capture,
-  including the words “start recording” or “stop recording,” is narration.
+- Connecting does not start SOP frame sampling, captioning, or narration storage.
+- **start recording** starts a fresh SOP packet. Repeated starts while recording
+  are ignored; **stop recording** finalizes the active packet.
+- Commands are standalone utterances, ignoring case, surrounding whitespace, and
+  trailing sentence punctuation. There is no wake phrase. Other speech, including
+  “stop,” “stop capture,” and “do not stop recording,” is narration only while
+  recording. The two control commands are excluded from SOP narration.
+- Camera mute, unmute, publication, and frame gaps never start or stop a packet.
+  With no fresh live frame, the existing current-frame tool requests a still from
+  clients that allow on-demand capture; this can briefly activate the camera.
+- Unavailable images do not end recording or narration. Captioning resumes only
+  when another distinct image has been saved.
+- Disconnect and graceful shutdown finalize open packets. A reconnect is idle
+  until another **start recording** command. Stale events from an old connection
+  cannot stop a new recording.
 
-The microphone must be enabled to capture spoken narration. Stopping only the
-microphone does not stop the camera-controlled recording. STT completion is
-asynchronous: turn the camera off after the last utterance has been transcribed.
-Raw audio remains available even if a transcript is missing. During rapid
-off/on toggles, media arriving before the previous packet finishes finalizing
-is not buffered for the next packet.
-If shared capture takes longer than 10 seconds to finalize, the worker logs a
-warning and continues waiting; it does not start an unbacked packet. The wait
-also applies during shutdown. For accepted recordings, if no manifest arrives,
-restart and graceful shutdown remain blocked until capture finalization can complete.
-The worker also waits for the new bundle's recorded start event, retrying the
-start command if capture is still closing the previous bundle. Frames and
-captions for the new packet begin only after that acceptance check succeeds.
-Departure and worker shutdown cancel pending starts without waiting behind the
-camera-event queue. Queued starts for that connection are discarded. A packet
-created for a start that was never accepted is finalized as `incomplete` without
-waiting for a nonexistent media manifest. If capture accepted the start before
-cancellation, normal manifest, narration, and pending-write draining still apply.
+Speech controls take effect after final recognition, not at the first spoken
+word. Keep the microphone enabled and pause after the last utterance before
+disconnecting so STT can finish. With `--capture`, raw audio can remain available
+even if a late transcript misses its SOP boundary.
+
+Stop drains pending filesystem writes and finalizes the packet before the next
+queued start. Narration and commands are ordered per participant, so speech
+following a queued start belongs to that new packet. Snapshots during the restart
+gap are not buffered. Departure cancels queued starts but drains accepted
+recordings and their queued narration. No raw-media manifest or encoder cleanup
+is needed to complete an SOP packet.
 
 ## Outputs
 
-All generated data is local and ignored by Git. Defaults are relative to the
-sample directory:
+Generated data remains local and Git-ignored. Defaults are relative to the sample:
 
 | Location | Contents |
 |---|---|
-| `artifacts/sessions/<session-id>/packet.json` | Packet status, counts, activity hierarchy, and shared media manifest reference |
-| `artifacts/sessions/<session-id>/frames/` | JPEG samples at a target of 2 fps and timestamped `index.jsonl` |
-| `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped visual captions, activity, phase, and visible changes |
-| `artifacts/sessions/<session-id>/transcript.jsonl` | User narration projected from the shared capture transcript |
+| `artifacts/sessions/<session-id>/packet.json` | SOP status, participant, timestamps, counts, and activity hierarchy |
+| `artifacts/sessions/<session-id>/frames/` | JPEG samples targeting 2 fps and timestamped `index.jsonl` |
+| `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
+| `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the SOP recording boundary |
 | `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary |
-| `artifacts/sessions/<session-id>/errors.jsonl` | Capture or caption errors, when present |
-| `artifacts/captures/<session-id>/<bundle>/` | Shared raw video, audio, transcript, event timeline, and final manifest |
+| `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
+| `artifacts/captures/<bundle>/` | Optional participant-wide media, transcripts, timeline, and manifest from `--capture` |
 
-The captioner observes the latest sampled frame every 5 seconds by default,
-with the previous caption as context. Captions are
-observations, not verified SOP steps. Narration is derived from the shared
-capture service's transcript, not a second STT implementation. The media profile
-is `raw`; this sample does not create a captioned demo MP4 automatically.
+The captioner checks for a new sampled frame every 5 seconds by default, with
+the previous caption as context. It does not recaption the same saved image.
+On-demand cadence depends on client response time; 2 fps is a target, not a
+guarantee. Captions are observations, not verified SOP steps.
 
-`packet.json` becomes `complete` after the shared manifest is available and
-narration export succeeds. Failed media finalization or narration export marks
-the packet `incomplete` and records the reason. Keep the packet and referenced
-capture bundle together. Media retention is disabled by default, so monitor
-disk usage and remove unwanted recordings manually.
+Narration reuses `VoiceAgent`'s final transcript events, also published to the
+optional shared capture service. There is no second STT implementation. The
+shared transcript retains speech outside SOP boundaries and the spoken commands;
+the SOP transcript contains only narration between them.
+
+An accepted stop is recorded in `packet.json.stop_command`. Packets no longer
+contain a per-SOP `media_capture` manifest link: shared bundles use independent
+participant-wide boundaries. Match them using participant identity and timestamps
+when needed. Packet `complete` means its local writes finished, not that every
+frame or utterance was available or the procedure was correct. Review errors and
+counts before generating a guide. Retention is disabled by default; monitor disk
+usage and remove unwanted recordings manually.
 
 ## Composition and configuration
 
-The orchestrator starts the hub, shared `device_io_capture` service, then the
-sample worker. The capture service uses `session_mode: explicit`; camera events
-cause the worker to invoke the existing participant-scoped `CaptureTools`.
-There is no second audio or video encoder in the sample.
+The orchestrator starts the hub, optional `device_io_capture`, and SOP worker.
+Shared capture uses `session_mode: participant` and `profile: demo`, as in the
+other samples. The worker never sends `CaptureTools` start or stop commands.
 
-The hub emits typed camera lifecycle events and replays active tracks with its
-participant roster. The worker serializes boundaries per participant and keeps
-an independent capture-control endpoint alive until all recordings finalize.
-`VoiceAgent` owns speech recognition and publishes the shared transcript without
-a conversational agent. Filesystem writes and finalization tasks are drained
-before the capture endpoint closes.
+The worker subscribes only to existing participant events and final voice
+transcripts. It has no camera lifecycle subscription. `VoiceAgent` owns STT;
+the sample handles recording commands and narration in per-participant order.
+Filesystem writes and finalization tasks drain before the frame endpoint closes.
+No conversational agent or recording speech producer is added.
 
-The voice gate disables its optional STOP command handling, and the sample
-disables early VAD transcription probes. STOP words therefore do not produce
-early STOP interruptions or spoken acknowledgements. Final utterances still
-use the normal speech-recognition and narration path. The defaults for other
-samples remain unchanged.
+The voice gate disables optional STOP handling, and the worker disables early
+VAD transcript probes. Ordinary STOP words cannot trigger spoken acknowledgements
+or early STOP interruptions. Other samples keep their existing defaults.
 
-`yaml/worker.yaml` owns frame frequency, caption interval, speech detection, and
-the SOP artifact root. It resolves `yaml/media_capture.yaml` to locate shared
-manifests. Paths are relative to their owning YAML file. Keep the shared capture
-service in explicit mode. `yaml/device_io_hub.yaml` owns the room and web server;
-`yaml/models.json` owns model endpoints. Restart the sample after edits. Refer
-to {doc}`configuration` for checked-in fields and {doc}`command-line` for CLI
+`yaml/worker.yaml` owns SOP output paths, sampling, caption cadence, and speech
+detection. `yaml/media_capture.yaml` independently configures the optional shared
+bundle. Paths resolve relative to their owning YAML. `yaml/device_io_hub.yaml`
+owns the room and web server; `yaml/models.json` owns model endpoints. Restart
+after edits. Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI
 options.

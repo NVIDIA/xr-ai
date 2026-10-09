@@ -5,8 +5,8 @@
 
 # SOP sample
 
-Capture narrated demonstrations automatically while a participant's live camera
-is on. The sample saves audio, video, sampled frames, captions, and narration.
+Record narrated demonstrations with spoken start and stop commands. The sample
+saves sampled frames, captions, and narration, with optional shared media capture.
 It does not answer questions or run guides.
 
 ## Run
@@ -18,23 +18,26 @@ servers and wait for them to report ready:
 uv run --project ../../model-server-samples/model-servers model_servers
 ```
 
-Then start capture from the same terminal:
+Then start the sample from the same terminal:
 
 ```bash
 uv sync
-uv run main.py --capture
+uv run main.py
 ```
 
 Alternatively, use the installed entry point:
 
 ```bash
-uv run sop_sample --capture
+uv run sop_sample
 ```
 
-Open the authenticated web-client URL printed by the hub, connect, enable the
-microphone, and turn on **live video**. Turn the camera off to finalize the
-recording; turn it on again for another recording. No spoken commands are
-required. Disconnecting also finalizes the recording.
+Open the authenticated web-client URL printed by the hub and connect. Enable
+the microphone and use live video or on-demand image capture. Say **start
+recording**, narrate the demonstration, then say **stop recording**. Repeat
+these commands to record another SOP without reconnecting. The worker is silent.
+
+Add `--capture` to either launch command to independently save participant-wide
+video, bidirectional audio, and data traffic. It does not start SOP recording.
 
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
