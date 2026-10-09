@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
-_LAUNCH_CONTRACT_VERSION = 3
+_LAUNCH_CONTRACT_VERSION = 4
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
     "HF_HUB_DISABLE_XET",
@@ -114,7 +114,7 @@ def build_run_argv(
 
     The container resolves the model (``vllm_argv[2]``) and its
     ``--revision`` from the mounted cache before CUDA starts, and downloads
-    it only when the cached snapshot is absent or incomplete. vLLM then
+    it only when the cached snapshot is absent. vLLM then
     serves the snapshot directory, so it makes no Hub metadata request.
     """
     env_vars: dict[str, str] = {

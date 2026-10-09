@@ -178,22 +178,30 @@ before contacting the Hub, and load cached models from their local paths:
 | Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
 | STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
 | Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
-| Clef | Complete release at `model_revision`, including the joint head, loader, processor, tokenizer, and backbone shards | Native release loader with the snapshot directory |
+| Clef | Snapshot at `model_revision` | Native release loader with the snapshot directory |
 
-A listed service whose model is cached starts without any Hub request. Only an
-absent artifact is downloaded. A vLLM snapshot also counts as absent when it is
-incomplete: `config.json`, the weights, or a shard listed by a weight index is
-missing. Pocket TTS accepts its ungated weights when the gated voice-cloning
-weights are not cached. Pip-mode vLLM passes the model ID to vLLM unchanged, so
-it still contacts the Hub.
+The listed services use cached artifacts without refreshing them from the Hub.
+Only a cache miss follows the online download path. Pocket TTS accepts its
+ungated weights when the gated voice-cloning weights are not cached. Pip-mode
+vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.
+
+Offline startup supports a previously working cache. A local snapshot lookup
+does not establish completeness or integrity. Interrupted or damaged caches
+may require an online re-download; automatic partial-cache repair is not
+provided. The underlying loader may fail or apply defaults for missing files.
+To recover, re-download the affected model and revision with `hf download
+<model-id> --revision <revision> --force-download`, using the same `HF_HOME`
+or `--cache-dir` as the service, then start the service again while online.
 
 A cache hit is never refreshed. A model without a pinned revision keeps the
 `main` commit it was downloaded at; update it with `hf download`, as shown
 above.
 
-After one start with network access fills `model_cache`, the stack starts on a
-host without network access. To forbid downloads, set `HF_HUB_OFFLINE=1`. The
-host services inherit it, and the vLLM wrapper forwards it into its containers:
+After a successful online start, the listed services can reuse their working
+model cache without network access. This assumes their runtime dependencies
+and Docker images are already installed. To forbid downloads, set
+`HF_HUB_OFFLINE=1`. The host services inherit it, and the vLLM wrapper forwards
+it into its containers:
 
 ```bash
 HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers

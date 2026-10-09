@@ -50,10 +50,10 @@ must contain the release's required model files; its revision is supplied by
 the configuration rather than checked against local artifact metadata.
 
 Without `model_path`, the server resolves the configured revision from the
-cache first and loads a complete release without Hub requests. An absent or
-incomplete release follows the online download path. With `HF_HUB_OFFLINE=1`,
-it instead fails before model loading with the model, revision, cache directory,
-and missing artifacts. Refer to
+cache first and passes the snapshot directory to the native loader. An absent
+snapshot follows the online download path. With `HF_HUB_OFFLINE=1`, a cache
+miss instead fails before model loading with the model, revision, and cache
+directory. Offline startup assumes a previously working cache. Refer to
 {ref}`starting-model-services-without-network-access` for cache behavior.
 
 With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the

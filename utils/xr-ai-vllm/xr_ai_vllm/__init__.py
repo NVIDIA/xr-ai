@@ -109,7 +109,7 @@ def serve(
     Docker mode resolves *model* from the mounted *model_cache* inside the
     container and serves the cached snapshot directory under
     ``--served-model-name`` without contacting the Hub. Only when the snapshot
-    is absent or incomplete does it verify a Xet-capable Hub, repairing a
+    is absent does it verify a Xet-capable Hub, repairing a
     missing or incompatible ``hf-xet`` wheel, and download the snapshot before
     CUDA starts. With ``HF_HUB_OFFLINE=1`` a missing snapshot fails startup
     instead. *extra_pip* is an additional
