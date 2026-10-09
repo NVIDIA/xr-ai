@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -43,8 +42,15 @@ def backend(tmp_path, monkeypatch):
         bfloat16="bf16", float16="fp16", float32="fp32",
     ))
     config = ServerConfig(
-        DEFAULT_MODEL, DEFAULT_REVISION, None, tmp_path / "configured-cache",
-        "127.0.0.1", 8120, "cpu", "float32", 4096, 1_048_576,
+        model_name=DEFAULT_MODEL,
+        model_revision=DEFAULT_REVISION,
+        model_cache=tmp_path / "configured-cache",
+        host="127.0.0.1",
+        port=8120,
+        device="cpu",
+        dtype="float32",
+        max_length=4096,
+        max_body_bytes=1_048_576,
     )
     instance = ClefBackend(config)
     yield instance
@@ -91,17 +97,3 @@ def test_configured_revision_is_required(backend, monkeypatch):
     with pytest.raises(RuntimeError, match=DEFAULT_REVISION):
         backend.load()
     assert attempts == []
-
-
-def test_explicit_model_path_bypasses_hub(backend, monkeypatch, tmp_path):
-    directory = tmp_path / "extracted"
-    directory.mkdir()
-    (directory / "joint_schema_model.py").write_text(_LOADER)
-    backend.config = replace(backend.config, model_path=directory)
-    lookup = Mock(side_effect=AssertionError("model_path must bypass the Hub"))
-    monkeypatch.setattr(huggingface_hub, "snapshot_download", lookup)
-
-    backend.load()
-
-    assert backend.model["directory"] == directory
-    lookup.assert_not_called()
