@@ -140,28 +140,26 @@ def test_models_config_loads() -> None:
     """The bundled model config parses and exposes the expected names."""
     cfg = load_models_config(_MODELS_CONFIG)
     llm_spec      = cfg.llm("llm")
-    agent_llm_spec = cfg.llm("agent_llm")
+    assert set(cfg.entries) == {"llm", "stt", "tts", "vlm"}
     stt_spec      = cfg.stt("stt")
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
     assert llm_spec.base_url       == "http://localhost:8108"
-    assert agent_llm_spec.base_url == "http://localhost:8108"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
     assert vlm_spec.base_url       == "http://localhost:8100"
 
     # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
     # is populated from vLLM's "reasoning_content" field.
-    assert agent_llm_spec.reasoning_field == "reasoning_content"
+    assert llm_spec.reasoning_field == "reasoning_content"
 
-    # Both logical LLMs share the Omni server. The preset must pin thinking off
+    # The Omni preset must pin thinking off
     # at the wire level: Nemotron-3-Nano-Omni's template defaults thinking-on,
     # which burns short reply budgets on hidden reasoning and returns empty
     # content with finish_reason="length".
-    for spec in (llm_spec, agent_llm_spec):
-        assert spec.model_name == "llm"
-        assert spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
+    assert llm_spec.model_name == "llm"
+    assert llm_spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
     assert vlm_spec.model_name == "vlm"
     assert vlm_spec.capabilities["vision"] is True
 
@@ -271,7 +269,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="Done — sphere added in front of you.")
 
-    agent_llm = _make_spec_llm(stub, "agent_llm")
+    llm = _make_spec_llm(stub, "llm")
 
     tools = [
         ToolDef(
@@ -303,7 +301,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
         ),
     ]
 
-    resp = await agent_llm.chat(
+    resp = await llm.chat(
         messages,
         tools=tools,
         max_tokens=2048,
@@ -344,13 +342,13 @@ async def test_agentic_loop_wire_golden_thinking_off() -> None:
     """agentic-loop with thinking off: the preset's wire-level default applies."""
     stub = StubOpenAI()
     stub.set_chat_message(content="Done.")
-    agent_llm = _make_spec_llm(stub, "agent_llm")
+    llm = _make_spec_llm(stub, "llm")
 
     messages = [
         ChatMessage(role="system", content="You are a spatial AI assistant."),
         ChatMessage(role="user",   content="[Pre-fetched context]\n\n[Request]\nAdd sphere"),
     ]
-    await agent_llm.chat(
+    await llm.chat(
         messages,
         tools=[ToolDef(name="add_primitive", description="Add.", parameters={})],
         max_tokens=1024,
@@ -375,9 +373,9 @@ async def test_agentic_loop_reasoning_field_normalized() -> None:
         reasoning_field="reasoning_content",
     )
 
-    agent_llm = _make_llm(stub, reasoning_field="reasoning_content")
+    llm = _make_llm(stub, reasoning_field="reasoning_content")
 
-    resp = await agent_llm.chat(
+    resp = await llm.chat(
         [ChatMessage(role="user", content="Add a sphere in front")],
     )
 
@@ -404,8 +402,8 @@ async def test_agentic_loop_tool_calls_parsed() -> None:
         finish_reason="tool_calls",
     )
 
-    agent_llm = _make_llm(stub, reasoning_field="reasoning")
-    resp = await agent_llm.chat(
+    llm = _make_llm(stub, reasoning_field="reasoning")
+    resp = await llm.chat(
         [ChatMessage(role="user", content="Add sphere ahead")],
         tools=[ToolDef(name="add_primitive", description="Add.", parameters={})],
     )

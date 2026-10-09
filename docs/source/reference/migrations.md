@@ -5,6 +5,18 @@
 
 # Release migration
 
+## Single LLM entry in model profiles
+
+XR Render and the shared local and NIM model profiles now use one `llm` entry
+for text chat and tool-calling loops. XR Render workers and eval commands read
+`llm` instead of `agent_llm`. For a custom XR Render profile, move any
+`agent_llm` settings you want to retain into `llm`, then remove the duplicate
+entry. Model endpoints, presets, and inference settings are unchanged.
+
+Application-defined names remain supported by `ModelsConfig` and `make_llm`.
+Applications that need multiple LLMs can retain distinct named entries of the
+LLM category; no SDK type or factory has changed.
+
 ## LiveKit sample credentials
 
 Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.

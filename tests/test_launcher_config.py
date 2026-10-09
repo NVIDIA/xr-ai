@@ -199,7 +199,6 @@ def test_bundled_render_config_supports_worker_accessors() -> None:
     models = load_models_config(_RENDER_YAML / "models.json")
 
     models.llm("llm")
-    models.llm("agent_llm")
     models.stt("stt")
     models.vlm("vlm")
     models.tts("tts")

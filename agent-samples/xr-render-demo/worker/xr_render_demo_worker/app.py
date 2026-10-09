@@ -39,7 +39,7 @@ async def run_app(
     """Run the render sample until the runtime exits."""
     setup_logging("worker")
     models = load_models_config(config.models_config)
-    llm = make_llm(models, "agent_llm")
+    llm = make_llm(models, "llm")
 
     async def warmed_llm_probe() -> bool:
         """Report ready only after a real tool-shaped inference succeeds.
