@@ -5,6 +5,9 @@
 
 import argparse
 import asyncio
+import hashlib
+import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,6 +40,60 @@ from .cases import CASES as CORPUS_CASES
 _HERE = Path(__file__).resolve().parent
 _CONFIG = load_config((_HERE / "../../yaml/xr_render_demo_worker.yaml").resolve())
 _PARTICIPANT = "eval-user"
+
+
+class MeasuredLLM:
+    """Record the typed model calls made by one offline evaluation case."""
+
+    def __init__(self, llm: Any) -> None:
+        self._llm = llm
+        self.calls: list[dict[str, Any]] = []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._llm, name)
+
+    async def chat(self, messages: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        response = await self._llm.chat(messages, **kwargs)
+        system_text = "\n".join(
+            part.text if hasattr(part, "text") else str(part)
+            for message in messages if message.role == "system"
+            for part in (message.content if isinstance(message.content, list) else (message.content,))
+        )
+        self.calls.append({
+            "elapsed_ms": (time.perf_counter() - started) * 1000,
+            "model": response.raw.get("model"),
+            "prompt_sha256": hashlib.sha256(system_text.encode("utf-8")).hexdigest(),
+            "settings": {
+                key: kwargs.get(key)
+                for key in ("max_tokens", "temperature", "enable_thinking", "thinking_budget")
+            },
+        })
+        return response
+
+
+def eval_metadata() -> dict[str, Any]:
+    config_path = _CONFIG.models_config
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    entry = config["models"]["agent_llm"]
+    return {
+        "model_profile": entry["adapter"].get("preset") or entry["adapter"].get("model_name"),
+        "model_config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+        "video_history_enabled": _CONFIG.video_history_enabled,
+    }
+
+
+def case_metrics(llm: MeasuredLLM, started: float) -> str:
+    model_ids = sorted({call["model"] for call in llm.calls if call["model"]})
+    prompt_hashes = sorted({call["prompt_sha256"][:12] for call in llm.calls})
+    settings = sorted({json.dumps(call["settings"], sort_keys=True) for call in llm.calls})
+    return (
+        f"model_revision={model_ids or [eval_metadata()['model_profile']]} "
+        f"prompt_sha256={prompt_hashes} llm_calls={len(llm.calls)} "
+        f"llm_ms={sum(call['elapsed_ms'] for call in llm.calls):.1f} "
+        f"wall_ms={(time.perf_counter() - started) * 1000:.1f} "
+        f"settings={settings}"
+    )
 
 _DEFAULT_POSE = {
     "is_valid": True,
@@ -679,8 +736,13 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
         make_placement_agent(llm, fake_scene, fake_tracking, context),
         make_appearance_agent(llm, fake_scene, context, physical_color),
         make_object_agent(llm, fake_scene, fake_tracking, context, physical_color),
-        make_vision_agent(llm, fake_current_frame, fake_image_query, context,
-                          make_fake_video(fake_scene._fake)),
+        make_vision_agent(
+            llm,
+            fake_current_frame,
+            fake_image_query,
+            context,
+            make_fake_video(fake_scene._fake) if _CONFIG.video_history_enabled else None,
+        ),
         make_memory_agent(llm, fake_text_memory),
     ]
     return SceneSupervisor(
@@ -690,8 +752,9 @@ def _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
 
 
 async def run_corpus_case(case: dict[str, Any]) -> bool:
+    started = time.perf_counter()
     scene = FakeScene.from_corpus_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
+    llm = MeasuredLLM(make_llm(load_models_config(_CONFIG.models_config), "agent_llm"))
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
@@ -721,7 +784,7 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
     if ok_override is not None:
         ok, why = ok_override, response
     status = "PASS" if ok else f"FAIL {why}"
-    print(f"{status:32} {case['name']}: {response}", flush=True)
+    print(f"{status:32} {case['name']}: {response} | {case_metrics(llm, started)}", flush=True)
     return ok
 
 
@@ -1176,8 +1239,9 @@ UTTERANCES = (
 
 
 async def run_case(case: Case) -> bool:
+    started = time.perf_counter()
     scene = FakeScene.from_case(case)
-    llm = make_llm(load_models_config(_CONFIG.models_config), "agent_llm")
+    llm = MeasuredLLM(make_llm(load_models_config(_CONFIG.models_config), "agent_llm"))
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         supervisor = _make_supervisor(llm, fake_scene, fake_tracking, fake_text_memory,
@@ -1259,7 +1323,7 @@ async def run_case(case: Case) -> bool:
             f"positions={wrong_positions}"
         )
     )
-    print(f"{status:32} {case.name}: {response}", flush=True)
+    print(f"{status:32} {case.name}: {response} | {case_metrics(llm, started)}", flush=True)
     return passed
 
 
@@ -1386,11 +1450,29 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("cases", nargs="*", help="Case names; omit to run all cases")
     args = parser.parse_args()
+    print(
+        f"RUN sample=xr-render-demo {json.dumps(eval_metadata(), sort_keys=True)}; "
+        "temperature=0; per-call sampling settings are listed per case"
+    )
     audit_prompts()
     wanted = _resolve_case_names(args.cases)
     corpus = [case for case in CORPUS_CASES if not wanted or case["name"] in wanted]
     precision = [case for case in CASES if not wanted or case.name in wanted]
     utterances = [case for case in UTTERANCES if not wanted or case.name in wanted]
+    deferred_corpus = [
+        case for case in corpus
+        if not _CONFIG.video_history_enabled and "look_at_past_frame" in case.get("required_tools", ())
+    ]
+    for case in deferred_corpus:
+        print(f"DEFERRED {case['name']}: recorded-video tool is disabled by the worker profile")
+    corpus = [case for case in corpus if case not in deferred_corpus]
+    deferred_precision = [
+        case for case in precision
+        if not _CONFIG.video_history_enabled and "look_at_past_frame" in case.required_tools
+    ]
+    for case in deferred_precision:
+        print(f"DEFERRED {case.name}: recorded-video tool is disabled by the worker profile")
+    precision = [case for case in precision if case not in deferred_precision]
     corpus_results = [await run_corpus_case(case) for case in corpus]
     precision_results = [await run_case(case) for case in precision]
     utterances_results = [await run_case(case) for case in utterances]
@@ -1400,6 +1482,9 @@ async def main() -> None:
         print(f"precision: {sum(precision_results)}/{len(precision_results)} passed")
     if utterances_results:
         print(f"utterances: {sum(utterances_results)}/{len(utterances_results)} passed")
+    deferred_count = len(deferred_corpus) + len(deferred_precision)
+    if deferred_count:
+        print(f"deferred: {deferred_count} (recorded-video capability disabled)")
     if not all(corpus_results + precision_results + utterances_results):
         raise SystemExit(1)
 
