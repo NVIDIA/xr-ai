@@ -4,7 +4,7 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
+from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, KIND_SYSTEMONE, ModelsConfig
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -13,7 +13,29 @@ from ._openai_compat import (
     OpenAICompatVLM,
     _PocketTTS,
 )
-from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, TTSService, VLMService
+from ._protocols import Capabilities, DecisionService, EmbeddingService, LLMService, STTService, TTSService, VLMService
+from ._systemone import _SystemOneDecision
+
+
+def make_decision(config: ModelsConfig, name: str) -> DecisionService:
+    """Construct the typed decision service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
+    spec = config.decision(name)
+    if spec.kind == KIND_SYSTEMONE:
+        return _SystemOneDecision(
+            base_url=spec.base_url,
+            model_name=spec.model_name,
+            api_key_env=spec.api_key_env,
+            timeout=spec.timeout,
+            health_check=spec.health_check,
+            health_path=spec.health_path,
+        )
+    raise ValueError(f"unsupported decision kind: {spec.kind!r}")
 
 
 def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
