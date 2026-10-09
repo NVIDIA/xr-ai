@@ -101,6 +101,5 @@ upstream terms; refer to [License texts](THIRD_PARTY_NOTICES.md#license-texts)
 for details.
 
 Refer to [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for each component's
-applicable license and the
-[complete license-file index](THIRD_PARTY_NOTICES.md#bundled-license-file-index)
-for links to the preserved texts.
+applicable license and [`third_party_licenses/`](third_party_licenses/)
+for the preserved texts.
