@@ -66,6 +66,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     /// Publication for the buffer-capturer track. Published after the first injected frame.
     private var bufferPublication: LocalTrackPublication?
+    private var cameraPublishDefaults = VideoPublishOptions()
 
     /// Currently active local camera track (device camera, ARKit, or simulator
     /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
@@ -158,6 +159,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         room.delegates.add(delegate: self)
 
         let roomOptions = RoomOptions(stopLocalTrackOnUnpublish: true)
+        cameraPublishDefaults = roomOptions.defaultVideoPublishOptions
         // Audio isolation: when hubIdentity is set, disable auto-subscribe and
         // subscribe only to the hub participant's tracks (post-connect below +
         // the didPublishTrack delegate), so a client never receives another
@@ -244,22 +246,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     // MARK: - StreamingBackend: camera
 
     private func videoPublishOptions(_ encoding: CameraEncodingConfig?) throws -> VideoPublishOptions? {
-        guard let encoding else { return nil }
-        guard encoding.maxBitrateBps > 0, encoding.maxFramerate > 0 else {
-            throw StreamError.invalidCameraEncoding("Bitrate and frame rate must be positive.")
-        }
-        let preference: DegradationPreference
-        switch encoding.qualityPreference {
-        case .detail: preference = .maintainResolution
-        case .motion: preference = .maintainFramerate
-        case .balanced: preference = .balanced
-        case nil: preference = .auto
-        }
-        return VideoPublishOptions(
-            encoding: VideoEncoding(maxBitrate: encoding.maxBitrateBps, maxFps: encoding.maxFramerate),
-            simulcast: encoding.simulcast ?? true,
-            degradationPreference: preference
-        )
+        try cameraPublishOptions(encoding, defaults: cameraPublishDefaults)
     }
 
     public func startCamera(config: CameraConfig) async throws {
@@ -411,7 +398,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
-        let publishOptions = try videoPublishOptions(encoding)
+        // Subsequent frames retain the publication's policy. Validate/map only
+        // when these options can actually be consumed by a first publication.
+        let publishOptions = bufferPublication == nil ? try videoPublishOptions(encoding) : nil
 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).

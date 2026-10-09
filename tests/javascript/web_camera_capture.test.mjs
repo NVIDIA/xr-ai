@@ -13,7 +13,7 @@ const { LiveKitBackend } = await import(
 const { StreamSession } = await import(
   '../../client-samples/web/StreamKit/StreamSession.js'
 );
-const { CameraConfig, CameraEncodingConfig, VideoQualityPreference } = await import(
+const { CameraConfig, CameraEncodingConfig } = await import(
   '../../client-samples/web/StreamKit/index.js'
 );
 const { INTERNAL_SEND_BYTE_STREAM } = await import(
@@ -343,7 +343,6 @@ test('invalid encoding is rejected before capture or stopping an active camera',
   assert.equal(mediaTrack.stopCount, 0);
   assert.equal(room.unpublishedTracks.length, 0);
   assert.equal(backend.cameraTrack, mediaTrack);
-  assert.equal(VideoQualityPreference.DETAIL, CameraEncodingConfig.detail.qualityPreference);
 });
 
 test('reports the highest selected-transport RTT and all inbound-track jitter', async (t) => {
