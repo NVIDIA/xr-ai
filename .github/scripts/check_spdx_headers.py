@@ -236,9 +236,15 @@ def check(path: Path) -> tuple[bool, str]:
         if not lstripped.startswith("//"):
             return False, f"SPDX line must start with '//' (got: {spdx_line!r})"
     elif style == "dash":
-        for line in window_lines:
-            if "SPDX-" in line and not line.lstrip().startswith("--"):
-                return False, f"SPDX line must start with '--' (got: {line!r})"
+        comment_lines = [
+            line.lstrip()[2:].strip()
+            for line in window_lines
+            if line.lstrip().startswith("--")
+        ]
+        if not any(_COPYRIGHT_RE.fullmatch(line) for line in comment_lines):
+            return False, f"SPDX line must start with '--' (got: {spdx_line!r})"
+        if _LICENSE_LINE not in comment_lines:
+            return False, "SPDX license line must start with '--'"
     elif style == "html":
         # The header must sit inside an HTML comment block somewhere in the window.
         if "<!--" not in window or "-->" not in window:

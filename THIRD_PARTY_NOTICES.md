@@ -267,7 +267,7 @@ license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).
 
 ## Bundled license file index
 
-The following index links all 62 preserved license files under
+The following index links all preserved license files under
 `third_party_licenses/`, including licenses for bundled native libraries, fonts,
 and other upstream components. The upstream texts are preserved unchanged;
 refer to the component disclosures above for applicable license elections.
@@ -302,7 +302,6 @@ refer to the component disclosures above for applicable license elections.
 | `matplotlib-3.11.1` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.1/LICENSE_YORICK) |
 | `matplotlib-3.11.1` | [`copying`](third_party_licenses/matplotlib-3.11.1/copying) |
 | `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
-| `nvidia-cutlass-dsl-4.6.2` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.6.2/LICENSE) |
 | `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
 | `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
@@ -314,7 +313,6 @@ refer to the component disclosures above for applicable license elections.
 | `pyzmq-27.2.0` | [`LICENSE.libsodium`](third_party_licenses/pyzmq-27.2.0/LICENSE.libsodium) |
 | `pyzmq-27.2.0` | [`LICENSE.tornado`](third_party_licenses/pyzmq-27.2.0/LICENSE.tornado) |
 | `pyzmq-27.2.0` | [`LICENSE.zeromq`](third_party_licenses/pyzmq-27.2.0/LICENSE.zeromq) |
-| `quack-kernels-0.6.4` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.4/LICENSE) |
 | `quack-kernels-0.6.5` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.5/LICENSE) |
 | `regex-2026.7.19` | [`LICENSE.txt`](third_party_licenses/regex-2026.7.19/LICENSE.txt) |
 | `soundfile-0.14.0` | [`LICENSE`](third_party_licenses/soundfile-0.14.0/LICENSE) |
