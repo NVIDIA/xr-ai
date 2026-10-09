@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example, not a recording: replace every task-specific value.
+# source_session identifies the voice-bounded SOP packet, not an optional
+# participant-wide media bundle. No raw-media manifest is required.
 schema_version: 1
 task:
   id: arrange_workpiece

@@ -96,9 +96,6 @@ class MsgType(IntEnum):
     FILE_MESSAGE = 18
     """Completed inbound file or byte transfer from a connector."""
 
-    VIDEO_TRACK_EVENT = 19
-    """Live camera track started, stopped, muted, or resumed."""
-
     # Add new types here; existing code is unaffected.
 
 
@@ -228,27 +225,6 @@ class ParticipantEvent:
 
     participant_session_id: str = ""
     """Opaque identity for this particular participant connection."""
-
-
-@dataclass(slots=True)
-class VideoTrackEvent:
-    """Camera lifecycle, independent of participant connection and still images.
-
-    Active tracks are replayed with the participant roster. A track becomes
-    active on its first frame or unmute and inactive on mute or stream end.
-    Screen-sharing tracks do not emit these events.
-    """
-
-    participant_id: str
-    """Owner of the camera track."""
-    track_id: str
-    """Opaque track identity; changes when a camera is republished."""
-    active: bool
-    """Whether live camera video is enabled."""
-    pts_us: int
-    """Event time in Unix microseconds."""
-    participant_session_id: str = ""
-    """Connection identity used to reject events from departed sessions."""
 
 
 @dataclass(slots=True)

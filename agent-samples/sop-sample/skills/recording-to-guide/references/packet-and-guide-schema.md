@@ -8,7 +8,7 @@
 ## Capture input
 
 Start with `packet.json`: `session_id`, `status`, `narration_status`, `counts`,
-`files`, `hierarchy`, and `media_capture`. Resolve `files` paths relative to the
+`files`, and `hierarchy`. Resolve `files` paths relative to the
 packet directory. A complete packet can still contain caption errors or no
 narration; inspect the contents, not only its status.
 
@@ -23,9 +23,14 @@ narration; inspect the contents, not only its status.
 Source timestamps are Unix microseconds. Caption `generated_at_us` measures
 inference completion, not event time. STT timestamps are alignment hints, not
 precise action boundaries. Inspect nearby frames if timing is uncertain.
-`media_capture.manifest` references the raw capture bundle; retain it with the
-packet. Raw audio may help review missing narration, but generation does not
-automatically retranscribe it. Do not fabricate speech for silent recordings.
+SOP snapshots, captions, and narration cover the spoken start/stop recording
+boundary. Optional `--capture` media covers the whole participant connection;
+it is not required for guide generation and may span multiple SOP packets.
+Use packet-local narration, not the whole shared transcript. New packets have
+no `media_capture` field. Older packets may link a bundle through
+`media_capture.manifest`; retain that bundle if present. Raw audio may help review
+missing narration, but generation does not automatically retranscribe it.
+Do not fabricate speech for silent recordings.
 
 ## Executable YAML
 

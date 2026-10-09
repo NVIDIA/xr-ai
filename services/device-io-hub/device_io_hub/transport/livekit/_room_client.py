@@ -34,7 +34,6 @@ from device_io_hub.ipc import (
     FileMessage,
     PixelFormat,
     ReturnAudioFlush,
-    VideoTrackEvent,
 )
 
 from ._byte_stream import ByteStreamReadLimits, read_byte_stream
@@ -306,7 +305,6 @@ class RoomClient:
         )
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
-        self._muted_camera_tracks: set[str] = set()
         # Tasks spawned by sync event callbacks; cancelled on disconnect().
         self._pending_tasks: set[asyncio.Task] = set()
         self._file_tasks: dict[
@@ -342,53 +340,18 @@ class RoomClient:
         @self._room.on("track_subscribed")
         def _on_track(
             track: rtc.Track,
-            pub: rtc.RemoteTrackPublication,
+            _pub: rtc.RemoteTrackPublication,
             participant: rtc.RemoteParticipant,
         ) -> None:
-            if track.kind == rtc.TrackKind.KIND_VIDEO and pub.muted:
-                self._muted_camera_tracks.add(track.sid)
-            self._maybe_start_track(
-                track, participant.identity,
-                camera=pub.source != rtc.TrackSource.SOURCE_SCREENSHARE,
-            )
+            self._maybe_start_track(track, participant.identity)
 
         @self._room.on("track_unsubscribed")
         def _on_track_end(
             track: rtc.Track,
-            pub: rtc.RemoteTrackPublication,
-            participant: rtc.RemoteParticipant,
+            _pub: rtc.RemoteTrackPublication,
+            _participant: rtc.RemoteParticipant,
         ) -> None:
-            # A task cancelled before its first turn cannot run its finally.
-            video_enabled(pub, participant, False)
             self._cancel_track_task(track.sid)
-            self._muted_camera_tracks.discard(track.sid)
-
-        def video_enabled(
-            pub: rtc.RemoteTrackPublication,
-            participant: rtc.RemoteParticipant,
-            active: bool,
-        ) -> None:
-            if (
-                pub.kind == rtc.TrackKind.KIND_VIDEO
-                and pub.source != rtc.TrackSource.SOURCE_SCREENSHARE
-                and (pub.track is not None or not active)
-            ):
-                if active:
-                    self._muted_camera_tracks.discard(pub.sid)
-                else:
-                    self._muted_camera_tracks.add(pub.sid)
-                self._spawn(self._ep.notify_video_track(VideoTrackEvent(
-                    participant.identity, pub.sid, active, _now_us(),
-                    self._participant_sessions.get(participant.identity, ""),
-                )))
-
-        @self._room.on("track_muted")
-        def _on_muted(pub: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant) -> None:
-            video_enabled(pub, participant, False)
-
-        @self._room.on("track_unmuted")
-        def _on_unmuted(pub: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant) -> None:
-            video_enabled(pub, participant, True)
 
         @self._room.on("data_received")
         def _on_data(packet: rtc.DataPacket) -> None:
@@ -489,21 +452,13 @@ class RoomClient:
         for participant in participants:
             for pub in participant.track_publications.values():
                 if pub.track is not None and pub.subscribed:
-                    if pub.kind == rtc.TrackKind.KIND_VIDEO and pub.muted:
-                        self._muted_camera_tracks.add(pub.track.sid)
-                    self._maybe_start_track(
-                        pub.track, participant.identity,
-                        camera=pub.source != rtc.TrackSource.SOURCE_SCREENSHARE,
-                    )
+                    self._maybe_start_track(pub.track, participant.identity)
 
-    def _maybe_start_track(self, track: rtc.Track, identity: str, *, camera: bool = True) -> None:
+    def _maybe_start_track(self, track: rtc.Track, identity: str) -> None:
         """Start a stream task for a video/audio track; ignore other kinds."""
-        existing = self._track_tasks.get(track.sid)
-        if existing is not None and not existing.done():
-            return
         if track.kind == rtc.TrackKind.KIND_VIDEO:
             self._start_track_task(
-                track.sid, self._stream_video(track, identity, track.sid, camera=camera),
+                track.sid, self._stream_video(track, identity, track.sid),
             )
         elif track.kind == rtc.TrackKind.KIND_AUDIO:
             self._start_track_task(
@@ -900,19 +855,12 @@ class RoomClient:
     # ── media streams ─────────────────────────────────────────────────────────
 
     async def _stream_video(
-        self, track: rtc.Track, identity: str, track_id: str, *, camera: bool = True
+        self, track: rtc.Track, identity: str, track_id: str
     ) -> None:
         logger.info("Video stream started: participant={!r}  track={!r}", identity, track_id)
         video_stream = rtc.VideoStream(track, format=rtc.VideoBufferType.I420)
-        session_id = self._participant_sessions.get(identity, "")
-        announced = False
         try:
             async for event in video_stream:
-                if camera and not announced and track_id not in self._muted_camera_tracks:
-                    await self._ep.notify_video_track(VideoTrackEvent(
-                        identity, track_id, True, _now_us(), session_id,
-                    ))
-                    announced = True
                 frame = event.frame
                 try:
                     await self._ep.push_frame(
@@ -943,17 +891,10 @@ class RoomClient:
                 "Video stream error: participant={!r}  track={!r}", identity, track_id,
             )
         finally:
-            try:
-                if camera:
-                    await self._ep.notify_video_track(VideoTrackEvent(
-                        identity, track_id, False, _now_us(), session_id,
-                    ))
-            finally:
-                self._muted_camera_tracks.discard(track_id)
-                logger.info(
-                    "Video stream ended: participant={!r}  track={!r}", identity, track_id,
-                )
-                await video_stream.aclose()
+            logger.info(
+                "Video stream ended: participant={!r}  track={!r}", identity, track_id,
+            )
+            await video_stream.aclose()
 
     async def _stream_audio(
         self, track: rtc.Track, identity: str, track_id: str

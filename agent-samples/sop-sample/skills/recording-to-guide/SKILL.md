@@ -14,6 +14,9 @@ Use a coding agent with file and image access to author the YAML directly. The
 capture worker does not invoke this skill. Do not substitute a plan-to-YAML
 compiler, generate code, run a guide, or approve it.
 
+SOP packets are voice-bounded. Optional participant-wide media is not required;
+use the packet's own narration, not speech from other recordings on the connection.
+
 ## Read the evidence
 
 Work from `agent-samples/sop-sample/`. Use the requested packet; otherwise choose
