@@ -244,10 +244,8 @@ async def main() -> None:
                 "sample": "tea-making-sample",
                 "model_profile": model_profile,
                 "config_sha256": config_hash,
-                "temperature": 0,
-                "max_tokens": 512,
-                "thinking": False,
                 "cases": len(selected),
+                "sampling_settings": "logged_per_case",
             },
             sort_keys=True,
         )
@@ -425,19 +423,21 @@ async def main() -> None:
             measured = measured_llm.calls[call_start:]
             model = next((call["model"] for call in reversed(measured) if call["model"]), None) or model_profile
             llm_ms = sum(call["elapsed_ms"] for call in measured)
+            settings = sorted({json.dumps(call["settings"], sort_keys=True) for call in measured})
             print(
                 f"{label} {case['name']}: tools={actual_tools!r} model={model!r} "
-                f"prompt_sha256={prompt_hash[:12]} temperature=0 max_tokens=512 "
-                f"thinking=false llm_ms={llm_ms:.1f} elapsed_ms={elapsed_ms:.1f} "
+                f"prompt_sha256={prompt_hash[:12]} settings={settings} "
+                f"llm_ms={llm_ms:.1f} elapsed_ms={elapsed_ms:.1f} "
                 f"content={content!r}"
             )
             if passed:
                 passed_count += 1
     finally:
         await llm.close()
+    all_settings = sorted({json.dumps(call["settings"], sort_keys=True) for call in measured_llm.calls})
     print(
-        f"RESULT {passed_count}/{len(selected)} cases passed; temperature=0 "
-        f"max_tokens=512 thinking=false prompt_hashes={sorted(prompt_hashes)}"
+        f"RESULT {passed_count}/{len(selected)} cases passed; settings={all_settings} "
+        f"prompt_hashes={sorted(prompt_hashes)}"
     )
     pass_rate = passed_count / len(selected)
     if pass_rate < _MIN_PASS_RATE:

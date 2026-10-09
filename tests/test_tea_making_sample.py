@@ -2128,6 +2128,40 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert "expected_response" not in active_visual
 
 
+def test_eval_measured_llm_keeps_actual_sampling_settings() -> None:
+    spec = importlib.util.spec_from_file_location("tea_eval_runner", _SAMPLE / "eval" / "eval.py")
+    assert spec is not None and spec.loader is not None
+    eval_runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(eval_runner)
+
+    class StubLLM:
+        async def chat(self, messages, **kwargs):
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=None,
+                finish_reason="stop",
+                raw={"model": "stub-model"},
+            )
+
+    measured = eval_runner._MeasuredLLM(StubLLM())
+    asyncio.run(
+        measured.chat(
+            [ChatMessage(role="system", content="Classifier prompt")],
+            max_tokens=384,
+            temperature=0.0,
+            enable_thinking=False,
+        )
+    )
+
+    assert measured.calls[0]["settings"] == {
+        "max_tokens": 384,
+        "temperature": 0.0,
+        "enable_thinking": False,
+        "thinking_budget": None,
+    }
+
+
 def _activate_test_step(guidance: GuidanceAgent, step_id: str) -> None:
     session = guidance.store.get("active")
     guidance.store.start(session)
