@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from device_io_hub.capture.config import load_capture_config
 
 _ROOT = Path(__file__).resolve().parents[1]
 _REQUIRED_SERVICES = {
@@ -475,13 +476,13 @@ def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
     capture = processes[hub_index + 1]
     assert capture.project == "../../services/device-io-hub"
     assert capture.command == "device_io_capture"
-    config = yaml.safe_load((sample._BASE / capture.config).read_text())
+    config = load_capture_config(sample._BASE / capture.config)
     hub = yaml.safe_load((sample._BASE / processes[hub_index].config).read_text())
-    assert config["profile"] == "demo"
-    assert config["session_mode"] == "participant"
-    assert config["out_dir"] == f"~/.local/share/xr-ai/captures/{sample_name}"
-    assert config["hub_sub_addr"] == hub.get("ipc_pub_addr", "ipc:///tmp/xr_hub_pub")
-    assert config["hub_push_addr"] == hub.get("ipc_in_addr", "ipc:///tmp/xr_hub_in")
+    assert config.profile == "demo"
+    assert config.session_mode == "participant"
+    assert Path(config.out_dir) == Path(f"~/.local/share/xr-ai/captures/{sample_name}").expanduser()
+    assert config.hub_sub_addr == hub.get("ipc_pub_addr", "ipc:///tmp/xr_hub_pub")
+    assert config.hub_push_addr == hub.get("ipc_in_addr", "ipc:///tmp/xr_hub_in")
 
 
 @pytest.mark.parametrize("sample_name", ["tea-making-sample", "lab-instrument-monitoring"])
