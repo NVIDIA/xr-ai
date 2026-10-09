@@ -17,18 +17,13 @@ from typing import Any
 
 import nemo_relay
 from loguru import logger
-from xr_ai_hub import FrameUnavailable, ProcessorEndpoint
+from xr_ai_hub import FrameUnavailable
 from xr_ai_runtime import Agent
-from xr_ai_tools.capture import CaptureTools
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageReference, ImageRegistry
-from xr_ai_tools.tools import ToolSet
-from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
-_MEDIA_FINALIZE_WARNING_S = 10.0
-_MEDIA_START_RETRY_S = 0.1
 
 
 @dataclass(slots=True)
@@ -70,15 +65,12 @@ class _Session:
     directory: Path
     started_at: str
     started_at_us: int
-    capture_tools: ToolSet
-    media_directory: Path
-    media_status: str = "start_requested"
-    media_manifest: str | None = None
     frame_count: int = 0
     transcript_count: int = 0
     narration_status: str = "pending"
     caption_count: int = 0
-    last_sequence: int | None = None
+    last_frame_key: tuple[str, int, int] | None = None
+    last_captioned_frame_id: int | None = None
     latest_frame: _Frame | None = None
     previous_caption: dict[str, str] | None = None
     activities: list[_Activity] = field(default_factory=list)
@@ -89,8 +81,8 @@ class _Session:
     active: bool = True
     status: str = "recording"
     ended_at: str | None = None
-    cancel_start: bool = False
     start_done: asyncio.Event = field(default_factory=asyncio.Event)
+    stop_command: dict[str, Any] | None = None
 
 
 def _now_us() -> int:
@@ -125,43 +117,6 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     _atomic_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
 
-def _export_narration(manifest_path: Path, destination: Path) -> int:
-    """Project the capture transcript into the existing SOP narration schema."""
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    source = (manifest_path.parent / manifest["transcript"]).resolve()
-    if not source.is_relative_to(manifest_path.parent.resolve()):
-        raise ValueError("capture transcript must be inside its bundle")
-    records = []
-    with source.open(encoding="utf-8") as stream:
-        for line in stream:
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if row["source"] != "user":
-                continue
-            text = row["text"].strip()
-            if not text:
-                continue
-            timestamp_us = row["pts_us"]
-            if type(timestamp_us) is not int or timestamp_us < 0:
-                raise ValueError("capture transcript pts_us must be a non-negative integer")
-            records.append(
-                json.dumps(
-                    {
-                        "transcript_id": len(records) + 1,
-                        "timestamp_us": timestamp_us,
-                        "timestamp": _iso(timestamp_us),
-                        "text": text,
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-                + "\n"
-            )
-    _atomic_text(destination, "".join(records))
-    return len(records)
-
-
 def _json_object(text: str) -> dict[str, Any]:
     candidate = text.strip()
     start = candidate.find("{")
@@ -191,14 +146,12 @@ def _clock(timestamp_us: int, started_at_us: int) -> str:
 
 
 class RecorderAgent(Agent):
-    """Capture a durable multimodal packet within camera-controlled boundaries."""
+    """Capture a durable multimodal packet independently of camera availability."""
 
     def __init__(
         self,
         *,
         sessions_dir: Path,
-        capture_endpoint: ProcessorEndpoint,
-        media_capture_dir: Path,
         current_frame: CurrentFrameTool,
         images: ImageRegistry,
         query_image: ImageQueryTool,
@@ -208,8 +161,6 @@ class RecorderAgent(Agent):
         super().__init__()
         self._sessions_dir = sessions_dir
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
-        self._capture_endpoint = capture_endpoint
-        self._media_capture_dir = media_capture_dir
         self._current_frame = current_frame
         self._images = images
         self._query_image = query_image
@@ -224,12 +175,14 @@ class RecorderAgent(Agent):
     def is_recording(self, participant_id: str) -> bool:
         return participant_id in self._sessions
 
-    async def start_recording(self, participant_id: str, *, cancelled: asyncio.Event | None = None) -> None:
+    async def start_recording(
+        self, participant_id: str, *, cancelled: asyncio.Event | None = None, timestamp_us: int | None = None,
+    ) -> None:
         """Start a fresh packet unless this participant is already recording."""
         async with self._sessions_lock:
             if participant_id in self._sessions or self._stopped or (cancelled is not None and cancelled.is_set()):
                 return
-            now_us = _now_us()
+            now_us = _now_us() if timestamp_us is None else timestamp_us
             session_id = f"{_session_stamp()}-{_safe(participant_id)[:48]}"
             directory = self._sessions_dir / session_id
             await asyncio.to_thread(
@@ -243,32 +196,12 @@ class RecorderAgent(Agent):
                 directory=directory,
                 started_at=_iso(now_us),
                 started_at_us=now_us,
-                capture_tools=CaptureTools(
-                    endpoint=self._capture_endpoint,
-                    target=session_id,
-                    metadata={"sop_session_id": session_id, "sop_packet": str(directory / "packet.json")},
-                ).participant_tools(participant_id),
-                media_directory=self._media_capture_dir / session_id,
             )
             self._sessions[participant_id] = state
         try:
             if self._stopped or (cancelled is not None and cancelled.is_set()):
-                state.media_status = "start_cancelled"
                 return
-            start = state.capture_tools.get("start_recording")
-            assert start is not None
-            try:
-                await start.execute(EmptyRequest())
-            except Exception:
-                state.media_status = "start_failed"
-                state.status = "failed"
-                state.ended_at = _iso(_now_us())
-                await self._write_views(state)
-                raise
-            if not await self._wait_for_media_start(state, cancelled):
-                return
-            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
-                return
+            await self._write(state, _atomic_text, state.directory / "transcript.jsonl", "")
             async with state.lock:
                 await self._write_views(state)
             state.tasks.extend(
@@ -286,48 +219,40 @@ class RecorderAgent(Agent):
                 )
             )
             logger.info("recording started pid={!r} session={}", participant_id, directory)
+        except Exception:
+            state.status = "incomplete"
+            raise
         finally:
             # Finalization may run concurrently with startup, but may not seal
             # the packet while startup can still add tasks or write metadata.
             state.start_done.set()
 
-    @staticmethod
-    def _media_started(state: _Session) -> bool:
-        for path in state.media_directory.glob("*/events.jsonl"):
-            with path.open(encoding="utf-8") as stream:
-                for line in stream:
-                    if not line.endswith("\n"):
-                        break
-                    event = json.loads(line)
-                    if event.get("kind") == "recording" and event.get("state") == "started":
-                        return True
-        return False
+    async def record_transcript(self, participant_id: str, text: str, timestamp_us: int) -> None:
+        """Save a final VoiceAgent transcript inside the active SOP boundary."""
+        state = self._sessions.get(participant_id)
+        if state is None or not text.strip():
+            return
+        async with state.lock:
+            if not state.active:
+                return
+            try:
+                await self._write(
+                    state, _append_jsonl, state.directory / "transcript.jsonl",
+                    {"transcript_id": state.transcript_count + 1, "timestamp_us": timestamp_us,
+                     "timestamp": _iso(timestamp_us), "text": text.strip()},
+                )
+            except Exception:
+                state.narration_status = "failed"
+                state.status = "incomplete"
+                raise
+            state.transcript_count += 1
 
-    async def _wait_for_media_start(self, state: _Session, cancelled: asyncio.Event | None) -> bool:
-        # Sending a start is not an acknowledgement: capture may still reject
-        # it after publishing the previous manifest, while finishing cleanup.
-        # Its flushed start event confirms acceptance in this unique target.
-        start = state.capture_tools.get("start_recording")
-        assert start is not None
-        waiting_since = time.monotonic()
-        warned = False
-        while not await asyncio.to_thread(self._media_started, state):
-            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
-                state.media_status = "start_cancelled"
-                return False
-            if not warned and time.monotonic() - waiting_since >= _MEDIA_FINALIZE_WARNING_S:
-                warned = True
-                logger.warning("media capture start pending pid={!r}; retrying until accepted", state.participant_id)
-            await asyncio.sleep(_MEDIA_START_RETRY_S)
-            if self._stopped or state.cancel_start or (cancelled is not None and cancelled.is_set()):
-                continue
-            # Repeating a start is idempotent while the same session is active.
-            await start.execute(EmptyRequest())
-        state.media_status = "recording"
-        return True
-
-    async def finish_recording(self, participant_id: str) -> None:
+    async def finish_recording(
+        self, participant_id: str, *, stop_command: dict[str, Any] | None = None,
+    ) -> None:
         """Finalize the packet using the same path as worker shutdown."""
+        if stop_command is not None and (state := self._sessions.get(participant_id)) is not None:
+            state.stop_command = stop_command
         await self._close(participant_id, status="complete")
 
     async def stop(self) -> None:
@@ -386,8 +311,10 @@ class RecorderAgent(Agent):
 
     async def _capture(self, state: _Session) -> None:
         frame = await self._current_frame.execute(CurrentFrameRequest(participant_id=state.participant_id))
+        # On-demand images have sequence zero; live sequences reset on republish.
+        frame_key = (frame.track_id, frame.timestamp_us, frame.sequence)
         async with state.lock:
-            if not state.active or frame.sequence == state.last_sequence:
+            if not state.active or frame_key == state.last_frame_key:
                 return
             frame_id = state.frame_count + 1
         image = self._images.resolve(frame.image)
@@ -408,7 +335,7 @@ class RecorderAgent(Agent):
             if not state.active:
                 return
             state.frame_count = frame_id
-            state.last_sequence = frame.sequence
+            state.last_frame_key = frame_key
             state.latest_frame = _Frame(
                 frame_id=frame_id,
                 timestamp_us=frame.timestamp_us,
@@ -443,7 +370,7 @@ class RecorderAgent(Agent):
         async with state.lock:
             frame = state.latest_frame
             previous = dict(state.previous_caption) if state.previous_caption else None
-        if frame is None:
+        if frame is None or frame.frame_id == state.last_captioned_frame_id:
             return
         query = json.dumps(
             {
@@ -503,6 +430,7 @@ class RecorderAgent(Agent):
                 record,
             )
             state.previous_caption = caption
+            state.last_captioned_frame_id = frame.frame_id
             self._update_hierarchy(state, record)
             await self._write_views(state)
 
@@ -566,6 +494,7 @@ class RecorderAgent(Agent):
             "status": status or state.status,
             "started_at": state.started_at,
             "ended_at": state.ended_at,
+            "stop_command": state.stop_command,
             "narration_status": state.narration_status,
             "capture": {
                 "target_fps": self._capture_fps,
@@ -576,11 +505,6 @@ class RecorderAgent(Agent):
                 "transcript": "transcript.jsonl",
                 "captions": "captions.jsonl",
                 "summary": "summary.md",
-            },
-            "media_capture": {
-                "directory": str(state.media_directory),
-                "control_status": state.media_status,
-                "manifest": state.media_manifest,
             },
             "counts": {
                 "frames": state.frame_count,
@@ -635,8 +559,8 @@ class RecorderAgent(Agent):
             (
                 "",
                 (
-                    "Frames and captions are source records; narration is derived "
-                    "from the shared capture transcript at finalization. `packet.json` "
+                    "Frames and captions are source records; narration uses final "
+                    "transcripts from the shared voice runtime. `packet.json` "
                     "is the current machine-readable index for coding agents."
                 ),
                 "",
@@ -672,23 +596,11 @@ class RecorderAgent(Agent):
         await asyncio.shield(finalizer)
 
     async def _finalize(self, state: _Session, *, status: str) -> None:
-        state.cancel_start = True
         await state.start_done.wait()
-        accepted = state.media_status == "recording"
         participant_id = state.participant_id
-        state.ended_at = _iso(_now_us())
-        stop = state.capture_tools.get("stop_recording")
-        assert stop is not None
-        stop_error: Exception | None = None
-        try:
-            await stop.execute(EmptyRequest())
-            state.media_status = "stop_requested"
-        except Exception as exc:
-            # The hub may already be closed during shutdown. Preserve the SOP
-            # packet; capture also finalizes on departure and service shutdown.
-            state.media_status = "stop_failed"
-            logger.warning("media capture stop failed pid={!r}: {}", participant_id, exc)
-            stop_error = exc
+        state.ended_at = _iso(state.stop_command["timestamp_us"] if state.stop_command else _now_us())
+        if state.status == "incomplete":
+            status = "incomplete"
         for task in state.tasks:
             task.cancel()
         if state.tasks:
@@ -708,34 +620,20 @@ class RecorderAgent(Agent):
         state.activities.clear()
         for caption in captions:
             self._update_hierarchy(state, caption)
-        if stop_error is not None:
-            await self._error(state, "media_capture_stop", str(stop_error))
-        # Reconcile acceptance after the last start has settled and stop was
-        # sent. An unaccepted target has no manifest to wait for.
-        accepted = accepted or await asyncio.to_thread(self._media_started, state)
-        if not accepted:
-            state.media_status = "start_cancelled"
-            await self._error(state, "media_capture_start", "recording ended before capture accepted its start")
-        # Departure or service shutdown may finalize capture even if sending
-        # stop failed because the voice transport has already closed.
-        if accepted:
-            await self._wait_for_media(state)
+        # Count the durable log after all queued transcript writes have drained.
+        transcript_path = state.directory / "transcript.jsonl"
+
+        def count_transcripts() -> int:
+            with transcript_path.open(encoding="utf-8") as stream:
+                return sum(bool(line.strip()) for line in stream)
         try:
-            if state.media_manifest is None:
-                raise ValueError("capture manifest unavailable; narration was not exported")
-            state.transcript_count = await self._write(
-                state,
-                _export_narration,
-                Path(state.media_manifest),
-                state.directory / "transcript.jsonl",
-            )
-            state.narration_status = "complete" if state.media_status == "complete" else "incomplete"
-        except (OSError, ValueError, KeyError, TypeError, AttributeError, OverflowError) as exc:
+            state.transcript_count = await asyncio.to_thread(count_transcripts)
+            if state.narration_status != "failed":
+                state.narration_status = "complete"
+        except OSError as exc:
             state.narration_status = "failed"
-            logger.warning("narration export failed pid={!r}: {}", participant_id, exc)
-            await self._error(state, "narration_export", str(exc))
-        if state.narration_status != "complete":
             status = "incomplete"
+            await self._error(state, "narration_finalize", str(exc))
         async with state.lock:
             state.active = False
             state.status = status
@@ -756,39 +654,3 @@ class RecorderAgent(Agent):
             status,
             state.directory,
         )
-
-    async def _wait_for_media(self, state: _Session) -> None:
-        # CaptureTools only sends commands. Its published manifest is the
-        # completion boundary; starting again during finalization drops starts.
-        def read_manifest() -> tuple[Path, dict[str, Any]] | None:
-            for path in state.media_directory.glob("*/manifest.json"):
-                return path, json.loads(path.read_text(encoding="utf-8"))
-            return None
-
-        async def wait_for_manifest() -> tuple[Path, dict[str, Any]]:
-            while (result := await asyncio.to_thread(read_manifest)) is None:
-                await asyncio.sleep(0.05)
-            return result
-
-        try:
-            try:
-                async with asyncio.timeout(_MEDIA_FINALIZE_WARNING_S):
-                    result = await wait_for_manifest()
-            except TimeoutError:
-                message = (
-                    "shared capture is still finalizing; "
-                    "keeping recording restart blocked until its manifest arrives"
-                )
-                logger.warning("media capture pending pid={!r}: {}", state.participant_id, message)
-                await self._error(state, "media_capture_pending", message)
-                result = await wait_for_manifest()
-            path, manifest = result
-            state.media_manifest = str(path)
-            if manifest.get("complete") is not True:
-                raise ValueError(f"incomplete media capture: {manifest.get('incomplete_reason')}")
-            state.media_status = "complete"
-        except (OSError, ValueError) as exc:
-            state.media_status = "finalization_failed"
-            message = str(exc)
-            logger.warning("media capture finalization pid={!r}: {}", state.participant_id, message)
-            await self._error(state, "media_capture_finalize", message)

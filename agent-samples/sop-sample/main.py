@@ -14,26 +14,36 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
-PROCESSES = [
-    Process("hub", "../../services/device-io-hub", "device_io_hub", config="yaml/device_io_hub.yaml"),
-    Process("capture", "../../services/device-io-hub", "device_io_capture", config="yaml/media_capture.yaml"),
-    Process("worker", "worker", "sop_sample_worker", config="yaml/worker.yaml"),
-]
+def _build_processes(*, capture: bool = False) -> list[Process]:
+    processes = [
+        Process("hub", "../../services/device-io-hub", "device_io_hub", config="yaml/device_io_hub.yaml"),
+        Process("worker", "worker", "sop_sample_worker", config="yaml/worker.yaml"),
+    ]
+    if capture:
+        processes.insert(1, Process(
+            "capture", "../../services/device-io-hub", "device_io_capture", config="yaml/media_capture.yaml",
+        ))
+    return processes
+
+
+PROCESSES = _build_processes()
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Record SOP demonstrations while the camera is on.")
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--capture", action="store_true", help="capture audio, video, frames, captions, and narration automatically"
+    parser = argparse.ArgumentParser(
+        description="Record SOP demonstrations with spoken start recording and stop recording commands."
+    )
+    parser.add_argument(
+        "--capture", action="store_true",
+        help="record participant video, bidirectional audio, and data-channel traffic",
     )
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> None:
-    _parser().parse_args(argv)
+    args = _parser().parse_args(argv)
     setup_logging("orchestrator", namespace="sop-sample")
-    run_stack(PROCESSES, _BASE)
+    run_stack(_build_processes(capture=args.capture), _BASE)
 
 
 if __name__ == "__main__":
