@@ -787,6 +787,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pytest-asyncio>=0.23`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
+  - `huggingface-hub>=0.32.0`
   - `Pillow>=10.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`

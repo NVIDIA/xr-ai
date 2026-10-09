@@ -19,6 +19,14 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml/tea_making_worker.yaml"
 
+_CAPTURE_PROCESS = Process(
+    "capture",
+    "../../services/device-io-hub",
+    "device_io_capture",
+    config="yaml/media_capture.yaml",
+)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Tea-making guidance with native XR agents.",
@@ -31,6 +39,14 @@ def _parser() -> argparse.ArgumentParser:
             "instead of loopback"
         ),
     )
+    parser.add_argument(
+        "--capture",
+        action="store_true",
+        help=(
+            "record participant video, bidirectional audio, and data-channel "
+            "traffic"
+        ),
+    )
     return parser
 
 
@@ -38,8 +54,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return _parser().parse_args(sys.argv[1:] if argv is None else argv)
 
 
-def _build_processes(worker_config: Path) -> list[Process]:
-    return [
+def _build_processes(
+    worker_config: Path, *, capture: bool = False
+) -> list[Process]:
+    processes = [
         Process(
             "hub",
             "../../services/device-io-hub",
@@ -59,6 +77,9 @@ def _build_processes(worker_config: Path) -> list[Process]:
             config=worker_config,
         ),
     ]
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
+    return processes
 
 
 def _write_config(
@@ -123,7 +144,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config), _BASE)
+        run_stack(_build_processes(worker_config, capture=args.capture), _BASE)
 
 
 if __name__ == "__main__":

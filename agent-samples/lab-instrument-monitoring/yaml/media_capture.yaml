@@ -2,5 +2,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Other capture settings use the shared defaults. Add fields here to override them.
-out_dir: ~/.local/share/xr-ai/captures/simple-vlm-example
+out_dir: ~/.local/share/xr-ai/captures/lab-instrument-monitoring
 profile: demo

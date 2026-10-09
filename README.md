@@ -93,5 +93,13 @@ Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution process and
 [`tests/README.md`](tests/README.md) for the shortest test commands. Refer to
 [`SECURITY.md`](SECURITY.md) to report security issues.
 
-XR AI is licensed under [Apache-2.0](LICENSE). Third-party components are listed
-in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+XR AI is licensed under [Apache-2.0](LICENSE).
+
+Third-party license and attribution texts are preserved under
+[`third_party_licenses/`](third_party_licenses/). These files retain their
+upstream terms; refer to [License texts](THIRD_PARTY_NOTICES.md#license-texts)
+for details.
+
+Refer to [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for each component's
+applicable license and [`third_party_licenses/`](third_party_licenses/)
+for the preserved texts.
