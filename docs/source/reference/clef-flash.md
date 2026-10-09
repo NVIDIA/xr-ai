@@ -50,8 +50,11 @@ must contain the release's required model files; its revision is supplied by
 the configuration rather than checked against local artifact metadata.
 With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the
 sample directory to stop only a listener carrying the matching Clef ownership
-and port markers. The stop command never treats a Docker container on that port
-as the Clef service. A server already listening on the configured port is reused
+and port markers. It waits for that process to exit, including request and native
+inference cleanup, before reporting success; closing the HTTP listener alone
+does not complete shutdown. Linux process handles keep termination and timeout
+escalation tied to the same verified process. The stop command never treats a
+Docker container on that port as the Clef service. A server already listening on the configured port is reused
 only when it has those ownership markers and its health response matches the
 complete requested server configuration; any other listener causes startup to
 fail before loading model weights.
