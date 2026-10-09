@@ -181,11 +181,20 @@ immediate always-on speech dispatch.
 
 ## Voice gating and early probes
 
+Global STOP recognition is enabled by default. For passive narration, set
+`stop_commands_enabled: false` in the voice-gate YAML. This disables STOP
+interruptions and acknowledgements for both partial and final transcripts,
+including conversations without a wake phrase. Final transcripts still follow
+the configured transcript and query-gating rules. Conversation controls and
+scoped application commands such as `stop recording` retain their own routing.
+Probes can remain enabled for wake acknowledgements; their timing is independent
+of the STOP policy.
+
 VAD and STT probe the opening audio while the user is still speaking. Probe
 audio includes a silent tail so offline STT can finalize a phrase. During an
-active conversation, a partial global-STOP match interrupts output immediately,
-but it does not commit
-the user's intent: final STT remains authoritative for global-stop versus query
+active conversation with STOP enabled, a partial global-STOP match interrupts
+output immediately, but it does not commit the user's intent: final STT remains
+authoritative for global-stop versus query
 routing. A slow probe receives a short grace period and is then cancelled.
 With wake phrases or conversation controls configured, one utterance can make
 up to three bounded partial STT requests plus the authoritative final request. Set `stop_probe_after_s` to
@@ -202,8 +211,8 @@ text and the tail after a configured wake phrase, so `stop` and
 only a standalone short stop uses the global-stop path; `hey agent stop`
 remains a query.
 
-Global STOP uses a closed imperative grammar for direct requests such as
-`stop`, `stop it`, `stop talking`, `be quiet`, and `shut up`, with a bounded set
+When enabled, global STOP uses a closed imperative grammar for direct requests
+such as `stop`, `stop it`, `stop talking`, `be quiet`, and `shut up`, with a bounded set
 of conversational prefixes and punctuation. Up to two prefixes may be drawn
 from `please`, `hey`, `okay`, `ok`, `uh`, `um`, `wait`, `no`, `just`,
 `alright`, `sorry`, `whoa`, `hang on`, `I said`, or `can`, `could`, `would`,

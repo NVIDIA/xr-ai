@@ -41,7 +41,7 @@ class VoiceGate:
     Event ladder in ``feed`` — exactly one event fires per call, in this
     deterministic priority order:
 
-    1. STOP detected on raw text OR on the magic-phrase-stripped tail
+    1. STOP enabled and detected on either raw text or the magic-phrase-stripped tail
        → ``on_stop(pid)``; closes the follow-up window.
     2. Magic phrase matched AND query non-empty
        → ``on_query(pid, query, fresh_match=True)``; closes the follow-up
@@ -57,7 +57,7 @@ class VoiceGate:
        defensively.
 
     When ``magic_phrases`` is empty the gate is in always-on mode: STOP
-    still wins (interrupts must work without a phrase) and every other
+    takes priority when enabled, and every other
     utterance dispatches straight to ``on_query`` with
     ``fresh_match=True``. The follow-up / phrase-only / drop branches
     are inert in this mode — they only make sense once a phrase exists
@@ -212,9 +212,8 @@ class VoiceGate:
         calls per participant (e.g. a per-pid ``transcribing`` flag).
         """
         # Always-on mode: no phrases configured, so the magic-phrase /
-        # follow-up / phrase-only / drop branches don't apply. STOP still
-        # wins (interrupts must work even without a phrase), and every
-        # other utterance is a fresh query. Passive capture disables STOP.
+        # follow-up / phrase-only / drop branches don't apply. Enabled STOP
+        # commands take priority; every other utterance is a fresh query.
         if self._magic_re is None:
             if self._matches_stop(text):
                 logger.info(
@@ -244,7 +243,7 @@ class VoiceGate:
         matched_magic  = stripped is not None
         stop_candidate = stripped if (matched_magic and stripped) else text
 
-        # 1. STOP — always wins. Matched on both the raw transcript
+        # 1. STOP — takes priority when enabled. Matched on both the raw transcript
         #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
         #    stop") so the fast path triggers either way.
         if self._matches_stop(stop_candidate):
