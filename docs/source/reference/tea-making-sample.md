@@ -466,6 +466,14 @@ uv run --project worker python eval/eval.py
 The command prints `PASS` or `MISS` for each case. It exits nonzero when the
 overall pass rate drops below 80 percent.
 
+The 154-case corpus covers foreground routing, workflow observations with
+current and prior tool results, and the change-watch, transcript-summary, and
+video-delta classifiers. It uses the worker's configured classifier prompts
+and production tool definitions. Per-case output includes the endpoint model
+identifier, prompt hash, temperature, token limit, thinking setting, LLM wall
+time, and case time. The case time measures model and agent logic; this eval
+does not measure audio startup or first useful audio.
+
 When debugging, inspect the workflow, background, foreground, and Relay JSONL
 files as separate stages. This shows whether the problem came from evidence,
 tool selection, state policy, event delivery, or presentation.

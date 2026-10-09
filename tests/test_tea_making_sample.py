@@ -2029,7 +2029,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     root_cases = [
         case
         for case in cases
-        if case.get("kind") != "observation"
+        if case.get("kind") in (None, "routing")
         and case.get("route", "root") == "root"
     ]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -2040,8 +2040,13 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "current_view",
         "rag_lookup",
         "transcript__start",
+        "transcript__stop",
+        "transcript__status",
         "video_log__start",
+        "video_log__stop",
+        "video_log__status",
         "workflow__start",
+        "change_watch__status",
     }
     active_cases = [case for case in cases if case.get("route") == "active"]
     assert {case["expected_tool"] for case in active_cases} == {
@@ -2069,7 +2074,13 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
     observation_cases = [case for case in cases if case.get("kind") == "observation"]
     assert len(observation_cases) >= 4
-    assert all(case["expected_updates"] == {} for case in observation_cases)
+    assert all(
+        case["expected_tool"] != "workflow__commit"
+        or "expected_updates" in case
+        or "expected_updates_containing" in case
+        for case in observation_cases
+    )
+    assert all(case["expected_updates"] == {} for case in observation_cases[:4])
 
     positive_active_names = {
         case["name"]
