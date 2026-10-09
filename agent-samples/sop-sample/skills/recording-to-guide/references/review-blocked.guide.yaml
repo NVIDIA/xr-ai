@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Example evidence: "Fit the [unintelligible] adapter into the side socket."
+# Evaluation via ../../evaluate-guide/SKILL.md must leave this step incomplete,
+# even if a later image shows an adapter fitted. Do not remove the gate to make the demo pass.
+# The action and target are known; the required adapter identity is not.
+# Keep that action as a draft, without claiming the live camera can resolve
+# author intent. Put source IDs and the clarification request in .review.md.
+# Do NOT copy this gate just because a source image is missing: when the
+# required adapter identity and result are clear, use the normal visual example.
+schema_version: 1
+task:
+  id: fit_adapter
+  name: "Fit Adapter"
+  version: 1
+  status: draft
+  source_session: example-blocked-session
+  start_step: fit_adapter
+  foreground_prompt: "The intended adapter must be clarified before replay approval."
+  complete_message: "The adapter placement is complete."
+state:
+  adapter_fitted:
+    type: boolean
+    description: "The intended adapter is fitted in the side socket; identity unresolved."
+    initial: false
+steps:
+  - id: fit_adapter
+    title: "Fit the intended adapter"
+    reads: []
+    writes: [adapter_fitted]
+    trigger:
+      function: current_view
+      interval_s: 3
+      result_field: text
+      arguments:
+        question: "Describe the visible side socket and any adapter fitted in it. This is context only; the required adapter identity is unresolved."
+    agent:
+      prompt: "Do not commit this step. Human review must identify the intended adapter and define its check."
+      tools: []
+    voice:
+      prompt: "The recorded action is fitting an adapter in the side socket; its identity needs clarification before verification."
+      tools: []
+    evidence:
+      pattern: '(?!)'
+      consecutive: 1
+    complete_when:
+      adapter_fitted: true
+    next: null
+    complete_on_skip: true
+    state_on_skip: {}
+    messages:
+      enter: "Fit the intended adapter in the side socket. Its identity requires review."
+      complete: "The adapter placement is verified. Say next to finish."
+      skip: "Ending without verification because the required adapter is unresolved."

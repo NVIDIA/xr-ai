@@ -6,6 +6,7 @@
 import copy
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,25 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from sop_sample_worker._validate_guide import main  # noqa: E402
 from sop_sample_worker._workflow_spec import load_workflow, parse_workflow  # noqa: E402
+
+
+def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
+    # Test the documented sibling installation, not links that only work from
+    # the repository root. Evaluation shares the authoring contract and examples.
+    for name in ("recording-to-guide", "evaluate-guide"):
+        shutil.copytree(_SAMPLE / "skills" / name, tmp_path / name)
+    for path in tmp_path.rglob("*.md"):
+        for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", path.read_text()):
+            if "://" not in target and not target.startswith("#"):
+                assert (path.parent / target.split("#", 1)[0]).is_file(), (path, target)
+    contracts = list(tmp_path.rglob("packet-and-guide-schema.md"))
+    assert len(contracts) == 1
+    for name in ("recording-to-guide", "evaluate-guide"):
+        skill = tmp_path / name
+        metadata = yaml.safe_load((skill / "SKILL.md").read_text().split("---", 2)[1])
+        assert metadata["name"] == name
+        interface = yaml.safe_load((skill / "agents/openai.yaml").read_text())["interface"]
+        assert f"${name}" in interface["default_prompt"]
 
 
 @pytest.fixture
@@ -38,8 +58,28 @@ def test_visual_example_uses_same_writable_boolean_and_closed_answers():
     assert re.fullmatch(step.evidence.pattern, "ready")
     for response in ("not ready", "unclear", "ready, but still held", "unavailable"):
         assert not re.fullmatch(step.evidence.pattern, response)
-    assert step.next_step is None
+    assert step.next_step == "attach_clips"
     assert step.trigger.result_field == "text"
+
+
+def test_visual_example_requires_fresh_evidence_for_each_linked_step():
+    workflow = load_workflow(_REFERENCES / "example.guide.yaml")
+    state = workflow.initial_state()
+    visited = []
+    step_id = workflow.start_step
+    while step_id is not None:
+        step = workflow.steps[step_id]
+        assert not step.is_complete(state), "Earlier completion must not satisfy a later step"
+        assert step.trigger.function == "current_view"
+        assert step.evidence.commit == step.complete_when == {step.writes[0]: True}
+        for response in ("not ready", "unclear", "unavailable"):
+            assert not re.fullmatch(step.evidence.pattern, response)
+        state.update(step.evidence.commit)
+        assert step.is_complete(state)
+        visited.append(step_id)
+        step_id = step.next_step
+    assert visited == ["position_workpiece", "attach_clips"]
+    assert len({tuple(step.writes) for step in workflow.steps.values()}) == len(visited)
 
 
 def test_timer_example_requires_live_setup_before_elapsed_only_wait():
@@ -63,6 +103,22 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
     assert wait.evidence.commit == wait.complete_when == {"wait_done": True}
     assert re.fullmatch(wait.evidence.pattern, "true")
     assert not re.fullmatch(wait.evidence.pattern, "false")
+
+
+def test_unresolved_identity_example_preserves_action_without_false_success():
+    workflow = load_workflow(_REFERENCES / "review-blocked.guide.yaml")
+    step = workflow.steps[workflow.start_step]
+    assert workflow.status == "draft"
+    assert not workflow.runnable
+    assert not step.is_complete(workflow.initial_state())
+    assert step.trigger.function == "current_view"
+    assert step.agent.tools == ()
+    assert step.voice.tools == ()
+    assert not step.evidence.commit
+    assert step.complete_on_skip
+    assert not step.state_on_skip
+    for observation in ("ready", "true", "unclear", "adapter fitted", "(?!)"):
+        assert not re.fullmatch(step.evidence.pattern, observation)
 
 
 @pytest.mark.parametrize("mutation,diagnostic", [
@@ -143,7 +199,7 @@ def test_duplicate_keys_rejected_at_every_level(edit, key):
 def test_safe_aliases_and_non_overlapping_merges_remain_supported():
     source = (_REFERENCES / "example.guide.yaml").read_text()
     source = source.replace("    type: boolean\n    description:", "    <<: {type: boolean}\n    description:")
-    source = source.replace("    agent:\n", "    agent: &policy\n")
+    source = source.replace("    agent:\n", "    agent: &policy\n", 1)
     # Sharing a policy is not a duplicate key in the receiving step.
     start = source.index("    voice:\n")
     end = source.index("    evidence:\n", start)
@@ -248,7 +304,7 @@ def test_module_cli_exit_code_and_read_only_behavior(tmp_path, visual):
     command = [sys.executable, "-m", "sop_sample_worker._validate_guide", str(path)]
     success = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert success.returncode == 0, success.stderr
-    assert "draft, 1 steps" in success.stdout
+    assert "draft, 2 steps" in success.stdout
     assert path.read_bytes() == before
     path.write_text("not: a guide")
     failure = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)

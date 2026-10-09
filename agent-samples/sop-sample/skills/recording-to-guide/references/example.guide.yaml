@@ -2,8 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example, not a recording: replace every task-specific value.
+# Before handoff, use ../../evaluate-guide/SKILL.md: "Are clips attached?"
+# question can pass one clip or inward tabs. Test the full question below on
+# available incomplete and completed views, then refine and retest the draft.
 # source_session identifies the voice-bounded SOP packet, not an optional
 # participant-wide media bundle. No raw-media manifest is required.
+# Example evidence: "Center the workpiece in the marked area. Attach two clips,
+# one on each side, with both tabs facing outward." These are two actions;
+# the clip count and direction belong in the second trigger, not just its voice.
+# Illustrative caption progression: workpiece held over the mark -> workpiece
+# resting centered; clip held by one edge -> one clip attached -> two attached
+# on opposite sides with tabs outward. Group the repeated clip observations as
+# evidence for "attach two clips", not separate "hold" and "clip visible" steps.
+# Extract action=attach, object=two clips, target=opposite workpiece sides,
+# orientation=tabs outward; distinguish one attached or held nearby from both
+# attached. Keep positioning as a distinct action. Map real source IDs in the
+# review notes; this illustrative sequence supplies no recorded visual proof.
+# These checks verify the resulting arrangement, not the history of each motion.
+# For an unresolved required identity, use review-blocked.guide.yaml instead of
+# inventing the identity or refusing to draft the demonstrated action.
+# Missing saved images do not make an explicitly instructed outward tab
+# direction unknown. Keep the normal live checks and note the capture gap.
 schema_version: 1
 task:
   id: arrange_workpiece
@@ -12,12 +31,16 @@ task:
   status: draft
   source_session: example-session-id
   start_step: position_workpiece
-  foreground_prompt: "Guide the recorded workpiece arrangement, without inferring hidden conditions."
-  complete_message: "The workpiece arrangement is complete."
+  foreground_prompt: "Guide workpiece positioning followed by two clip attachments."
+  complete_message: "The workpiece and its two clips are arranged."
 state:
   workpiece_positioned:
     type: boolean
     description: "The workpiece is visibly centered inside the marked area."
+    initial: false
+  clips_attached:
+    type: boolean
+    description: "Two clips are visibly attached on opposite sides, with both tabs outward."
     initial: false
 steps:
   - id: position_workpiece
@@ -45,10 +68,43 @@ steps:
         workpiece_positioned: true
     complete_when:
       workpiece_positioned: true
-    next: null
+    next: attach_clips
     complete_on_skip: false
     state_on_skip: {}
     messages:
       enter: "Place the workpiece flat and centered inside the marked area."
-      complete: "The workpiece looks positioned. Say next to finish."
+      complete: "The workpiece looks positioned. Say next for the clips."
       skip: "Skipping the positioning check without verification."
+  - id: attach_clips
+    title: "Attach the two clips"
+    reads: []
+    writes: [clips_attached]
+    trigger:
+      function: current_view
+      interval_s: 3
+      result_field: text
+      arguments:
+        question: >-
+          Are two clips visibly attached to opposite sides of the workpiece,
+          with both tabs facing outward, not merely held nearby?
+          Answer exactly ready, not ready, or unclear.
+    agent:
+      prompt: "Use the direct classification. Missing or occluded requirements are not success."
+      tools: []
+    voice:
+      prompt: "For a live check, ask current_view about two attached clips, opposite sides, and both tabs outward."
+      tools: [current_view]
+    evidence:
+      pattern: '^ready$'
+      consecutive: 2
+      commit:
+        clips_attached: true
+    complete_when:
+      clips_attached: true
+    next: null
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: "Attach one clip on each side of the workpiece with both tabs facing outward."
+      complete: "Both clips look attached with tabs outward. Say next to finish."
+      skip: "Skipping the clip check without verification."

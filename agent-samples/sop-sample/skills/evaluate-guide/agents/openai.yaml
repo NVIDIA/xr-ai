@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Evaluate Guide"
+  short_description: "Check a draft SOP against its recorded evidence"
+  default_prompt: "Use $evaluate-guide to check my draft SOP against its source capture and report findings without modifying the guide."

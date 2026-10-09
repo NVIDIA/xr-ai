@@ -67,10 +67,17 @@ and completion messages; do not copy the worked example's wording.
 
 `evidence.commit` uses writable fields, not a literal placeholder like
 `done_field`. With it, matching evidence commits directly without an observation
-LLM. Without it, the observation agent may call the engine-provided
+LLM; that agent's prompt and tools do not execute. Without it, the observation
+agent may call the engine-provided
 `workflow__commit`, still gated by the evidence threshold. Do not list that
 internal tool in `agent.tools`. Completion does not advance; messages ask the
 user to say next. A skip is not verified success.
+
+Give each step its own completion boolean, initially false. Do not reuse a
+previous step's completion field: that would make the later step complete on
+entry without its own observation. Capture success never initializes replay
+completion to true. The visual example links two independent checks; it does
+not prescribe two steps for every recording.
 
 ## Closed tool catalog
 
@@ -103,9 +110,23 @@ Timing starts at setup, not when the user says next. It does not prove continuou
 contact. Unknown, ranged, or fractional durations require review instead of
 guessing an accepted positive integer.
 
-## Review-blocked steps
+## Evidence gaps and review-blocked steps
 
-Retain an unsupported action as a draft step, not a fictitious verification.
+Use normal live checks for clearly specified observable results, even when a
+saved image is missing or a caption is stale. Record that authoring gap in the
+review notes; it does not make the replay tool incapable of checking the result.
+This includes an explicitly instructed count or orientation: absent visual
+corroboration is not an unresolved instruction. Decide from the required result.
+For example, an explicit placement instruction with an unavailable saved image
+can still have a `current_view` placement check with `^ready$` evidence.
+
+Reserve a blocked step for an unresolved required condition or an unsupported
+verification, such as proving past ordering or a hidden fit from one image.
+Retain the action, not a fictitious verification.
+An unclear object identity can require this pattern without preventing a draft
+of the known action and target. Refer to
+[the complete blocked example](review-blocked.guide.yaml). Do not substitute a
+request for clarification for both requested output files when an action is known.
 Use a bounded `current_view` question about the observable context, a separate
 false-initialized completion field, and this never-matching evidence gate:
 
@@ -121,6 +142,16 @@ even if the model proposes it. Set `complete_on_skip: true` if later steps depen
 on this unresolved prerequisite. Explain the exact gap in the step prompts and
 review notes. Do not approve until it is resolved; schema validity alone is not
 approval. Never put invented triggers or extra `review_blockers` keys in the YAML.
+An ordinary ordered step list does not itself require a temporal tool: final
+visible states can verify ordinary placements. Block when the required success
+condition is the past motion or order itself, rather than the visible result.
 
 Store evidence mappings, caption corrections, and approval blockers in the
 separate `.review.md` file. It is a human review aid, not executable guide state.
+Keep authoring changes in those notes. The
+[evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
+untested checks, and revision findings separately in `<slug>.evaluation.md`.
+Do not add test results to YAML.
+Write these outputs under `agent-samples/sop-sample/guides/` from the repository
+root, unless a different output directory was requested. Links between these
+references resolve relative to their containing files, not the working directory.
