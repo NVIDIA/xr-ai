@@ -29,6 +29,7 @@ automatically:
 | `yaml/voice_gate*.yaml` | Conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |
 | `yaml/models.local.json` | Reused model adapters and endpoint addresses |
+| `yaml/media_capture.yaml` | Opt-in capture output, NVENC, audio, captions, and retention |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
 For example, use the preset that accepts speech without a wake phrase during an
@@ -67,6 +68,15 @@ Alternatively, run the source file directly after synchronization:
 ```bash
 uv run main.py
 ```
+
+To record a demo session, use:
+
+```bash
+uv run tea_making_sample --capture
+```
+
+Refer to the [session capture guide](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html#opt-in-session-capture)
+for output and encoding requirements.
 
 To make the unauthenticated event viewer reachable from a trusted private
 network, use this alternative sample command:
