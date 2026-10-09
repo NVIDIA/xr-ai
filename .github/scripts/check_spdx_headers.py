@@ -236,9 +236,8 @@ def check(path: Path) -> tuple[bool, str]:
         if not lstripped.startswith("//"):
             return False, f"SPDX line must start with '//' (got: {spdx_line!r})"
     elif style == "dash":
-        for line in window_lines:
-            if "SPDX-" in line and not line.lstrip().startswith("--"):
-                return False, f"SPDX line must start with '--' (got: {line!r})"
+        if not lstripped.startswith("--"):
+            return False, f"SPDX line must start with '--' (got: {spdx_line!r})"
     elif style == "html":
         # The header must sit inside an HTML comment block somewhere in the window.
         if "<!--" not in window or "-->" not in window:
