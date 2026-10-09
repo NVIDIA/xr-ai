@@ -490,20 +490,21 @@ async def test_stale_control_after_restart_rejected(engine):
     assert engine._sessions["alice"].step_id == "base"
 
 
-def test_cli_selects_replay_without_capture_and_quotes_name(monkeypatch):
+@pytest.mark.parametrize("capture", [False, True])
+def test_cli_selects_replay_with_optional_media_capture_and_quotes_name(monkeypatch, capture):
     spec = importlib.util.spec_from_file_location("sop_replay_main", _SAMPLE / "main.py")
     main = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(main)
     requests = []
 
     def launch(processes, base):
-        assert [p.name for p in processes] == ["hub", "worker"]
+        assert [p.name for p in processes] == (["hub", "capture", "worker"] if capture else ["hub", "worker"])
         assert processes[-1].command == "sop_sample_replay"
         requests.append(json.loads(processes[-1].config.read_text()))
         assert base == _SAMPLE
 
     monkeypatch.setattr(main, "run_stack", launch)
-    main.run(["--replay", "Align Parts"])
+    main.run(["--replay", "Align Parts"] + (["--capture"] if capture else []))
     assert requests == [{"settings": str(_SAMPLE / "yaml/replay.yaml"), "guide_name": "Align Parts"}]
     with pytest.raises(SystemExit):
         main.run(["--replay", " "])
