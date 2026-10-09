@@ -32,6 +32,7 @@ Attributes
    xr_ai_models.VideoInput
    xr_ai_models.Category
    xr_ai_models.KIND_OPENAI_COMPAT
+   xr_ai_models.KIND_SYSTEMONE
    xr_ai_models.ModelKind
    xr_ai_models.Spec
 
@@ -44,6 +45,10 @@ Classes
    xr_ai_models.Capabilities
    xr_ai_models.ChatMessage
    xr_ai_models.ChatResponse
+   xr_ai_models.DecisionAnswer
+   xr_ai_models.DecisionQuestion
+   xr_ai_models.DecisionResponse
+   xr_ai_models.DecisionService
    xr_ai_models.ChatStreamEvent
    xr_ai_models.EmbeddingService
    xr_ai_models.ImagePart
@@ -61,6 +66,7 @@ Classes
    xr_ai_models.OpenAICompatTTS
    xr_ai_models.OpenAICompatVLM
    xr_ai_models.AdapterSpec
+   xr_ai_models.DecisionSpec
    xr_ai_models.DeploymentSpec
    xr_ai_models.EmbeddingSpec
    xr_ai_models.EndpointSpec
@@ -80,6 +86,7 @@ Functions
 
    xr_ai_models.load_models_config
    xr_ai_models.load_models_config_from_dict
+   xr_ai_models.make_decision
    xr_ai_models.make_embedding
    xr_ai_models.make_llm
    xr_ai_models.make_stt
@@ -214,6 +221,125 @@ Package Contents
       :type:  dict[str, Any]
 
       The unmodified provider response object.
+
+
+
+.. py:class:: DecisionAnswer
+
+   One validated choice and its probability trace.
+
+
+   .. py:attribute:: choice
+      :type:  str
+
+      The selected label from the question's criteria.
+
+
+
+   .. py:attribute:: confidence
+      :type:  float
+
+      The selected choice probability.
+
+
+
+   .. py:attribute:: probabilities
+      :type:  Mapping[str, float]
+
+      Probability for every permitted choice label.
+
+
+
+.. py:class:: DecisionQuestion
+
+   One choice question for a structured decision model.
+
+   The keys in ``criteria`` are the permitted answer labels. Each value gives
+   the criterion that distinguishes that choice. Define at least two non-empty
+   labels with non-empty descriptions.
+
+
+   .. py:attribute:: instructions
+      :type:  str
+
+      Question-specific instructions for selecting a criterion.
+
+
+
+   .. py:attribute:: criteria
+      :type:  Mapping[str, str]
+
+      Permitted choice labels and their selection criteria.
+
+
+
+.. py:class:: DecisionResponse
+
+   Validated answers and metadata returned by a decision service.
+
+
+   .. py:attribute:: answers
+      :type:  Mapping[str, DecisionAnswer]
+
+      Answers keyed by the question identifiers supplied to ``decide``.
+
+
+
+   .. py:attribute:: model
+      :type:  str
+
+      Model identifier reported by the service.
+
+
+
+   .. py:attribute:: usage
+      :type:  Mapping[str, Any]
+
+      Provider-reported usage metadata.
+
+
+
+   .. py:attribute:: raw
+      :type:  Mapping[str, Any]
+
+      Unmodified JSON response from the provider.
+
+
+
+.. py:class:: DecisionService
+
+
+
+   Structural interface for typed, choice-only decision services.
+
+
+   .. py:method:: decide(state: str | Mapping[str, Any], questions: Mapping[str, DecisionQuestion], *, timeout: float | None = None) -> DecisionResponse
+      :async:
+
+
+      Evaluate all questions against text or a JSON-compatible state mapping.
+
+      Return one choice and a complete probability map for each question.
+      No free-form text or reasoning is generated. A per-call timeout must be
+      positive and finite; the SystemOne adapter caps it at the configured
+      endpoint timeout. Transport failures and invalid or incomplete answers
+      raise exceptions without returning partial decisions.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready for requests.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release resources owned by the service.
 
 
 
@@ -995,6 +1121,34 @@ Package Contents
    A model role supported by :class:`ModelsConfig`.
 
 
+.. py:class:: DecisionSpec
+
+
+
+   Configuration for a choice-only structured decision endpoint.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      Model identifier and adapter settings.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity, authentication, and readiness settings.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata for the serving process.
+
+
+
 .. py:class:: DeploymentSpec
 
    Process ownership for the endpoint that serves a model role.
@@ -1130,6 +1284,14 @@ Package Contents
    The adapter kind for OpenAI-compatible HTTP endpoints.
 
 
+.. py:data:: KIND_SYSTEMONE
+   :type:  ModelKind
+   :value: 'systemone'
+
+
+   The adapter kind for typed Clef SystemOne decision endpoints.
+
+
 .. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
 
 
@@ -1202,6 +1364,12 @@ Package Contents
    .. py:method:: embedding(name: str) -> EmbeddingSpec
 
       Return the embedding specification named *name*.
+
+
+
+   .. py:method:: decision(name: str) -> DecisionSpec
+
+      Return the decision specification named *name*.
 
 
 
@@ -1317,6 +1485,15 @@ Package Contents
 
    ``source`` labels validation errors and is useful when the mapping did not
    originate from a file.
+
+
+.. py:function:: make_decision(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.DecisionService
+
+   Construct the typed decision service for the named configuration entry.
+
+   Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+   names a different model role, and :class:`ValueError` for an unsupported
+   adapter kind.
 
 
 .. py:function:: make_embedding(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.EmbeddingService

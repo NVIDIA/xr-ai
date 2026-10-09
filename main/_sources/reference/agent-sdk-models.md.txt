@@ -7,7 +7,7 @@
 
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, and embedding protocols and
+`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, and decision protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
@@ -29,6 +29,29 @@ async with make_llm(config, "agent_llm") as llm:
     )
     print(response.content, response.reasoning)
 ```
+
+Choice-only decision clients use `make_decision` and the SystemOne adapter:
+
+```python
+from xr_ai_models import DecisionQuestion, load_models_config, make_decision
+
+config = load_models_config("yaml/models.json")
+async with make_decision(config, "triage") as decisions:
+    result = await decisions.decide(
+        "The participant asked to start the timer.",
+        {
+            "approval": DecisionQuestion(
+                instructions="Did the participant explicitly approve the action?",
+                criteria={"yes": "An explicit approval", "no": "No explicit approval"},
+            )
+        },
+    )
+    print(result.answers["approval"].choice)
+```
+
+The profile entry uses `category: decision`, `kind: systemone`, a model name,
+and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
+documents the local service and its pinned model release.
 
 (profile-contract)=
 A client profile names logical roles and declares adapters and endpoints:

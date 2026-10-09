@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>xr-ai-web-events &#8212; XR AI</title>
+    <title>Clef-Flash local decision server &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/agent-sdk-web-events';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/clef-flash';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Clef-Flash local decision server" href="clef-flash.html" />
-    <link rel="prev" title="xr-ai-voice" href="agent-sdk-voice.html" />
+    <link rel="next" title="Command-line reference" href="command-line.html" />
+    <link rel="prev" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -290,7 +290,7 @@
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/reference/agent-sdk-web-events.html", "../../v0.1.0-beta/index.html", "agent-sdk-web-events.html"];
+    var urls = ["../../v0.2.0-beta.2/index.html", "../../v0.1.0-beta/index.html", "clef-flash.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -344,8 +344,8 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-web-events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -429,7 +429,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr-ai-web-events</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Clef-Flash local decision server</span></li>
   </ul>
 </nav>
 </div>
@@ -450,69 +450,75 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="xr-ai-web-events">
-<h1>xr-ai-web-events<a class="headerlink" href="#xr-ai-web-events" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-web-events</span></code> presents application-selected runtime events in a bounded,
-read-only browser view. It does not tail files, persist data, or enter model,
-voice, media, or DeviceIOHub authentication paths. Refer to <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a>
-for the public APIs.</p>
-<section id="publishing-selected-events">
-<h2>Publishing selected events<a class="headerlink" href="#publishing-selected-events" title="Link to this heading">#</a></h2>
-<p>Applications explicitly project compact JSON-compatible payloads to
-<code class="docutils literal notranslate"><span class="pre">WEB_EVENT_TOPIC</span></code>. Each event’s serialized <code class="docutils literal notranslate"><span class="pre">payload</span></code> is limited to 16 KiB.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">RuntimeContext</span><span class="p">,</span> <span class="n">Topic</span><span class="p">,</span> <span class="n">subscribe</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_web_events</span><span class="w"> </span><span class="kn">import</span> <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span> <span class="n">WebEvent</span><span class="p">,</span> <span class="n">WebEventsAgent</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">Reading</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span>
-
-<span class="n">READING_TOPIC</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"application.reading"</span><span class="p">,</span> <span class="n">Reading</span><span class="p">)</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">ReadingEventsAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-
-    <span class="nd">@subscribe</span><span class="p">(</span><span class="n">READING_TOPIC</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">report_reading</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">reading</span><span class="p">:</span> <span class="n">Reading</span><span class="p">,</span>
-        <span class="n">ctx</span><span class="p">:</span> <span class="n">RuntimeContext</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
-            <span class="n">WEB_EVENT_TOPIC</span><span class="p">,</span>
-            <span class="n">WebEvent</span><span class="p">(</span>
-                <span class="n">topic</span><span class="o">=</span><span class="s2">"application.reading"</span><span class="p">,</span>
-                <span class="n">title</span><span class="o">=</span><span class="s2">"Readings"</span><span class="p">,</span>
-                <span class="n">payload</span><span class="o">=</span><span class="n">reading</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">),</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-<span class="n">runtime</span> <span class="o">=</span> <span class="n">AgentRuntime</span><span class="p">()</span>
-<span class="n">viewer</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"web-events"</span><span class="p">,</span> <span class="n">WebEventsAgent</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">"Agent events"</span><span class="p">))</span>
-<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"reading-events"</span><span class="p">,</span> <span class="n">ReadingEventsAgent</span><span class="p">())</span>
-
-<span class="k">async</span> <span class="k">with</span> <span class="n">viewer</span><span class="p">:</span>
-    <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-        <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">READING_TOPIC</span><span class="p">,</span> <span class="n">Reading</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mf">21.5</span><span class="p">))</span>
+<section id="clef-flash-local-decision-server">
+<h1>Clef-Flash local decision server<a class="headerlink" href="#clef-flash-local-decision-server" title="Link to this heading">#</a></h1>
+<p>The optional Clef-Flash 9B service exposes the upstream joint-schema model over
+the typed SystemOne HTTP contract used by <code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. It loads the pinned
+release’s <code class="docutils literal notranslate"><span class="pre">joint_schema_model.py</span></code> directly from the model directory and calls
+its native <code class="docutils literal notranslate"><span class="pre">load_release_model</span></code> and <code class="docutils literal notranslate"><span class="pre">systemone</span></code> functions. The service does not
+route decisions through a generation endpoint.</p>
+<p>The service supports text-only choice questions. A request must name the
+configured model, include state, and provide at least one question with a
+string instruction and two or more named choices. An empty instruction uses
+the upstream question-ID fallback. The service rejects
+multimodal fields, unsupported question types, model-name mismatches, oversized
+bodies, and tokenized inputs above <code class="docutils literal notranslate"><span class="pre">max_length</span></code>. This length check uses the
+release tokenizer before inference so state is never silently truncated by the
+upstream encoder.</p>
+<p>The server loads weights once, runs a two-choice warmup, and signals launcher
+readiness only after the model and HTTP listener are ready. Inference executes
+one request at a time on a dedicated worker thread; HTTP health and model
+metadata remain responsive while requests wait. Client cancellation, including
+repeated cancellation, does not release the inference lock until the running
+worker call finishes. <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/health</span></code> and
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> include model and <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> provenance.
+<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> returns the standard answers and usage object with the
+same provenance fields.</p>
+<section id="launching">
+<h2>Launching<a class="headerlink" href="#launching" title="Link to this heading">#</a></h2>
+<p>From <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model
 </pre></div>
 </div>
-<p>Start the viewer before worker readiness so a bind failure fails the worker.
-<code class="docutils literal notranslate"><span class="pre">start()</span></code> and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> are idempotent, and the agent is an async context manager.
-The page groups events by participant and presentation topic. Its cursor API
-reports bounded-history rollover; <code class="docutils literal notranslate"><span class="pre">/healthz</span></code> checks the listener.</p>
+<p>The sample starts <code class="docutils literal notranslate"><span class="pre">services/clef-server</span></code> persistently on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>.
+Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> pins model revision
+<code class="docutils literal notranslate"><span class="pre">17f0b0ad64efb65d273590632833508766b2aae6</span></code> from the
+<code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository and downloads it into the repository’s
+ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache on first launch. To use an already extracted copy of
+that snapshot, set <code class="docutils literal notranslate"><span class="pre">model_path</span></code> to its directory in the YAML. The local path
+must contain the release’s required model files; its revision is supplied by
+the configuration rather than checked against local artifact metadata.
+With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
+sample directory to stop only a listener carrying the matching Clef ownership
+and port markers. It waits for that process to exit, including request and native
+inference cleanup, before reporting success; closing the HTTP listener alone
+does not complete shutdown. Linux process handles keep termination and timeout
+escalation tied to the same verified process. The stop command never treats a
+Docker container on that port as the Clef service. A server already listening on the configured port is reused
+only when it has those ownership markers and its health response matches the
+complete requested server configuration; any other listener causes startup to
+fail before loading model weights.</p>
+<p>The YAML sets the bind address, port, device, inference dtype, maximum token
+length, and maximum request-body size. The checked-in values use <code class="docutils literal notranslate"><span class="pre">cuda:0</span></code>,
+BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
+limit receive HTTP 422; increase <code class="docutils literal notranslate"><span class="pre">max_length</span></code> only when GPU memory allows it.</p>
 </section>
-<section id="exposure-boundary">
-<h2>Exposure boundary<a class="headerlink" href="#exposure-boundary" title="Link to this heading">#</a></h2>
-<p>The default is <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code>. The listener has no application
-authentication or TLS, and payloads may include transcripts or camera-derived
-text. Prefer an SSH tunnel for remote development:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh<span class="w"> </span>-L<span class="w"> </span><span class="m">8092</span>:127.0.0.1:8092<span class="w"> </span>user@xr-host
-</pre></div>
-</div>
-<p>Direct exposure belongs only on a trusted network or behind an authenticated
-TLS reverse proxy. The proxy must preserve an allowed <code class="docutils literal notranslate"><span class="pre">Host</span></code> value or rewrite it
-to the configured listener address. Listener addresses are IPv4-only.</p>
+<section id="http-contract">
+<h2>HTTP contract<a class="headerlink" href="#http-contract" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> accepts the SystemOne request fields <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">state</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">questions</span></code>. The response contains the configured model name, one choice
+answer per question, input-token usage, and the pinned revision. The service
+does not accept images, videos, <code class="docutils literal notranslate"><span class="pre">noul</span></code>, or <code class="docutils literal notranslate"><span class="pre">score</span></code> questions. The pinned model
+rounds native probabilities to four decimal places. Before returning them, the
+service validates their shape and values, normalizes them to a complete
+distribution, and derives confidence from the selected normalized probability.</p>
+<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/health</span></code> reports the Clef service, model and revision, plus a deterministic
+fingerprint of the active non-secret server configuration. The launcher uses
+that complete identity only to decide whether an owned listener is reusable.</p>
+<p>Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_models.make_decision</span></code> and the model profile’s SystemOne
+adapter. They do not call this HTTP endpoint directly.</p>
 </section>
 </section>
 
@@ -527,20 +533,20 @@ to the configured listener address. Listener addresses are IPv4-only.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="agent-sdk-voice.html"
+       href="agent-sdk-web-events.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr-ai-voice</p>
+        <p class="prev-next-title">xr-ai-web-events</p>
       </div>
     </a>
     <a class="right-next"
-       href="clef-flash.html"
+       href="command-line.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Clef-Flash local decision server</p>
+        <p class="prev-next-title">Command-line reference</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -565,8 +571,8 @@ to the configured listener address. Listener addresses are IPv4-only.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#publishing-selected-events">Publishing selected events</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exposure-boundary">Exposure boundary</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launching">Launching</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#http-contract">HTTP contract</a></li>
 </ul>
   </nav></div>
 

@@ -345,6 +345,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -452,7 +453,7 @@
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
 <p><a id="contract"></a></p>
-<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, and embedding protocols and
+<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, and decision protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
@@ -472,6 +473,26 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>Choice-only decision clients use <code class="docutils literal notranslate"><span class="pre">make_decision</span></code> and the SystemOne adapter:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">DecisionQuestion</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_decision</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_decision</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"triage"</span><span class="p">)</span> <span class="k">as</span> <span class="n">decisions</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">decisions</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span>
+        <span class="s2">"The participant asked to start the timer."</span><span class="p">,</span>
+        <span class="p">{</span>
+            <span class="s2">"approval"</span><span class="p">:</span> <span class="n">DecisionQuestion</span><span class="p">(</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">"Did the participant explicitly approve the action?"</span><span class="p">,</span>
+                <span class="n">criteria</span><span class="o">=</span><span class="p">{</span><span class="s2">"yes"</span><span class="p">:</span> <span class="s2">"An explicit approval"</span><span class="p">,</span> <span class="s2">"no"</span><span class="p">:</span> <span class="s2">"No explicit approval"</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">answers</span><span class="p">[</span><span class="s2">"approval"</span><span class="p">]</span><span class="o">.</span><span class="n">choice</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The profile entry uses <code class="docutils literal notranslate"><span class="pre">category:</span> <span class="pre">decision</span></code>, <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">systemone</span></code>, a model name,
+and an endpoint. The standalone <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash guide</span></a>
+documents the local service and its pinned model release.</p>
 <p id="profile-contract">A client profile names logical roles and declares adapters and endpoints:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
