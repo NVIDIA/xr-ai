@@ -15,7 +15,7 @@ The default deployment (yaml/models.default.json) starts:
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
 Use --models PATH for a custom deployment of these local services.
-For NVIDIA NIM models, use the separate model-servers-nim sample.
+For NVIDIA NIM models, configure independently deployed endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
 YAML directory; a service may ship a profile-specific config variant named
@@ -96,7 +96,7 @@ def _models_path(value: str) -> Path:
         )
     if value == "vlm_llm_nim":
         raise argparse.ArgumentTypeError(
-            "--models vlm_llm_nim is retired; use the model-servers-nim sample"
+            "--models vlm_llm_nim is retired; configure independently deployed NIM endpoints"
         )
     return Path(value)
 

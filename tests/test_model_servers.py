@@ -717,7 +717,7 @@ def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize(("argv", "message", "code"), [
     (["--models", "default"], "run model_servers without --models", 2),
-    (["--models", "vlm_llm_nim"], "use the model-servers-nim sample", 2),
+    (["--models", "vlm_llm_nim"], "configure independently deployed NIM endpoints", 2),
     (["--dry-run"], "unrecognized arguments", 2),
     (["--unknown"], "unrecognized arguments", 2),
     (["--help"], "Custom local deployment JSON", 0),

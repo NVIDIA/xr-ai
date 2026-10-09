@@ -24,14 +24,12 @@ recorded video, and document retrieval.
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
-| `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -302,114 +300,34 @@ table, and the profile contract are in
 
 ## Hosting models on NVIDIA NIM
 
-The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
-local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
-API, so this is a model-profile change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
-Self-hosted speech NIMs are covered below.
+Develop with the local shared model servers and deploy the same workers against
+independently operated NIM endpoints. The model profile selects a protocol
+adapter and an endpoint; samples continue to use the typed `xr_ai_models`
+interfaces. There is no XR AI NIM container launcher or local HTTP proxy.
 
-A hosted consumer entry uses an environment-variable reference for its
-credential and omits deployment and health polling metadata:
-
-```json
-{
-  "models": {
-    "vlm": {
-      "category": "vlm",
-      "adapter": {
-        "kind": "openai_compat",
-        "model_name": "nvidia/cosmos3-nano-reasoner",
-        "capabilities": {"vision": true, "streaming": true}
-      },
-      "endpoint": {
-        "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY"
-      }
-    }
-  }
-}
-```
-
-- **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
-  token. The key is a
-  managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to {doc}`/getting_started/credentials`); or export it.
-- **Omitted `deployment`** defaults to an externally operated endpoint; no
-  model process is started or stopped by the profile.
-- **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
-
-To adapt a sample, copy its active model profile, replace the local model entry
-with the hosted entry, and point `models_config` in the worker YAML at the new
-file. The worker reads the endpoint credential named in `api_key_env`; export
-it or configure the credential store. Consumer sample launchers do not inspect
-model profiles to choose model processes.
+Chat and vision use `openai_compat` with native model IDs. Speech uses
+`riva_grpc`, which normalizes Riva audio inside the SDK. Asymmetric embedding
+endpoints use the existing `adapter.default_extras.input_type` field; the SDK
+translates query and passage labels without changing the RAG service.
 
 (self-hosted-nim-containers-models-vlm-llm-nim-json)=
-### Self-hosted NIM containers
+### Self-hosted NIM endpoints
 
-Compatible models can be pulled from NGC and served as optimized NIM
-containers on your own GPUs. Use the separate
-{doc}`/reference/model-servers-nim` sample:
-
-```bash
-uv run --project model-server-samples/model-servers-nim model_servers_nim
-```
-
-Its hardware profiles select the container images, ports, and GPU placement;
-its compatibility adapters preserve the endpoints consumed by existing agent
-samples. The `model-servers` sample launches local server wrappers only.
-Refer to the NIM sample guide for model selection, hardware qualification,
-cache behavior, and shutdown commands.
-
-Self-hosted Riva speech NIMs also expose a direct gRPC interface.
-Workers reach them through the optional `riva_grpc` model kind:
-
-```yaml
-stt:
-  kind:      riva_grpc
-  category:  stt
-  base_url:  localhost:50051   # the container's gRPC port
-  language:  en-US
-```
-
-TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). An explicit `health()` call with `health_check: true` (the
-default) runs a gRPC channel-ready probe; consumer startup does not call it.
-The standalone {doc}`/reference/magpie-nim-tts` service exposes a Magpie Riva
-NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
-the optional SDK dependency; HTTP consumers do not.
-
-Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
-`nvcr.io` image pull *and* by the container itself to download the
-GPU-matched optimized engine from NGC on first start; multi-GB, cached
-under `models/nim/` for later runs), and GPU capacity for every container.
-`cuda_visible_devices` placement lives in the per-GPU-profile
-`nim_*_server.yaml` files. Their adjacent comments record profile-specific
-validation status and hardware cautions; verify startup and capacity on the
-target host. Readiness gates on each container's `/v1/health/ready`.
-
-A NIM container serving something the samples don't ship is the same
-mechanism by hand: point an `openai_compat` entry's `base_url` at its port
-or a `riva_grpc` entry at its gRPC port. Consumer workers do not require a
-health route. Operators can still check the container's `/v1/health/ready`
-endpoint directly.
-With `ownership: external` (you run the container yourself) that is the
-whole change. For an orchestrator to launch or expect it, the entry's
-`deployment.service` must name a process row in that orchestrator's service
-table; a service name with no row fails fast at startup, and adding one row plus
-its config YAML is the only orchestrator edit the profile system ever
-needs.
+Operators own container lifecycle, GPU placement, optimized-engine caching,
+health exposure, and endpoint authorization. Consumer profiles use external
+ownership. The local `model-servers` launcher remains a development convenience.
+Refer to {doc}`/guides/deploying-with-nim` for a complete profile, sample
+configuration paths, smoke checks, and deployment qualification.
 
 ## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-and self-hosted NIM containers (`nim_server`)
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
 serving so the next start reuses hot weights. Use `model_servers --stop`
-for the local stack or `model_servers_nim --stop` for the NIM stack. When
-switching between these samples, stop the current stack first. At startup a wrapper
+for the local stack. Independently deployed NIMs follow their operator's
+lifecycle. At startup a wrapper
 that finds a *different* persistent xr-ai container holding its port (found
 by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -710,7 +628,3 @@ cleanup.
   hardware-specific YAML under
   `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
-- The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `model-server-samples/model-servers-nim/yaml/<gpu-profile>/`; its
-  `nim_<role>_server.yaml` files use `nim_cache`, normally
-  `../../../../models/nim` from that location.

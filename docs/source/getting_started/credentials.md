@@ -90,9 +90,11 @@ inference endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` send
 it as the `Authorization: Bearer` token (refer to
 {doc}`AI services — hosting models on NVIDIA NIM </components/ai-services>`).
 
-The `model-servers-nim` sample calls
-`require_credentials("NGC_API_KEY")`. This check is non-interactive and exits
-when the key is unavailable, so provide the key before starting the profile.
+Deploying self-hosted NIMs requires credentials in the operator's deployment
+environment. Agents connecting to those endpoints need only their inference
+credentials. Configure each role's `endpoint.api_key_env` with the environment
+variable accepted by its gateway; it need not be `NGC_API_KEY`. Refer to
+{doc}`/guides/deploying-with-nim`.
 Get a key at <https://ngc.nvidia.com/setup/api-key>, then export it:
 
 ```bash
@@ -124,7 +126,7 @@ call this helper.
 an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
 token is absent. `model_servers --allow-anonymous` relaxes only the `HF_TOKEN`
-check; credentials required by the selected NIM profile remain strict.
+check.
 
 ## Managing saved tokens
 

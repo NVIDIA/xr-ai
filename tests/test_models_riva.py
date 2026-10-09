@@ -51,7 +51,7 @@ class _FakeASRService:
         self.calls: list[tuple[bytes, _FakeRecognitionConfig]] = []
         self.transcripts = ["hello ", "world"]
 
-    def offline_recognize(self, audio, config):
+    def offline_recognize(self, audio, config, future=False):
         self.calls.append((audio, config))
         results = [
             types.SimpleNamespace(
@@ -60,7 +60,13 @@ class _FakeASRService:
             for t in self.transcripts
         ]
         results.append(types.SimpleNamespace(alternatives=[]))
-        return types.SimpleNamespace(results=results)
+        response = types.SimpleNamespace(results=results)
+        if future:
+            from concurrent.futures import Future
+            call = Future()
+            call.set_result(response)
+            return call
+        return response
 
 
 class _FakeSynthesisService:
