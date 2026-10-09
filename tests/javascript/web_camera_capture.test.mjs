@@ -13,6 +13,9 @@ const { LiveKitBackend } = await import(
 const { StreamSession } = await import(
   '../../client-samples/web/StreamKit/StreamSession.js'
 );
+const { CameraConfig, CameraEncodingConfig, VideoQualityPreference } = await import(
+  '../../client-samples/web/StreamKit/index.js'
+);
 const { INTERNAL_SEND_BYTE_STREAM } = await import(
   '../../client-samples/web/StreamKit/Backends/LiveKit/ByteStreamTransport.js'
 );
@@ -281,6 +284,66 @@ test('stops the captured camera track when LiveKit publication fails', async (t)
 
   assert.equal(mediaTrack.stopCount, 1);
   assert.equal(backend.cameraTrack, null);
+});
+
+test('camera encoding presets reach publication and reset on restart without constraining capture', async (t) => {
+  const captured = [];
+  const publications = [];
+  installMediaDevices(async constraints => {
+    captured.push(constraints);
+    return { getVideoTracks: () => [makeMediaTrack()] };
+  });
+  const { backend } = await connectedBackend(t, async (track, options) => {
+    publications.push(options);
+    return { videoTrack: makePublishedTrack(track) };
+  });
+  const session = new StreamSession(backend);
+  await session.startCamera(new CameraConfig({
+    encoding: new CameraEncodingConfig({ ...CameraEncodingConfig.detail, maxFramerate: 10 }),
+  }));
+  assert.deepEqual(publications[0], {
+    source: 'camera', videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 10 },
+    simulcast: false, degradationPreference: 'maintain-resolution',
+  });
+  for (const [encoding, expected] of [
+    [CameraEncodingConfig.motion, 'maintain-framerate'],
+    [CameraEncodingConfig.balanced, 'balanced'],
+  ]) {
+    await session.startCamera(new CameraConfig({ encoding }));
+    assert.equal(publications.at(-1).degradationPreference, expected);
+    assert.equal('simulcast' in publications.at(-1), false);
+  }
+  await session.startCamera(new CameraConfig());
+  assert.deepEqual(publications.at(-1), { source: 'camera' });
+  await session.startCamera(new CameraConfig({ encoding: new CameraEncodingConfig({ maxFramerate: 5 }) }));
+  assert.deepEqual(publications.at(-1), {
+    source: 'camera', videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 5 },
+  });
+  for (const constraints of captured) {
+    assert.deepEqual(constraints, { audio: false, video: { facingMode: 'user', resizeMode: 'none' } });
+  }
+});
+
+test('invalid encoding is rejected before capture or stopping an active camera', async (t) => {
+  const mediaTrack = makeMediaTrack();
+  let captures = 0;
+  installMediaDevices(async () => {
+    captures += 1;
+    return { getVideoTracks: () => [mediaTrack] };
+  });
+  const { backend, room } = await connectedBackend(t, async track => ({ videoTrack: makePublishedTrack(track) }));
+  await backend.startCamera();
+  for (const maxFramerate of [0, -1, NaN, Infinity, 1.5, '10']) {
+    await assert.rejects(backend.startCamera({ encoding: { maxFramerate } }), RangeError);
+  }
+  await assert.rejects(backend.startCamera({ encoding: { maxBitrateBps: 0 } }), RangeError);
+  await assert.rejects(backend.startCamera({ encoding: { qualityPreference: 'unknown' } }), TypeError);
+  await assert.rejects(backend.startCamera({ encoding: { simulcast: 'false' } }), TypeError);
+  assert.equal(captures, 1);
+  assert.equal(mediaTrack.stopCount, 0);
+  assert.equal(room.unpublishedTracks.length, 0);
+  assert.equal(backend.cameraTrack, mediaTrack);
+  assert.equal(VideoQualityPreference.DETAIL, CameraEncodingConfig.detail.qualityPreference);
 });
 
 test('reports the highest selected-transport RTT and all inbound-track jitter', async (t) => {

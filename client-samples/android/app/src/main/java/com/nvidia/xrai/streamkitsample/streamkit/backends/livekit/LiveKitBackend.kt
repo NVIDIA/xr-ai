@@ -16,6 +16,8 @@ import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.VideoQualityPreference
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.ConnectOptions
@@ -27,6 +29,7 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
+import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
@@ -34,6 +37,8 @@ import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoCaptureParameter
+import io.livekit.android.room.track.VideoEncoding
+import livekit.org.webrtc.RtpParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -226,10 +231,32 @@ internal class LiveKitBackend(
 
     // ── StreamingBackend: camera ───────────────────────────────────────────────
 
+    private fun videoPublishDefaults(encoding: CameraEncodingConfig?): VideoTrackPublishDefaults {
+        val preference = when (encoding?.qualityPreference) {
+            VideoQualityPreference.DETAIL -> RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            VideoQualityPreference.MOTION -> RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+            VideoQualityPreference.BALANCED -> RtpParameters.DegradationPreference.BALANCED
+            null -> null
+        }
+        return VideoTrackPublishDefaults(
+            videoEncoding = encoding?.let { VideoEncoding(it.maxBitrateBps, it.maxFramerate) },
+            simulcast = encoding?.simulcast ?: true,
+            degradationPreference = preference,
+        )
+    }
+
     override suspend fun startCamera(config: CameraConfig) {
         if (!isConnected) throw StreamError.CameraRequiresConnection
 
         val lp = room?.localParticipant ?: return
+        val publishDefaults = videoPublishDefaults(config.encoding)
+        // A muted camera keeps its publication and encoding options. Republish
+        // when changing policy so stop/start cannot retain the previous one.
+        if (injectedVideoTrack != null || lp.videoTrackPublishDefaults != publishDefaults) {
+            stopCamera()
+            lp.getTrackPublication(Track.Source.CAMERA)?.track?.let { lp.unpublishTrack(it) }
+            lp.videoTrackPublishDefaults = publishDefaults
+        }
         val position = when (config.facing) {
             CameraConfig.CameraFacing.FRONT -> CameraPosition.FRONT
             CameraConfig.CameraFacing.BACK  -> CameraPosition.BACK
@@ -294,6 +321,14 @@ internal class LiveKitBackend(
         width: Int,
         height: Int,
         timestampUs: Long,
+    ) = injectVideoFrame(i420, width, height, timestampUs, null)
+
+    override suspend fun injectVideoFrame(
+        i420: ByteBuffer,
+        width: Int,
+        height: Int,
+        timestampUs: Long,
+        encoding: CameraEncodingConfig?,
     ) {
         if (!isConnected) throw StreamError.NotConnected
 
@@ -325,7 +360,9 @@ internal class LiveKitBackend(
             // Publish as the CAMERA source so it appears in the local preview
             // (CameraPreviewView reads getTrackPublication(Track.Source.CAMERA))
             // and is treated as the participant's camera feed by the hub.
-            lp.publishVideoTrack(track, VideoTrackPublishOptions(source = Track.Source.CAMERA))
+            lp.publishVideoTrack(track, VideoTrackPublishOptions(
+                base = videoPublishDefaults(encoding), source = Track.Source.CAMERA,
+            ))
             injectedVideoTrack = track
             injectedCapturer = newCapturer
             newCapturer
