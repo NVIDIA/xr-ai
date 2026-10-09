@@ -30,6 +30,7 @@ sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
 import clef_server.__main__ as clef_main  # noqa: E402
 from clef_server._config import ServerConfig, identity, load_config  # noqa: E402
 from clef_server._service import (  # noqa: E402
+    ClefBackend,
     _await_without_abandoning,
     _normalize_response,
     create_app,
@@ -89,7 +90,6 @@ def _config(tmp_path: Path, *, max_body_bytes: int = 1024) -> ServerConfig:
     return ServerConfig(
         model_name="Cloudflare/clef-flash",
         model_revision=REVISION,
-        model_path=None,
         model_cache=tmp_path / "cache",
         host="127.0.0.1",
         port=8120,
@@ -115,16 +115,78 @@ def _request(**overrides) -> dict:
     return {**body, **overrides}
 
 
-def test_config_resolves_model_paths_relative_to_yaml(tmp_path: Path) -> None:
+def test_config_resolves_model_cache_relative_to_yaml(tmp_path: Path) -> None:
     yaml_path = tmp_path / "yaml" / "clef.yaml"
     yaml_path.parent.mkdir()
-    yaml_path.write_text(f"model_revision: {REVISION}\nmodel_path: ../weights\nmodel_cache: ../cache\n")
+    yaml_path.write_text(f"model_revision: {REVISION}\nmodel_cache: ../cache\n")
 
     config = load_config(yaml_path)
 
-    assert config.model_path == (tmp_path / "weights").resolve()
     assert config.model_cache == (tmp_path / "cache").resolve()
     assert config.port == 8120
+
+
+def test_backend_resolves_pinned_snapshot_from_model_cache(monkeypatch, tmp_path: Path) -> None:
+    import types
+
+    from clef_server import _service
+
+    snapshot = (
+        tmp_path
+        / "cache"
+        / "models--Cloudflare--clef-flash"
+        / "snapshots"
+        / REVISION
+    )
+    snapshot.mkdir(parents=True)
+    (snapshot / "joint_schema_model.py").write_text("release model")
+    download_calls = []
+
+    def snapshot_download(**kwargs):
+        download_calls.append(kwargs)
+        return str(snapshot)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        types.SimpleNamespace(bfloat16="bf16", float16="fp16", float32="fp32"),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        types.SimpleNamespace(snapshot_download=snapshot_download),
+    )
+
+    release = types.SimpleNamespace(
+        load_release_model=lambda model_dir, **kwargs: (model_dir, kwargs),
+        systemone=lambda *_args: {},
+        encode_record=lambda *_args, **_kwargs: [],
+    )
+    loader = types.SimpleNamespace(exec_module=lambda module: vars(module).update(vars(release)))
+    fake_spec = types.SimpleNamespace(name="_clef_release_model", loader=loader)
+    monkeypatch.setattr(_service.importlib.util, "spec_from_file_location", lambda *_args: fake_spec)
+    monkeypatch.setattr(
+        _service.importlib.util,
+        "module_from_spec",
+        lambda _spec: types.SimpleNamespace(),
+    )
+
+    config = _config(tmp_path)
+    backend = ClefBackend(config)
+    try:
+        backend.load()
+    finally:
+        backend.executor.shutdown(wait=True)
+
+    assert download_calls == [
+        {
+            "repo_id": config.model_name,
+            "revision": REVISION,
+            "cache_dir": config.model_cache,
+        }
+    ]
+    assert backend.model == snapshot
+    assert backend.processor["device"] == config.device
 
 
 def test_health_models_and_success_include_revision(tmp_path: Path) -> None:

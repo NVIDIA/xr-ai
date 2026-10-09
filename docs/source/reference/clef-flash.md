@@ -44,10 +44,8 @@ The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
 Its `yaml/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
 `Cloudflare/clef-flash` model repository and downloads it into the repository's
-ignored `models/` cache on first launch. To use an already extracted copy of
-that snapshot, set `model_path` to its directory in the YAML. The local path
-must contain the release's required model files; its revision is supplied by
-the configuration rather than checked against local artifact metadata.
+ignored `models/` cache on first launch. Later launches resolve the same pinned
+snapshot from that cache.
 With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the
 sample directory to stop only a listener carrying the matching Clef ownership
 and port markers. It waits for that process to exit, including request and native

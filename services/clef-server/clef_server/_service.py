@@ -38,19 +38,14 @@ class ClefBackend:
         import torch
         from huggingface_hub import snapshot_download
 
-        if self.config.model_path is not None:
-            model_dir = self.config.model_path
-            if not model_dir.is_dir():
-                raise ValueError(f"model_path is not a directory: {model_dir}")
-        else:
-            self.config.model_cache.mkdir(parents=True, exist_ok=True)
-            model_dir = Path(
-                snapshot_download(
-                    repo_id=self.config.model_name,
-                    revision=self.config.model_revision,
-                    cache_dir=self.config.model_cache,
-                )
+        self.config.model_cache.mkdir(parents=True, exist_ok=True)
+        model_dir = Path(
+            snapshot_download(
+                repo_id=self.config.model_name,
+                revision=self.config.model_revision,
+                cache_dir=self.config.model_cache,
             )
+        )
         source = model_dir / "joint_schema_model.py"
         if not source.is_file():
             raise ValueError(f"missing upstream model implementation: {source}")

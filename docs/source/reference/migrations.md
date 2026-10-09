@@ -5,6 +5,17 @@
 
 # Release migration
 
+## Clef model cache configuration
+
+Remove `model_path` from Clef server YAML files. Clef always resolves the
+pinned `model_name` and `model_revision` through Hugging Face Hub using
+`model_cache`; an existing cached snapshot is reused automatically. Set
+`model_cache` to the desired cache root instead of pointing at an extracted
+snapshot directory. Before restarting, stop a running Clef server with
+`uv run clef_flash_model --stop` from `model-server-samples/clef-flash/`;
+the configuration identity changed, so a server started by an older version
+cannot be reused by the updated launcher.
+
 ## LiveKit sample credentials
 
 Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
