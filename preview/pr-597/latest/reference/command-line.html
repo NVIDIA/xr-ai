@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Sample configuration reference" href="configuration.html" />
-    <link rel="prev" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
+    <link rel="prev" title="Clef-Flash local decision server" href="clef-flash.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -317,6 +317,7 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -477,6 +478,19 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 </dd>
 </dl>
 </section>
+<section id="clef-flash-model">
+<h2>clef_flash_model<a class="headerlink" href="#clef-flash-model" title="Link to this heading">#</a></h2>
+<p>Launch the persistent local Clef-Flash 9B SystemOne service.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop only the Clef service configured by yaml/clef_server.yaml.</p>
+</dd>
+</dl>
+</section>
 <section id="model-servers">
 <h2>model_servers<a class="headerlink" href="#model-servers" title="Link to this heading">#</a></h2>
 <p>model-servers orchestrator — starts one shared AI inference stack and exits.</p>
@@ -533,12 +547,12 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="agent-sdk-web-events.html"
+       href="clef-flash.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr-ai-web-events</p>
+        <p class="prev-next-title">Clef-Flash local decision server</p>
       </div>
     </a>
     <a class="right-next"
