@@ -25,6 +25,7 @@ import pytest
 import xr_ai_launcher._stack as launcher_stack
 import xr_ai_vllm
 import yaml
+from _helpers_hf import COMMIT, block_network, cache_file, use_hub_cache
 
 from _helpers_subprocess import pick_free_port
 
@@ -74,6 +75,38 @@ class TTSModel:
     def load_model(*, language):
         return _Model()
 """
+    )
+    _write_fake_pocket_config(package)
+
+
+def _write_fake_pocket_config(package: Path) -> None:
+    """Add the config modules the server reads to resolve cached artifacts."""
+    (package / "utils").mkdir()
+    (package / "utils" / "__init__.py").write_text("")
+    (package / "utils" / "config.py").write_text(
+        "from pathlib import Path\n"
+        "CONFIGS_DIR = Path(__file__).parent.parent / 'config'\n"
+    )
+    (package / "utils" / "utils.py").write_text(
+        "def get_predefined_voice(language, name):\n"
+        f"    return f'hf://kyutai/voices/{{language}}/{{name}}.safetensors@{COMMIT}'\n"
+    )
+    (package / "config").mkdir()
+    (package / "config" / "english.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "weights_path": f"hf://kyutai/gated/model.safetensors@{COMMIT}",
+                "weights_path_without_voice_cloning": (
+                    f"hf://kyutai/open/model.safetensors@{COMMIT}"
+                ),
+                "default_temperature": 0.3,
+                "flow_lm": {
+                    "lookup_table": {
+                        "tokenizer_path": f"hf://kyutai/open/tokenizer.model@{COMMIT}",
+                    },
+                },
+            }
+        )
     )
 
 
@@ -146,9 +179,99 @@ def _loaded_backend(module, monkeypatch: pytest.MonkeyPatch):
         "pocket_tts",
         SimpleNamespace(TTSModel=SimpleNamespace(load_model=load_model)),
     )
+    monkeypatch.setattr(module, "_cached_artifacts", lambda *_args: None)
     backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
     backend._ensure_loaded()
     return backend, model, load_model
+
+
+@pytest.fixture()
+def cached_pocket(tmp_path, monkeypatch):
+    """Pocket TTS stand-in whose shipped config references Hub artifacts."""
+    package = tmp_path / "packages" / "pocket_tts"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    _write_fake_pocket_config(package)
+    for name in [m for m in sys.modules if m.split(".")[0] == "pocket_tts"]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.syspath_prepend(str(package.parent))
+    import pocket_tts
+
+    model = _FakeModel()
+    loads: list[dict] = []
+
+    def load_model(*, language=None, config=None):
+        # The server deletes its generated config after loading.
+        loads.append(
+            {"language": language, "config": config and yaml.safe_load(Path(config).read_text())}
+        )
+        return model
+
+    monkeypatch.setattr(
+        pocket_tts, "TTSModel", SimpleNamespace(load_model=load_model), raising=False
+    )
+    cache = use_hub_cache(monkeypatch, tmp_path / "hub")
+    return SimpleNamespace(cache=cache, model=model, loads=loads)
+
+
+def _cache_pocket_file(cache: Path, uri: str) -> Path:
+    path, _, commit = uri.removeprefix("hf://").partition("@")
+    owner, name, filename = path.split("/", 2)
+    return cache_file(cache, f"{owner}/{name}", filename, revision=None, commit=commit)
+
+
+_GATED = f"hf://kyutai/gated/model.safetensors@{COMMIT}"
+_UNGATED = f"hf://kyutai/open/model.safetensors@{COMMIT}"
+_TOKENIZER = f"hf://kyutai/open/tokenizer.model@{COMMIT}"
+_VOICE = f"hf://kyutai/voices/english/bill_boerst.safetensors@{COMMIT}"
+
+
+@pytest.mark.parametrize("gated", [False, True])
+async def test_cached_artifacts_load_without_network(cached_pocket, monkeypatch, gated):
+    module = _load_main_module()
+    uris = (_UNGATED, _TOKENIZER, _VOICE) + ((_GATED,) if gated else ())
+    paths = {uri: _cache_pocket_file(cached_pocket.cache, uri) for uri in uris}
+    attempts = block_network(monkeypatch)
+    backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
+    backend._ensure_loaded()
+    [load] = cached_pocket.loads
+    config = load["config"]
+    assert load["language"] is None
+    assert config["weights_path"] == str(paths[_GATED if gated else _UNGATED])
+    assert "weights_path_without_voice_cloning" not in config
+    assert config["flow_lm"]["lookup_table"]["tokenizer_path"] == str(paths[_TOKENIZER])
+    assert config["default_temperature"] == 0.3
+    assert backend._voice_state == {"voice": paths[_VOICE]}
+    assert cached_pocket.model.has_voice_cloning is gated
+    assert attempts == []
+
+
+async def test_partial_cache_falls_back_to_pocket_downloads(cached_pocket) -> None:
+    module = _load_main_module()
+    for uri in (_UNGATED, _TOKENIZER):
+        _cache_pocket_file(cached_pocket.cache, uri)
+    backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
+
+    backend._ensure_loaded()
+
+    assert cached_pocket.loads == [{"language": "english", "config": None}]
+    assert backend._voice_state == {"voice": "bill_boerst"}
+
+
+async def test_explicit_offline_miss_names_missing_artifact(
+    cached_pocket, monkeypatch
+) -> None:
+    module = _load_main_module()
+    use_hub_cache(monkeypatch, cached_pocket.cache, offline=True)
+    for uri in (_UNGATED, _TOKENIZER):
+        _cache_pocket_file(cached_pocket.cache, uri)
+    backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
+
+    with pytest.raises(RuntimeError, match="HF_HUB_OFFLINE") as raised:
+        backend._ensure_loaded()
+
+    assert _VOICE in str(raised.value)
+    assert cached_pocket.loads == []
 
 
 @pytest.mark.parametrize("config_path", _PROFILE_CONFIGS)
@@ -183,6 +306,7 @@ async def test_backend_auto_selects_cuda_and_warms_up(monkeypatch) -> None:
             TTSModel=SimpleNamespace(load_model=Mock(return_value=model)),
         ),
     )
+    monkeypatch.setattr(module, "_cached_artifacts", lambda *_args: None)
     backend = module._PocketTTSBackend("bill_boerst", "english", "auto")
 
     backend.warmup()

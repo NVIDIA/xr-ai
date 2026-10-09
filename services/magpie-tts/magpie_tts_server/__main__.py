@@ -32,7 +32,7 @@ import io
 import os
 import sys
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 from loguru import logger
@@ -49,6 +49,39 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
         p = (yaml_dir / p).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _cached_nemo_checkpoint(model_name: str, revision: str | None) -> str | None:
+    """Return the cached ``.nemo`` checkpoint of a Hub model, or ``None``.
+
+    Makes no network request. With ``HF_HUB_OFFLINE`` set, an uncached
+    checkpoint fails here with the model and revision instead of inside NeMo.
+    """
+    if "/" not in model_name:
+        return None  # NGC catalog name, resolved by NeMo
+    from huggingface_hub import constants, try_to_load_from_cache
+    from huggingface_hub.utils import HFValidationError
+
+    # NeMo's Hub loader uses the same file name. hf_hub_download is avoided
+    # because even with local_files_only it can build request headers, which
+    # some Hub releases resolve over the network.
+    filename = PurePosixPath(model_name).name + ".nemo"
+    try:
+        path = try_to_load_from_cache(
+            repo_id=model_name, filename=filename, revision=revision
+        )
+    except HFValidationError:
+        return None  # not a Hub repository ID
+    if isinstance(path, str):
+        return path
+    if constants.HF_HUB_OFFLINE:
+        raise RuntimeError(
+            f"{model_name} (revision {revision or 'main'}, file {filename}) "
+            f"is not cached under {constants.HF_HUB_CACHE}, and "
+            "HF_HUB_OFFLINE is set. Start once with network access to "
+            "download it, or unset HF_HUB_OFFLINE."
+        )
+    return None
 
 
 class _TtsBackend:
@@ -78,12 +111,15 @@ class _TtsBackend:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
             logger.info("Loading NeMo TTS {!r} on {}…", self._model_name, device)
-            if self._revision and "/" in self._model_name:
+            checkpoint = _cached_nemo_checkpoint(self._model_name, self._revision)
+            if checkpoint:
+                logger.info("Restoring cached checkpoint {}", checkpoint)
+                model = MagpieTTSModel.restore_from(restore_path=checkpoint)
+            elif self._revision and "/" in self._model_name:
                 # Download a pinned revision from HuggingFace directly, then
                 # restore from the cached .nemo file.  NeMo's from_pretrained()
                 # always pulls HEAD, so we bypass it when a revision is pinned.
                 import nemo
-                from pathlib import PurePosixPath
                 from huggingface_hub import hf_hub_download
                 from huggingface_hub import get_token as _get_hf_token
 

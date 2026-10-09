@@ -36,6 +36,7 @@ import math
 import os
 import socket
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -96,6 +97,89 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     return p
 
 
+def _cached_hub_file(uri: str) -> Path | None:
+    """Resolve a Pocket TTS ``hf://<repo>/<file>[@revision]`` from the cache.
+
+    Uses a pure cache lookup: even with ``local_files_only``,
+    ``hf_hub_download`` can build request headers, which some Hub releases
+    resolve over the network.
+    """
+    from huggingface_hub import try_to_load_from_cache
+
+    if not uri.startswith("hf://"):
+        return Path(uri)
+    path, _, revision = uri.removeprefix("hf://").partition("@")
+    owner, name, filename = path.split("/", 2)
+    cached = try_to_load_from_cache(
+        repo_id=f"{owner}/{name}", filename=filename, revision=revision or None
+    )
+    return Path(cached) if isinstance(cached, str) else None
+
+
+def _localize(value, missing: list[str]):
+    """Replace each ``hf://`` reference in a config tree with its cached path."""
+    if isinstance(value, dict):
+        return {key: _localize(item, missing) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_localize(item, missing) for item in value]
+    if isinstance(value, str) and value.startswith("hf://"):
+        path = _cached_hub_file(value)
+        if path is None:
+            missing.append(value)
+            return value
+        return str(path)
+    return value
+
+
+def _cached_artifacts(language: str, voice: str) -> tuple[dict, Path, bool] | None:
+    """Return a cache-local model config, voice state file, and cloning flag.
+
+    Returns ``None`` when an artifact is not cached, so the caller can fall back
+    to Pocket TTS's own downloads. Makes no network request. With
+    ``HF_HUB_OFFLINE`` set, a missing artifact fails here and names it.
+    """
+    from huggingface_hub import constants
+    from pocket_tts.utils.config import CONFIGS_DIR
+    from pocket_tts.utils.utils import get_predefined_voice
+
+    config = yaml.safe_load((CONFIGS_DIR / f"{language}.yaml").read_text())
+    gated = config.pop("weights_path", None)
+    ungated = config.pop("weights_path_without_voice_cloning", None)
+    missing: list[str] = []
+    config = _localize(config, missing)
+
+    # Pocket TTS prefers the gated voice-cloning weights and falls back to the
+    # ungated ones. Either serves the predefined voice, so a cached ungated
+    # file is a hit; otherwise every start without gated access would retry
+    # the Hub before falling back.
+    voice_cloning = False
+    if gated or ungated:
+        weights = _cached_hub_file(gated) if gated else None
+        voice_cloning = weights is not None
+        if weights is None and ungated:
+            weights = _cached_hub_file(ungated)
+        if weights is None:
+            missing.append(ungated or gated)
+        else:
+            config["weights_path"] = str(weights)
+
+    voice_uri = get_predefined_voice(language=language, name=voice)
+    voice_state = _cached_hub_file(voice_uri)
+    if voice_state is None:
+        missing.append(voice_uri)
+
+    if not missing:
+        return config, voice_state, voice_cloning
+    if constants.HF_HUB_OFFLINE:
+        raise RuntimeError(
+            f"Pocket TTS language {language!r} voice {voice!r} is not cached "
+            f"under {constants.HF_HUB_CACHE}, and HF_HUB_OFFLINE is set. "
+            f"Missing: {', '.join(missing)}. Start once with network access "
+            "to download it, or unset HF_HUB_OFFLINE."
+        )
+    return None
+
+
 class _PocketTTSBackend:
     """Thread-safe Pocket TTS voice loader and synthesizer."""
 
@@ -134,11 +218,23 @@ class _PocketTTSBackend:
                 raise RuntimeError("Pocket TTS requested CUDA, but CUDA is unavailable")
 
             logger.info("Loading Pocket TTS language {!r} on {}…", self._language, device)
-            model = TTSModel.load_model(language=self._language)
+            cached = _cached_artifacts(self._language, self._voice_name)
+            if cached is None:
+                model = TTSModel.load_model(language=self._language)
+                voice = self._voice_name
+            else:
+                config, voice, voice_cloning = cached
+                logger.info("Loading cached Pocket TTS artifacts")
+                # load_model accepts only a YAML path for a custom config.
+                with tempfile.TemporaryDirectory() as directory:
+                    config_path = Path(directory) / f"{self._language}.yaml"
+                    config_path.write_text(yaml.safe_dump(config))
+                    model = TTSModel.load_model(config=config_path)
+                model.has_voice_cloning = voice_cloning
             if device != "cpu":
                 model.to(device)
             logger.info("Loading voice {!r}…", self._voice_name)
-            voice_state = model.get_state_for_audio_prompt(self._voice_name)
+            voice_state = model.get_state_for_audio_prompt(voice)
             self._model = model
             self._voice_state = voice_state
             self._device = device

@@ -344,7 +344,16 @@ class TestBuildRunArgv:
         assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
         assert argv[image_index + 1] == "-c"
 
-    def test_bootstraps_xet_stack_before_starting_vllm(self, tmp_path):
+    def test_resolves_cached_snapshot_before_any_hub_bootstrap(self, tmp_path):
+        bash_cmd = build_run_argv(**self._base_kwargs(tmp_path))[-1]
+        local = bash_cmd.index(" local my-model")
+        assert local < bash_cmd.index("import hf_xet") < bash_cmd.index(" download my-model")
+        assert bash_cmd.endswith(
+            'vllm serve "$model_path" --served-model-name my-model '
+            "--host 0.0.0.0 --port 8100"
+        )
+
+    def test_bootstraps_xet_stack_before_download(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         bash_cmd = argv[-1]
         assert bash_cmd.count("import hf_xet") == 2
@@ -352,27 +361,7 @@ class TestBuildRunArgv:
         assert "python3 -m pip install -q" in bash_cmd
         assert _docker._HF_XET_REQUIREMENT in bash_cmd
         assert "huggingface-hub>=" not in bash_cmd
-        assert bash_cmd.endswith("vllm serve my-model --host 0.0.0.0 --port 8100")
-
-    def test_prefetches_and_syncs_snapshot_before_vllm(self, tmp_path):
-        kwargs = self._base_kwargs(tmp_path)
-        kwargs["prefetch_model"] = "org/cold-model"
-
-        argv = build_run_argv(**kwargs)
-        bash_cmd = argv[-1]
-
-        assert "snapshot_download" in bash_cmd
-        assert "org/cold-model" in bash_cmd
-        assert "os.sync()" in bash_cmd
-        assert bash_cmd.index("snapshot_download") < bash_cmd.index("vllm serve")
-
-    def test_prefetch_changes_configuration_fingerprint(self, tmp_path):
-        kwargs = self._base_kwargs(tmp_path)
-        without_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
-        kwargs["prefetch_model"] = "org/cold-model"
-        with_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
-
-        assert with_prefetch != without_prefetch
+        assert bash_cmd.index("import hf_xet") < bash_cmd.index(" download my-model")
 
     def test_skips_xet_bootstrap_when_disabled_in_extra_env(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
@@ -383,7 +372,26 @@ class TestBuildRunArgv:
         assert "HF_HUB_DISABLE_XET=1" in env_flags
         assert "import hf_xet" not in bash_cmd
         assert _docker._HF_XET_REQUIREMENT not in bash_cmd
-        assert bash_cmd == "vllm serve my-model --host 0.0.0.0 --port 8100"
+        assert " download my-model" in bash_cmd
+
+    def test_forwards_explicit_offline_mode(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+        monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        env_flags = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-e"]
+
+        assert "HF_HUB_OFFLINE=1" in env_flags
+        assert "TRANSFORMERS_OFFLINE=1" in env_flags
+
+    def test_keeps_explicit_served_model_name(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["vllm_argv"] = [*kwargs["vllm_argv"], "--served-model-name=alias"]
+
+        bash_cmd = build_run_argv(**kwargs)[-1]
+
+        assert bash_cmd.count("--served-model-name") == 1
+        assert bash_cmd.endswith("--served-model-name=alias")
 
     def test_extra_pip_uses_no_build_isolation(self, tmp_path):
         # mamba-ssm and causal-conv1d both `import torch` from setup.py at
@@ -794,7 +802,7 @@ class TestRun:
         assert "--gpu-memory-utilization" not in captured["argv"]
         assert captured["diagnostic_argv"] == kwargs["vllm_argv"]
 
-    def test_spark_uma_enables_prefetch_and_retry(self, tmp_path, monkeypatch):
+    def test_spark_uma_enables_retry(self, tmp_path, monkeypatch):
         kwargs = _run_kwargs(tmp_path)
         kwargs["spark_uma"] = True
         captured_build: dict = {}
@@ -812,7 +820,7 @@ class TestRun:
 
         run(**kwargs)
 
-        assert captured_build["prefetch_model"] == "model"
+        assert captured_build["vllm_argv"][2] == "model"
         assert captured_run["spark_uma"] is True
 
     def test_spark_uma_is_harmless_in_pip_mode(self, tmp_path, monkeypatch):
