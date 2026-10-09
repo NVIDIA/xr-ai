@@ -184,11 +184,15 @@ class VoiceGate:
         """Return whether *text* has a phrase at a sentence boundary."""
         return self._magic_re is not None and strip_magic(self._magic_re, text) is not None
 
+    def _matches_stop(self, text: str) -> bool:
+        """Apply the shared STOP policy to an already-selected transcript."""
+        return self._cfg.stop_commands_enabled and STOP_RE.match(text) is not None
+
     def _matches_partial_stop(self, text: str) -> bool:
         """Match a partial STOP on raw text or its wake-stripped tail."""
         stripped = strip_magic(self._magic_re, text)
         candidate = stripped if stripped else text
-        return self._cfg.stop_commands_enabled and STOP_RE.match(candidate) is not None
+        return self._matches_stop(candidate)
 
     def could_match_magic_phrase(self, text: str) -> bool:
         """Return whether the current partial sentence can become a match."""
@@ -212,7 +216,7 @@ class VoiceGate:
         # wins (interrupts must work even without a phrase), and every
         # other utterance is a fresh query. Passive capture disables STOP.
         if self._magic_re is None:
-            if self._cfg.stop_commands_enabled and STOP_RE.match(text):
+            if self._matches_stop(text):
                 logger.info(
                     "gate decision pid=%r kind=STOP fresh_match=False "
                     "followup_window_open=False",
@@ -243,7 +247,7 @@ class VoiceGate:
         # 1. STOP — always wins. Matched on both the raw transcript
         #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
         #    stop") so the fast path triggers either way.
-        if self._cfg.stop_commands_enabled and STOP_RE.match(stop_candidate):
+        if self._matches_stop(stop_candidate):
             logger.info(
                 "gate decision pid=%r kind=STOP fresh_match=%s "
                 "followup_window_open=%s",

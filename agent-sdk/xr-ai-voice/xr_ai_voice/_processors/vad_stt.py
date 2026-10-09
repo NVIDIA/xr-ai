@@ -108,6 +108,9 @@ class VadSttProcessor(FrameProcessor):
         self._vad_cfg               = vad_cfg
         self._on_partial_transcript = on_partial_transcript
         self._on_final_transcript   = on_final_transcript
+        # The pipeline binds the gate's policy; standalone processors retain
+        # default STOP recognition without requiring a voice-gate instance.
+        self._matches_stop: Callable[[str], bool] = lambda text: STOP_RE.match(text) is not None
         self._gate_controls_partial_stop = False
         self._detectors: dict[str, VadDetector] = {}
         # Track which pid is currently in an utterance so on_utterance
@@ -325,7 +328,7 @@ class VadSttProcessor(FrameProcessor):
                     logger.exception("partial-probe stt transcribe failed pid={!r}", pid)
                     return
 
-                stop_matched = bool(text and STOP_RE.match(text))
+                stop_matched = bool(text and self._matches_stop(text))
                 logger.info(
                     "early transcript probe fired pid={!r} attempt={} latency_ms={} stop_matched={}",
                     pid, attempt, round((time.monotonic() - before) * 1000),
