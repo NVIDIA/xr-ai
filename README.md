@@ -97,10 +97,10 @@ XR AI is licensed under [Apache-2.0](LICENSE).
 
 Third-party license and attribution texts are preserved under
 [`third_party_licenses/`](third_party_licenses/). These files retain their
-upstream terms, including Apache-2.0, BSD, MIT, MPL-2.0, LGPL, Artistic,
-LLVM-exception, font licenses, and NVIDIA proprietary terms.
+upstream terms; refer to [License texts](THIRD_PARTY_NOTICES.md#license-texts)
+for details.
 
-See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for each component’s
+Refer to [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for each component's
 applicable license and the
 [complete license-file index](THIRD_PARTY_NOTICES.md#bundled-license-file-index)
 for links to the preserved texts.
