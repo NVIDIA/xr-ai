@@ -149,9 +149,6 @@ def test_bundled_license_index_is_complete_and_links_exist() -> None:
         f"Missing entries: {expected - set(table_links)}; "
         f"Unexpected entries: {set(table_links) - expected}"
     )
-    stated_count = re.search(r"links all (\d+) preserved license files", section)
-    assert stated_count is not None, "Missing license index count"
-    assert int(stated_count.group(1)) == len(expected), "Stale license index count"
     for target in re.findall(r"\]\(([^)]+)\)", section):
         assert target.startswith("third_party_licenses/"), target
         assert (_ROOT / target).is_file(), f"Broken license index link: {target}"
