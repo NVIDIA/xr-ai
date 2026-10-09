@@ -487,7 +487,6 @@ async def test_participant_leave_continues_when_held_slot_release_fails():
     )
     hub._participant_connector = {"alice": "conn"}
     hub._participant_sessions = {"alice": ""}
-    hub._video_tracks = {}
     hub._published_status = {"alice": "ready"}
     hub._agent_status = {"agent": {"alice": "ready"}}
     hub._latest_slots = {("alice", "cam"): (FailingRing(), view)}

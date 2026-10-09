@@ -68,7 +68,7 @@ from ._file_ordering import FileRoute, FileSessionOrderer
 from ._types import (AgentPresence, AudioChunk, DataMessage, FileMessage, FrameData,
                      FrameRequest, FrameSignal, ImageCaptureCancel,
                      ImageCaptureData, ImageCaptureRequest, MsgType,
-                     ParticipantEvent, ReturnAudioFlush, RosterRequest, VideoTrackEvent,
+                     ParticipantEvent, ReturnAudioFlush, RosterRequest,
                      SubscriptionProbe)
 
 log = logging.getLogger(__name__)
@@ -281,7 +281,6 @@ class ProcessorEndpoint:
         self._image_capture_cbs: list[ImageCaptureCallback] = []
         self._file_cbs:        list[FileCallback]        = []
         self._participant_cbs: list[ParticipantCallback] = []
-        self._video_track_cbs: list[Callable[[VideoTrackEvent], Awaitable[None]]] = []
 
         # Pending request_frame() calls keyed by (participant_id, track_id).
         # Each entry is a list of futures — all resolved when FRAME_DATA arrives.
@@ -522,14 +521,6 @@ class ProcessorEndpoint:
     def on_participant(self, cb: ParticipantCallback) -> None:
         """Register an async callback for participant join and leave events."""
         self._participant_cbs.append(cb)
-
-    def on_video_track(self, cb: Callable[[VideoTrackEvent], Awaitable[None]]) -> None:
-        """Observe camera lifecycle for subscribed participants, including roster replay.
-
-        Unlike frames, these events also report camera-off while a participant
-        remains connected. Handlers must tolerate duplicate active events.
-        """
-        self._video_track_cbs.append(cb)
 
     # ── return path ───────────────────────────────────────────────────────────
 
@@ -1052,14 +1043,6 @@ class ProcessorEndpoint:
         elif type_id == MsgType.IMAGE_CAPTURE_DATA:
             for cb in self._image_capture_cbs:
                 self._spawn(cb(msg))
-        elif type_id == MsgType.VIDEO_TRACK_EVENT:
-            if (
-                msg.participant_id in self._subscribed
-                and self._participant_sessions.get(msg.participant_id)
-                == msg.participant_session_id
-            ):
-                for cb in self._video_track_cbs:
-                    self._spawn(cb(msg))
         elif type_id == MsgType.PARTICIPANT_EVENT:
             # Update participant set + auto-subscribe state synchronously
             # before spawning user callbacks so callbacks observe a
