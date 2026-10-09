@@ -129,3 +129,29 @@ def test_text_unidecode_artistic_license_election_is_explicit() -> None:
     assert 'The "Artistic License"' in contents
     assert "elects the **Artistic-1.0-Perl** option" in _NOTICES
     assert "does not rely on the GPL grant" in _NOTICES
+
+
+def test_bundled_license_index_is_complete_and_links_exist() -> None:
+    section = _NOTICES.split("## Bundled license file index\n", 1)[1].split("\n## ", 1)[0]
+    table_links = re.findall(r"^\|[^\n]*\]\(([^)]+)\)", section, re.MULTILINE)
+    assert len(table_links) == len(set(table_links)), "Duplicate license index entries"
+    expected = {
+        path.relative_to(_ROOT).as_posix()
+        for path in (_ROOT / "third_party_licenses").rglob("*")
+        if path.is_file()
+        and path.name != "license_notes.md"
+        and (
+            path.name.upper().startswith(("LICENSE", "LICENCE", "COPYING"))
+            or path.name == "FTL.TXT"
+        )
+    }
+    assert set(table_links) == expected, (
+        f"Missing entries: {expected - set(table_links)}; "
+        f"Unexpected entries: {set(table_links) - expected}"
+    )
+    stated_count = re.search(r"links all (\d+) preserved license files", section)
+    assert stated_count is not None, "Missing license index count"
+    assert int(stated_count.group(1)) == len(expected), "Stale license index count"
+    for target in re.findall(r"\]\(([^)]+)\)", section):
+        assert target.startswith("third_party_licenses/"), target
+        assert (_ROOT / target).is_file(), f"Broken license index link: {target}"
