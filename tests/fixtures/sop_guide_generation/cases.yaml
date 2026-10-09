@@ -1,0 +1,127 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Original synthetic capture excerpts. Feed input only; reserve checks for scoring.
+- id: multi_caption_actions
+  input:
+    packet: {session_id: synthetic-organizer, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "An organizer with three empty slots and a handle; a hand holds a divider above a slot."}
+      - {caption_id: 2, frame_id: 2, frame_timestamp_us: 3000000, caption: "The divider is aligned over the first slot, still held above it."}
+      - {caption_id: 3, frame_id: 3, frame_timestamp_us: 5000000, caption: "One divider is seated; another is held near the second slot."}
+      - {caption_id: 4, frame_id: 4, frame_timestamp_us: 7000000, caption: "Two dividers are seated; the third slot is empty."}
+      - {caption_id: 5, frame_id: 5, frame_timestamp_us: 9000000, caption: "Three dividers are seated with their tall ends toward the handle."}
+      - {caption_id: 6, frame_id: 6, frame_timestamp_us: 11000000, caption: "A nameplate is held beside the organizer front rail."}
+      - {caption_id: 7, frame_id: 7, frame_timestamp_us: 13000000, caption: "The nameplate is clipped onto the front rail, no longer held."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1500000, text: "Seat all three dividers in the slots with their tall ends toward the handle."}
+      - {transcript_id: 2, timestamp_us: 10000000, text: "Then clip the nameplate onto the front rail."}
+    media_access: "Text-only synthetic capture. No images supplied; captions cannot stand in for actual visual test results."
+  checks:
+    - "Extracts seating dividers and clipping the nameplate as distinct required actions, rather than one step per caption."
+    - "Holding and alignment observations remain progress evidence, not independent required procedural steps."
+    - "Divider instruction and verification retain all three, seated in the slots, and tall ends toward the handle."
+    - "Nameplate instruction and verification require attachment to the front rail, not presence or holding nearby."
+    - "Evidence notes connect the chronological source IDs to action, object, target, constraints, and incomplete versus completed states."
+    - "Preserves both actions and their counts if grouping repeated observations; does not infer hidden fit or a required motion history."
+    - "Keeps a draft with normal visible-result gates while reporting that image checks are unavailable, not claiming visual passes."
+
+- id: stale_caption_additions
+  input:
+    packet: {session_id: synthetic-rack, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "An empty rack lies on a table."}
+      - {caption_id: 2, frame_id: 2, frame_timestamp_us: 5000000, caption: "An empty rack lies on a table."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1500000, text: "Insert the left divider into the rack."}
+      - {transcript_id: 2, timestamp_us: 2500000, text: "Now the right divider."}
+      - {transcript_id: 3, timestamp_us: 3500000, text: "Clip the yellow handle onto the front with the notch facing up."}
+      - {transcript_id: 4, timestamp_us: 4500000, text: "Sorry, I was adjusting the camera."}
+    media_access: "No images supplied in this text-only probe. Do not claim to have inspected them."
+  checks:
+    - "Retains three distinct actions: left divider, right divider, handle."
+    - "Handle trigger question includes clipping/attachment, front, and notch facing up."
+    - "Does not turn camera adjustment into a step or copy the example workpiece task."
+    - "Records stale-caption conflict and unavailable-image review gap with actual source IDs."
+    - "Clearly instructed observable assembly results retain normal live ready gates, not disabled gates solely for missing source images."
+    - "Recorded replay distinguishes text/state audit from unavailable image tests; no invented visual pass results."
+
+- id: prerequisite_count
+  input:
+    packet: {session_id: synthetic-spacers, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "A lid beside a base; two of its spacers are visible."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1000000, text: "The four spacers are already mounted. Check all four before placing the lid."}
+      - {transcript_id: 2, timestamp_us: 2000000, text: "Place the lid on the base with the arrow toward the handle."}
+    media_access: "No images supplied."
+  checks:
+    - "Four spacers are a prerequisite check, not a new installation instruction."
+    - "The actual prerequisite question requires all four; two visible does not prove four."
+    - "Lid verification question includes arrow toward the handle and placement on the base."
+    - "Records partial visibility as a gap, without inventing missing assembly operations."
+
+- id: ambiguous_speech
+  input:
+    packet: {session_id: synthetic-label, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "A hand holds an unreadable small object above a folder."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1000000, text: "Put the sticky nose on the folder's upper right corner."}
+    media_access: "No images supplied."
+  checks:
+    - "Preserves placement and upper right target instead of discarding the action."
+    - "Flags probable sticky-note transcription ambiguity rather than silently asserting a correction."
+    - "No claim of image inspection or confirmed attachment; remains draft pending clarification."
+
+- id: instructed_timer
+  input:
+    packet: {session_id: synthetic-pad, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "A blue pad lies flat inside a marked tray."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1000000, text: "Place the blue pad inside the tray, then wait fifteen seconds from placement."}
+    media_access: "No images supplied."
+  checks:
+    - "Separate visual setup and timer wait with duration_s 15, not the example's 10."
+    - "Setup uses clock__now and atomically saves its live epoch_us plus setup boolean."
+    - "Setup has no evidence.commit, and complete_on_skip true prevents uninitialized timer entry."
+    - "Wait uses clock__timer, saved start in reads, expired result, ^true$ and direct boolean commit."
+    - "No visual checks on wait, invented timestamp, or claim of continuously maintained placement."
+    - "Exactly one placement-and-clock setup followed by the wait; unavailable source images alone do not disable setup."
+    - "Setup and wait each have distinct initially false completion booleans, so one cannot complete the other."
+    - "Replay labels before/at-expiry checks as simulated, not observed elapsed time or production clock calls; no historic timestamp in YAML."
+
+- id: unsupported_sequence_and_duration
+  input:
+    packet: {session_id: synthetic-dial, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "The dial points to the upper mark."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1000000, text: "Turn the dial fully left, then right, then return it to the upper mark."}
+      - {transcript_id: 2, timestamp_us: 2000000, text: "Keep pressing the spring tab for ten to twenty seconds."}
+    media_access: "No images supplied."
+  checks:
+    - "Retains dial ordering and spring-tab contact requirements without pretending final view proves them."
+    - "Flags sequence verification, continuous contact, and ambiguous duration as blockers."
+    - "Does not invent sequence_view or choose duration_s 15 from the range."
+    - "Unsupported checks use never-matching evidence and no direct completion commit."
+    - "Guide validates structurally but remains draft, with blockers in review notes."
+
+- id: replay_incomplete_demonstration
+  input:
+    packet: {session_id: synthetic-bracket, status: complete}
+    captions:
+      - {caption_id: 1, frame_id: 1, frame_timestamp_us: 1000000, caption: "An empty bracket with three sockets."}
+      - {caption_id: 2, frame_id: 2, frame_timestamp_us: 4000000, caption: "One gray peg fitted and a second held near another socket."}
+      - {caption_id: 3, frame_id: 3, frame_timestamp_us: 7000000, caption: "Two gray pegs fitted, rounded ends facing inward; the third socket is empty."}
+    transcripts:
+      - {transcript_id: 1, timestamp_us: 1500000, text: "Fit all three gray locking pegs into the bracket, with rounded ends facing outward."}
+    media_access: "Text-only capture excerpt. No images supplied; caption statements are not actual visual test outputs."
+  checks:
+    - "Actual trigger requires three fitted gray pegs and outward rounded ends, not merely visible or held nearby."
+    - "Reviews incomplete and wrong-orientation evidence, without treating the last caption as proof of success."
+    - "Preserves three and outward even though the demonstration never establishes completion."
+    - "Reports caption-based analysis separately from unavailable image replay and leaves concrete review blockers."
+    - "Does not invent iterations, frame inspection, production tool calls, or a successful replay."
+    - "Any guide edits are validated and audited again; output remains draft for user review."
