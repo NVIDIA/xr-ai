@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import huggingface_hub
 import pytest
@@ -19,111 +19,63 @@ from xr_ai_vllm._docker import build_run_argv
 _REPO = "org/model"
 
 
-def _complete_snapshot(cache: Path, **kwargs) -> Path:
-    cache_file(cache, _REPO, "config.json", "{}", **kwargs)
-    cache_file(cache, _REPO, "tokenizer.json", "{}", **kwargs)
-    return cache_file(cache, _REPO, "model.safetensors", "w", **kwargs).parent
-
-
-class TestLocalResolution:
-    @pytest.mark.parametrize("offline", [False, True])
-    def test_cache_hit_makes_no_network_request(self, tmp_path, monkeypatch, capsys, offline):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub", offline=offline)
-        snapshot = _complete_snapshot(cache)
-        attempts = block_network(monkeypatch)
-
-        assert _hf_snapshot.main(["local", _REPO, ""]) == 0
-        assert capsys.readouterr().out == f"{snapshot}\n"
-        assert attempts == []
-
-    def test_snapshot_contents_are_left_to_the_loader(self, tmp_path, monkeypatch):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        snapshot = cache_file(cache, _REPO, "params.json", "{}").parent
-        attempts = block_network(monkeypatch)
-
-        assert _hf_snapshot.resolve_local(_REPO, None) == snapshot
-        assert attempts == []
-
-    def test_pinned_revision_resolves_its_snapshot(self, tmp_path, monkeypatch):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        snapshot = _complete_snapshot(cache, revision=None)
-        block_network(monkeypatch)
-
-        assert _hf_snapshot.resolve_local(_REPO, COMMIT) == snapshot
-        assert _hf_snapshot.resolve_local(_REPO, "other") is None
-
-    def test_local_model_directory_is_served_as_configured(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
-        assert _hf_snapshot.resolve_local(str(tmp_path), None) == tmp_path
-
-    def test_absent_snapshot_is_a_miss(self, tmp_path, monkeypatch, capsys):
-        use_hub_cache(monkeypatch, tmp_path / "hub")
-        attempts = block_network(monkeypatch)
-        assert _hf_snapshot.main(["local", _REPO, ""]) == _hf_snapshot.CACHE_MISS
-        assert capsys.readouterr().out == ""
-        assert attempts == []
-
-    def test_explicit_offline_miss_names_model_revision_and_cache(self, tmp_path, monkeypatch, capsys):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
-        attempts = block_network(monkeypatch)
-        assert _hf_snapshot.main(["local", _REPO, "v1.2"]) == 1
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert "org/model (revision v1.2) is not cached" in captured.err
-        assert str(cache) in captured.err
-        assert "HF_HUB_OFFLINE" in captured.err
-        assert attempts == []
-
-
-class TestDownload:
-    def test_downloads_flushes_and_prints_snapshot(self, tmp_path, monkeypatch, capsys):
-        snapshot = _complete_snapshot(tmp_path / "hub")
-        fetch = Mock(return_value=str(snapshot))
-        sync = Mock()
-        monkeypatch.setattr(huggingface_hub, "snapshot_download", fetch)
-        monkeypatch.setattr(_hf_snapshot.os, "sync", sync, raising=False)
-        assert _hf_snapshot.main(["download", _REPO, "v1.2"]) == 0
-        fetch.assert_called_once_with(repo_id=_REPO, revision="v1.2")
-        sync.assert_called_once_with()
-        assert capsys.readouterr().out == f"{snapshot}\n"
-
-
-class TestContainerInvocation:
-    """The embedded source as the container runs it: ``python3 -c``."""
-
-    def _run(self, cache: Path, *args: str, offline: bool) -> subprocess.CompletedProcess:
-        env = {
-            **os.environ,
-            "HF_HUB_CACHE": str(cache),
-            # Any Hub request would fail against this endpoint.
-            "HF_ENDPOINT": "http://127.0.0.1:9",
-        }
-        env.pop("HF_HUB_OFFLINE", None)
-        env.pop("TRANSFORMERS_OFFLINE", None)
+@pytest.mark.parametrize("offline,cached", [(False, True), (True, True), (False, False), (True, False)])
+def test_local_resolution(tmp_path, monkeypatch, capsys, offline, cached):
+    cache = use_hub_cache(monkeypatch, tmp_path / "hub", offline=offline)
+    # The resolver does not impose a model layout or prove completeness.
+    snapshot = cache_file(cache, _REPO, "params.json").parent if cached else None
+    attempts = block_network(monkeypatch)
+    status = _hf_snapshot.main(["local", _REPO, ""])
+    output = capsys.readouterr()
+    assert attempts == []
+    if cached:
+        assert status == 0 and output.out == f"{snapshot}\n"
+    else:
+        assert status == (1 if offline else _hf_snapshot.CACHE_MISS)
+        assert output.out == ""
         if offline:
-            env["HF_HUB_OFFLINE"] = "1"
-        return subprocess.run(
-            [sys.executable, "-c", _docker._HF_SNAPSHOT_CODE, *args],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+            assert _REPO in output.err and "revision main" in output.err
+            assert str(cache) in output.err and "HF_HUB_OFFLINE" in output.err
 
-    def test_cache_hit_prints_snapshot(self, tmp_path):
-        snapshot = _complete_snapshot(tmp_path / "hub")
 
-        result = self._run(tmp_path / "hub", "local", _REPO, "", offline=False)
+def test_revision_and_explicit_directory(tmp_path, monkeypatch):
+    cache = use_hub_cache(monkeypatch, tmp_path / "hub")
+    snapshot = cache_file(cache, _REPO, "params.json", revision=None).parent
+    attempts = block_network(monkeypatch)
+    assert _hf_snapshot.resolve_local(_REPO, COMMIT) == snapshot
+    assert _hf_snapshot.resolve_local(_REPO, "other") is None
+    assert _hf_snapshot.resolve_local(str(tmp_path), None) == tmp_path
+    assert attempts == []
 
-        assert result.returncode == 0, result.stderr
-        assert result.stdout == f"{snapshot}\n"
 
-    def test_offline_miss_fails_with_model_and_revision(self, tmp_path):
-        result = self._run(tmp_path / "hub", "local", _REPO, "", offline=True)
+def test_download_syncs_before_returning_path(tmp_path, monkeypatch, capsys):
+    calls = Mock()
 
-        assert result.returncode == 1
-        assert result.stdout == ""
-        assert "org/model (revision main) is not cached" in result.stderr
+    def fetch(**kwargs):
+        calls.fetch(**kwargs)
+        print("download log")
+        return str(tmp_path)
+
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", fetch)
+    monkeypatch.setattr(_hf_snapshot.os, "sync", calls.sync, raising=False)
+    assert _hf_snapshot.main(["download", _REPO, COMMIT]) == 0
+    assert calls.mock_calls == [call.fetch(repo_id=_REPO, revision=COMMIT), call.sync()]
+    output = capsys.readouterr()
+    assert output.out == f"{tmp_path}\n" and "download log" in output.err
+
+
+def test_embedded_source_runs_in_container_python(tmp_path):
+    snapshot = cache_file(tmp_path, _REPO, "params.json").parent
+    env = dict(os.environ)
+    for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        env.pop(key, None)
+    result = subprocess.run(
+        [sys.executable, "-c", _docker._HF_SNAPSHOT_CODE, "local", _REPO, ""],
+        env=env | {"HF_HUB_CACHE": str(tmp_path), "HF_ENDPOINT": "http://127.0.0.1:9"},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{snapshot}\n"
 
 
 _FAKE_PYTHON = """#!/bin/sh
@@ -188,50 +140,23 @@ class TestContainerCommand:
         steps = calls.read_text().splitlines() if calls.exists() else []
         return result, steps, served
 
-    def test_cache_hit_serves_snapshot_without_download(self, tmp_path):
-        command = self._command(tmp_path, ["--served-model-name", "served", "--port", "8100"])
-
-        result, steps, served = self._run(tmp_path, command, CACHED="/cache/snapshot")
-
-        assert result.returncode == 0, result.stderr
-        assert steps == [f"local {_REPO} "]
-        assert served == [
-            "serve", "/cache/snapshot", "--served-model-name", "served", "--port", "8100",
-        ]
-
-    def test_cache_miss_downloads_then_serves_downloaded_snapshot(self, tmp_path):
-        command = self._command(tmp_path, ["--served-model-name", "served"])
-
-        result, steps, served = self._run(tmp_path, command, DOWNLOADED="/cache/fresh")
-
-        assert result.returncode == 0, result.stderr
-        assert steps == [f"local {_REPO} ", "xet", "xet", f"download {_REPO} "]
-        assert served == ["serve", "/cache/fresh", "--served-model-name", "served"]
-
-    def test_resolver_failure_stops_before_download_and_vllm(self, tmp_path):
-        command = self._command(tmp_path, ["--served-model-name", "served"])
-
-        result, steps, served = self._run(tmp_path, command, LOCAL_STATUS="1")
-
-        assert result.returncode == 1
-        assert steps == [f"local {_REPO} "]
-        assert served is None
-
-    def test_revision_selects_the_resolved_snapshot(self, tmp_path):
-        command = self._command(
-            tmp_path, ["--served-model-name", "served", "--revision", COMMIT]
+    @pytest.mark.parametrize("cached,status", [(True, 0), (False, _hf_snapshot.CACHE_MISS), (False, 1)])
+    @pytest.mark.parametrize("name_args", [[], ["--served-model-name", "served"]])
+    def test_resolve_then_serve(self, tmp_path, cached, status, name_args):
+        command = self._command(tmp_path, [*name_args, "--revision", COMMIT])
+        result, steps, served = self._run(
+            tmp_path, command, CACHED="/cache/model" if cached else "",
+            LOCAL_STATUS=str(status), DOWNLOADED="/cache/model",
         )
-
-        _result, steps, served = self._run(tmp_path, command, CACHED="/cache/pinned")
-
-        assert steps == [f"local {_REPO} {COMMIT}"]
-        assert served[:2] == ["serve", "/cache/pinned"]
-
-    def test_served_name_defaults_to_model_id(self, tmp_path):
-        command = self._command(tmp_path, ["--port", "8100"])
-
-        _result, _steps, served = self._run(tmp_path, command, CACHED="/cache/snapshot")
-
-        assert served == [
-            "serve", "/cache/snapshot", "--served-model-name", _REPO, "--port", "8100",
-        ]
+        expected_steps = [f"local {_REPO} {COMMIT}"]
+        if status == _hf_snapshot.CACHE_MISS:
+            expected_steps += ["xet", "xet", f"download {_REPO} {COMMIT}"]
+        assert steps == expected_steps
+        if status == 1:
+            assert result.returncode == 1 and served is None
+        else:
+            assert result.returncode == 0, result.stderr
+            assert served == [
+                "serve", "/cache/model", "--served-model-name",
+                "served" if name_args else _REPO, "--revision", COMMIT,
+            ]

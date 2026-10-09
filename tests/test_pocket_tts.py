@@ -226,45 +226,23 @@ _TOKENIZER = f"hf://kyutai/open/tokenizer.model@{COMMIT}"
 _VOICE = f"hf://kyutai/voices/english/bill_boerst.safetensors@{COMMIT}"
 
 
-async def test_backend_loads_complete_cache_without_network(
-    cached_pocket, monkeypatch
-) -> None:
+@pytest.mark.parametrize("gated", [False, True])
+async def test_cached_artifacts_load_without_network(cached_pocket, monkeypatch, gated):
     module = _load_main_module()
-    paths = {
-        uri: _cache_pocket_file(cached_pocket.cache, uri)
-        for uri in (_GATED, _UNGATED, _TOKENIZER, _VOICE)
-    }
+    uris = (_UNGATED, _TOKENIZER, _VOICE) + ((_GATED,) if gated else ())
+    paths = {uri: _cache_pocket_file(cached_pocket.cache, uri) for uri in uris}
     attempts = block_network(monkeypatch)
     backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
-
     backend._ensure_loaded()
-
     [load] = cached_pocket.loads
+    config = load["config"]
     assert load["language"] is None
-    assert load["config"]["weights_path"] == str(paths[_GATED])
-    assert "weights_path_without_voice_cloning" not in load["config"]
-    assert load["config"]["flow_lm"]["lookup_table"]["tokenizer_path"] == str(
-        paths[_TOKENIZER]
-    )
-    assert load["config"]["default_temperature"] == 0.3
+    assert config["weights_path"] == str(paths[_GATED if gated else _UNGATED])
+    assert "weights_path_without_voice_cloning" not in config
+    assert config["flow_lm"]["lookup_table"]["tokenizer_path"] == str(paths[_TOKENIZER])
+    assert config["default_temperature"] == 0.3
     assert backend._voice_state == {"voice": paths[_VOICE]}
-    assert cached_pocket.model.has_voice_cloning is True
-    assert attempts == []
-
-
-async def test_cached_ungated_weights_are_a_hit(cached_pocket, monkeypatch) -> None:
-    module = _load_main_module()
-    ungated = _cache_pocket_file(cached_pocket.cache, _UNGATED)
-    for uri in (_TOKENIZER, _VOICE):
-        _cache_pocket_file(cached_pocket.cache, uri)
-    attempts = block_network(monkeypatch)
-    backend = module._PocketTTSBackend("bill_boerst", "english", "cpu")
-
-    backend._ensure_loaded()
-
-    [load] = cached_pocket.loads
-    assert load["config"]["weights_path"] == str(ungated)
-    assert cached_pocket.model.has_voice_cloning is False
+    assert cached_pocket.model.has_voice_cloning is gated
     assert attempts == []
 
 

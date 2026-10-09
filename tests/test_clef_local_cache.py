@@ -27,6 +27,8 @@ def systemone(*args, **kwargs):
 def encode_record(*args, **kwargs):
     return None
 """
+
+
 def _snapshot(cache: Path, *, commit=DEFAULT_REVISION) -> Path:
     return cache_file(
         cache, DEFAULT_MODEL, "joint_schema_model.py", _LOADER,
@@ -50,68 +52,45 @@ def backend(tmp_path, monkeypatch):
     monkeypatch.delitem(sys.modules, "_clef_release_model", raising=False)
 
 
-@pytest.mark.parametrize("offline", [False, True])
-def test_cached_snapshot_loads_without_network(backend, monkeypatch, offline):
-    from huggingface_hub import constants
-
-    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", offline)
-    snapshot = _snapshot(backend.config.model_cache)
-    attempts = block_network(monkeypatch)
-
-    backend.load()
-
-    assert backend.model["directory"] == snapshot
-    assert backend.model["device"] == "cpu"
-    assert attempts == []
-
-
-def test_cache_miss_downloads_before_loading(backend, monkeypatch, tmp_path):
-    downloaded = _snapshot(tmp_path / "downloaded")
+@pytest.mark.parametrize("cached,offline", [(True, False), (True, True), (False, False), (False, True)])
+def test_cache_resolution_through_backend(backend, monkeypatch, tmp_path, cached, offline):
+    use_hub_cache(monkeypatch, tmp_path / "unused-default-cache", offline=offline)
+    directory = _snapshot(backend.config.model_cache if cached else tmp_path / "downloaded")
+    online = Mock(return_value=str(directory))
     real_lookup = huggingface_hub.snapshot_download
-    online = Mock(return_value=str(downloaded))
 
     def fetch(**kwargs):
-        if kwargs.get("local_files_only"):
-            return real_lookup(**kwargs)
-        return online(**kwargs)
+        return real_lookup(**kwargs) if kwargs.get("local_files_only") else online(**kwargs)
 
     monkeypatch.setattr(huggingface_hub, "snapshot_download", fetch)
     attempts = block_network(monkeypatch)
-
-    backend.load()
-
-    online.assert_called_once_with(
-        repo_id=DEFAULT_MODEL, revision=DEFAULT_REVISION, cache_dir=backend.config.model_cache,
-    )
-    assert backend.model["directory"] == downloaded
-    assert attempts == []
-
-
-def test_offline_miss_names_model_revision_and_cache(backend, monkeypatch):
-    from huggingface_hub import constants
-
-    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
-    attempts = block_network(monkeypatch)
-
-    with pytest.raises(RuntimeError, match="HF_HUB_OFFLINE") as raised:
+    if offline and not cached:
+        with pytest.raises(RuntimeError, match="HF_HUB_OFFLINE") as error:
+            backend.load()
+        message = str(error.value)
+        assert DEFAULT_MODEL in message and DEFAULT_REVISION in message
+        assert str(backend.config.model_cache) in message
+        assert backend.model is None
+    else:
         backend.load()
-
-    message = str(raised.value)
-    assert DEFAULT_MODEL in message and DEFAULT_REVISION in message
-    assert str(backend.config.model_cache) in message
-    assert backend.model is None
+        assert backend.model["directory"] == directory
+        assert backend.model["device"] == "cpu"
+    if cached or offline:
+        online.assert_not_called()
+    else:
+        online.assert_called_once_with(
+            repo_id=DEFAULT_MODEL, revision=DEFAULT_REVISION, cache_dir=backend.config.model_cache,
+        )
     assert attempts == []
 
 
 def test_configured_revision_is_required(backend, monkeypatch):
-    from huggingface_hub import constants
-
-    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
+    use_hub_cache(monkeypatch, backend.config.model_cache, offline=True)
     _snapshot(backend.config.model_cache, commit="a" * 40)
-    block_network(monkeypatch)
-
+    attempts = block_network(monkeypatch)
     with pytest.raises(RuntimeError, match=DEFAULT_REVISION):
         backend.load()
+    assert attempts == []
 
 
 def test_explicit_model_path_bypasses_hub(backend, monkeypatch, tmp_path):

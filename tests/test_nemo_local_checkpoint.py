@@ -33,14 +33,6 @@ def _load_magpie():
     return module
 
 
-def _fake_cpu_torch(monkeypatch) -> None:
-    monkeypatch.setitem(
-        sys.modules,
-        "torch",
-        SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False)),
-    )
-
-
 def _fake_nemo_module(monkeypatch, name: str, **attributes) -> None:
     """Install ``name`` and its parent packages as attribute-linked stand-ins."""
     parts = name.split(".")
@@ -52,111 +44,63 @@ def _fake_nemo_module(monkeypatch, name: str, **attributes) -> None:
             child = SimpleNamespace(**{parts[depth - 1]: child})
 
 
-def _fake_loader() -> Mock:
-    model = Mock()
-    model.eval.return_value = None
-    return Mock(
-        restore_from=Mock(return_value=model),
-        from_pretrained=Mock(return_value=model),
-    )
+@pytest.fixture(params=["stt", "magpie"])
+def backend(request, tmp_path, monkeypatch):
+    cache = use_hub_cache(monkeypatch, tmp_path / "hub")
+    loader = Mock()
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False),
+    ))
+    if request.param == "stt":
+        model_name = _STT_MODEL
+        _fake_nemo_module(monkeypatch, "nemo.collections.asr", models=SimpleNamespace(ASRModel=loader))
+        instance = stt_main._AsrBackend(model_name, "cpu", cache)
+    else:
+        model_name = _TTS_MODEL
+        _fake_nemo_module(monkeypatch, "nemo.collections.tts.models.magpietts", MagpieTTSModel=loader)
+        instance = _load_magpie()._TtsBackend(model_name, "cpu", 22050, cache)
+    return instance, loader, model_name, cache
 
 
-class TestSttCheckpoint:
-    def test_cache_hit_makes_no_network_request(self, tmp_path, monkeypatch):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        checkpoint = cache_file(cache, _STT_MODEL, "parakeet-tdt-0.6b-v3.nemo")
-        attempts = block_network(monkeypatch)
-
-        assert stt_main._cached_nemo_checkpoint(_STT_MODEL) == str(checkpoint)
-        assert attempts == []
-
-    def test_cache_miss_returns_none(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub")
-        attempts = block_network(monkeypatch)
-
-        assert stt_main._cached_nemo_checkpoint(_STT_MODEL) is None
-        assert attempts == []
-
-    def test_explicit_offline_miss_names_model(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
-
-        with pytest.raises(RuntimeError, match=rf"{_STT_MODEL} \(revision main"):
-            stt_main._cached_nemo_checkpoint(_STT_MODEL)
-
-    def test_ngc_catalog_name_is_left_to_nemo(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
-
-        assert stt_main._cached_nemo_checkpoint("stt_en_conformer_ctc_large") is None
-
-    def test_non_hub_path_is_left_to_nemo(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
-
-        assert stt_main._cached_nemo_checkpoint("/models/custom/asr.nemo") is None
-
-    def _backend_with_fake_nemo(self, tmp_path, monkeypatch) -> tuple[object, Mock]:
-        loader = _fake_loader()
-        _fake_cpu_torch(monkeypatch)
-        _fake_nemo_module(
-            monkeypatch,
-            "nemo.collections.asr",
-            models=SimpleNamespace(ASRModel=loader),
-        )
-        return stt_main._AsrBackend(_STT_MODEL, "auto", tmp_path), loader
-
-    def test_backend_restores_cached_checkpoint(self, tmp_path, monkeypatch):
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        checkpoint = cache_file(cache, _STT_MODEL, "parakeet-tdt-0.6b-v3.nemo")
-        backend, loader = self._backend_with_fake_nemo(tmp_path, monkeypatch)
-        attempts = block_network(monkeypatch)
-
-        backend._ensure_loaded()
-
-        loader.restore_from.assert_called_once_with(restore_path=str(checkpoint))
-        loader.from_pretrained.assert_not_called()
-        assert attempts == []
-
-    def test_backend_downloads_on_cache_miss(self, tmp_path, monkeypatch):
-        use_hub_cache(monkeypatch, tmp_path / "hub")
-        backend, loader = self._backend_with_fake_nemo(tmp_path, monkeypatch)
-
-        backend._ensure_loaded()
-
-        loader.from_pretrained.assert_called_once_with(_STT_MODEL)
-        loader.restore_from.assert_not_called()
+def test_cached_checkpoint_restores_without_network(backend, monkeypatch):
+    instance, loader, model_name, cache = backend
+    checkpoint = cache_file(cache, model_name, model_name.split("/")[-1] + ".nemo")
+    attempts = block_network(monkeypatch)
+    instance._ensure_loaded()
+    loader.restore_from.assert_called_once_with(restore_path=str(checkpoint))
+    loader.from_pretrained.assert_not_called()
+    assert instance.ready and attempts == []
 
 
-class TestMagpieCheckpoint:
-    def test_pinned_revision_hit_makes_no_network_request(self, tmp_path, monkeypatch):
-        module = _load_magpie()
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        checkpoint = cache_file(
-            cache, _TTS_MODEL, "magpie_tts_multilingual_357m.nemo", revision=None
-        )
-        attempts = block_network(monkeypatch)
+def test_cache_miss_uses_existing_loader(backend):
+    instance, loader, model_name, _cache = backend
+    instance._ensure_loaded()
+    loader.from_pretrained.assert_called_once_with(model_name)
+    loader.restore_from.assert_not_called()
 
-        assert module._cached_nemo_checkpoint(_TTS_MODEL, COMMIT) == str(checkpoint)
-        assert attempts == []
 
-    def test_explicit_offline_miss_names_model_and_revision(self, tmp_path, monkeypatch):
-        module = _load_magpie()
-        use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
+def test_offline_miss_reports_model_and_cache(backend, monkeypatch):
+    instance, loader, model_name, cache = backend
+    use_hub_cache(monkeypatch, cache, offline=True)
+    attempts = block_network(monkeypatch)
+    with pytest.raises(RuntimeError, match="HF_HUB_OFFLINE") as error:
+        instance._ensure_loaded()
+    assert model_name in str(error.value) and str(cache) in str(error.value)
+    assert "revision main" in str(error.value) and attempts == []
+    loader.restore_from.assert_not_called()
+    loader.from_pretrained.assert_not_called()
 
-        with pytest.raises(RuntimeError, match=rf"{_TTS_MODEL} \(revision {COMMIT}"):
-            module._cached_nemo_checkpoint(_TTS_MODEL, COMMIT)
 
-    def test_backend_restores_cached_checkpoint(self, tmp_path, monkeypatch):
-        module = _load_magpie()
-        cache = use_hub_cache(monkeypatch, tmp_path / "hub")
-        checkpoint = cache_file(cache, _TTS_MODEL, "magpie_tts_multilingual_357m.nemo")
-        loader = _fake_loader()
-        _fake_cpu_torch(monkeypatch)
-        _fake_nemo_module(
-            monkeypatch, "nemo.collections.tts.models.magpietts", MagpieTTSModel=loader
-        )
-        attempts = block_network(monkeypatch)
+def test_magpie_lookup_uses_configured_revision(tmp_path, monkeypatch):
+    cache = use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
+    checkpoint = cache_file(cache, _TTS_MODEL, "magpie_tts_multilingual_357m.nemo", revision=None)
+    module = _load_magpie()
+    assert module._cached_nemo_checkpoint(_TTS_MODEL, COMMIT) == str(checkpoint)
+    with pytest.raises(RuntimeError, match="revision other"):
+        module._cached_nemo_checkpoint(_TTS_MODEL, "other")
 
-        module._TtsBackend(_TTS_MODEL, "auto", 22050, tmp_path)._ensure_loaded()
 
-        loader.restore_from.assert_called_once_with(restore_path=str(checkpoint))
-        loader.from_pretrained.assert_not_called()
-        assert attempts == []
+@pytest.mark.parametrize("name", ["stt_en_conformer_ctc_large", "/models/custom/asr.nemo"])
+def test_non_hub_models_are_left_to_nemo(tmp_path, monkeypatch, name):
+    use_hub_cache(monkeypatch, tmp_path / "hub", offline=True)
+    assert stt_main._cached_nemo_checkpoint(name) is None
