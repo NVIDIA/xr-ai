@@ -5,6 +5,20 @@
 
 # Release migration
 
+## SOP voice recording and optional media capture
+
+Start the SOP sample with `uv run main.py`, then say **start recording** and
+**stop recording**. Connection and camera changes no longer start SOP recording.
+Repeated voice commands can create multiple packets on one connection.
+
+`--capture` now independently enables participant-wide shared media capture,
+as in Simple VLM and XR Render. Change local media settings from
+`session_mode: explicit` to `session_mode: participant`; the supplied profile is
+`demo`. The worker no longer uses `media_capture_yaml` or waits for a bundle
+manifest. New packets omit the per-SOP `media_capture` link and save narration
+directly from shared final voice transcripts. Existing packet files are untouched.
+Refer to {doc}`sop-sample`.
+
 ## LiveKit sample credentials
 
 Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.

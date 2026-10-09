@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Replay-only settings; paths are relative to this file.
+guides_dir: ../guides
+models_config: models.replay.json
+voice_gate_yaml: voice_gate.replay.yaml
+frame_max_age_s: 2.0
+frame_timeout_s: 3.0
+vision_timeout_s: 15.0
