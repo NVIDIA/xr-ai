@@ -13,7 +13,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pipecat.frames.frames import DataFrame, TranscriptionFrame
+from pipecat.frames.frames import DataFrame, InputAudioRawFrame, TranscriptionFrame, UninterruptibleFrame
+
+
+@dataclass(kw_only=True)
+class _TrackedInputAudioFrame(InputAudioRawFrame):
+    """Private projection of the hub's existing microphone track identity."""
+
+    track_id: str
 
 
 @dataclass(kw_only=True)
@@ -25,7 +32,7 @@ class _SpeakerTranscriptionFrame(TranscriptionFrame):
 
 
 @dataclass
-class _SpeakerEnrollmentFrame(DataFrame):
+class _SpeakerEnrollmentFrame(DataFrame, UninterruptibleFrame):
     """Private enrollment transition consumed by the conversation gate."""
 
     participant_id: str
@@ -40,7 +47,7 @@ class _UnrecognizedSpeechFrame(DataFrame):
 
 
 @dataclass
-class ParticipantJoinedFrame(DataFrame):
+class ParticipantJoinedFrame(DataFrame, UninterruptibleFrame):
     """A participant joined the conversation.
 
     Consumed by ``VoiceGateProcessor`` (greeting hook) and
@@ -52,7 +59,7 @@ class ParticipantJoinedFrame(DataFrame):
 
 
 @dataclass
-class ParticipantLeftFrame(DataFrame):
+class ParticipantLeftFrame(DataFrame, UninterruptibleFrame):
     """A participant left the conversation.
 
     Consumed by the private assistant processor (per-pid teardown).

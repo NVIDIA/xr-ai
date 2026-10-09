@@ -234,12 +234,18 @@ speaker:
   base_url: http://127.0.0.1:8102
 ```
 
-The worker probes the service's HTTP `/health` endpoint once before starting its media pipeline.
-A ready compatible service selects diarization; an absent or unresponsive endpoint
-selects the configured ordinary `STTService`, including the unchanged NIM stack's
-HTTP STT adapter. The worker logs its selection. Ordinary STT cannot identify or
-reject other voices on the same microphone. Set `speaker.backend: required` to
-refuse startup without diarization, or `speaker.enabled: false` to select ordinary
+Before announcing readiness, the worker probes the service's HTTP `/health`
+endpoint. A ready compatible service selects diarization. In automatic mode,
+connection absence selects the configured ordinary `STTService`, including the
+unchanged NIM stack's HTTP STT adapter. Once a listener is observed, an unresponsive
+or interrupted response means not-ready: the worker waits using the existing
+service-readiness polling instead of silently selecting unfiltered STT. A stalled
+listener can therefore hold startup until it is ready or startup is cancelled.
+Incompatible identities and HTTP error statuses fail startup. Ambient proxy
+settings do not redirect either the HTTP probe or the WebSocket stream.
+The worker logs its selection. Ordinary STT cannot identify or reject other voices
+on the same microphone. Set `speaker.backend: required` to wait for diarization
+even when the service is absent, or `speaker.enabled: false` to select ordinary
 STT while retaining conversation controls. Restart the worker to change backends.
 Loss of a selected diarization service resets enrollment instead of switching to
 unfiltered STT.
@@ -259,6 +265,14 @@ speaker and enrolls the one whose conditioned transcript completes the start
 phrase, including during overlapping speech. If multiple speakers complete the
 phrase in the same accepted audio step, neither is selected. Once enrolled,
 another voice's later start phrase cannot take over the connection.
+
+The hub's existing microphone track identity is retained privately. Switching
+to a different track closes the old stream, discards pending audio and controls,
+revokes enrollment, and opens a new timeline at the next track's first audio.
+Microphone stop and republish therefore cannot join old phrase fragments across
+tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
+do not establish capture continuity, and delivery jitter does not trigger guessed
+resets. Explicit same-track capture epochs are outside this integration.
 
 Start the inference process separately from the repository root:
 
@@ -287,6 +301,13 @@ seconds before retrying after failure or overload. Closing the WebSocket release
 its inference session, and the service bounds their count. At `max_utterance_s`,
 an enrolled speaker's final transcript is retained, but the incomplete utterance
 cannot activate a conversation control or enroll a new speaker.
+
+Departure closes admission before asynchronous cleanup, and only an explicit
+participant join permits new audio. Cleanup retains task and queue ownership
+through stream close. Participant lifecycle and enrollment transitions retain
+their order and survive pipeline interruptions. An active-to-reset transition
+interrupts the current answer and emits one listening-reset notice; subsequent
+outage retries do not repeatedly interrupt or announce the same reset.
 
 Worker phrase settings do not require restarting the model service. When both
 `conversation` and `speaker` are present, `conversation` owns the control settings.

@@ -168,10 +168,19 @@ class VoiceGateProcessor(FrameProcessor):
 
         if isinstance(frame, _SpeakerEnrollmentFrame):
             if frame.state == "reset":
+                was_active = frame.participant_id in self._conversation_active
                 self._conversation_active.discard(frame.participant_id)
                 self._controls.pop(frame.participant_id, None)
                 self._gate.forget(frame.participant_id)
                 self._early_wake_ack.discard(frame.participant_id)
+                if was_active:
+                    stop = InterruptionFrame()
+                    stop.transport_source = frame.participant_id
+                    await self.push_frame(stop)
+                    await self._emit_text_response(
+                        frame.participant_id,
+                        "Speaker listening was reset. Say the start phrase to talk again when it is ready.",
+                    )
             elif frame.state in {"enrolled", "released"}:
                 await self._set_conversation_active(frame.participant_id, frame.state == "enrolled")
             else:

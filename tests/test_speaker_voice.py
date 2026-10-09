@@ -23,6 +23,7 @@ from websockets.asyncio.server import serve
 from xr_ai_models._speaker_stream import _SpeakerStream
 from xr_ai_voice._frames import (
     GatedQueryFrame,
+    ParticipantJoinedFrame,
     ParticipantLeftFrame,
     _SpeakerEnrollmentFrame,
     _SpeakerTranscriptionFrame,
@@ -330,7 +331,7 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
 
 @pytest.mark.asyncio
 async def test_early_stop_never_runs_for_unenrolled_voice_or_control_prefix():
-    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig(), on_partial_transcript=AsyncMock(return_value=False))
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig(), on_partial_transcript=AsyncMock(return_value=True))
     processor.push_frame = AsyncMock()
     await processor._event("a", {"kind": "partial", "text": "stop"})
     assert not processor.push_frame.called
@@ -338,6 +339,7 @@ async def test_early_stop_never_runs_for_unenrolled_voice_or_control_prefix():
     processor.push_frame.reset_mock()
     await processor._event("a", {"kind": "partial", "text": "Hey agent let's stop"})
     assert not processor.push_frame.called
+    processor._on_partial.assert_not_awaited()
     await processor._event("a", {"kind": "partial", "text": "stop"})
     assert isinstance(processor.push_frame.call_args.args[0], InterruptionFrame)
     assert processor._enrolled == {"a"}
@@ -352,6 +354,7 @@ async def test_model_failure_revokes_enrollment_without_batch_stt_fallback():
     processor._client = SimpleNamespace(_feed=AsyncMock(side_effect=TimeoutError()), _forget=AsyncMock())
     processor.push_frame = AsyncMock()
     processor._enrolled.add("a")
+    await processor.process_frame(ParticipantJoinedFrame("a"), FrameDirection.DOWNSTREAM)
     audio = InputAudioRawFrame(audio=bytes(640), sample_rate=16000, num_channels=1)
     audio.transport_source = "a"
     await processor.process_frame(audio, FrameDirection.DOWNSTREAM)
@@ -382,6 +385,8 @@ async def test_slow_inference_does_not_block_other_participants_and_overload_dro
     processor._client = SimpleNamespace(_feed=AsyncMock(side_effect=feed), _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
     processor._enrolled.add("slow")
+    for pid in ("slow", "other"):
+        await processor.process_frame(ParticipantJoinedFrame(pid), FrameDirection.DOWNSTREAM)
     def audio(pid):
         frame = InputAudioRawFrame(audio=bytes(32000), sample_rate=16000, num_channels=1)
         frame.transport_source = pid
@@ -511,6 +516,7 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
     processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
     processor._enrolled.add("web-client")
+    await processor.process_frame(ParticipantJoinedFrame("web-client"), FrameDirection.DOWNSTREAM)
     def audio():
         frame = InputAudioRawFrame(audio=bytes(320), sample_rate=16000, num_channels=1)
         frame.transport_source = "web-client"
@@ -635,17 +641,22 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
 @pytest.mark.parametrize("backend", ["auto", "required"])
 @pytest.mark.parametrize("available", [False, True])
 async def test_backend_is_selected_once_at_startup(monkeypatch, backend, available):
-    probe = AsyncMock(return_value=available)
+    from xr_ai_voice import _speaker_client
+    async def wait(probes):
+        assert await probes["speaker ASR"]()
+    monkeypatch.setattr(_speaker_client, "wait_for_services", wait)
+    probe = AsyncMock(side_effect=[available, True] if backend == "required" and not available else None,
+                      return_value=available)
     monkeypatch.setattr(_SpeakerClient, "_available", probe)
     cfg = _SpeakerConfig(backend=backend)
     if backend == "required" and not available:
-        with pytest.raises(RuntimeError, match="required but unavailable"):
-            await _select_speaker_asr(cfg)
+        assert await _select_speaker_asr(cfg) is True
     else:
         assert await _select_speaker_asr(cfg) is available
-    assert probe.await_count == 1
+    calls = 2 if backend == "required" and not available else 1
+    assert probe.await_count == calls
     assert await _select_speaker_asr(None) is False
-    assert probe.await_count == 1
+    assert probe.await_count == calls
 
 
 @pytest.mark.asyncio

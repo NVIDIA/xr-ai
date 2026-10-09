@@ -22,7 +22,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_voicegate._phrases import STOP_RE
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
-from .._frames import ParticipantLeftFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+from .._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
 from .._speaker_client import _SpeakerClient
 
 
@@ -40,6 +40,8 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._queued_bytes: dict[str, int] = {}
         self._retry_after: dict[str, float] = {}
         self._closed = False
+        self._participants: set[str] = set()
+        self._tracks: dict[str, str] = {}
 
     async def cleanup(self) -> None:
         await self._shutdown()
@@ -47,6 +49,7 @@ class _SpeakerSttProcessor(FrameProcessor):
 
     async def _shutdown(self) -> None:
         self._closed = True
+        self._participants.clear()
         for task in list(self._tasks.values()):
             task.cancel()
         await asyncio.gather(*list(self._tasks.values()), return_exceptions=True)
@@ -54,25 +57,43 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._enrolled.clear()
         self._interrupted.clear()
         self._retry_after.clear()
+        self._tracks.clear()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, (EndFrame, CancelFrame)):
             await self._shutdown()
+        elif isinstance(frame, ParticipantJoinedFrame):
+            pid = frame.participant_id
+            await self._cancel_worker(pid)
+            self._retry_after.pop(pid, None)
+            self._tracks.pop(pid, None)
+            if not self._closed:
+                self._participants.add(pid)
         elif isinstance(frame, ParticipantLeftFrame):
             pid = frame.participant_id
+            self._participants.discard(pid)
             await self._cancel_worker(pid)
             self._retry_after.pop(pid, None)
             self._enrolled.discard(pid)
             self._interrupted.discard(pid)
+            self._tracks.pop(pid, None)
         elif isinstance(frame, InputAudioRawFrame):
             pid = frame.transport_source
-            if not pid or self._closed:
+            if not pid or self._closed or pid not in self._participants:
                 return
             if frame.sample_rate != 16000 or frame.num_channels != 1:
                 raise ValueError("speaker ASR requires 16 kHz mono PCM")
             if len(frame.audio) > 32000 or len(frame.audio) % 2:
                 raise ValueError("speaker ASR expects at most one second of signed 16-bit PCM")
+            track = getattr(frame, "track_id", "")
+            if track and self._tracks.get(pid, track) != track:
+                await self._cancel_worker(pid)
+                if self._closed or pid not in self._participants:
+                    return
+                await self._reset(pid, retry=False)
+            if track:
+                self._tracks[pid] = track
             if time.monotonic() < self._retry_after.get(pid, 0):
                 return
             pts_us = frame.pts // 1_000 if frame.pts is not None else time.time_ns() // 1_000
@@ -97,6 +118,7 @@ class _SpeakerSttProcessor(FrameProcessor):
         await self.push_frame(frame, direction)
 
     async def _run(self, pid: str, queue: asyncio.Queue) -> None:
+        task = asyncio.current_task()
         try:
             while True:
                 audio, pts_us = await queue.get()
@@ -109,8 +131,6 @@ class _SpeakerSttProcessor(FrameProcessor):
             logger.exception("speaker ASR unavailable; enrollment reset pid={!r}", pid)
             await self._reset(pid)
         finally:
-            self._queues.pop(pid, None)
-            self._queued_bytes.pop(pid, None)
             try:
                 # Best-effort cleanup must not hold up disconnect or overload
                 # handling when the inference service is unavailable.
@@ -119,7 +139,11 @@ class _SpeakerSttProcessor(FrameProcessor):
             except Exception:
                 logger.warning("speaker session cleanup failed pid={!r}", pid)
             finally:
-                self._tasks.pop(pid, None)
+                if self._tasks.get(pid) is task:
+                    self._tasks.pop(pid, None)
+                if self._queues.get(pid) is queue:
+                    self._queues.pop(pid, None)
+                    self._queued_bytes.pop(pid, None)
 
     async def _cancel_worker(self, pid: str) -> None:
         task = self._tasks.get(pid)
@@ -127,8 +151,11 @@ class _SpeakerSttProcessor(FrameProcessor):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    async def _reset(self, pid: str) -> None:
-        self._retry_after[pid] = time.monotonic() + 2.0
+    async def _reset(self, pid: str, *, retry: bool = True) -> None:
+        if retry:
+            self._retry_after[pid] = time.monotonic() + 2.0
+        else:
+            self._retry_after.pop(pid, None)
         self._enrolled.discard(pid)
         self._interrupted.discard(pid)
         await self.push_frame(_SpeakerEnrollmentFrame(pid, "reset"))

@@ -19,7 +19,7 @@ dependencies = [
 # CVE-2026-97687 and CVE-2026-97689 affect the Riva client's HTTP transport.
 riva = ["nvidia-riva-client>=2.17", "urllib3>=2.8.0"]
 # Private speaker-ASR streams use WebSocket audio without changing batch HTTP clients.
-speaker = ["websockets>=13.0"]
+speaker = ["websockets>=15.0"]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }

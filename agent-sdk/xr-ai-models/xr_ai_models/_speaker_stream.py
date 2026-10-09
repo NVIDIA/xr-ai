@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from websockets.asyncio.client import ClientConnection, connect
@@ -18,12 +19,15 @@ def _check_identity(status: dict[str, Any]) -> None:
         raise RuntimeError("speaker endpoint belongs to an incompatible service")
 
 
-async def _speaker_available(base_url: str, timeout_s: float) -> bool:
-    async with httpx.AsyncClient(timeout=min(2.0, timeout_s)) as client:
+async def _speaker_available(base_url: str, timeout_s: float) -> bool | None:
+    """False means absent; None means a present endpoint is not ready."""
+    async with httpx.AsyncClient(timeout=min(2.0, timeout_s), trust_env=False) as client:
         try:
             response = await client.get(f"{base_url.rstrip('/')}/health")
-        except (httpx.ConnectError, httpx.TimeoutException):
+        except httpx.ConnectError:
             return False
+        except httpx.TransportError:
+            return None
         response.raise_for_status()
         _check_identity(response.json())
         return True
@@ -33,7 +37,8 @@ class _SpeakerStream:
     """One connection owns one enrollment and ordered PCM timeline."""
 
     def __init__(self, base_url: str, timeout_s: float) -> None:
-        self._url = base_url.rstrip('/').replace("http://", "ws://", 1).replace("https://", "wss://", 1)
+        origin = urlsplit(base_url)
+        self._url = urlunsplit(("ws" if origin.scheme == "http" else "wss", origin.netloc, "", "", ""))
         self._timeout_s = timeout_s
         self._socket: ClientConnection | None = None
 
@@ -41,6 +46,7 @@ class _SpeakerStream:
         async with asyncio.timeout(self._timeout_s):
             self._socket = await connect(
                 f"{self._url}/v1/audio/transcriptions/stream",
+                proxy=None,
                 open_timeout=self._timeout_s, close_timeout=self._timeout_s,
             )
             await self._socket.send(json.dumps({"config": config, "audio_origin_us": audio_origin_us}))

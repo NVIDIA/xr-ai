@@ -67,6 +67,7 @@ class _VoiceSession:
         self._transport = transport
         self._io_processor: _VoiceIOProcessor | None = None
         self._closed = False
+        self._use_speaker_asr: bool | None = None
 
     @property
     def transport(self) -> HubVoiceTransport:
@@ -93,6 +94,7 @@ class _VoiceSession:
             raise RuntimeError("voice session is closed")
         try:
             await wait_for_services(self.probes)
+            self._use_speaker_asr = await _select_speaker_asr(self.voice_gate._speaker)
             _ = self.transport
         except BaseException:
             await self.close()
@@ -112,7 +114,9 @@ class _VoiceSession:
         """Run media input/output until the pipeline exits."""
         if self._io_processor is not None:
             raise RuntimeError("voice session is already running")
-        use_speaker_asr = await _select_speaker_asr(self.voice_gate._speaker)
+        if self._use_speaker_asr is None:
+            self._use_speaker_asr = await _select_speaker_asr(self.voice_gate._speaker)
+        use_speaker_asr = self._use_speaker_asr
         logger.info("speech backend={} conversation_controls={}",
                     "diarization" if use_speaker_asr else "ordinary STT (no speaker filtering)",
                     self.voice_gate._conversation is not None)

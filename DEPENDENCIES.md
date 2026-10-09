@@ -134,7 +134,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `nvidia-riva-client>=2.17`
     - `urllib3>=2.8.0`
   - `speaker`:
-    - `websockets>=13.0`
+    - `websockets>=15.0`
 - Commands: none
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
