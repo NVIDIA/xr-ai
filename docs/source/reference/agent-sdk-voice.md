@@ -302,7 +302,8 @@ for placement and capacity, waits for decoder warmup, and reuses matching warm
 instances. `model_servers --stop` includes the speaker service. Stop the stack
 before changing its speaker-service YAML. The separate `model-servers-nim`
 stack retains its existing speech services. Auto-selected workers use their
-existing NIM adapters when speaker ASR is unavailable.
+existing NIM adapters when speaker ASR is absent at backend selection; once a
+listener is observed, they wait for compatible service readiness instead.
 
 The default profile does not start batch STT. Consumers that require it can
 manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
