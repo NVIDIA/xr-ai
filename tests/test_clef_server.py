@@ -442,7 +442,17 @@ import uvicorn
 from clef_server._config import ServerConfig, DEFAULT_REVISION
 from clef_server._service import create_app
 root=Path(sys.argv[1]);port=int(sys.argv[2])
-cfg=ServerConfig('test',DEFAULT_REVISION,None,root,'127.0.0.1',port,'cpu','float32',256,4096)
+cfg=ServerConfig(
+    model_name='test',
+    model_revision=DEFAULT_REVISION,
+    model_cache=root,
+    host='127.0.0.1',
+    port=port,
+    device='cpu',
+    dtype='float32',
+    max_length=256,
+    max_body_bytes=4096,
+)
 class Backend:
     model=object();revision=DEFAULT_REVISION;config=cfg
     executor=ThreadPoolExecutor(max_workers=1)
