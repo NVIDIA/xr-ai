@@ -64,6 +64,8 @@ uv run main.py
 ```
 
 The first cold start downloads model weights and can take tens of minutes.
+Later starts load the cached weights and need no network access; refer to
+[starting without network access](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#starting-model-services-without-network-access).
 Refer to the
 [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html) and
 configure the required credentials before starting the stack.

@@ -16,6 +16,7 @@ module logs in when Docker's active config lacks nvcr.io credentials.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -30,18 +31,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from . import _diagnostics, _lifecycle
+from . import _diagnostics, _hf_snapshot, _lifecycle
 
 log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
-_LAUNCH_CONTRACT_VERSION = 2
+_LAUNCH_CONTRACT_VERSION = 3
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
     "HF_HUB_DISABLE_XET",
     "HF_HUB_ENABLE_HF_TRANSFER",
+    "HF_HUB_OFFLINE",
+    "TRANSFORMERS_OFFLINE",
 )
 _HF_XET_VERSION_SPEC = ">=1.1.2,<2.0.0"
 _HF_XET_REQUIREMENT = f"hf-xet{_HF_XET_VERSION_SPEC}"
@@ -52,14 +55,7 @@ _HF_XET_IMPORT_CHECK = (
     "from packaging.specifiers import SpecifierSet; "
     f"assert SpecifierSet({_HF_XET_VERSION_SPEC!r}).contains(version('hf-xet'))"
 )
-_HF_PREFETCH_CODE = (
-    "import os, sys; "
-    "from huggingface_hub import snapshot_download; "
-    "print(f'Prefetching Hugging Face snapshot {sys.argv[1]} before CUDA startup', "
-    "flush=True); "
-    "snapshot_download(repo_id=sys.argv[1]); "
-    "os.sync()"
-)
+_HF_SNAPSHOT_CODE = inspect.getsource(_hf_snapshot)
 _SPARK_UMA_RETRY_DELAY_S = 10.0
 
 
@@ -107,7 +103,6 @@ def build_run_argv(
     extra_env: dict[str, str] | None,
     extra_pip: list[str] | None,
     vllm_argv: list[str],
-    prefetch_model: str | None = None,
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
 
@@ -116,6 +111,11 @@ def build_run_argv(
     group but remains stoppable via pid_on_port + SIGTERM — the same path
     as pip-mode vLLM.  With --network host the vLLM process is visible to
     ss(8) on the host, so no docker-specific stop logic is needed.
+
+    The container resolves the model (``vllm_argv[2]``) and its
+    ``--revision`` from the mounted cache before CUDA starts, and downloads
+    it only when the cached snapshot is absent or incomplete. vLLM then
+    serves the snapshot directory, so it makes no Hub metadata request.
     """
     env_vars: dict[str, str] = {
         "HF_HOME": str(model_cache),
@@ -144,8 +144,6 @@ def build_run_argv(
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
     }
-    if prefetch_model:
-        payload["prefetch_model"] = prefetch_model
     # The name-only -e resolves the token into the container's creation-time
     # env, so a rotated token must change the contract; the key is omitted
     # entirely when unset to keep tokenless fingerprints stable.
@@ -190,26 +188,45 @@ def build_run_argv(
     xet_install = shlex.join(
         ["python3", "-m", "pip", "install", "-q", _HF_XET_REQUIREMENT]
     )
-    commands: list[str] = []
     xet_disabled = env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
         "1",
         "ON",
         "YES",
         "TRUE",
     }
+    model = vllm_argv[2]
+    serve_args = vllm_argv[3:]
+    if not any(
+        arg == "--served-model-name" or arg.startswith("--served-model-name=")
+        for arg in serve_args
+    ):
+        # vLLM names a model served from a directory after its path.
+        serve_args = ["--served-model-name", model, *serve_args]
+
+    def snapshot(mode: str) -> str:
+        return shlex.join([
+            "python3", "-c", _HF_SNAPSHOT_CODE,
+            mode, model, _flag_value(serve_args, "--revision") or "",
+        ])
+
+    download: list[str] = []
     if not xet_disabled:
         # Images vary in their Hub/Xet stack. Repair a missing or incompatible
         # hf-xet wheel, then re-check the complete Hub integration so an
         # incapable Hub or install failure stops startup instead of falling
         # back to HTTPS.
-        commands.extend([f"( {xet_check} || {xet_install} )", xet_check])
-    if prefetch_model:
-        # Spark's CPU and GPU share one memory pool. Finish network transfer,
-        # snapshot reconstruction, and writeback before vLLM initializes CUDA
-        # so their transient allocations cannot overlap a driver context.
-        commands.append(
-            shlex.join(["python3", "-c", _HF_PREFETCH_CODE, prefetch_model])
-        )
+        download.extend([f"( {xet_check} || {xet_install} )", xet_check])
+    download.append(f'model_path="$({snapshot("download")})"')
+    # A cache hit skips every Hub request. A miss downloads before vLLM starts
+    # CUDA; any other resolver failure, including a miss under
+    # HF_HUB_OFFLINE, stops startup with the resolver's error.
+    resolve = (
+        f'model_path="$({snapshot("local")})"; status=$?; '
+        f'if [ "$status" -eq {_hf_snapshot.CACHE_MISS} ]; then '
+        f'{" && ".join(download)} || exit 1; '
+        'elif [ "$status" -ne 0 ]; then exit "$status"; fi'
+    )
+    commands: list[str] = []
     if extra_pip:
         # extra_pip is the seam for models whose architecture needs a wheel
         # the NGC image doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's
@@ -220,9 +237,21 @@ def build_run_argv(
         commands.append(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
-    commands.append(shlex.join(vllm_argv))
-    argv += ["-c", " && ".join(commands)]
+    commands.append(
+        f'{shlex.join(vllm_argv[:2])} "$model_path" {shlex.join(serve_args)}'
+    )
+    argv += ["-c", f"{resolve}; {' && '.join(commands)}"]
     return argv
+
+
+def _flag_value(args: list[str], flag: str) -> str | None:
+    """Return the value of *flag* in *args* (``--flag v`` or ``--flag=v``)."""
+    for index, arg in enumerate(args):
+        if arg == flag and index + 1 < len(args):
+            return args[index + 1]
+        if arg.startswith(f"{flag}="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 # ── docker container helpers ─────────────────────────────────────────────────
@@ -751,7 +780,6 @@ def run(
         extra_env=extra_env,
         extra_pip=extra_pip,
         vllm_argv=vllm_argv,
-        prefetch_model=vllm_argv[2] if spark_uma else None,
     )
     run_container(
         argv=argv,
