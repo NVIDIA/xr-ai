@@ -40,7 +40,8 @@ class VoiceGateConfig:
     """Sentence-boundary opt-in phrases.
 
     A match is valid at transcript start or after ``.``, ``?``, or ``!``.
-    An empty tuple dispatches every non-STOP STT transcript.
+    An empty tuple dispatches every non-STOP STT transcript, or every transcript
+    when ``stop_commands_enabled`` is false.
     """
 
     followup_grace_s: float           = 5.0
@@ -57,6 +58,17 @@ class VoiceGateConfig:
     set ``listening_chime: false`` to disable it.
     """
 
+    stop_commands_enabled: bool = True
+    """Whether STOP recognition interrupts speech or invokes the stop handler.
+
+    Applies to early probes and final transcripts, including conversations
+    without a wake phrase. Disable for passive narration: STOP words then
+    follow normal transcript and query gating without a STOP interruption or
+    acknowledgement. Probes may remain enabled for wake acknowledgements.
+    This does not disable other conversation controls or speech-start events.
+    Scoped application commands such as "stop recording" remain queries.
+    """
+
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
 
 
@@ -64,7 +76,8 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
-    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
+    ``stop_commands_enabled`` (bool, default true).
     An optional ``conversation`` mapping configures microphone start and stop
     controls in the unified voice pipeline.
     Missing file or empty file → returns the dataclass defaults (gate
@@ -87,6 +100,9 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
         listening_chime  = _parse_config_bool(
             raw.get("listening_chime", True), "listening_chime"
+        ),
+        stop_commands_enabled = _parse_config_bool(
+            raw.get("stop_commands_enabled", True), "stop_commands_enabled"
         ),
     )
     object.__setattr__(cfg, "_conversation", _ConversationConfig._from_yaml(raw.get("conversation")))

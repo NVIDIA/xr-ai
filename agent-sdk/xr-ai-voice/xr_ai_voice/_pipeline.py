@@ -88,6 +88,7 @@ def _build_voice_pipeline(
         on_final_transcript=on_final_transcript,
     )
 
+    vad_stt._matches_stop = voice_gate_proc.gate._matches_stop
     vad_stt._gate_controls_partial_stop = voice_gate_cfg._conversation is not None
 
     pipeline = Pipeline([
