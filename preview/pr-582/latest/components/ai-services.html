@@ -694,24 +694,30 @@ before contacting the Hub, and load cached models from their local paths:</p>
 <td><p>A cache-local copy of that language configuration</p></td>
 </tr>
 <tr class="row-odd"><td><p>Clef</p></td>
-<td><p>Complete release at <code class="docutils literal notranslate"><span class="pre">model_revision</span></code>, including the joint head, loader, processor, tokenizer, and backbone shards</p></td>
+<td><p>Snapshot at <code class="docutils literal notranslate"><span class="pre">model_revision</span></code></p></td>
 <td><p>Native release loader with the snapshot directory</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>A listed service whose model is cached starts without any Hub request. Only an
-absent artifact is downloaded. A vLLM snapshot also counts as absent when it is
-incomplete: <code class="docutils literal notranslate"><span class="pre">config.json</span></code>, the weights, or a shard listed by a weight index is
-missing. Pocket TTS accepts its ungated weights when the gated voice-cloning
-weights are not cached. Pip-mode vLLM passes the model ID to vLLM unchanged, so
-it still contacts the Hub.</p>
+<p>The listed services use cached artifacts without refreshing them from the Hub.
+Only a cache miss follows the online download path. Pocket TTS accepts its
+ungated weights when the gated voice-cloning weights are not cached. Pip-mode
+vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.</p>
+<p>Offline startup supports a previously working cache. A local snapshot lookup
+does not establish completeness or integrity. Interrupted or damaged caches
+may require an online re-download; automatic partial-cache repair is not
+provided. The underlying loader may fail or apply defaults for missing files.
+To recover, re-download the affected model and revision with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span> <span class="pre">&lt;model-id&gt;</span> <span class="pre">--revision</span> <span class="pre">&lt;revision&gt;</span> <span class="pre">--force-download</span></code>, using the same <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>
+or <code class="docutils literal notranslate"><span class="pre">--cache-dir</span></code> as the service, then start the service again while online.</p>
 <p>A cache hit is never refreshed. A model without a pinned revision keeps the
 <code class="docutils literal notranslate"><span class="pre">main</span></code> commit it was downloaded at; update it with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, as shown
 above.</p>
-<p>After one start with network access fills <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, the stack starts on a
-host without network access. To forbid downloads, set <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>. The
-host services inherit it, and the vLLM wrapper forwards it into its containers:</p>
+<p>After a successful online start, the listed services can reuse their working
+model cache without network access. This assumes their runtime dependencies
+and Docker images are already installed. To forbid downloads, set
+<code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>. The host services inherit it, and the vLLM wrapper forwards
+it into its containers:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">HF_HUB_OFFLINE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
 </pre></div>
 </div>

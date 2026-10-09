@@ -467,10 +467,10 @@ that snapshot, set <code class="docutils literal notranslate"><span class="pre">
 must contain the release’s required model files; its revision is supplied by
 the configuration rather than checked against local artifact metadata.</p>
 <p>Without <code class="docutils literal notranslate"><span class="pre">model_path</span></code>, the server resolves the configured revision from the
-cache first and loads a complete release without Hub requests. An absent or
-incomplete release follows the online download path. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>,
-it instead fails before model loading with the model, revision, cache directory,
-and missing artifacts. Refer to
+cache first and passes the snapshot directory to the native loader. An absent
+snapshot follows the online download path. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>, a cache
+miss instead fails before model loading with the model, revision, and cache
+directory. Offline startup assumes a previously working cache. Refer to
 <a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache behavior.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
 sample directory to stop only a listener carrying the matching Clef ownership

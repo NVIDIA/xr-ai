@@ -654,7 +654,7 @@ helper can find it.</p>
 <p>Docker mode resolves <em>model</em> from the mounted <em>model_cache</em> inside the
 container and serves the cached snapshot directory under
 <code class="docutils literal notranslate"><span class="pre">--served-model-name</span></code> without contacting the Hub. Only when the snapshot
-is absent or incomplete does it verify a Xet-capable Hub, repairing a
+is absent does it verify a Xet-capable Hub, repairing a
 missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel, and download the snapshot before
 CUDA starts. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code> a missing snapshot fails startup
 instead. <em>extra_pip</em> is an additional

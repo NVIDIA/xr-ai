@@ -721,6 +721,24 @@ locks, and participant cleanup.</p>
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
 command syntax.</p>
 </section>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">tea_making_sample</span> <span class="pre">--capture</span></code>
+from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code> to start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code>
+immediately after DeviceIOHub. It records participant video, device and agent
+audio, and inbound and outbound data in a separate process. The option can be
+combined with <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects the <code class="docutils literal notranslate"><span class="pre">demo</span></code> profile and participant-lifetime
+sessions. Each connection creates a raw bundle under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/tea-making-sample/</span></code>. When the session closes,
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
+requires an NVIDIA GPU with NVENC support and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+<p>Capture uses bounded queues and drops pending capture frames if encoding falls
+behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code>
+when the deployment must not retain device media. Refer to
+<a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
+</section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
 <p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The
@@ -1092,6 +1110,7 @@ until another concrete application requires the same contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deterministic-foreground-routing">Deterministic foreground routing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-contract">Workflow contract</a></li>
