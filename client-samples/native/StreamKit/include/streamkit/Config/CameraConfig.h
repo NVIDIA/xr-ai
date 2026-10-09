@@ -9,16 +9,35 @@
 
 namespace streamkit {
 
-/// Optional publish-side encoding controls for externally captured video.
+/// Encoder tradeoff under resource or bandwidth pressure; not a quality guarantee.
+enum class VideoQualityPreference { kBalanced, kDetail, kMotion };
+
+/// Optional publish-side encoding controls. Capture format is unchanged.
 ///
-/// Backends that open their own platform camera may ignore this. The C++
-/// LiveKitBackend consumes it because callers push frames through FrameSink
-/// and need to specify publish options before the first frame creates the
-/// LocalVideoTrack.
+/// Limits apply to each encoded stream, not aggregate network traffic. Backends
+/// apply supported settings. The C++ LiveKitBackend consumes it through FrameSink
+/// to specify publish options before the first frame creates the
+/// LocalVideoTrack. Restart the camera to apply changes.
 struct CameraEncodingConfig {
+    /// Ceiling in bits per second; zero preserves the SDK default.
     std::uint64_t max_bitrate_bps = 0;
+    /// Ceiling in frames per second; zero preserves the SDK default.
     double max_framerate = 0.0;
+    /// Publish multiple resolutions when supported. Unset preserves backend defaults.
     std::optional<bool> simulcast;
+    /// Unset preserves the backend's adaptation preference.
+    std::optional<VideoQualityPreference> quality_preference;
+
+    /// Favors resolution and disables simulcast; cannot guarantee minimum resolution.
+    static CameraEncodingConfig Detail() {
+        return {3'000'000, 30.0, false, VideoQualityPreference::kDetail};
+    }
+    static CameraEncodingConfig Motion() {
+        return {3'000'000, 30.0, std::nullopt, VideoQualityPreference::kMotion};
+    }
+    static CameraEncodingConfig Balanced() {
+        return {3'000'000, 30.0, std::nullopt, VideoQualityPreference::kBalanced};
+    }
 };
 
 /// Configures camera capture passed to StreamSession::StartCamera().

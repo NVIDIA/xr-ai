@@ -28,6 +28,72 @@ imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
 network metrics, request-driven image capture, and file transfer remain separate
 operations.
 
+(camera-streaming-quality)=
+## Camera streaming quality
+
+Pass an optional `CameraEncodingConfig` through `CameraConfig.encoding` when
+starting video. The settings belong to the local publishing client. No hub
+configuration or client-server policy exchange is involved. LiveKit mapping
+stays inside the backend; other backends apply the settings they support.
+
+| Preset | Adaptation preference | Multiple-resolution publication |
+|---|---|---|
+| Detail | Favor resolution; reduce FPS under pressure | Disabled |
+| Motion | Favor FPS; reduce resolution under pressure | Backend default |
+| Balanced | Allow both resolution and FPS to change | Backend default |
+
+All three presets start with ceilings of 3 Mbps per encoded stream and 30 FPS.
+Override the FPS ceiling for workloads that need fewer, more detailed frames.
+Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
+overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
+Omitting `encoding` preserves backend defaults. C++ also retains its existing
+zero-as-unset numeric fields; its named presets supply the explicit ceilings.
+
+```javascript
+const encoding = new CameraEncodingConfig({
+  ...CameraEncodingConfig.detail,
+  maxFramerate: 10,
+  maxBitrateBps: 3_000_000,
+});
+await session.startCamera(new CameraConfig({ encoding }));
+```
+
+```swift
+var encoding = CameraEncodingConfig.detail
+encoding.maxFramerate = 10
+try await session.startCamera(config: CameraConfig(encoding: encoding))
+```
+
+```kotlin
+val encoding = CameraEncodingConfig.DETAIL.copy(maxFramerate = 10)
+session.startCamera(CameraConfig(encoding = encoding))
+```
+
+```cpp
+streamkit::CameraConfig camera;
+camera.encoding = streamkit::CameraEncodingConfig::Detail();
+camera.encoding->max_framerate = 10;
+session.StartCamera(camera);
+```
+
+The preference and `simulcast` switch can also be configured independently.
+Favoring detail alone changes encoder adaptation; the Detail preset additionally
+disables lower simulcast layers. Capture format remains selected by the platform
+or external frame producer, preserving the camera's aspect ratio.
+
+For externally supplied Apple or Android frames, pass the same encoding policy
+as the optional `encoding` argument to `session.injectVideoFrame` on the first
+frame that publishes the track. Later frames keep the active policy. C++ takes
+the policy through `StartCamera` before the first `FrameSink` frame. Stop the
+camera and start a new publication to change settings. Custom backends using
+the original frame-injection method retain their existing behavior and ignore
+the optional encoding policy until they implement it.
+
+These settings do not guarantee minimum streaming resolution, minimum FPS, or
+latency. Under insufficient bandwidth, delivery may stall or lose frames.
+Consumers must still handle changing frame dimensions. A receiver's LiveKit
+quality request is also a preference, not a minimum-resolution guarantee.
+
 (request-driven-image-capture)=
 ## Request-driven image capture
 

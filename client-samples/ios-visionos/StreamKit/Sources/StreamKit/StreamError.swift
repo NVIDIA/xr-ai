@@ -26,6 +26,9 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// `startCamera()` was called while not connected.
     case cameraRequiresConnection
 
+    /// Publish-side bitrate or frame rate is invalid.
+    case invalidCameraEncoding(String)
+
     /// *(visionOS)* `startCamera()` was called but no immersive space is open.
     ///
     /// Open your app's `ImmersiveSpace` scene **before** calling `startCamera()`.
@@ -57,6 +60,7 @@ public enum StreamError: Error, LocalizedError, Sendable {
         case .missingToken:               return "Provide a token or tokenURL in LiveKitConfig."
         case .tokenFetchFailed(let url):  return "Failed to fetch token from \(url)."
         case .cameraRequiresConnection:   return "Connect before starting the camera."
+        case .invalidCameraEncoding(let reason): return "Invalid camera encoding: \(reason)"
         case .immersiveSpaceRequired:
             return "Camera capture on visionOS requires an open ImmersiveSpace. " +
                    "Call openImmersiveSpace() in your app before startCamera()."

@@ -28,6 +28,7 @@
 #include <fstream>
 #include <functional>
 #include <future>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -264,6 +265,19 @@ int main() {
     //    STREAMKIT_HAVE_LIVEKIT-gated SDK calls.
     session.Connect();
     session.StartCamera();
+    for (double invalid_fps : {-1.0, std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::quiet_NaN()}) {
+        streamkit::CameraConfig invalid_camera;
+        invalid_camera.encoding = streamkit::CameraEncodingConfig::Detail();
+        invalid_camera.encoding->max_framerate = invalid_fps;
+        bool rejected = false;
+        try {
+            session.StartCamera(invalid_camera);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        Expect(rejected);
+    }
     auto* sink = dynamic_cast<streamkit::FrameSink*>(session.GetBackend());
     Expect(sink != nullptr);
 

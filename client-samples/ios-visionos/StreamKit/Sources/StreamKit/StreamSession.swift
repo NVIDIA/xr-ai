@@ -201,6 +201,15 @@ public final class StreamSession: ObservableObject {
         try await injectable.injectVideoFrame(sampleBuffer)
     }
 
+    /// Push an external frame with an optional publishing policy for the first frame.
+    /// Stop the camera before changing it; subsequent frames keep the active policy.
+    /// Custom backends apply only supported settings.
+    public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
+                                encoding: CameraEncodingConfig?) async throws {
+        guard let injectable = backend as? FrameInjectable else { return }
+        try await injectable.injectVideoFrame(sampleBuffer, encoding: encoding)
+    }
+
     // MARK: - Data channel
 
     /// Sends binary data to all participants, optionally on a named topic.

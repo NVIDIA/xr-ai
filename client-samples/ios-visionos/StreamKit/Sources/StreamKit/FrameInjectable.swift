@@ -68,4 +68,17 @@ public protocol FrameInjectable: AnyObject, Sendable {
     ///    `kCVPixelFormatType_32BGRA`, etc.).
     /// - Throws: ``StreamError/notConnected`` if not connected.
     func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws
+
+    /// Encoding is applied when the first frame publishes the track. Stop the
+    /// camera before changing it. Backends apply only supported settings.
+    func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
+                         encoding: CameraEncodingConfig?) async throws
+}
+
+public extension FrameInjectable {
+    /// Existing custom backends retain their injection behavior.
+    func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
+                         encoding: CameraEncodingConfig?) async throws {
+        try await injectVideoFrame(sampleBuffer)
+    }
 }
