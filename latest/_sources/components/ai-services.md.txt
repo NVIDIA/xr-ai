@@ -166,6 +166,52 @@ HF_HOME=models hf download nvidia/Cosmos3-Nano
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
 
+(starting-model-services-without-network-access)=
+
+## Starting without network access
+
+The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:
+
+| Service | Cached artifact | Loaded through |
+|---|---|---|
+| Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
+| STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
+| Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
+| Clef | Snapshot at `model_revision` | Native release loader with the snapshot directory |
+
+The listed services use cached artifacts without refreshing them from the Hub.
+Only a cache miss follows the online download path. Pocket TTS accepts its
+ungated weights when the gated voice-cloning weights are not cached. Pip-mode
+vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.
+
+Offline startup supports a previously working cache. A local snapshot lookup
+does not establish completeness or integrity. Interrupted or damaged caches
+may require an online re-download; automatic partial-cache repair is not
+provided. The underlying loader may fail or apply defaults for missing files.
+To recover, re-download the affected model and revision with `hf download
+<model-id> --revision <revision> --force-download`, using the same `HF_HOME`
+or `--cache-dir` as the service, then start the service again while online.
+
+A cache hit is never refreshed. A model without a pinned revision keeps the
+`main` commit it was downloaded at; update it with `hf download`, as shown
+above.
+
+After a successful online start, the listed services can reuse their working
+model cache without network access. This assumes their runtime dependencies
+and Docker images are already installed. To forbid downloads, set
+`HF_HUB_OFFLINE=1`. The host services inherit it, and the vLLM wrapper forwards
+it into its containers:
+
+```bash
+HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers
+```
+
+In this mode, a service whose model is not cached fails at startup with an
+error that names the model, its revision, and the cache directory. Like the
+other forwarded Hub settings, changing `HF_HUB_OFFLINE` recreates persistent
+vLLM containers.
+
 (migrating-model-caches-from-ai-services)=
 
 ## Migrating model caches from `ai-services/`
@@ -504,11 +550,15 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
-- Before `vllm serve` starts, the wrapper verifies that the image's Hub exposes
-  its Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
+- Before `vllm serve` starts, the container resolves the model snapshot from
+  the mounted cache, as described in
+  {ref}`starting-model-services-without-network-access`. Only when the snapshot
+  must be downloaded does the wrapper verify that the image's Hub exposes its
+  Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
   incompatible `hf-xet` wheel and checks the complete integration again; an
   unavailable accelerator therefore fails startup instead of silently falling
-  back to plain HTTPS.
+  back to plain HTTPS. The download completes and is synced to disk before
+  vLLM initializes CUDA.
 - `HF_XET_HIGH_PERFORMANCE=1` is the default in pip and docker modes. Setting
   it to `0` disables high-performance tuning, not Xet itself. Set
   `HF_HUB_DISABLE_XET=1` to disable Xet. To use legacy `hf_transfer` with a

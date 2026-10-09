@@ -1852,8 +1852,8 @@ workflow.</p></li>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
 
-<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
-<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
+<span class="c1"># and Docker did not OOM-kill it.</span>
 <span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
@@ -1892,8 +1892,8 @@ workflow.</p></li>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
 
-<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
-<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
+<span class="c1"># and Docker did not OOM-kill it.</span>
 <span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
@@ -1974,8 +1974,8 @@ workflow.</p></li>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
 
-<span class="c1"># Prefetch and sync the snapshot before CUDA initialization, then retry once</span>
-<span class="c1"># only if the driver rejects a CUDA allocation without an OOM-killed container.</span>
+<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
+<span class="c1"># and Docker did not OOM-kill it.</span>
 <span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>

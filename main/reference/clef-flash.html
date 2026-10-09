@@ -489,8 +489,14 @@ Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_serve
 ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache on first launch. To use an already extracted copy of
 that snapshot, set <code class="docutils literal notranslate"><span class="pre">model_path</span></code> to its directory in the YAML. The local path
 must contain the release’s required model files; its revision is supplied by
-the configuration rather than checked against local artifact metadata.
-With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
+the configuration rather than checked against local artifact metadata.</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">model_path</span></code>, the server resolves the configured revision from the
+cache first and passes the snapshot directory to the native loader. An absent
+snapshot follows the online download path. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>, a cache
+miss instead fails before model loading with the model, revision, and cache
+directory. Offline startup assumes a previously working cache. Refer to
+<a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache behavior.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
 sample directory to stop only a listener carrying the matching Clef ownership
 and port markers. It waits for that process to exit, including request and native
 inference cleanup, before reporting success; closing the HTTP listener alone

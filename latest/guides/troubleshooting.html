@@ -537,12 +537,12 @@ startup failure on UMA systems.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> is much larger than <code class="docutils literal notranslate"><span class="pre">MemFree</span></code> and <code class="docutils literal notranslate"><span class="pre">Cached</span></code> is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.</p>
-<p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile enables <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each Docker-backed
-vLLM service. The wrapper downloads and syncs the complete Hugging Face
-snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
-writeback allocations do not overlap the CUDA context allocation. If the
-driver allocation still fails, the wrapper waits for reclamation and restarts
-the stopped container once. Only the wrapper that launched the current
+<p><strong>Fix:</strong> every Docker-backed vLLM service resolves its Hugging Face snapshot
+before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
+that point, so transfer, reconstruction, and dirty writeback allocations do not
+overlap the CUDA context allocation. The bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile also enables
+<code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each of these services: if the driver allocation still fails,
+the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
 container attempt may restart it; another wrapper that adopts the running
 container observes it without taking ownership. The retry applies only when
 Docker reports that the container was not OOM-killed and the traceback reaches
@@ -602,8 +602,8 @@ the target hardware.</p>
 settings into a custom Spark profile. Do not flush the filesystem cache
 routinely for this symptom: doing so makes the next checkpoint read cold and
 can reproduce the profiling variation. An explicit KV cache cannot bypass an
-earlier CUDA driver-allocation failure; the prefetch and bounded retry are
-separate safeguards for that stage.</p>
+earlier CUDA driver-allocation failure; the pre-CUDA snapshot download and
+bounded retry are separate safeguards for that stage.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
