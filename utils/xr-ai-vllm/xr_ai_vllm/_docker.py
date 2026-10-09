@@ -221,10 +221,13 @@ def build_run_argv(
     # CUDA; any other resolver failure, including a miss under
     # HF_HUB_OFFLINE, stops startup with the resolver's error.
     resolve = (
-        f'model_path="$({snapshot("local")})"; status=$?; '
-        f'if [ "$status" -eq {_hf_snapshot.CACHE_MISS} ]; then '
-        f'{" && ".join(download)} || exit 1; '
-        'elif [ "$status" -ne 0 ]; then exit "$status"; fi'
+        f'model_path="$({snapshot("local")})"\n'
+        'status=$?\n'
+        f'if [ "$status" -eq {_hf_snapshot.CACHE_MISS} ]; then\n'
+        f'    {" && ".join(download)} || exit 1\n'
+        'elif [ "$status" -ne 0 ]; then\n'
+        '    exit "$status"\n'
+        'fi'
     )
     commands: list[str] = []
     if extra_pip:
@@ -240,7 +243,7 @@ def build_run_argv(
     commands.append(
         f'{shlex.join(vllm_argv[:2])} "$model_path" {shlex.join(serve_args)}'
     )
-    argv += ["-c", f"{resolve}; {' && '.join(commands)}"]
+    argv += ["-c", f"{resolve}\n{' && '.join(commands)}"]
     return argv
 
 
