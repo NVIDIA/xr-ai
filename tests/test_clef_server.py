@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -217,13 +218,27 @@ def _health_response(config: ServerConfig):
     return _Response()
 
 
-def test_matching_owned_ready_listener_is_reused(tmp_path: Path, monkeypatch) -> None:
-    config = _config(tmp_path)
+@pytest.mark.parametrize("host, url_host", [
+    ("127.0.0.1", "127.0.0.1"),
+    ("0.0.0.0", "127.0.0.1"),
+    ("::", "[::1]"),
+    ("::1", "[::1]"),
+    ("2001:db8::1", "[2001:db8::1]"),
+])
+def test_matching_owned_ready_listener_is_reused(tmp_path: Path, monkeypatch, host, url_host) -> None:
+    config = replace(_config(tmp_path), host=host)
     monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
     monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
-    monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _health_response(config))
+    urls = []
+
+    def probe(url, **_kwargs):
+        urls.append(url)
+        return _health_response(config)
+
+    monkeypatch.setattr(clef_main, "urlopen", probe)
 
     assert clef_main._reuse_ready_server(config)
+    assert urls == [f"http://{url_host}:{config.port}/health"]
 
 
 def test_mismatched_configuration_is_not_reused(tmp_path: Path, monkeypatch) -> None:

@@ -114,9 +114,10 @@ def _reuse_ready_server(config) -> bool:
         raise RuntimeError(
             f"port {config.port} belongs to an unmanaged listener; stop it before launching"
         )
-    probe_host = "127.0.0.1" if config.host in {"0.0.0.0", "::"} else config.host
+    probe_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(config.host, config.host)
+    url_host = f"[{probe_host}]" if ":" in probe_host else probe_host
     try:
-        with urlopen(f"http://{probe_host}:{config.port}/health", timeout=1.0) as response:
+        with urlopen(f"http://{url_host}:{config.port}/health", timeout=1.0) as response:
             payload = response.read(16_384)
     except (OSError, URLError) as exc:
         raise RuntimeError(
