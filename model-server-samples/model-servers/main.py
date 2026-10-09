@@ -30,7 +30,9 @@ To stop all model servers:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
+import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from xr_ai_launcher import (
     GPUInventoryError,
@@ -86,6 +88,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "embedding_server",
         "embedding_server",
     ),
+    "clef": ("../../services/clef-server", "clef_server", "clef_server"),
 }
 
 
@@ -171,7 +174,9 @@ def _stop_models() -> None:
         ) from exc
 
 
-def _stop_unselected_services(processes: list[Process]) -> None:
+def _stop_unselected_services(
+    processes: list[Process], profile_path: Path | None = None,
+) -> None:
     """Free capacity held by services outside the selected profile.
 
     Stops by port, keeping any port the profile uses: a persistent server
@@ -179,9 +184,21 @@ def _stop_unselected_services(processes: list[Process]) -> None:
     wrapper when a different container owns it).
     """
     selected_ports = {process.port for process in processes}
+    profile_path = profile_path or _BASE / "yaml" / "models.default.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    selected_services = load_deployment_profile(profile_path).services
+    for model in profile["models"].values():
+        deployment = model["deployment"]
+        if deployment.get("ownership") != "reused":
+            continue
+        endpoint = urlsplit(model["endpoint"]["base_url"])
+        if endpoint.hostname in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}:
+            if endpoint.port is not None:
+                selected_ports.add(endpoint.port)
     unselected = [
         (service, port)
         for service, port in _known_service_ports()
+        if service != "clef" or service in selected_services
         if port not in selected_ports
     ]
     if not stop_persistent_servers(unselected):
@@ -230,7 +247,7 @@ def run() -> None:
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         require_credentials(credential)
-    _stop_unselected_services(processes)
+    _stop_unselected_services(processes, ns.models)
     run_stack(processes, _BASE, exit_after_ready=True)
 
 

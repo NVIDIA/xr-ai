@@ -180,6 +180,14 @@ def stop_persistent_servers(
     success = True
     found = False
     for label, port in services:
+        if label == "clef":
+            clef_success, clef_found, message = _docker._stop_clef_server(port)
+            found = found or clef_found
+            if message:
+                print(f"  [{label}] {message}", flush=True)
+            success = success and clef_success
+            continue
+
         container_name, container_checked = _docker.container_on_port_checked(port)
         if not container_checked:
             print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)

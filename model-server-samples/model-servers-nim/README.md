@@ -26,6 +26,10 @@ env:
   NIM_MAX_NUM_SEQS: "2"
 ```
 
+The `decision` role reuses a separately hosted Clef endpoint on port 8120. Set
+its `endpoint.base_url` to the host running Clef; this sample does not launch
+Clef as a NIM service.
+
 Refer to the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/model-servers-nim.html#configure)
 and generated [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
 for the remaining settings. Stop and restart the stack after configuration changes.

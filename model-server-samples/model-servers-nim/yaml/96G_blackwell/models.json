@@ -95,6 +95,21 @@
           "NGC_API_KEY"
         ]
       }
+    },
+    "decision": {
+      "category": "decision",
+      "adapter": {
+        "kind": "systemone",
+        "model_name": "Cloudflare/clef-flash"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8120",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "reused",
+        "service": "clef"
+      }
     }
   }
 }

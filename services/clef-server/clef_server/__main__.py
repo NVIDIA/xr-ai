@@ -18,25 +18,13 @@ from urllib.request import urlopen
 import uvicorn
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm._docker import pid_on_port_checked
+from xr_ai_vllm._docker import _has_clef_ownership, pid_on_port_checked
 
 from ._config import identity, load_config
 from ._service import create_app
 
 _MANAGED_ENV = "XR_AI_CLEF_MANAGED"
 _PORT_ENV = "XR_AI_CLEF_PORT"
-
-
-def _has_clef_ownership(pid: int, port: int) -> bool:
-    """Return whether the listener carries Clef's exact exec-time ownership."""
-    try:
-        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
-    except OSError:
-        return False
-    return (
-        f"{_MANAGED_ENV}=1".encode() in entries
-        and f"{_PORT_ENV}={port}".encode() in entries
-    )
 
 
 def run() -> None:

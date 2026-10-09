@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from xr_ai_vllm import _docker, stop_persistent_servers
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
@@ -294,42 +295,33 @@ def test_clef_ownership_uses_exact_environment_not_command_line(tmp_path: Path, 
     (proc_root / "cmdline").write_text("python\0unrelated.py\0/tmp/clef_server.yaml")
     (proc_root / "environ").write_bytes(b"PATH=/bin\0")
     monkeypatch.setattr(
-        clef_main,
+        _docker,
         "Path",
         lambda raw: tmp_path / str(raw).removeprefix("/"),
     )
-    monkeypatch.setattr(
-        clef_sample,
-        "Path",
-        lambda raw: tmp_path / str(raw).removeprefix("/"),
-    )
-
     assert not clef_main._has_clef_ownership(1234, 8120)
-    assert not clef_sample._has_clef_ownership(1234, 8120)
     (proc_root / "environ").write_bytes(
         b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0"
     )
     assert clef_main._has_clef_ownership(1234, 8120)
-    assert clef_sample._has_clef_ownership(1234, 8120)
     assert not clef_main._has_clef_ownership(1234, 8121)
-    assert not clef_sample._has_clef_ownership(1234, 8121)
 
 
 @pytest.fixture
 def process_handle(monkeypatch):
-    monkeypatch.setattr(clef_sample.os, "pidfd_open", lambda _pid: 999)
-    monkeypatch.setattr(clef_sample.os, "close", lambda _fd: None)
+    monkeypatch.setattr(_docker.os, "pidfd_open", lambda _pid: 999)
+    monkeypatch.setattr(_docker.os, "close", lambda _fd: None)
 
 
 def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch, process_handle) -> None:
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: False)
+    monkeypatch.setattr(_docker, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(_docker, "_has_clef_ownership", lambda *_args: False)
     monkeypatch.setattr(
         "xr_ai_vllm._docker.container_on_port_checked",
         lambda *_args: (_ for _ in ()).throw(AssertionError("Clef stop must not inspect Docker")),
     )
     monkeypatch.setattr(
-        clef_sample.signal,
+        _docker.signal,
         "pidfd_send_signal",
         lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal unowned listener")),
     )
@@ -339,10 +331,10 @@ def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch, process_h
 
 def test_stop_rechecks_listener_pid_before_signalling(monkeypatch, process_handle) -> None:
     listeners = iter([(1234, True, True), (5678, True, True)])
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(_docker, "pid_on_port_checked", lambda _port: next(listeners))
+    monkeypatch.setattr(_docker, "_has_clef_ownership", lambda *_args: True)
     monkeypatch.setattr(
-        clef_sample.signal,
+        _docker.signal,
         "pidfd_send_signal",
         lambda *_args: (_ for _ in ()).throw(AssertionError("must not signal replacement listener")),
     )
@@ -352,10 +344,10 @@ def test_stop_rechecks_listener_pid_before_signalling(monkeypatch, process_handl
 
 def test_stop_signals_verified_process_handle(monkeypatch, process_handle) -> None:
     signals = []
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
-    monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
-    monkeypatch.setattr(clef_sample, "_wait_for_process_exit", lambda *_args: True)
+    monkeypatch.setattr(_docker, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(_docker, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(_docker.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
+    monkeypatch.setattr(_docker, "_wait_for_pidfd_exit", lambda *_args: True)
 
     assert clef_sample._stop_clef(8120)
     assert signals == [(999, signal.SIGTERM)]
@@ -363,12 +355,12 @@ def test_stop_signals_verified_process_handle(monkeypatch, process_handle) -> No
 
 def test_force_stop_keeps_captured_identity_after_listener_replacement(monkeypatch, process_handle) -> None:
     listeners = iter([(1234, True, True), (1234, True, True), (5678, True, True)])
-    monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(_docker, "pid_on_port_checked", lambda _port: next(listeners))
+    monkeypatch.setattr(_docker, "_has_clef_ownership", lambda *_args: True)
     signals = []
-    monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
+    monkeypatch.setattr(_docker.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
     waits = iter([False, True])
-    monkeypatch.setattr(clef_sample, "_wait_for_process_exit", lambda *_args: next(waits))
+    monkeypatch.setattr(_docker, "_wait_for_pidfd_exit", lambda *_args: next(waits))
     assert clef_sample._stop_clef(8120)
     assert signals == [(999, signal.SIGTERM), (999, signal.SIGKILL)]
     assert next(listeners) == (5678, True, True)
@@ -440,10 +432,12 @@ uvicorn.run(create_app(cfg,Backend()),host='127.0.0.1',port=port,log_level='erro
             time.sleep(0.01)
 
     request_thread = threading.Thread(target=request)
-    stop_thread = threading.Thread(target=lambda: results.append(clef_sample._stop_clef(port)))
+    stop_thread = threading.Thread(
+        target=lambda: results.append(stop_persistent_servers([("clef", port)]))
+    )
     try:
         wait_for(lambda: listener(port)[2])
-        monkeypatch.setattr(clef_sample, "pid_on_port_checked", listener)
+        monkeypatch.setattr(_docker, "pid_on_port_checked", listener)
         request_thread.start()
         wait_for(lambda: (tmp_path / "entered").exists())
         stop_thread.start()

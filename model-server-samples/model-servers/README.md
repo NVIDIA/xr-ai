@@ -23,6 +23,12 @@ Model configuration has two layers:
 | Which services and endpoints belong to the stack | `yaml/models.default.json` or a custom JSON path |
 | Model, port, GPU placement, memory budget, cache, and runtime options | `yaml/<gpu-profile>/*.yaml` |
 
+`yaml/models.clef.json` is opt-in: it starts Clef on port 8120 and reuses the
+other local endpoints. Start the default stack first, then select this profile
+only when the configured GPU has at least 18 GiB available for Clef's BF16
+weights. The device is explicit in `yaml/<gpu-profile>/clef_server.yaml`; edit
+it if Clef belongs on a different GPU. The default profile does not start Clef.
+
 The launcher detects the GPU profile and reads its YAML automatically. To tune
 a server, edit the matching file before starting the stack. For example,
 `yaml/96G_blackwell/vlm_server.yaml` owns the Cosmos VLM settings on a 96 GB
@@ -55,6 +61,13 @@ Run all commands from `model-server-samples/model-servers/`:
 ```bash
 uv sync
 uv run model_servers
+```
+
+After the default stack is ready, start Clef on a GPU with enough available
+memory:
+
+```bash
+uv run model_servers --models yaml/models.clef.json
 ```
 
 Alternatively, run the source file directly after synchronization:

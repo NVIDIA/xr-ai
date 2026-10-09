@@ -17,6 +17,13 @@ The launcher waits for readiness, then exits with the model servers running.
 | LLM and agent LLM | Nemotron 3 Nano Omni 30B A3B Reasoning | HTTP `localhost:8108` |
 | VLM | Cosmos3 Nano Reasoner | HTTP `localhost:8100` |
 | Embedding | Llama Nemotron Embed 1B v2 | HTTP `localhost:8109` |
+| Decision | Cloudflare Clef-Flash | Reused SystemOne endpoint, default `localhost:8120` |
+
+Clef remains a non-NIM service. The NIM profile marks its decision endpoint as
+reused, so run Clef separately on another machine or a GPU with enough free
+memory, then set `decision.endpoint.base_url` in the selected
+`yaml/<gpu-profile>/models.json` to that host. The default URL works when Clef
+already runs on the same host; the NIM stack does not start or stop it.
 
 All client endpoints preserve the original `model-servers` HTTP contracts,
 including `/health`, the `llm`, `vlm`, and `embed` aliases, multipart WAV

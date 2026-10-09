@@ -15,7 +15,7 @@ import httpx
 import pytest
 import yaml
 from nim_model_adapter.embedding import build_app
-from xr_ai_models import load_models_config, make_embedding, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_decision, make_embedding, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_vllm._nim import build_nim_run_argv
 
 BASE = Path(__file__).resolve().parents[1] / "model-server-samples/model-servers-nim"
@@ -49,18 +49,24 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
     sample._export_models(profile, destination)
     assert profile.read_bytes() == original
     config = load_models_config(destination)
-    assert set(config.entries) == {"stt", "tts", "llm", "agent_llm", "vlm", "embedding"}
+    assert set(config.entries) == {"stt", "tts", "llm", "agent_llm", "vlm", "embedding", "decision"}
     assert config.llm("llm") == config.llm("agent_llm")
     assert all(spec.deployment.ownership == "reused" for spec in config.entries.values())
     assert all(not spec.deployment.credentials for spec in config.entries.values())
     original = load_models_config(BASE.parent / "model-servers/yaml/models.default.json")
     for name, spec in config.entries.items():
+        if name == "decision":
+            assert spec.model_name == "Cloudflare/clef-flash"
+            assert spec.base_url == "http://localhost:8120"
+            assert spec.deployment.ownership == "reused"
+            continue
         assert spec.adapter == original.entries[name].adapter
         assert spec.endpoint == original.entries[name].endpoint
 
     async def construct():
         for factory, name in [(make_stt, "stt"), (make_tts, "tts"), (make_llm, "llm"),
-                              (make_llm, "agent_llm"), (make_vlm, "vlm"), (make_embedding, "embedding")]:
+                              (make_llm, "agent_llm"), (make_vlm, "vlm"),
+                              (make_embedding, "embedding"), (make_decision, "decision")]:
             client = factory(config, name)
             await client.close()
     asyncio.run(construct())
@@ -140,6 +146,23 @@ def test_export_rejects_overwriting_deployment():
     profile = BASE / "yaml/spark/models.json"
     with pytest.raises(ValueError, match="must not overwrite"):
         sample._export_models(profile, profile)
+
+
+def test_nim_reuses_clef_without_owning_its_listener(tmp_path, monkeypatch):
+    profile = BASE / "yaml/96G_blackwell/models.json"
+    data = json.loads(profile.read_text())
+    data["models"]["decision"]["endpoint"]["base_url"] = "http://spare-gpu:8120"
+    selected = tmp_path / "models.json"
+    selected.write_text(json.dumps(data))
+    processes, _, _ = sample._build_processes("96G_blackwell", selected)
+    destination = tmp_path / "reused.json"
+    sample._export_models(selected, destination)
+
+    client = load_models_config(destination).decision("decision")
+    assert client.base_url == "http://spare-gpu:8120"
+    assert client.model_name == "Cloudflare/clef-flash"
+    assert client.deployment.ownership == "reused"
+    assert all(process.name != "clef" for process in processes)
 
 
 def test_unknown_service_fails_before_launch(tmp_path):
