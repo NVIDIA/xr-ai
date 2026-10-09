@@ -24,12 +24,7 @@ from xr_render_demo_worker.agents.appearance.agent import DESCRIPTION as appeara
 from xr_render_demo_worker.agents.memory.agent import DESCRIPTION as memory_description
 from xr_render_demo_worker.agents.object.agent import DESCRIPTION as object_description
 from xr_render_demo_worker.agents.placement.agent import DESCRIPTION as placement_description
-from xr_render_demo_worker.agents.vision.agent import (
-    _LIVE_ONLY_DESCRIPTION,
-)
-from xr_render_demo_worker.agents.vision.agent import (
-    DESCRIPTION as vision_description,
-)
+from xr_render_demo_worker.agents.vision import agent as vision_agent
 from xr_render_demo_worker.models import SceneRequest, SubagentResult, SubagentTask
 from xr_render_demo_worker.supervisor import SceneSupervisor
 
@@ -40,7 +35,9 @@ _DESCRIPTIONS = {
     "appearance_agent": appearance_description,
     "object_agent": object_description,
     "vision_agent": (
-        vision_description if harness._CONFIG.video_history_enabled else _LIVE_ONLY_DESCRIPTION
+        vision_agent.DESCRIPTION
+        if harness._CONFIG.video_history_enabled
+        else vision_agent._LIVE_ONLY_DESCRIPTION
     ),
     "memory_agent": memory_description,
 }
