@@ -130,7 +130,7 @@ async def test_embedding_cancellation_does_not_submit_second_group(monkeypatch):
 
 def test_endpoint_profile_and_sample_environments_use_existing_contract():
     config = load_models_config(ROOT / "deployment/nim/models.yaml")
-    assert set(config.entries) == {"llm", "agent_llm", "vlm", "stt", "tts", "embedding"}
+    assert set(config.entries) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert all(spec.deployment.ownership == "external" for spec in config.entries.values())
     assert config.required_credentials == ("NIM_ENDPOINT_API_KEY",)
     assert config.embedding("embedding").kind == "openai_compat"
@@ -339,7 +339,7 @@ async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(mon
         transport=httpx.MockTransport(handle), **kwargs,
     ))
     await SMOKE["check"](profile)
-    assert len(calls) == 10
+    assert len(calls) == 7
     vision = [payload for host, payload in calls if host == "vlm.example.com"]
     assert len(vision) == 2
     assert vision[0]["messages"][0]["content"][0]["type"] == "image_url"
