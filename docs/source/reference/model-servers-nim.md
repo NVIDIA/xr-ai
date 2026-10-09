@@ -289,8 +289,8 @@ uv --config-file ../../uv.toml run --project ../../tests python smoke_test.py --
 ```
 
 The default smoke test loads the original `model-servers` configuration unchanged.
-It exercises a Magpie-to-Parakeet speech round trip, PCM speech responses, both
-LLM roles, image inference and streaming, and query and passage embeddings.
+It exercises a Magpie-to-Parakeet speech round trip, PCM speech responses,
+LLM chat, image inference and streaming, and query and passage embeddings.
 A smaller consumer profile tests only its configured roles. Repeat after a cold start and a
 warm restart on each target machine; monitor GPU memory under concurrent agent
 traffic as well as during startup.

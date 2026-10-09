@@ -54,7 +54,7 @@ async def check(profile: Path) -> None:
     async with AsyncExitStack() as stack:
         clients = {}
         for name, factory in (("stt", make_stt), ("tts", make_tts), ("llm", make_llm),
-                              ("agent_llm", make_llm), ("vlm", make_vlm), ("embedding", make_embedding)):
+                              ("vlm", make_vlm), ("embedding", make_embedding)):
             if name not in config.entries:
                 continue
             client = factory(config, name)
@@ -76,15 +76,13 @@ async def check(profile: Path) -> None:
                 raise RuntimeError("unexpected Magpie PCM format or metadata")
             print("PASS Pocket client PCM response: 44100 Hz, mono, 16-bit", flush=True)
 
-        for role in ("llm", "agent_llm"):
-            if role not in clients:
-                continue
-            response = await clients[role].chat(
+        if "llm" in clients:
+            response = await clients["llm"].chat(
                 [ChatMessage("user", "Reply with the word ready.")], max_tokens=64, timeout=120,
             )
             if not response.content.strip():
-                raise RuntimeError(f"{role} returned no visible text")
-            print(f"PASS {role}: {response.content.strip()}")
+                raise RuntimeError("llm returned no visible text")
+            print(f"PASS llm: {response.content.strip()}")
 
         if "vlm" in clients:
             response = await clients["vlm"].ask_image(

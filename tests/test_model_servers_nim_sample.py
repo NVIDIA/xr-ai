@@ -49,8 +49,7 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
     sample._export_models(profile, destination)
     assert profile.read_bytes() == original
     config = load_models_config(destination)
-    assert set(config.entries) == {"stt", "tts", "llm", "agent_llm", "vlm", "embedding"}
-    assert config.llm("llm") == config.llm("agent_llm")
+    assert set(config.entries) == {"stt", "tts", "llm", "vlm", "embedding"}
     assert all(spec.deployment.ownership == "reused" for spec in config.entries.values())
     assert all(not spec.deployment.credentials for spec in config.entries.values())
     original = load_models_config(BASE.parent / "model-servers/yaml/models.default.json")
@@ -60,7 +59,7 @@ def test_profiles_build_real_sdk_clients_and_persistent_processes(hardware, tmp_
 
     async def construct():
         for factory, name in [(make_stt, "stt"), (make_tts, "tts"), (make_llm, "llm"),
-                              (make_llm, "agent_llm"), (make_vlm, "vlm"), (make_embedding, "embedding")]:
+                              (make_vlm, "vlm"), (make_embedding, "embedding")]:
             client = factory(config, name)
             await client.close()
     asyncio.run(construct())

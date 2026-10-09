@@ -48,22 +48,6 @@
         ]
       }
     },
-    "agent_llm": {
-      "adapter": {
-        "preset": "nemotron_omni"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8108",
-        "readiness": "health"
-      },
-      "deployment": {
-        "ownership": "managed",
-        "service": "llm-adapter",
-        "credentials": [
-          "NGC_API_KEY"
-        ]
-      }
-    },
     "vlm": {
       "adapter": {
         "preset": "cosmos3_nano_reasoner"

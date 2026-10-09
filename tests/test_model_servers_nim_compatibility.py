@@ -143,7 +143,7 @@ def test_existing_configs_work_unchanged(relative, network):
                 await stack.enter_async_context(app.router.lifespan_context(app))
             clients = {}
             for name, factory in (("stt", make_stt), ("tts", make_tts), ("vlm", make_vlm),
-                                  ("llm", make_llm), ("agent_llm", make_llm), ("embedding", make_embedding)):
+                                  ("llm", make_llm), ("embedding", make_embedding)):
                 if name in config.entries:
                     client = clients[name] = factory(config, name)
                     stack.push_async_callback(client.close)
@@ -161,12 +161,10 @@ def test_existing_configs_work_unchanged(relative, network):
             assert image == {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}}
             text = "".join([chunk async for chunk in clients["vlm"].stream("data:image/png;base64,aGVsbG8=", "hello")])
             assert text == "ready"
-            for name in ("llm", "agent_llm"):
-                if name not in clients:
-                    continue
+            if "llm" in clients:
                 messages = [ChatMessage("assistant", "", tool_calls=[ToolCall("prev", "lookup", "{}")]),
                             ChatMessage("tool", "found", tool_call_id="prev"), ChatMessage("user", "find test")]
-                response = await clients[name].chat(messages, tools=[ToolDef("lookup", "Find a name", {
+                response = await clients["llm"].chat(messages, tools=[ToolDef("lookup", "Find a name", {
                     "type": "object", "properties": {"name": {"type": "string"}},
                 })], enable_thinking=True, thinking_budget=64, max_tokens=128, temperature=0.1)
                 assert response.tool_calls == [ToolCall("call-1", "lookup", '{"name":"test"}')]
@@ -178,7 +176,7 @@ def test_existing_configs_work_unchanged(relative, network):
                 assert upstream["messages"][1]["tool_call_id"] == "prev"
                 assert upstream["max_tokens"] == 128 and upstream["temperature"] == 0.1
                 assert upstream["chat_template_kwargs"] == {"enable_thinking": True, "thinking_budget": 64}
-                assert "".join([text async for text in clients[name].stream([ChatMessage("user", "hi")])]) == "ready"
+                assert "".join([text async for text in clients["llm"].stream([ChatMessage("user", "hi")])]) == "ready"
             if "embedding" in clients:
                 assert await clients["embedding"].embed(["passage: abcd", "query: hi"]) == [[4.0], [2.0]]
     asyncio.run(check())

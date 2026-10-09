@@ -76,7 +76,7 @@ assuming a fallback.
 On first run each model downloads from Hugging Face (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-The default starts Nemotron-3 Nano Omni (8108, serving both LLM roles),
+The default starts Nemotron-3 Nano Omni (8108),
 Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS (8105), and embeddings
 (8109). Use `--models PATH` only for a custom local deployment JSON. Starting
 a profile stops persisted servers outside it first and aborts if they cannot
@@ -312,10 +312,9 @@ dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
-worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
-tool-calling loop over scene, tracking, spatial math, vision, and video-memory
-tools. Refer to the
+worker calls those processes through Relay-managed native tools. The render
+agent runs a Nemotron-3-Nano-Omni-30B-A3B-Reasoning tool-calling loop over
+scene, tracking, spatial math, vision, and video-memory tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
 map, agentic-loop details, and XR session lifecycle.
 

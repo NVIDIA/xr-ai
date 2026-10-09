@@ -270,7 +270,7 @@ never branch on backend.
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
 config = load_models_config("yaml/models.json")
-async with make_llm(config, "agent_llm") as llm:
+async with make_llm(config, "llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
         max_tokens=128,
@@ -284,7 +284,7 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
 ```json
 {
   "models": {
-    "agent_llm": {
+    "llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
       "endpoint": {"base_url": "http://localhost:8108"}

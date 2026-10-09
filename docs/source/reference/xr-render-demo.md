@@ -132,7 +132,7 @@ overrides `lovr_bin` in `scene/scene_service.yaml`. Use a GPU index reported by
 settings are independent and must be planned together. Keep
 `allow_sim_pose: false` outside the live eval harness.
 
-Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
+Each `models.json` entry maps a logical role (`llm`, `stt`, `tts`,
 or `vlm`) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to {doc}`/guides/customizing-model-servers` for
@@ -206,9 +206,9 @@ launch configuration changed.
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs both LLM roles in `yaml/models.json`: `agent_llm` runs the
-supervisor and subagent tool-calling loops, and `llm` remains available for
-untooled chat calls. Thinking stays off unless a call explicitly enables it.
+The `llm` entry in `yaml/models.json` runs the supervisor and subagent
+tool-calling loops. The same `LLMService` interface supports chat calls with
+and without tools. Thinking stays off unless a call explicitly enables it.
 
 ## VLM — Cosmos3 Nano Reasoner
 
