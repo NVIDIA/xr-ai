@@ -450,30 +450,64 @@ def test_simple_vlm_declares_only_its_hub_and_worker() -> None:
     assert [process.name for process in sample.PROCESSES] == ["hub", "worker"]
 
 
-def test_sample_capture_is_opt_in_and_starts_immediately_after_hub() -> None:
-    simple = _load_module(
-        "service_layout_simple_vlm_capture",
-        "agent-samples/simple-vlm-example/main.py",
+@pytest.mark.parametrize(
+    "sample_name",
+    ["simple-vlm-example", "xr-render-demo", "tea-making-sample", "lab-instrument-monitoring"],
+)
+def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
+    sample_name: str,
+) -> None:
+    sample = _load_module(
+        f"service_layout_{sample_name.replace('-', '_')}_capture",
+        f"agent-samples/{sample_name}/main.py",
     )
-    render = _load_module(
-        "service_layout_render_capture",
-        "agent-samples/xr-render-demo/main.py",
+    assert sample._parser().parse_args([]).capture is False
+    assert sample._parser().parse_args(["--capture"]).capture is True
+    worker_args = (sample._WORKER_CONFIG,) if sample_name == "tea-making-sample" else ()
+    defaults = sample._build_processes(*worker_args)
+    assert "capture" not in [process.name for process in defaults]
+
+    processes = sample._build_processes(*worker_args, capture=True)
+    names = [process.name for process in processes]
+    hub_index = names.index("hub")
+    assert names[hub_index + 1] == "capture"
+    assert [process for process in processes if process.name != "capture"] == defaults
+    capture = processes[hub_index + 1]
+    assert capture.project == "../../services/device-io-hub"
+    assert capture.command == "device_io_capture"
+    config = yaml.safe_load((sample._BASE / capture.config).read_text())
+    hub = yaml.safe_load((sample._BASE / processes[hub_index].config).read_text())
+    assert config["profile"] == "demo"
+    assert config["session_mode"] == "participant"
+    assert config["out_dir"] == f"~/.local/share/xr-ai/captures/{sample_name}"
+    assert config["hub_sub_addr"] == hub.get("ipc_pub_addr", "ipc:///tmp/xr_hub_pub")
+    assert config["hub_push_addr"] == hub.get("ipc_in_addr", "ipc:///tmp/xr_hub_in")
+
+
+@pytest.mark.parametrize("sample_name", ["tea-making-sample", "lab-instrument-monitoring"])
+def test_sample_run_passes_capture_and_preserves_web_event_option(
+    sample_name: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _load_module(
+        f"service_layout_{sample_name.replace('-', '_')}_capture_run",
+        f"agent-samples/{sample_name}/main.py",
     )
+    launches = []
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    def capture_launch(processes, base):
+        worker = next(process for process in processes if process.name == "worker")
+        config = yaml.safe_load(Path(worker.config).read_text())
+        launches.append((processes, config["web_events_host"]))
 
-    assert simple._parse_args([]).capture is False
-    assert render._parse_args([]).capture is False
-    assert "capture" not in [process.name for process in simple.PROCESSES]
-    assert "capture" not in [process.name for process in render._build_processes()]
-
-    assert simple._parse_args(["--capture"]).capture is True
-    assert render._parse_args(["--capture"]).capture is True
-    for processes in (
-        simple._build_processes(capture=True),
-        render._build_processes(capture=True),
-    ):
-        names = [process.name for process in processes]
-        hub_index = names.index("hub")
-        assert names[hub_index + 1] == "capture"
+    monkeypatch.setattr(sample, "run_stack", capture_launch)
+    sample.run(["--capture", "--expose-web-events"])
+    processes, host = launches.pop()
+    assert host == "0.0.0.0"
+    assert [process.name for process in processes][:2] == ["hub", "capture"]
+    sample.run([])
+    processes, host = launches.pop()
+    assert host == "127.0.0.1"
+    assert "capture" not in [process.name for process in processes]
 
 
 def test_render_demo_declares_only_application_processes() -> None:
