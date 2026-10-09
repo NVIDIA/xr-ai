@@ -368,24 +368,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `llama_nemotron_llm_server` → `llama_nemotron_llm_server.__main__:run`
 
-#### `magpie-nim-tts` — [`services/magpie-nim-tts/`](services/magpie-nim-tts/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `fastapi>=0.115`
-  - `uvicorn>=0.30`
-  - `pyyaml>=6.0`
-  - `httpx>=0.27`
-  - `grpcio>=1.67`
-- Optional dependency groups: none
-- Commands:
-  - `magpie_nim_tts` → `magpie_nim_tts.__main__:run`
-
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
 - Python: `>=3.11,<3.14`
@@ -445,19 +427,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups: none
 - Commands:
   - `nemotron3_nano_llm_server` → `nemotron3_nano_llm_server.__main__:run`
-
-#### `nim-server` — [`services/nim-server/`](services/nim-server/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `pyyaml>=6.0`
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `nim_server` → `nim_server.__main__:run`
 
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
@@ -611,7 +580,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,marker-tracking,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
@@ -645,7 +614,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -677,7 +646,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
@@ -749,7 +718,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -789,51 +758,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `model_servers` → `main:run`
 
-#### `model-servers-nim` — [`model-server-samples/model-servers-nim/`](model-server-samples/model-servers-nim/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `model_servers_nim` → `main:run`
-
-#### `nim-model-adapter` — [`model-server-samples/model-servers-nim/compatibility-adapter/`](model-server-samples/model-servers-nim/compatibility-adapter/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `fastapi>=0.115`
-  - `uvicorn>=0.30`
-  - `pyyaml>=6.0`
-  - `httpx>=0.27`
-  - `grpcio>=1.67`
-  - `python-multipart>=0.0.18`
-- Optional dependency groups: none
-- Commands:
-  - `nim_model_adapter` → `nim_model_adapter.__main__:run`
-
-#### `nim-riva-server` — [`model-server-samples/model-servers-nim/riva-server/`](model-server-samples/model-servers-nim/riva-server/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `pyyaml>=6.0`
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `nim_riva_server` → `nim_riva_server.__main__:run`
-
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
@@ -849,9 +773,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-  - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
-  - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
-  - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
@@ -898,14 +819,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
-    - `model-servers-nim` → [`model-servers-nim`](model-server-samples/model-servers-nim/) (local, editable)
-    - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
-    - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
+    - `model-servers-nim`
+    - `nim-model-adapter`
+    - `nim-riva-server`
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-    - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
+    - `magpie-nim-tts`
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-    - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
+    - `nim-server`
     - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
     - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
     - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)

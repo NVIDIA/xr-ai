@@ -97,6 +97,24 @@ async def _channel_ready(auth: Any, enabled: bool) -> bool:
     return await asyncio.to_thread(probe)
 
 
+async def _cancel_and_join(call: Any, pending: asyncio.Task | None) -> None:
+    # Cancelling a to_thread task leaves the native read alive. Cancel the RPC
+    # and retain the read task through repeated caller cancellation until joined.
+    call.cancel()
+    if pending is None:
+        return
+    joined = asyncio.gather(pending, return_exceptions=True)
+    cancelled = None
+    while not joined.done():
+        try:
+            await asyncio.shield(joined)
+        except asyncio.CancelledError as exc:
+            cancelled = exc
+    joined.result()
+    if cancelled is not None:
+        raise cancelled
+
+
 class RivaSTT:
     """Riva ASR client: offline (batch) recognition over gRPC."""
 
@@ -130,7 +148,11 @@ class RivaSTT:
         channels: int = 1,
         timeout: float | None = None,
     ) -> str:
-        """Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript."""
+        """Recognize *audio* (WAV or raw 16-bit PCM) and return the transcript.
+
+        Timeout and cancellation cancel the RPC and join its pending native read
+        before returning, so a caller can safely release recognition resources.
+        """
         if sample_rate is None:
             sample_rate, channels, audio = _parse_wav(audio)
         config = self._rc.RecognitionConfig(
@@ -140,10 +162,13 @@ class RivaSTT:
             audio_channel_count=channels,
             max_alternatives=1,
         )
-        response = await asyncio.wait_for(
-            asyncio.to_thread(self._asr.offline_recognize, audio, config),
-            timeout or self._timeout,
-        )
+        call = self._asr.offline_recognize(audio, config, future=True)
+        pending = asyncio.create_task(asyncio.to_thread(call.result))
+        try:
+            async with asyncio.timeout(timeout or self._timeout):
+                response = await asyncio.shield(pending)
+        finally:
+            await _cancel_and_join(call, pending)
         return "".join(
             r.alternatives[0].transcript
             for r in response.results
@@ -262,23 +287,7 @@ class RivaTTS:
             if pending:
                 raise ValueError("Riva returned an incomplete PCM sample")
         finally:
-            # Cancelling a to_thread task alone leaves its gRPC read running.
-            # Cancel the actual RPC first, then wait for that read to unwind.
-            responses.cancel()
-            if read_task is not None:
-                joined = asyncio.gather(read_task, return_exceptions=True)
-                cancelled = None
-                # A disconnect can cancel us again during timeout cleanup.
-                # Shield every join attempt so the blocking read keeps its
-                # task, and propagate cancellation only after it has finished.
-                while not joined.done():
-                    try:
-                        await asyncio.shield(joined)
-                    except asyncio.CancelledError as exc:
-                        cancelled = exc
-                joined.result()
-                if cancelled is not None:
-                    raise cancelled
+            await _cancel_and_join(responses, read_task)
 
     async def health(self) -> bool:
         """Whether the Riva gRPC channel is ready (assumed when probing is off)."""

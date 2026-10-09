@@ -82,8 +82,8 @@ Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS (8105), and embeddings
 a profile stops persisted servers outside it first and aborts if they cannot
 be stopped, avoiding GPU overcommit.
 
-For NVIDIA NIM models, use the separate {doc}`/reference/model-servers-nim`
-sample. The `model-servers` launcher no longer selects NIM deployments.
+For deployment using NVIDIA NIM, configure independently deployed endpoints.
+Refer to {doc}`/guides/deploying-with-nim`; no NIM model launcher is required.
 
 `HF_TOKEN` is required by default: without it the large first-run download
 can stall indefinitely. Refer to the

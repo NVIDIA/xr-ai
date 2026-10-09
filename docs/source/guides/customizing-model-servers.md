@@ -36,9 +36,9 @@ The default `yaml/models.default.json` profile starts local Parakeet STT,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run `model_servers` without `--models` to use it.
 
-NIM launch support belongs to the separate {doc}`/reference/model-servers-nim`
-sample, which provides Magpie TTS and compatible endpoints for existing agents.
-The `model-servers` service catalog contains only local server wrappers.
+For NIM deployment, configure independently deployed endpoints with the same
+SDK factories. Refer to {doc}`deploying-with-nim`. The `model-servers` service
+catalog contains only local server wrappers.
 
 Copy the default profile to customize it:
 
@@ -117,8 +117,8 @@ omitting their `deployment` objects. Keep adapter settings and endpoint
 credentials needed by the client; server-only credentials stay in the shared
 stack's deployment profile.
 
-The standard local stack and the separate `model-servers-nim` stack work with
-existing samples' checked-in models JSON. For custom deployments, change only
+The standard local stack works with samples' checked-in models JSON.
+For deployment against native NIM endpoints, change only
 the roles whose model adapters or endpoints differ. Preserve the sample's other
 roles and any required RAG embedding health settings described below.
 
@@ -178,11 +178,11 @@ can prevent RAG startup even when embedding inference works.
 
 ## Riva speech boundary
 
-The `model-servers` launcher does not launch Riva NIMs. Refer to
-{doc}`/reference/model-servers-nim` for the NIM stack and its HTTP compatibility
-adapters. Direct Riva gRPC clients require the optional Riva SDK dependency and
-an explicit models configuration change; that is not an endpoint-only
-customization.
+The `model-servers` launcher does not launch Riva NIMs. Direct Riva clients
+normalize native speech in the SDK; no HTTP compatibility adapter is required.
+The sample voice workers include the Riva SDK extra. Configure the speech
+adapter and endpoint in the active models profile. Refer to
+{doc}`deploying-with-nim`.
 
 ## Validate and switch profiles
 
