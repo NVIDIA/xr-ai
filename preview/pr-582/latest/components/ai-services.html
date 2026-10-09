@@ -321,6 +321,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -502,25 +503,31 @@ recorded video, and document retrieval.</p>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code> via <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code></p></td>
+<td><p>8120</p></td>
+<td><p>Cloudflare Clef-Flash 9B</p></td>
+<td><p>Native SystemOne choice decisions</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nim_server</span></code></p></td>
 <td><p>configured per YAML</p></td>
 <td><p>selected NVIDIA NIM</p></td>
 <td><p>persistent Docker container</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
 <td><p>8340</p></td>
 <td><p>—</p></td>
@@ -664,8 +671,8 @@ match the consumer:</p>
 </section>
 <section id="starting-without-network-access">
 <span id="starting-model-services-without-network-access"></span><h2>Starting without network access<a class="headerlink" href="#starting-without-network-access" title="Link to this heading">#</a></h2>
-<p>Each model service looks up its model in its Hugging Face cache before it
-contacts the Hub, and loads a cached model from its local path:</p>
+<p>The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Service</p></th>
@@ -686,10 +693,14 @@ contacts the Hub, and loads a cached model from its local path:</p>
 <td><p>Weights, tokenizer, and voice state named by the selected <code class="docutils literal notranslate"><span class="pre">language</span></code></p></td>
 <td><p>A cache-local copy of that language configuration</p></td>
 </tr>
+<tr class="row-odd"><td><p>Clef</p></td>
+<td><p>Complete release at <code class="docutils literal notranslate"><span class="pre">model_revision</span></code>, including the joint head, loader, processor, tokenizer, and backbone shards</p></td>
+<td><p>Native release loader with the snapshot directory</p></td>
+</tr>
 </tbody>
 </table>
 </div>
-<p>A service whose model is cached starts without any network request. Only an
+<p>A listed service whose model is cached starts without any Hub request. Only an
 absent artifact is downloaded. A vLLM snapshot also counts as absent when it is
 incomplete: <code class="docutils literal notranslate"><span class="pre">config.json</span></code>, the weights, or a shard listed by a weight index is
 missing. Pocket TTS accepts its ungated weights when the gated voice-cloning
@@ -749,7 +760,8 @@ readiness, refer to <a class="reference internal" href="../reference/migrations.
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
 depend on <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
 load a per-sample model profile, and construct service clients via
-<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
+<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings) so callers
 never branch on backend.</p>

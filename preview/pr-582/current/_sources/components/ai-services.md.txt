@@ -29,6 +29,7 @@ recorded video, and document retrieval.
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
@@ -169,16 +170,17 @@ HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 
 ## Starting without network access
 
-Each model service looks up its model in its Hugging Face cache before it
-contacts the Hub, and loads a cached model from its local path:
+The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:
 
 | Service | Cached artifact | Loaded through |
 |---|---|---|
 | Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
 | STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
 | Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
+| Clef | Complete release at `model_revision`, including the joint head, loader, processor, tokenizer, and backbone shards | Native release loader with the snapshot directory |
 
-A service whose model is cached starts without any network request. Only an
+A listed service whose model is cached starts without any Hub request. Only an
 absent artifact is downloaded. A vLLM snapshot also counts as absent when it is
 incomplete: `config.json`, the weights, or a shard listed by a weight index is
 missing. Pocket TTS accepts its ungated weights when the gated voice-cloning
@@ -250,7 +252,8 @@ readiness, refer to {ref}`consumer-model-readiness`.
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, `make_embedding`, and
+`make_decision`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.
