@@ -65,4 +65,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.livekit.android)
     debugImplementation(libs.androidx.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.14.2")
 }
