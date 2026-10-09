@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The pinned snapshot downloads into model_cache on first launch. Set
+# model_path to an extracted matching snapshot directory to reuse it directly.
+model_name: Cloudflare/clef-flash
+model_revision: 17f0b0ad64efb65d273590632833508766b2aae6
+model_path: null
+model_cache: ../../../models
+
+host: 127.0.0.1
+# 810x contains shared client endpoints, including NIM compatibility adapters.
+# 811x is used by native NIM chat and embedding backends; Clef uses 8120.
+# Port inventory: docs/source/reference/model-servers-nim.md.
+port: 8120
+device: cuda:0
+dtype: bfloat16
+max_length: 4096
+max_body_bytes: 1048576
