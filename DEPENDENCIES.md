@@ -267,6 +267,28 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Services
 
+#### `clef-server` — [`services/clef-server/`](services/clef-server/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `accelerate>=1.2.0`
+  - `fastapi>=0.115.0`
+  - `huggingface-hub>=0.32.0`
+  - `pillow>=10.0.0`
+  - `pyyaml>=6.0`
+  - `safetensors>=0.4.5`
+  - `torch>=2.11.0`
+  - `torchvision>=0.28.0`
+  - `transformers>=5.17.0`
+  - `uvicorn[standard]>=0.34.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `clef_server` → `clef_server.__main__:run`
+
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
 - Python: `>=3.11,<3.14`
@@ -740,6 +762,19 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr_render_demo_worker` → `xr_render_demo_worker.__main__:run`
 
 ### Model server samples
+
+#### `clef-flash-model-server` — [`model-server-samples/clef-flash/`](model-server-samples/clef-flash/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `clef_flash_model` → `main:run`
 
 #### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
 

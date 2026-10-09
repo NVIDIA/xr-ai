@@ -183,6 +183,86 @@ class Capabilities:
     """Whether the endpoint can return model reasoning."""
 
 
+@dataclass(frozen=True)
+class DecisionQuestion:
+    """One choice question for a structured decision model.
+
+    The keys in ``criteria`` are the permitted answer labels. Each value gives
+    the criterion that distinguishes that choice. Define at least two non-empty
+    labels with non-empty descriptions.
+    """
+
+    instructions: str
+    """Question-specific instructions for selecting a criterion."""
+
+    criteria: Mapping[str, str]
+    """Permitted choice labels and their selection criteria."""
+
+
+@dataclass(frozen=True)
+class DecisionAnswer:
+    """One validated choice and its probability trace."""
+
+    choice: str
+    """The selected label from the question's criteria."""
+
+    confidence: float
+    """The selected choice probability."""
+
+    probabilities: Mapping[str, float]
+    """Probability for every permitted choice label."""
+
+
+@dataclass(frozen=True)
+class DecisionResponse:
+    """Validated answers and metadata returned by a decision service."""
+
+    answers: Mapping[str, DecisionAnswer]
+    """Answers keyed by the question identifiers supplied to ``decide``."""
+
+    model: str
+    """Model identifier reported by the service."""
+
+    usage: Mapping[str, Any]
+    """Provider-reported usage metadata."""
+
+    raw: Mapping[str, Any]
+    """Unmodified JSON response from the provider."""
+
+
+@runtime_checkable
+class DecisionService(Protocol):
+    """Structural interface for typed, choice-only decision services."""
+
+    async def decide(
+        self,
+        state: str | Mapping[str, Any],
+        questions: Mapping[str, DecisionQuestion],
+        *,
+        timeout: float | None = None,
+    ) -> DecisionResponse:
+        """Evaluate all questions against text or a JSON-compatible state mapping.
+
+        Return one choice and a complete probability map for each question.
+        No free-form text or reasoning is generated. A per-call timeout must be
+        positive and finite; the SystemOne adapter caps it at the configured
+        endpoint timeout. Transport failures and invalid or incomplete answers
+        raise exceptions without returning partial decisions.
+        """
+
+        pass
+
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
+
+
 @runtime_checkable
 class LLMService(Protocol):
     """Structural interface for text chat-completion services."""
