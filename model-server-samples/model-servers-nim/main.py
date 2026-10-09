@@ -40,6 +40,9 @@ _SERVICES = {
     "llm-adapter": ("compatibility-adapter", "nim_model_adapter", "llm_adapter.yaml"),
     "vlm-nim": ("../../services/nim-server", "nim_server", "nim_vlm_server.yaml"),
     "vlm-adapter": ("compatibility-adapter", "nim_model_adapter", "vlm_adapter.yaml"),
+    # Clef is a separately managed non-NIM endpoint. Its profile entry exists
+    # only so `ownership: reused` can preserve and export the client endpoint.
+    "clef": ("../../services/clef-server", "clef_server", "clef_server.yaml"),
 }
 _BACKENDS = {
     "stt-adapter": "stt-nim", "tts-adapter": "tts-nim",

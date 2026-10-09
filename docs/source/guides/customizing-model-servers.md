@@ -36,6 +36,22 @@ The default `yaml/models.default.json` profile starts local Parakeet STT,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run `model_servers` without `--models` to use it.
 
+The opt-in `yaml/models.clef.json` profile starts Clef and marks the existing
+model endpoints as reused. Start the default stack first; its listeners remain
+running as Clef starts on port 8120. The Clef YAML sets an explicit `device`,
+but does not reserve memory on a GPU. The BF16 model historically allocates
+about 18 GiB, so select this profile only when that much memory is available on
+the chosen GPU. Edit `yaml/<gpu-profile>/clef_server.yaml` to choose a device;
+the checked-in placement is not qualified beside the default stack.
+
+```bash
+uv run model_servers --models yaml/models.clef.json
+```
+
+For a Clef endpoint on another host or GPU, update the `decision` endpoint in
+the selected deployment or client profile to that host's port 8120. The NIM
+sample ships this role as `ownership: reused`; it does not start or stop Clef.
+
 NIM launch support belongs to the separate {doc}`/reference/model-servers-nim`
 sample, which provides Magpie TTS and compatible endpoints for existing agents.
 The `model-servers` service catalog contains only local server wrappers.

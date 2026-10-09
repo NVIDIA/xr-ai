@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import select
 import shlex
 import signal
 import subprocess
@@ -61,6 +62,62 @@ _HF_PREFETCH_CODE = (
     "os.sync()"
 )
 _SPARK_UMA_RETRY_DELAY_S = 10.0
+_CLEF_MANAGED_ENV = "XR_AI_CLEF_MANAGED"
+_CLEF_PORT_ENV = "XR_AI_CLEF_PORT"
+_CLEF_STOP_TIMEOUT_S = 20.0
+_CLEF_KILL_TIMEOUT_S = 5.0
+
+
+def _has_clef_ownership(pid: int, port: int) -> bool:
+    """Return whether a process carries Clef's exact managed-port markers."""
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except OSError:
+        return False
+    return (
+        f"{_CLEF_MANAGED_ENV}=1".encode() in entries
+        and f"{_CLEF_PORT_ENV}={port}".encode() in entries
+    )
+
+
+def _wait_for_pidfd_exit(pidfd: int, timeout_s: float) -> bool:
+    """Wait until the exact process captured by *pidfd* exits."""
+    return bool(select.select([pidfd], [], [], timeout_s)[0])
+
+
+def _stop_clef_server(port: int) -> tuple[bool, bool, str]:
+    """Stop only Clef's exact owned listener and observe process exit.
+
+    Returns ``(success, found_listener, message)`` so generic persistent
+    cleanup can dispatch Clef without weakening its pidfd ownership boundary.
+    """
+    pid, checked, listening = pid_on_port_checked(port)
+    if not checked or (listening and pid is None):
+        return False, False, f"cannot inspect ownership of port {port}; not stopping"
+    if not listening:
+        return True, False, "no persistent Clef server is running"
+    assert pid is not None
+    pidfd = None
+    try:
+        pidfd = os.pidfd_open(pid)
+        if not _has_clef_ownership(pid, port):
+            return False, True, f"listener on port {port} is not an owned Clef server; not stopping"
+        if pid_on_port_checked(port) != (pid, True, True):
+            return False, True, f"listener on port {port} changed during inspection; not stopping"
+        signal.pidfd_send_signal(pidfd, signal.SIGTERM)
+        if _wait_for_pidfd_exit(pidfd, _CLEF_STOP_TIMEOUT_S):
+            return True, True, f"stopped Clef server on port {port}"
+        signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+        if _wait_for_pidfd_exit(pidfd, _CLEF_KILL_TIMEOUT_S):
+            return True, True, f"force-stopped Clef server on port {port}"
+    except ProcessLookupError:
+        return True, False, ""
+    except OSError as exc:
+        return False, True, f"cannot track the configured Clef process: {exc}; not stopping"
+    finally:
+        if pidfd is not None:
+            os.close(pidfd)
+    return False, True, f"Clef server on port {port} is still running"
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────

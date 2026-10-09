@@ -120,6 +120,7 @@ def test_known_ports_are_discovered_from_service_yaml() -> None:
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("clef", 8120),
     }
 
 
@@ -237,6 +238,7 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("clef", 8120),
     }
 
 
@@ -270,6 +272,70 @@ def test_starting_profile_stops_unselected_services(
     assert {port for _, port in stopped} == {8107}
 
 
+def test_clef_profile_reuses_existing_listeners_and_starts_only_clef(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.clef.json"
+    processes, credentials = _model_servers._build_processes(profile)
+    assert [process.name for process in processes] == ["clef"]
+    assert processes[0].port == 8120
+    assert credentials == ()
+    config = yaml.safe_load(Path(processes[0].config).read_text())
+    assert config["device"] == "cuda:0"
+    assert config["port"] == 8120
+
+    listeners = {8100, 8103, 8105, 8108, 8109}
+    stopped: list[tuple[str, int]] = []
+
+    def stop(services: list[tuple[str, int]]) -> bool:
+        stopped.extend(services)
+        for _name, port in services:
+            listeners.discard(port)
+        return True
+
+    monkeypatch.setattr(_model_servers, "stop_persistent_servers", stop)
+    _model_servers._stop_unselected_services(processes, profile)
+
+    assert listeners == {8100, 8103, 8105, 8108, 8109}
+    assert 8120 not in {port for _, port in stopped}
+    assert not ({8100, 8103, 8105, 8108, 8109} & {port for _, port in stopped})
+
+
+def test_default_profile_does_not_stop_an_opt_in_clef_listener(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    stopped: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        _model_servers,
+        "stop_persistent_servers",
+        lambda services: stopped.extend(services) or True,
+    )
+
+    processes, _ = _model_servers._build_processes()
+    _model_servers._stop_unselected_services(processes)
+
+    assert ("clef", 8120) not in stopped
+
+
+def test_default_deployment_keeps_clef_opt_in() -> None:
+    default = json.loads(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json")
+        .read_text(encoding="utf-8")
+    )
+    clef = json.loads(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml/models.clef.json")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "decision" not in default["models"]
+    assert clef["models"]["decision"]["deployment"] == {
+        "ownership": "managed",
+        "service": "clef",
+    }
+
+
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
@@ -285,7 +351,7 @@ def test_cli_selects_requested_profile(
     selected: list[Path | None] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p, _profile=None: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
@@ -302,7 +368,7 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
     selected: list[tuple[Path | None, str | None]] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p, _profile=None: None)
     monkeypatch.setattr(
         _model_servers,
         "_build_processes",
@@ -423,7 +489,7 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
         _model_servers, "require_credentials",
         lambda name, **kw: required.append(name),
     )
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p, _profile=None: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda _selection, _gpu_profile=None: ([], ("CUSTOM_API_KEY",)),
