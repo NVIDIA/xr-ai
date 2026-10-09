@@ -2,6 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example only. Ten seconds must not be copied unless instructed.
+# Evaluation follows ../../evaluate-guide/SKILL.md. A simulated clock is
+# unexpired at setup + 9 seconds
+# and expired at setup + 10. These are calculated checks, not measured video
+# duration or production clock calls. Never write the simulated start into YAML.
+# Placement and live clock initialization form ONE setup step. Do not insert
+# another placement step or reuse an already-completed boolean for setup.
+# Evaluation traces the actual setup dispatch: evidence.commit is absent,
+# so the observation agent can call clock__now before committing its result.
+# Missing authoring images belong in review notes, not an automatic (?!) gate.
+# Read the blocked example only if the prerequisite or duration is unresolved;
+# an exact instructed wait with a clear placement uses this normal setup.
 schema_version: 1
 task:
   id: pause_after_placement
@@ -10,7 +21,7 @@ task:
   status: draft
   source_session: example-timer-session
   start_step: place_workpiece
-  foreground_prompt: "Guide placement followed by the instructed elapsed wait. No claim of continuous contact."
+  foreground_prompt: "Guide placement and start its clock, then the elapsed wait. No claim of continuous contact."
   complete_message: "Placement and the elapsed wait are complete."
 state:
   placement_done:

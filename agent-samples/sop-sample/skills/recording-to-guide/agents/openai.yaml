@@ -4,4 +4,4 @@
 interface:
   display_name: "Recording to Guide"
   short_description: "Draft an evidence-linked SOP from a saved capture"
-  default_prompt: "Use $recording-to-guide to read my completed SOP capture and write a draft guide YAML and review notes."
+  default_prompt: "Use $recording-to-guide to author a draft from my SOP capture, evaluate it with $evaluate-guide, and revise it before human review."
