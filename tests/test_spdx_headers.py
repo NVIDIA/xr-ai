@@ -38,10 +38,11 @@ def test_lua_missing_header_is_detected_and_fixed(tmp_path, monkeypatch, capsys,
     assert source.read_text() == text
 
 
-def test_lua_rejects_wrong_comment_marker(tmp_path):
+@pytest.mark.parametrize("line", [0, 1])
+def test_lua_rejects_wrong_comment_marker(tmp_path, line):
     source = tmp_path / "scene.lua"
     header = _CHECKER._build_header(source, "dash").splitlines(keepends=True)
-    header[0] = header[0].replace("--", "#", 1)
+    header[line] = header[line].replace("--", "#", 1)
     source.write_text("".join(header) + "print('scene')\n")
     ok, reason = _CHECKER.check(source)
     assert not ok
@@ -49,12 +50,13 @@ def test_lua_rejects_wrong_comment_marker(tmp_path):
 
 
 @pytest.mark.parametrize("shebang", ["", "#!/usr/bin/env luajit\n"])
-def test_lua_header_allows_spdx_in_body(tmp_path, capsys, shebang):
+@pytest.mark.parametrize("license_id", ["MIT", "Apache-2.0"])
+def test_lua_header_allows_spdx_in_body(tmp_path, capsys, shebang, license_id):
     source = tmp_path / "scene.lua"
     text = (
         shebang
         + _CHECKER._build_header(source, "dash")
-        + 'local s = "SPDX-License-Identifier: MIT"\n'
+        + f'local s = "SPDX-License-Identifier: {license_id}"\n'
     )
     source.write_text(text)
 
@@ -62,6 +64,24 @@ def test_lua_header_allows_spdx_in_body(tmp_path, capsys, shebang):
     for _ in range(2):
         assert _CHECKER.main(["--fix", str(source)]) == 0
         assert source.read_text() == text
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("line", [0, 1])
+def test_lua_header_declaration_in_code_is_detected_and_fixed(tmp_path, capsys, line):
+    source = tmp_path / "scene.lua"
+    header = _CHECKER._build_header(source, "dash").splitlines(keepends=True)
+    header[line] = f'local s = "{header[line].removeprefix("-- ").strip()}"\n'
+    body = "".join(header) + "print('scene')\n"
+    source.write_text(body)
+
+    assert _CHECKER.main([str(source)]) == 1
+    assert _CHECKER.main(["--fix", str(source)]) == 1
+    fixed = source.read_text()
+    assert fixed.endswith(body)
+    assert _CHECKER.main([str(source)]) == 0
+    assert _CHECKER.main(["--fix", str(source)]) == 0
+    assert source.read_text() == fixed
     capsys.readouterr()
 
 
