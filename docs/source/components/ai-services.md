@@ -170,16 +170,17 @@ HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 
 ## Starting without network access
 
-Each model service looks up its model in its Hugging Face cache before it
-contacts the Hub, and loads a cached model from its local path:
+The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:
 
 | Service | Cached artifact | Loaded through |
 |---|---|---|
 | Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
 | STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
 | Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
+| Clef | Complete release at `model_revision`, including the joint head, loader, processor, tokenizer, and backbone shards | Native release loader with the snapshot directory |
 
-A service whose model is cached starts without any network request. Only an
+A listed service whose model is cached starts without any Hub request. Only an
 absent artifact is downloaded. A vLLM snapshot also counts as absent when it is
 incomplete: `config.json`, the weights, or a shard listed by a weight index is
 missing. Pocket TTS accepts its ungated weights when the gated voice-cloning

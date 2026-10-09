@@ -22,6 +22,71 @@ from loguru import logger
 from ._config import ServerConfig, identity
 
 
+def _missing_model_files(directory: Path) -> list[str]:
+    """Check the artifacts consumed by Clef's release loader and processor."""
+    required = (
+        "joint_schema_model.py", "joint_head_config.json", "joint_head.safetensors",
+        "config.json", "processor_config.json", "tokenizer.json",
+        "tokenizer_config.json", "chat_template.jinja",
+    )
+    missing = [name for name in required if not (directory / name).is_file()]
+    index = directory / "model.safetensors.index.json"
+    if index.is_file():
+        try:
+            weights = json.loads(index.read_text())["weight_map"]
+            if not isinstance(weights, dict) or not weights or not all(
+                isinstance(name, str) and name for name in weights.values()
+            ):
+                raise ValueError("invalid weight map")
+        except (OSError, ValueError, KeyError, TypeError):
+            missing.append(index.name)
+        else:
+            missing.extend(sorted({name for name in weights.values() if not (directory / name).is_file()}))
+    elif not (directory / "model.safetensors").is_file():
+        missing.append("model.safetensors or model.safetensors.index.json")
+    return missing
+
+
+def _resolve_model_directory(config: ServerConfig) -> Path:
+    """Resolve a complete cached Clef release before trying the Hub."""
+    if config.model_path is not None:
+        if not config.model_path.is_dir():
+            raise ValueError(f"model_path is not a directory: {config.model_path}")
+        return config.model_path
+
+    from huggingface_hub import constants, snapshot_download
+    from huggingface_hub.utils import LocalEntryNotFoundError
+
+    config.model_cache.mkdir(parents=True, exist_ok=True)
+    lookup = {
+        "repo_id": config.model_name,
+        "revision": config.model_revision,
+        "cache_dir": config.model_cache,
+    }
+    missing = ["model snapshot"]
+    try:
+        directory = Path(snapshot_download(**lookup, local_files_only=True))
+    except LocalEntryNotFoundError:
+        pass
+    else:
+        missing = _missing_model_files(directory)
+        if not missing:
+            return directory
+
+    description = f"{config.model_name} (revision {config.model_revision})"
+    if constants.HF_HUB_OFFLINE:
+        raise RuntimeError(
+            f"{description} is not fully cached under {config.model_cache}, and "
+            f"HF_HUB_OFFLINE is set. Missing: {', '.join(missing)}. "
+            "Start once with network access to download it, or unset HF_HUB_OFFLINE."
+        )
+    directory = Path(snapshot_download(**lookup))
+    missing = _missing_model_files(directory)
+    if missing:
+        raise RuntimeError(f"downloaded snapshot of {description} at {directory} is missing: {', '.join(missing)}")
+    return directory
+
+
 class ClefBackend:
     """Own the downloaded code, model, processor, and serialized GPU calls."""
 
@@ -35,22 +100,8 @@ class ClefBackend:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clef-inference")
 
     def load(self) -> None:
+        model_dir = _resolve_model_directory(self.config)
         import torch
-        from huggingface_hub import snapshot_download
-
-        if self.config.model_path is not None:
-            model_dir = self.config.model_path
-            if not model_dir.is_dir():
-                raise ValueError(f"model_path is not a directory: {model_dir}")
-        else:
-            self.config.model_cache.mkdir(parents=True, exist_ok=True)
-            model_dir = Path(
-                snapshot_download(
-                    repo_id=self.config.model_name,
-                    revision=self.config.model_revision,
-                    cache_dir=self.config.model_cache,
-                )
-            )
         source = model_dir / "joint_schema_model.py"
         if not source.is_file():
             raise ValueError(f"missing upstream model implementation: {source}")
