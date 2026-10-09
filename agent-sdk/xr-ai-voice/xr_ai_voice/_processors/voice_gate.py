@@ -35,7 +35,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate, VoiceGateConfig
-from xr_ai_voicegate._phrases import STOP_RE, strip_magic
+from xr_ai_voicegate._phrases import strip_magic
 from xr_ai_voicegate._conversation import _ControlMatcher
 
 from .._audio import wav_to_output_frames
@@ -124,7 +124,7 @@ class VoiceGateProcessor(FrameProcessor):
             if pid not in self._conversation_active or cfg._could_be_control(text):
                 return False
             if not cfg.require_wake_phrase:
-                return bool(STOP_RE.match(text))
+                return self._gate._matches_stop(text)
         if self._gate._matches_partial_stop(text):
             return True
         if self._gate.matches_magic_phrase(text):
@@ -253,7 +253,7 @@ class VoiceGateProcessor(FrameProcessor):
             await self._gate.feed(pid, frame.text)
             return
         text = frame.text
-        if text and STOP_RE.match(text):
+        if text and self._gate._matches_stop(text):
             await self._on_gate_stop(pid)
         elif text:
             await self._on_gate_query(pid, text, False)

@@ -22,7 +22,7 @@ import io
 import wave
 import warnings
 from typing import Any, AsyncIterator, Sequence
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import nemo_relay
 import numpy as np
@@ -670,42 +670,85 @@ async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("conversation", ["off", "open", "closed"])
+@pytest.mark.parametrize("wake_phrase", [False, True])
+@pytest.mark.parametrize("stop_enabled", [False, True])
 @pytest.mark.parametrize("text", ["stop", "stop recording"])
-async def test_passive_narration_disables_probes_but_keeps_final_stop_transcript(monkeypatch, text):
+async def test_stop_policy_with_probes_and_final_transcripts(
+    monkeypatch, conversation, wake_phrase, stop_enabled, text,
+):
+    from xr_ai_voice._transport import HubVoiceTransport
+    from xr_ai_voicegate._conversation import _ConversationConfig
+
     _StagedVad.instances.clear()
-    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
-    stt = _StagedStt(texts=[text])
-    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0))
-    gate_proc = VoiceGateProcessor(cfg=VoiceGateConfig(stop_commands_enabled=False), tts=Mock())
-    sink = _CaptureSink()
-    worker = PipelineWorker(
-        Pipeline([proc, gate_proc, sink]), cancel_on_idle_timeout=False, enable_rtvi=False
+    cfg = VoiceGateConfig(
+        magic_phrases=("hey agent",) if wake_phrase else (),
+        listening_chime=False,
+        stop_commands_enabled=stop_enabled,
     )
-    runner = WorkerRunner()
-    await runner.add_workers(worker)
+    if conversation != "off":
+        object.__setattr__(cfg, "_conversation", _ConversationConfig(require_wake_phrase=False))
+    stt = _StagedStt(texts=[], default="stop")
+    transcripts = AsyncMock()
+    transport = HubVoiceTransport()
+    pipeline, _worker = _build_voice_pipeline(
+        transport=transport, stt=stt, tts=_FakeTts(), io_processor=_EchoAssistant(),
+        vad_cfg=VadConfig(stop_probe_after_s=0.001), voice_gate_cfg=cfg,
+        on_final_transcript=transcripts,
+    )
+    proc, gate = pipeline.processors[2:4]
+    emitted = []
+
+    async def to_gate(frame, *_args):
+        if isinstance(frame, TranscriptionFrame):
+            await gate._handle_transcription(frame)
+        else:
+            emitted.append(frame)
+
+    proc.push_frame = to_gate
+    gate.push_frame = AsyncMock(side_effect=lambda frame, *_args: emitted.append(frame))
+    if conversation == "open":
+        gate._conversation_active.add("web-client")
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
+    final_text = f"hey agent {text}" if wake_phrase and conversation == "off" else text
+    active = conversation != "closed"
+    try:
+        await proc._handle_audio(frame)
+        await asyncio.wait_for(proc._probe_task["web-client"], timeout=2)
+        assert stt.calls, "Probing must remain enabled even when STOP is disabled."
+        assert any(isinstance(f, InterruptionFrame) for f in emitted) == (active and stop_enabled)
+        assert not any(isinstance(f, TextFrame) for f in emitted), "Partial STOP must not acknowledge."
+        transcripts.assert_not_awaited()
+        emitted.clear()
 
-    async def drive():
-        await worker.queue_frame(frame)
-        async with asyncio.timeout(2):
-            while not _StagedVad.instances:
-                await asyncio.sleep(0.001)
-        await asyncio.sleep(0.3)  # Beyond the default early-probe interval.
-        assert not stt.calls
-        assert not proc._probe_task
+        stt.texts = [final_text]
         await _StagedVad.instances[-1].trigger_utterance()
-        async with asyncio.timeout(2):
-            while not any(isinstance(f, GatedQueryFrame) for f in sink.frames):
-                await asyncio.sleep(0.001)
-        await worker.queue_frame(EndFrame())
+        final_stop = active and stop_enabled and text == "stop"
+        assert any(isinstance(f, InterruptionFrame) for f in emitted) == final_stop
+        assert [f.text for f in emitted if isinstance(f, TextFrame)] == (
+            ["Okay, I will stop."] if final_stop else []
+        )
+        assert [f.text for f in emitted if isinstance(f, GatedQueryFrame)] == (
+            [text] if active and not final_stop else []
+        )
+        assert [call.args[1] for call in transcripts.await_args_list] == ([final_text] if active else [])
+    finally:
+        await proc.cleanup()
+        await gate.cleanup()
+        transport.shutdown()
 
-    await asyncio.gather(runner.run(), drive())
-    assert len(stt.calls) == 1
-    assert [f.text for f in sink.frames if isinstance(f, GatedQueryFrame)] == [text]
-    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames)
-    assert not any(isinstance(f, TextFrame) and f.text == "Okay, I will stop." for f in sink.frames)
+
+@pytest.mark.asyncio
+async def test_disabling_stop_preserves_partial_wake_acknowledgment():
+    gate = VoiceGateProcessor(
+        cfg=VoiceGateConfig(magic_phrases=("hey agent",), stop_commands_enabled=False),
+        tts=_FakeTts(),
+    )
+    gate._emit_chime = AsyncMock()
+    assert not await gate.handle_partial_transcript("web-client", "hey agent")
+    gate._emit_chime.assert_awaited_once_with("web-client", early=True)
 
 
 @pytest.mark.asyncio

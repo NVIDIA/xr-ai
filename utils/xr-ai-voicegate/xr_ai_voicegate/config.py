@@ -59,12 +59,14 @@ class VoiceGateConfig:
     """
 
     stop_commands_enabled: bool = True
-    """Whether final or partial STOP utterances trigger the stop handler.
+    """Whether STOP recognition interrupts speech or invokes the stop handler.
 
-    Disable for passive transcription: STOP words then follow normal query
-    gating, without invoking this gate's stop handler or stop acknowledgement.
-    This does not disable upstream VAD interruptions; passive voice consumers
-    must also disable early transcription probes in their VAD configuration.
+    Applies to early probes and final transcripts, including conversations
+    without a wake phrase. Disable for passive narration: STOP words then
+    follow normal transcript and query gating without a STOP interruption or
+    acknowledgement. Probes may remain enabled for wake acknowledgements.
+    This does not disable other conversation controls or speech-start events.
+    Scoped application commands such as "stop recording" remain queries.
     """
 
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
