@@ -20,7 +20,6 @@ after checking available GPU memory:
 max_length: 8192
 ```
 
-Hugging Face reuses the pinned snapshot from `model_cache` on later launches.
 Refer to the generated
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
 for the remaining checked-in fields and comments.

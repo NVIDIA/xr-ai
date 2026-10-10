@@ -43,9 +43,9 @@ uv run clef_flash_model
 The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
 Its `yaml/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
-`Cloudflare/clef-flash` model repository and downloads it into the repository's
-ignored `models/` cache. The service resolves the configured pinned snapshot
-from that cache first and passes its directory to the native loader. A cache
+`Cloudflare/clef-flash` model repository. The service resolves the configured
+pinned snapshot from the repository's ignored `models/` cache first and passes
+its directory to the native loader. A cache
 miss follows the online download path; with `HF_HUB_OFFLINE=1`, it fails before
 model loading with the model, revision, and cache directory. Offline startup
 assumes a previously working cache. Refer to

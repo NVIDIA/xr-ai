@@ -7,11 +7,14 @@
 
 ## Clef model cache configuration
 
-Remove `model_path` from Clef server YAML files. Clef always resolves the
-pinned `model_name` and `model_revision` through Hugging Face Hub using
-`model_cache`; an existing cached snapshot is reused automatically. Set
-`model_cache` to the desired cache root instead of pointing at an extracted
-snapshot directory. Before restarting, stop a running Clef server from
+Remove `model_path` from Clef server YAML files. Clef first resolves the
+pinned `model_name` and `model_revision` from the Hugging Face cache under
+`model_cache`; only a cache miss follows the online download path. Set
+`model_cache` to a Hugging Face cache root, not an extracted snapshot directory:
+a directory created with `hf download --local-dir` or git-lfs does not have
+the required cache layout. Refer to
+{ref}`starting-model-services-without-network-access` for cache preparation
+and offline startup. Before restarting, stop a running Clef server from
 `model-server-samples/clef-flash/`:
 
 ```bash
