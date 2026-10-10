@@ -20,7 +20,6 @@ after checking available GPU memory:
 max_length: 8192
 ```
 
-Set `model_path` only when you have an extracted copy of the pinned snapshot.
 Refer to the generated
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
 for the remaining checked-in fields and comments.

@@ -88,7 +88,6 @@ def _config(tmp_path: Path, *, max_body_bytes: int = 1024) -> ServerConfig:
     return ServerConfig(
         model_name="Cloudflare/clef-flash",
         model_revision=REVISION,
-        model_path=None,
         model_cache=tmp_path / "cache",
         host="127.0.0.1",
         port=8120,
@@ -114,14 +113,13 @@ def _request(**overrides) -> dict:
     return {**body, **overrides}
 
 
-def test_config_resolves_model_paths_relative_to_yaml(tmp_path: Path) -> None:
+def test_config_resolves_model_cache_relative_to_yaml(tmp_path: Path) -> None:
     yaml_path = tmp_path / "yaml" / "clef.yaml"
     yaml_path.parent.mkdir()
-    yaml_path.write_text(f"model_revision: {REVISION}\nmodel_path: ../weights\nmodel_cache: ../cache\n")
+    yaml_path.write_text(f"model_revision: {REVISION}\nmodel_cache: ../cache\n")
 
     config = load_config(yaml_path)
 
-    assert config.model_path == (tmp_path / "weights").resolve()
     assert config.model_cache == (tmp_path / "cache").resolve()
     assert config.port == 8120
 
@@ -388,7 +386,17 @@ import uvicorn
 from clef_server._config import ServerConfig, DEFAULT_REVISION
 from clef_server._service import create_app
 root=Path(sys.argv[1]);port=int(sys.argv[2])
-cfg=ServerConfig('test',DEFAULT_REVISION,None,root,'127.0.0.1',port,'cpu','float32',256,4096)
+cfg=ServerConfig(
+    model_name='test',
+    model_revision=DEFAULT_REVISION,
+    model_cache=root,
+    host='127.0.0.1',
+    port=port,
+    device='cpu',
+    dtype='float32',
+    max_length=256,
+    max_body_bytes=4096,
+)
 class Backend:
     model=object();revision=DEFAULT_REVISION;config=cfg
     executor=ThreadPoolExecutor(max_workers=1)
