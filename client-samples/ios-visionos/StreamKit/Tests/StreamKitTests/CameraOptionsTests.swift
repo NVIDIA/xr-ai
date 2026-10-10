@@ -43,9 +43,9 @@ struct CameraOptionsTests {
     @Test func invalidMutablePolicyIsRejectedWhenConsumed() {
         var policy = CameraEncodingConfig()
         policy.maxBitrateBps = 0
-        #expect(throws: StreamError.self) { try cameraPublishOptions(policy, defaults: VideoPublishOptions()) }
+        #expect(throws: StreamKit.StreamError.self) { try cameraPublishOptions(policy, defaults: VideoPublishOptions()) }
         policy.maxBitrateBps = 1
         policy.maxFramerate = -1
-        #expect(throws: StreamError.self) { try cameraPublishOptions(policy, defaults: VideoPublishOptions()) }
+        #expect(throws: StreamKit.StreamError.self) { try cameraPublishOptions(policy, defaults: VideoPublishOptions()) }
     }
 }
