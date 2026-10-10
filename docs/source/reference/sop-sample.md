@@ -94,8 +94,12 @@ Generated data remains local and Git-ignored. Defaults are relative to the sampl
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 | `artifacts/captures/<bundle>/` | Optional participant-wide media, transcripts, timeline, and manifest from `--capture` |
 
-The captioner checks for a new sampled frame every 5 seconds by default, with
-the previous caption as context. It does not recaption the same saved image.
+The captioner checks for a new sampled frame every 5 seconds by default. Each
+request compares two saved images in chronological order: the previous
+successfully captioned frame, then the current frame. The first caption of each
+recording uses only the initial image. Previous caption text is not sent to the
+model, and it does not recaption the same saved image. The prompt asks for visible
+actions, object details, and changes without assuming hidden actions or completion.
 On-demand cadence depends on client response time; 2 fps is a target, not a
 guarantee. Captions are observations, not verified SOP steps.
 
