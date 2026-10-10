@@ -66,6 +66,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     /// Publication for the buffer-capturer track. Published after the first injected frame.
     private var bufferPublication: LocalTrackPublication?
+    private var cameraPublishDefaults = VideoPublishOptions()
 
     /// Currently active local camera track (device camera, ARKit, or simulator
     /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
@@ -158,6 +159,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         room.delegates.add(delegate: self)
 
         let roomOptions = RoomOptions(stopLocalTrackOnUnpublish: true)
+        cameraPublishDefaults = roomOptions.defaultVideoPublishOptions
         // Audio isolation: when hubIdentity is set, disable auto-subscribe and
         // subscribe only to the hub participant's tracks (post-connect below +
         // the didPublishTrack delegate), so a client never receives another
@@ -243,10 +245,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     // MARK: - StreamingBackend: camera
 
+    private func videoPublishOptions(_ encoding: CameraEncodingConfig?) throws -> VideoPublishOptions? {
+        try cameraPublishOptions(encoding, defaults: cameraPublishDefaults)
+    }
+
     public func startCamera(config: CameraConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
+
+        let publishOptions = try videoPublishOptions(config.encoding)
 
         // Stop any currently active camera before starting a new one.
         try await stopCamera()
@@ -277,7 +285,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         if let seed = seedBuffer, let capturer = simTrack.capturer as? BufferCapturer {
             capturer.capture(seed)
         }
-        bufferPublication = try await room.localParticipant.publish(videoTrack: simTrack)
+        bufferPublication = try await room.localParticipant.publish(videoTrack: simTrack, options: publishOptions)
         localCameraTrack = simTrack
         simulatorFrameTask = Task { [weak self] in
             await self?.runSimulatorFrameLoop(startingAt: 1)
@@ -287,13 +295,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // ARKit passthrough camera — device only, requires an open ImmersiveSpace and
         // the com.apple.developer.arkit.main-camera-access.allow enterprise entitlement.
         let track = makeVisionOSTrack()
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        cameraPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
         localCameraTrack = track
 
         #else
         // Physical iOS/iPadOS camera.
         let track = makeIOSTrack(config: config)
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        cameraPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
         localCameraTrack = track
         #endif
     }
@@ -382,9 +390,17 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     ///   (`kCVPixelFormatType_420YpCbCr8BiPlanarFullRange`, `kCVPixelFormatType_32BGRA`, etc.).
     /// - Throws: ``StreamError/notConnected`` if not connected.
     public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws {
+        try await injectVideoFrame(sampleBuffer, encoding: nil)
+    }
+
+    public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
+                                 encoding: CameraEncodingConfig?) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
+        // Subsequent frames retain the publication's policy. Validate/map only
+        // when these options can actually be consumed by a first publication.
+        let publishOptions = bufferPublication == nil ? try videoPublishOptions(encoding) : nil
 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
@@ -411,7 +427,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
         // Publish the track lazily — dimensions are now known from the frame above.
         if bufferPublication == nil {
-            bufferPublication = try await room.localParticipant.publish(videoTrack: track)
+            bufferPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
         }
     }
 

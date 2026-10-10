@@ -28,6 +28,6 @@ export { ConnectionState }                        from './ConnectionState.js';
 export { NetworkMetrics, NetworkQuality }          from './NetworkMetrics.js';
 export { StreamError }                            from './StreamError.js';
 export { AudioConfig, MicrophoneMode }            from './Config/AudioConfig.js';
-export { CameraConfig, CameraFacing }             from './Config/CameraConfig.js';
+export { CameraConfig, CameraFacing, CameraEncodingConfig, VideoQualityPreference } from './Config/CameraConfig.js';
 export { SessionConfig }                          from './Config/SessionConfig.js';
 export { BackendConfiguration, LiveKitConfig }    from './Config/BackendConfiguration.js';

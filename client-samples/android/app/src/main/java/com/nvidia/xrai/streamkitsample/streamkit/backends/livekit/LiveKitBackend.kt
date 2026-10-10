@@ -16,6 +16,8 @@ import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.VideoQualityPreference
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.ConnectOptions
@@ -27,6 +29,7 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
+import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
@@ -34,6 +37,8 @@ import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoCaptureParameter
+import io.livekit.android.room.track.VideoEncoding
+import livekit.org.webrtc.RtpParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -131,7 +136,9 @@ internal class LiveKitBackend(
     /** Custom capturer that lets us push externally-sourced frames into LiveKit. */
     @Volatile private var injectedCapturer: InjectedVideoCapturer? = null
     private var injectedVideoTrack: LocalVideoTrack? = null
-    private val injectedVideoMutex = Mutex()
+    // Device capture and injected frames share the SDK's CAMERA publication.
+    private val cameraMutex = Mutex()
+    private var cameraPublishBaseline: VideoTrackPublishDefaults? = null
 
     // ── StreamingBackend: connect / disconnect ─────────────────────────────────
 
@@ -150,6 +157,7 @@ internal class LiveKitBackend(
 
         val newRoom = LiveKit.create(appContext)
         room = newRoom
+        cameraPublishBaseline = newRoom.localParticipant.videoTrackPublishDefaults
 
         val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         connectionScope = scope
@@ -226,10 +234,36 @@ internal class LiveKitBackend(
 
     // ── StreamingBackend: camera ───────────────────────────────────────────────
 
-    override suspend fun startCamera(config: CameraConfig) {
+    private fun videoPublishDefaults(encoding: CameraEncodingConfig?): VideoTrackPublishDefaults {
+        val current = room?.localParticipant?.videoTrackPublishDefaults ?: VideoTrackPublishDefaults()
+        val baseline = cameraPublishBaseline ?: current
+        val preference = when (encoding?.qualityPreference) {
+            VideoQualityPreference.DETAIL -> RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            VideoQualityPreference.MOTION -> RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+            VideoQualityPreference.BALANCED -> RtpParameters.DegradationPreference.BALANCED
+            null -> baseline.degradationPreference
+        }
+        return current.copy(
+            videoEncoding = encoding?.let { VideoEncoding(it.maxBitrateBps, it.maxFramerate) } ?: baseline.videoEncoding,
+            simulcast = encoding?.simulcast ?: baseline.simulcast,
+            degradationPreference = preference,
+        )
+    }
+
+    override suspend fun startCamera(config: CameraConfig) = cameraMutex.withLock {
         if (!isConnected) throw StreamError.CameraRequiresConnection
 
-        val lp = room?.localParticipant ?: return
+        val lp = room?.localParticipant ?: throw StreamError.CameraRequiresConnection
+        val publishDefaults = videoPublishDefaults(config.encoding)
+        // A muted camera keeps its publication and encoding options. Republish
+        // when changing policy so stop/start cannot retain the previous one.
+        if (injectedVideoTrack != null || lp.videoTrackPublishDefaults != publishDefaults) {
+            val previous = lp.getTrackPublication(Track.Source.CAMERA)?.track
+            val wasInjected = injectedVideoTrack != null
+            stopCameraLocked()
+            if (!wasInjected) previous?.let { lp.unpublishTrack(it) }
+            lp.videoTrackPublishDefaults = publishDefaults
+        }
         val position = when (config.facing) {
             CameraConfig.CameraFacing.FRONT -> CameraPosition.FRONT
             CameraConfig.CameraFacing.BACK  -> CameraPosition.BACK
@@ -244,21 +278,20 @@ internal class LiveKitBackend(
             position = position,
         )
         lp.setCameraEnabled(true)
+        Unit
     }
 
-    override suspend fun stopCamera() {
-        injectedVideoMutex.withLock {
-            val track = injectedVideoTrack
-            if (track != null) {
-                // unpublishTrack with default stopOnUnpublish=true already
-                // calls track.stop() + track.dispose() — calling them again
-                // races MediaCodec's event handler against its torn-down
-                // thread ("Handler on a dead thread" IllegalStateException).
-                room?.localParticipant?.unpublishTrack(track)
-                injectedVideoTrack = null
-                injectedCapturer = null
-                return
-            }
+    override suspend fun stopCamera() = cameraMutex.withLock { stopCameraLocked() }
+
+    /** Caller owns cameraMutex; never re-enter the public stop operation. */
+    private suspend fun stopCameraLocked() {
+        val track = injectedVideoTrack
+        if (track != null) {
+            // The SDK owns stop/dispose for a published track; don't do both.
+            room?.localParticipant?.unpublishTrack(track)
+            injectedVideoTrack = null
+            injectedCapturer = null
+            return
         }
         room?.localParticipant?.setCameraEnabled(false)
     }
@@ -294,24 +327,27 @@ internal class LiveKitBackend(
         width: Int,
         height: Int,
         timestampUs: Long,
-    ) {
-        if (!isConnected) throw StreamError.NotConnected
+    ) = injectVideoFrame(i420, width, height, timestampUs, null)
 
-        // Fast path — track already exists. Take the same mutex that
-        // stopCamera()/tearDown() use when they clear and dispose the
-        // capturer, so a concurrent teardown cannot dispose the native
-        // capturer between the null-check and pushI420Frame (use-after-dispose).
-        injectedVideoMutex.withLock {
+    override suspend fun injectVideoFrame(
+        i420: ByteBuffer,
+        width: Int,
+        height: Int,
+        timestampUs: Long,
+        encoding: CameraEncodingConfig?,
+    ) {
+        cameraMutex.withLock {
+            // Recheck after waiting: teardown closes admission before acquiring
+            // the lock, so a queued frame cannot recreate a disconnected track.
+            if (!isConnected) throw StreamError.NotConnected
             injectedCapturer?.let {
                 it.pushI420Frame(i420, width, height, timestampUs)
                 return
             }
-        }
-        // Slow path — first frame: create + publish track under the mutex.
-        val capturer = injectedVideoMutex.withLock {
-            injectedCapturer?.let { return@withLock it }
-
             val lp = room?.localParticipant ?: throw StreamError.NotConnected
+            // Switch source by exact track identity while owning the entire
+            // transaction, not a CAMERA lookup after a suspended stop.
+            lp.getTrackPublication(Track.Source.CAMERA)?.track?.let { lp.unpublishTrack(it) }
             val newCapturer = InjectedVideoCapturer()
             val track = lp.createVideoTrack(
                 name = "injected-video",
@@ -321,16 +357,31 @@ internal class LiveKitBackend(
                     captureParams = VideoCaptureParameter(width, height, 30),
                 ),
             )
-            track.startCapture()
-            // Publish as the CAMERA source so it appears in the local preview
-            // (CameraPreviewView reads getTrackPublication(Track.Source.CAMERA))
-            // and is treated as the participant's camera feed by the hub.
-            lp.publishVideoTrack(track, VideoTrackPublishOptions(source = Track.Source.CAMERA))
-            injectedVideoTrack = track
-            injectedCapturer = newCapturer
-            newCapturer
+            try {
+                track.startCapture()
+                // Publish as CAMERA for both the preview and the hub.
+                check(lp.publishVideoTrack(track, VideoTrackPublishOptions(
+                    base = videoPublishDefaults(encoding), source = Track.Source.CAMERA,
+                ))) { "Injected camera publication failed" }
+                injectedVideoTrack = track
+                injectedCapturer = newCapturer
+                // First delivery has the same lifetime protection as cached
+                // pushes: stop/switch cannot dispose the capturer in between.
+                newCapturer.pushI420Frame(i420, width, height, timestampUs)
+            } catch (error: Throwable) {
+                injectedVideoTrack = null
+                injectedCapturer = null
+                // Publish can fail/cancel before the SDK owns the track. Its
+                // unpublish operation is a no-op for an unpublished track.
+                if (lp.getTrackPublication(Track.Source.CAMERA)?.track === track) {
+                    lp.unpublishTrack(track)
+                } else {
+                    track.stop()
+                    track.dispose()
+                }
+                throw error
+            }
         }
-        capturer.pushI420Frame(i420, width, height, timestampUs)
     }
 
     // ── StreamingBackend: data channel ─────────────────────────────────────────
@@ -637,16 +688,17 @@ internal class LiveKitBackend(
         // room teardown itself unpublishes tracks (which stops + disposes
         // them); avoid a manual stop()/dispose() here so we don't race the
         // MediaCodec event handler against its own torn-down thread.
-        injectedVideoMutex.withLock {
+        cameraMutex.withLock {
             val track = injectedVideoTrack
             if (track != null) {
                 runCatching { room?.localParticipant?.unpublishTrack(track) }
             }
             injectedVideoTrack = null
             injectedCapturer = null
+            room?.disconnect()
+            room = null
+            cameraPublishBaseline = null
         }
-        room?.disconnect()
-        room = null
         // connectionScope.cancel() above stops the RoomEvent collector, so this
         // is the single DISCONNECTED notification emitted per teardown.
         onConnectionStateChanged?.invoke(ConnectionState.DISCONNECTED)

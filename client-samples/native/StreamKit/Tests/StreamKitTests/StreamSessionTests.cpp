@@ -166,6 +166,7 @@ int main() {
         .max_bitrate_bps = 2'500'000,
         .max_framerate = 21.0,
         .simulcast = false,
+        .quality_preference = streamkit::VideoQualityPreference::kDetail,
     };
     session.StartCamera(encoded_camera);
     ExpectEq(raw->start_camera_calls, 2);
@@ -175,6 +176,8 @@ int main() {
     ExpectEq(raw->last_camera_config.encoding->max_framerate, 21.0);
     Expect(raw->last_camera_config.encoding->simulcast.has_value());
     Expect(!*raw->last_camera_config.encoding->simulcast);
+    Expect(raw->last_camera_config.encoding->quality_preference
+           == streamkit::VideoQualityPreference::kDetail);
 
     // ── Send + data delivery ───────────────────────────────────────────────
     const std::string msg = "hello";

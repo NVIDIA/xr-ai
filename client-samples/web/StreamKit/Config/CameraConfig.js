@@ -29,12 +29,71 @@ export const CameraFacing = Object.freeze({
   BACK: 'environment',
 });
 
+/** Encoder tradeoff under resource or bandwidth pressure; never a quality guarantee. */
+export const VideoQualityPreference = Object.freeze({
+  BALANCED: 'balanced',
+  /** Favor resolution over frame rate. */
+  DETAIL: 'detail',
+  /** Favor frame rate over resolution. */
+  MOTION: 'motion',
+});
+
+/**
+ * Optional publishing policy. Limits apply to each encoded stream, not aggregate
+ * network traffic. Capture format is unchanged. Backends apply supported settings.
+ * The detail preset disables multiple-resolution publication and favors resolution
+ * over FPS; it does not guarantee minimum resolution or frame delivery.
+ * Defaults for an explicitly supplied policy are 3 Mbps and 30 FPS.
+ * Restart the camera to apply changes; these are not live setters.
+ */
+export class CameraEncodingConfig {
+  /**
+   * @param {object} [opts]
+   * @param {number} [opts.maxBitrateBps=3000000] Positive integer, bits per second.
+   * @param {number} [opts.maxFramerate=30] Positive integer, frames per second.
+   * @param {string|null} [opts.qualityPreference=null] Null preserves backend default.
+   * @param {boolean|null} [opts.simulcast=null] Publish multiple resolutions when supported.
+   */
+  constructor({ maxBitrateBps = 3_000_000, maxFramerate = 30,
+    qualityPreference = null, simulcast = null } = {}) {
+    for (const [name, value] of Object.entries({ maxBitrateBps, maxFramerate })) {
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new RangeError(`${name} must be a positive integer`);
+      }
+    }
+    if (qualityPreference !== null && !Object.values(VideoQualityPreference).includes(qualityPreference)) {
+      throw new TypeError('Unknown video quality preference');
+    }
+    if (simulcast !== null && typeof simulcast !== 'boolean') {
+      throw new TypeError('simulcast must be a boolean or null');
+    }
+    this.maxBitrateBps = maxBitrateBps;
+    this.maxFramerate = maxFramerate;
+    this.qualityPreference = qualityPreference;
+    this.simulcast = simulcast;
+    Object.freeze(this);
+  }
+
+  /** @returns {CameraEncodingConfig} Favor resolution and disable simulcast. */
+  static get detail() {
+    return new CameraEncodingConfig({ qualityPreference: VideoQualityPreference.DETAIL, simulcast: false });
+  }
+  /** @returns {CameraEncodingConfig} Favor frame rate; leave simulcast at backend default. */
+  static get motion() {
+    return new CameraEncodingConfig({ qualityPreference: VideoQualityPreference.MOTION });
+  }
+  /** @returns {CameraEncodingConfig} Allow both resolution and frame rate to adapt. */
+  static get balanced() {
+    return new CameraEncodingConfig({ qualityPreference: VideoQualityPreference.BALANCED });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Configures camera capture for a {@link StreamSession}.
  *
- * Resolution and frame-rate are intentionally not exposed here: the browser
+ * Capture resolution and frame-rate are intentionally not exposed here: the browser
  * selects a supported native format without forcing an aspect ratio, matching
  * the behaviour of the Swift SDK on iOS and visionOS.
  *
@@ -65,16 +124,21 @@ export class CameraConfig {
    */
   #deviceId;
 
+  /** @type {CameraEncodingConfig|null} Optional publish-side policy. */
+  #encoding;
+
   /**
    * @param {object}       [opts]
    * @param {boolean}      [opts.enabled=true]
    * @param {string}       [opts.facing=CameraFacing.FRONT]
    * @param {string|null}  [opts.deviceId=null]
+   * @param {CameraEncodingConfig|null} [opts.encoding=null] Null preserves backend defaults.
    */
-  constructor({ enabled = true, facing = CameraFacing.FRONT, deviceId = null } = {}) {
+  constructor({ enabled = true, facing = CameraFacing.FRONT, deviceId = null, encoding = null } = {}) {
     this.#enabled  = enabled;
     this.#facing   = facing;
     this.#deviceId = deviceId;
+    this.encoding = encoding;
   }
 
   /** @returns {boolean} Whether the camera should be captured and streamed. */
@@ -97,6 +161,10 @@ export class CameraConfig {
    */
   get deviceId() { return this.#deviceId; }
   set deviceId(v) { this.#deviceId = v; }
+
+  /** @returns {CameraEncodingConfig|null} Publish-side policy for the next camera start. */
+  get encoding() { return this.#encoding; }
+  set encoding(v) { this.#encoding = v == null ? null : new CameraEncodingConfig(v); }
 
   // -------------------------------------------------------------------------
   // Presets

@@ -11,6 +11,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import java.io.File
 import java.nio.ByteBuffer
@@ -125,6 +126,15 @@ interface StreamingBackend {
      * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
      */
     suspend fun injectVideoFrame(i420: ByteBuffer, width: Int, height: Int, timestampUs: Long)
+
+    /**
+     * Encoding applies when the first frame publishes the track. Stop the camera
+     * before changing it. Existing custom backends apply only supported settings.
+     */
+    suspend fun injectVideoFrame(
+        i420: ByteBuffer, width: Int, height: Int, timestampUs: Long,
+        encoding: CameraEncodingConfig?,
+    ) = injectVideoFrame(i420, width, height, timestampUs)
 
     // ── Data channel ──────────────────────────────────────────────────────────
 
