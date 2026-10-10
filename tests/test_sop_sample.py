@@ -85,7 +85,7 @@ async def demo(tmp_path):
     )))
     recorder = RecorderAgent(
         sessions_dir=tmp_path / "sessions", current_frame=frames, images=images,
-        query_image=captioner, capture_fps=2, caption_interval_s=5,
+        query_images=captioner, capture_fps=2, caption_interval_s=5,
     )
     capture = CaptureRecording(recorder)
     try:
@@ -459,6 +459,87 @@ async def test_on_demand_images_and_republished_stream_are_distinct(demo, monkey
     await speak(demo, 'stop recording')
     packet = json.loads((state.directory / "packet.json").read_text())
     assert packet["counts"]["frames"] == packet["counts"]["captions"] == 5
+
+
+@pytest.fixture
+async def manual_caption_demo(demo, monkeypatch):
+    async def idle(_state):
+        await asyncio.Future()
+
+    monkeypatch.setattr(demo.recorder, "_capture_loop", idle)
+    monkeypatch.setattr(demo.recorder, "_caption_loop", idle)
+    await demo.capture.receive(joined())
+    return demo
+
+
+async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption_demo):
+    from xr_ai_tools.vision import MultiImageQueryTool
+
+    demo = manual_caption_demo
+    prompt = load_config(_SAMPLE / "yaml/worker.yaml").caption_prompt
+    response = demo.captioner.execute.return_value.text
+    vlm = Mock(ask_images=AsyncMock(return_value=SimpleNamespace(content=response)))
+    demo.recorder._query_images = MultiImageQueryTool(
+        images=demo.recorder._images, vlm=vlm, system_prompt=prompt,
+    )
+    source = demo.frames.execute.return_value
+    for _ in range(2):
+        await speak(demo, "start recording")
+        state = demo.recorder._sessions["user"]
+        paths = []
+        for timestamp in (100, 200, 300):
+            demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": timestamp})
+            await demo.recorder._capture(state)
+            paths.append(state.directory / state.latest_frame.path)
+            if timestamp == 200:
+                continue  # Sampling is faster than captioning; compare captioned frames.
+            await demo.recorder._caption(state)
+        assert vlm.ask_images.await_args_list[-2].args[0] == [paths[0]]
+        call = vlm.ask_images.await_args_list[-1]
+        assert call.args[0] == [paths[0], paths[2]]
+        assert all(path.is_file() for path in call.args[0])
+        assert call.kwargs["system_prompt"] == prompt
+        assert "A blue block" not in call.args[1]  # No previous caption text.
+        assert "earlier" in call.args[1] and "current" in call.args[1]
+        # Re-resolve from saved snapshots even after the live registry evicts them.
+        demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": 400})
+        await demo.recorder._capture(state)
+        current = state.directory / state.latest_frame.path
+        demo.recorder._images.clear()
+        await demo.recorder._caption(state)
+        assert vlm.ask_images.await_args.args[0] == [paths[2], current]
+        await demo.recorder._caption(state)  # No additional call for a stale image.
+        assert state.caption_count == 3
+        await speak(demo, "stop recording")
+        assert packet(state)["counts"] == {"frames": 4, "captions": 3, "transcripts": 0}
+        # The next recording gets fresh live references, not the previous session's pair.
+        source = source.model_copy(update={"image": demo.recorder._images.put(paths[0].read_bytes())})
+    assert vlm.ask_images.await_count == 6
+
+
+async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo):
+    demo = manual_caption_demo
+    await speak(demo, "start recording")
+    state = demo.recorder._sessions["user"]
+    source = demo.frames.execute.return_value
+    success = demo.captioner.execute.return_value
+    paths = []
+    for timestamp in (100, 200, 300):
+        demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": timestamp})
+        await demo.recorder._capture(state)
+        paths.append(state.directory / state.latest_frame.path)
+        if timestamp == 200:
+            demo.captioner.execute.return_value = SimpleNamespace(available=False, text="VLM unavailable")
+            with pytest.raises(RuntimeError, match="VLM unavailable"):
+                await demo.recorder._caption(state)
+            assert state.last_captioned_frame.frame_id == 1
+            demo.captioner.execute.return_value = success
+        else:
+            await demo.recorder._caption(state)
+    request = demo.captioner.execute.await_args.args[0]
+    assert [demo.recorder._images.resolve(image) for image in request.images] == [paths[0], paths[2]]
+    assert state.caption_count == 2
+    assert state.last_captioned_frame.frame_id == 3
 
 
 async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monkeypatch):

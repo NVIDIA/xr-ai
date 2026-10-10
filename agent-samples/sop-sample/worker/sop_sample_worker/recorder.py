@@ -20,8 +20,8 @@ from loguru import logger
 from xr_ai_hub import FrameUnavailable
 from xr_ai_runtime import Agent
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
-from xr_ai_tools.image import ImageReference, ImageRegistry
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+from xr_ai_tools.image import ImageRegistry
+from xr_ai_tools.vision import MultiImageQueryRequest, MultiImageQueryTool
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -34,7 +34,6 @@ class _Frame:
     sequence: int
     width: int
     height: int
-    image: ImageReference
 
 
 @dataclass(slots=True)
@@ -70,7 +69,7 @@ class _Session:
     narration_status: str = "pending"
     caption_count: int = 0
     last_frame_key: tuple[str, int, int] | None = None
-    last_captioned_frame_id: int | None = None
+    last_captioned_frame: _Frame | None = None
     latest_frame: _Frame | None = None
     previous_caption: dict[str, str] | None = None
     activities: list[_Activity] = field(default_factory=list)
@@ -154,7 +153,7 @@ class RecorderAgent(Agent):
         sessions_dir: Path,
         current_frame: CurrentFrameTool,
         images: ImageRegistry,
-        query_image: ImageQueryTool,
+        query_images: MultiImageQueryTool,
         capture_fps: float,
         caption_interval_s: float,
     ) -> None:
@@ -163,7 +162,7 @@ class RecorderAgent(Agent):
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._current_frame = current_frame
         self._images = images
-        self._query_image = query_image
+        self._query_images = query_images
         self._capture_period_s = 1.0 / capture_fps
         self._capture_fps = capture_fps
         self._caption_interval_s = caption_interval_s
@@ -343,7 +342,6 @@ class RecorderAgent(Agent):
                 sequence=frame.sequence,
                 width=frame.width,
                 height=frame.height,
-                image=frame.image,
             )
             await self._write(
                 state,
@@ -369,17 +367,21 @@ class RecorderAgent(Agent):
     async def _caption(self, state: _Session) -> None:
         async with state.lock:
             frame = state.latest_frame
+            previous_frame = state.last_captioned_frame
             previous = dict(state.previous_caption) if state.previous_caption else None
-        if frame is None or frame.frame_id == state.last_captioned_frame_id:
+        if frame is None or (previous_frame is not None and frame.frame_id == previous_frame.frame_id):
             return
-        query = json.dumps(
-            {
-                "prior_observation": previous,
-                "instruction": "Describe this exact frame and its visible delta.",
-            },
-            ensure_ascii=False,
+        frames = [previous_frame, frame] if previous_frame is not None else [frame]
+        # Register the saved snapshots at query time: live-frame references can
+        # be evicted while a caption request is slow or the camera is idle.
+        images = [self._images.put(state.directory / item.path, owner=state.session_id) for item in frames]
+        query = (
+            "Compare image 1 (earlier) with image 2 (current). Describe the visible action, "
+            "relevant object details, and current state; report only changes supported by the images."
+            if previous_frame is not None else
+            "Describe this initial image and its visible state. Use Initial observation for delta."
         )
-        result = await self._query_image.execute(ImageQueryRequest(image=frame.image, query=query))
+        result = await self._query_images.execute(MultiImageQueryRequest(images=images, query=query))
         if not result.available:
             raise RuntimeError(result.text)
         try:
@@ -430,7 +432,7 @@ class RecorderAgent(Agent):
                 record,
             )
             state.previous_caption = caption
-            state.last_captioned_frame_id = frame.frame_id
+            state.last_captioned_frame = frame
             self._update_hierarchy(state, record)
             await self._write_views(state)
 

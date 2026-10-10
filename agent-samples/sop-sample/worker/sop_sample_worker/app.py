@@ -14,7 +14,7 @@ from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_tools.vision import MultiImageQueryTool
 from xr_ai_voice import UserQuery, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
@@ -40,7 +40,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         sessions_dir=config.artifacts_dir / "sessions",
         current_frame=frames,
         images=images,
-        query_image=ImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt),
+        query_images=MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt),
         capture_fps=config.capture_fps,
         caption_interval_s=config.caption_interval_s,
     )
