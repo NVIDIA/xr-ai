@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import time
 from pathlib import Path
 
 import yaml
@@ -29,9 +32,32 @@ async def main() -> None:
         load_models_config(_SAMPLE / "yaml" / "models.json"),
         "llm",
     )
+    config_path = _SAMPLE / "yaml" / "models.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    model_entry = config["models"]["llm"]
+    model_profile = model_entry["adapter"].get("preset") or model_entry["adapter"].get("model_name")
+    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    print(
+        "RUN "
+        + json.dumps(
+            {
+                "sample": "lab-instrument-monitoring",
+                "model_profile": model_profile,
+                "config_sha256": config_hash,
+                "prompt_sha256": prompt_hash,
+                "temperature": 0,
+                "max_tokens": 256,
+                "thinking": False,
+                "cases": len(cases),
+            },
+            sort_keys=True,
+        )
+    )
     failures: list[str] = []
     try:
         for case in cases:
+            started = time.perf_counter()
             messages = [
                 ChatMessage(role="system", content=prompt),
                 ChatMessage(role="user", content=case["query"]),
@@ -59,7 +85,13 @@ async def main() -> None:
                     errors.append(f"invalid {call.name!r} arguments: {exc}")
             passed = actual_tools == expected_tools and not errors
             label = "PASS" if passed else "FAIL"
-            print(f"{label} {case['name']}: tools={actual_tools!r}")
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            model = response.raw.get("model") or model_profile
+            print(
+                f"{label} {case['name']}: tools={actual_tools!r} model={model!r} "
+                f"prompt_sha256={prompt_hash[:12]} temperature=0 max_tokens=256 "
+                f"thinking=false llm_ms={elapsed_ms:.1f}"
+            )
             if not passed:
                 print(f"  content={response.content!r}")
                 failures.append(

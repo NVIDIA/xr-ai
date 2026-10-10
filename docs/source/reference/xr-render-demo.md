@@ -433,6 +433,22 @@ The evaluation project derives schemas from the worker's native tools. Offline
 tiers call the live agent LLM but apply tool effects to deterministic fixtures,
 so they do not mutate the LOVR scene.
 
+The offline corpus contains 69 end-to-end scenarios, 16 precision cases (15
+active, one deferred), and 40 utterance variants, plus 46 supervisor-routing
+cases and 74 leaf-agent cases (72 active, two deferred). The checked-in worker
+profile disables recorded-video history, so cases requiring
+`look_at_past_frame` are reported as deferred. The harness omits that tool and
+uses the production live-only vision description; it does not simulate a
+capability the profile does not expose. The active baseline has 446 cases
+across Tea, Lab, and XR.
+
+Each offline case reports the model identifier returned by the endpoint, the
+system-prompt hash, per-call sampling settings, total LLM wall time, and full
+offline case time. These are model-call and agent-workflow measurements. The
+offline harness does not measure audio startup or first useful audio. Preserve
+the model-server checkpoint and hardware profile with archived run output when
+the endpoint reports only a served model alias.
+
 | Tier | Command | Runs against | Approximate cost |
 |---|---|---|---|
 | Supervisor routing | `xr_render_demo_eval_supervisor` | Fake subagents that record delegations | 15 seconds per case |
@@ -466,7 +482,10 @@ uv run xr_render_demo_eval_subagents placement
 
 The offline tiers require only the agent LLM, which defaults to
 `http://localhost:8108`. They do not require the demo stack, capability
-services, or LOVR.
+services, or LOVR. Run identical commands and model configuration on each
+revision being compared; archive the `RUN`, per-case, and summary lines for
+each revision. A case failure is a regression only within its own tier; combine
+the per-tier case results rather than comparing pooled latency totals.
 
 ### Live drivers
 
