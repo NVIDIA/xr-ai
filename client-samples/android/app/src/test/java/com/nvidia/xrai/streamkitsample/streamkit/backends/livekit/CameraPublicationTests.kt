@@ -59,12 +59,18 @@ class CameraPublicationTests {
 
         suspend fun prepareInjection() {
             // Match native arguments without constructing a WebRTC capturer.
+            // Java Mockito matchers register correctly but return null. Give
+            // Kotlin's non-null call boundary a value after registration.
+            val capturerArgument = Mockito.mock(livekit.org.webrtc.VideoCapturer::class.java)
+            val captureArgument = LocalVideoTrackOptions()
+            val publishArgument = VideoTrackPublishOptions(base = defaults)
             Mockito.doReturn(track).`when`(participant).createVideoTrack(
-                Mockito.anyString(), Mockito.any(livekit.org.webrtc.VideoCapturer::class.java),
-                Mockito.any(LocalVideoTrackOptions::class.java), Mockito.isNull(),
+                Mockito.anyString(), Mockito.any(livekit.org.webrtc.VideoCapturer::class.java) ?: capturerArgument,
+                Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
             )
             Mockito.doAnswer { active = publication; true }.`when`(participant).publishVideoTrack(
-                Mockito.eq(track), Mockito.any(VideoTrackPublishOptions::class.java), Mockito.isNull(),
+                Mockito.eq(track) ?: track,
+                Mockito.any(VideoTrackPublishOptions::class.java) ?: publishArgument, Mockito.isNull(),
             )
             Mockito.doAnswer { active = null; null }.`when`(participant).unpublishTrack(track)
         }
@@ -109,13 +115,14 @@ class CameraPublicationTests {
         val f = Fixture()
         f.prepareInjection()
         var stop: Job? = null
+        val frameArgument = ByteBuffer.allocate(0)
         Mockito.mockConstruction(InjectedVideoCapturer::class.java) { capturer, _ ->
             Mockito.doAnswer {
                 stop = launch(start = CoroutineStart.UNDISPATCHED) { f.backend.stopCamera() }
                 assertFalse(stop!!.isCompleted)
                 assertSame(f.publication, f.active)
                 null
-            }.`when`(capturer).pushI420Frame(Mockito.any(ByteBuffer::class.java), Mockito.anyInt(),
+            }.`when`(capturer).pushI420Frame(Mockito.any(ByteBuffer::class.java) ?: frameArgument, Mockito.anyInt(),
                                            Mockito.anyInt(), Mockito.anyLong())
         }.use {
             f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
