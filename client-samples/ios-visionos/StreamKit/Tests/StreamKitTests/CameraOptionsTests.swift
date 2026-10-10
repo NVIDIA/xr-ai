@@ -15,7 +15,7 @@ struct CameraOptionsTests {
         let defaults = VideoPublishOptions(name: "camera", simulcast: false,
                                            degradationPreference: .maintainFramerate,
                                            streamName: "existing-stream")
-        let options = try #require(cameraPublishOptions(CameraEncodingConfig(), defaults: defaults))
+        let options = try #require(try cameraPublishOptions(CameraEncodingConfig(), defaults: defaults))
         #expect(!options.simulcast)
         #expect(options.degradationPreference == .maintainFramerate)
         #expect(options.name == defaults.name && options.streamName == defaults.streamName)
@@ -35,7 +35,7 @@ struct CameraOptionsTests {
     }
 
     @Test(arguments: [true, false]) func explicitSimulcastOverridesDefault(_ enabled: Bool) throws {
-        let options = try #require(cameraPublishOptions(CameraEncodingConfig(simulcast: enabled),
+        let options = try #require(try cameraPublishOptions(CameraEncodingConfig(simulcast: enabled),
                                                        defaults: VideoPublishOptions(simulcast: !enabled)))
         #expect(options.simulcast == enabled)
     }
