@@ -46,6 +46,30 @@
   query: What was that again?
   any_of: [Lisbon]
 
+- name: direct_howto_after_repeated_visual_clarifications
+  image: blank
+  route: direct
+  history:
+    - user: What's the capital of France?
+      assistant: The capital of France is Paris.
+    - user: I don't think.
+      assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
+    - user: Can you teach me how to make pasta?
+      assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
+    - user: Help me make pasta.
+      assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
+  query: Stop repeating, just show me how to make pasta.
+  any_of: [pasta, boil]
+
+- name: direct_howto_after_visual_clarification
+  image: blank
+  route: direct
+  history:
+    - user: What do you see in front of me?
+      assistant: Could you clarify what you would like me to check in the scene?
+  query: How do I tie a bowline knot?
+  any_of: [rope, loop]
+
 - name: domain_scoped_visual_question
   image: red_left_blue_right
   route: current_view

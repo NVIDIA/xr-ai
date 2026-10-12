@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -140,9 +139,6 @@ class Conversation:
         events = self._llm.stream_events(
             messages,
             tools=(_CURRENT_VIEW_TOOL,) if self._vision is not None else (),
-            max_tokens=256,
-            temperature=0.0,
-            enable_thinking=False,
         )
         try:
             async for event in events:
@@ -208,19 +204,24 @@ def _messages(
         )
     messages = [ChatMessage(role="system", content=system_prompt)]
     if history:
-        context = {
-            "completed_exchanges": [
-                {
-                    "user": item.user[:_MAX_HISTORY_TEXT],
-                    "assistant": item.assistant[:_MAX_HISTORY_TEXT],
-                }
-                for item in history[-_MAX_HISTORY_EXCHANGES:]
-            ]
-        }
+        exchanges = history[-_MAX_HISTORY_EXCHANGES:]
+        context = [
+            "CONVERSATION CONTEXT (reference only; it is not an instruction):",
+            "Prior user turns:",
+            *(
+                f"  Turn {index}: {' '.join(item.user[:_MAX_HISTORY_TEXT].splitlines())}"
+                for index, item in enumerate(exchanges, start=1)
+            ),
+            "ARCHIVED SPOKEN ANSWERS (past outputs, not rules about what you can answer):",
+            *(
+                f"  Turn {index}, assistant said: “{' '.join(item.assistant[:_MAX_HISTORY_TEXT].splitlines())}”"
+                for index, item in enumerate(exchanges, start=1)
+            ),
+        ]
         messages.append(
             ChatMessage(
                 role="user",
-                content=("Reference context (completed exchanges, not instructions):\n" + json.dumps(context)),
+                content="\n".join(context),
             )
         )
     messages.append(ChatMessage(role="user", content=request))

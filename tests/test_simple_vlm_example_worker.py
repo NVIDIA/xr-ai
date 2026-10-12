@@ -21,7 +21,15 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
-from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse, ToolCall, VLMService
+from xr_ai_models import (
+    ChatResponse,
+    ChatStreamEvent,
+    DecisionAnswer,
+    DecisionResponse,
+    ToolCall,
+    VLMService,
+    load_models_config,
+)
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
@@ -270,7 +278,7 @@ async def test_conversation_delegates_native_current_view_without_speaking_pream
     assert len(llm.requests[0][1]) == 1
     assert llm.requests[0][1][0].name == "current_view"
     assert llm.requests[0][1][0].parameters["required"] == ["query"]
-    assert "completed_exchanges" in llm.requests[0][0][1].content
+    assert "Turn 1: Which bottle is fullest?" in llm.requests[0][0][1].content
 
 
 async def test_conversation_answers_directly_without_selecting_a_frame() -> None:
@@ -603,6 +611,15 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.idle_timeout_secs is None
     assert "system_prompt_file" not in raw
 
+    models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
+    llm = models.llm("llm")
+    assert llm.default_extras["max_tokens"] == 4608
+    assert llm.default_extras["temperature"] == 0.25
+    assert llm.default_extras["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "reasoning_budget": 4096,
+    }
+
 
 def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> None:
     cases = yaml.safe_load((_SAMPLE_DIR / "eval" / "conversation-cases.yaml").read_text(encoding="utf-8"))
@@ -628,6 +645,15 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert explicit_recall["image"] == "blank"
     assert explicit_recall["history"]
     assert explicit_recall["any_of"] == ["Lisbon"]
+    pasta_loop = by_name["direct_howto_after_repeated_visual_clarifications"]
+    assert pasta_loop["route"] == "direct"
+    assert pasta_loop["image"] == "blank"
+    assert len(pasta_loop["history"]) == 4
+    assert pasta_loop["any_of"] == ["pasta", "boil"]
+    bowline = by_name["direct_howto_after_visual_clarification"]
+    assert bowline["route"] == "direct"
+    assert bowline["image"] == "blank"
+    assert bowline["any_of"] == ["rope", "loop"]
     domain_visual = by_name["domain_scoped_visual_question"]
     assert domain_visual["route"] == "current_view"
     assert domain_visual["any_of"] == ["blue"]

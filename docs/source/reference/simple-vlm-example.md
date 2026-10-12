@@ -19,9 +19,10 @@ The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and shared endpoints for
 Parakeet STT, Nemotron-3 Nano Omni (LLM), Cosmos3 Nano Reasoner (VLM), and Pocket
-TTS. Start those endpoints together with the sample's local model-server stack.
-The worker checks LLM health during readiness and performs an image warmup
-through the VLM.
+TTS. The LLM adapter enables Omni reasoning with a 4096-token soft reasoning
+hint and a 4608-token total output limit. Start those endpoints together with
+the sample's local model-server stack. The worker checks LLM health during
+readiness and performs an image warmup through the VLM.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -87,7 +88,7 @@ layout works without command-line configuration arguments.
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | LLM/VLM/STT/TTS adapters and shared endpoints |
+| `yaml/models.json` | LLM/VLM/STT/TTS adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |

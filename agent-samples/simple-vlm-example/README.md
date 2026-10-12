@@ -28,7 +28,7 @@ files before starting the sample:
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Reused model adapters and endpoint addresses |
+| `yaml/models.json` | Reused model adapters, endpoint addresses, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 
