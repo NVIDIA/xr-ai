@@ -6,6 +6,7 @@
 Uses :class:`_stub_openai.StubOpenAI` (an ``httpx.MockTransport``) so no
 real HTTP listener is needed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -115,7 +116,9 @@ async def test_embedding_batches_inputs_and_preserves_response_order() -> None:
     stub = StubOpenAI()
     stub.set_embeddings([[1.0, 0.0], [0.0, 1.0]])
     async with OpenAICompatEmbedding(
-        "http://stub", "embed", client=stub.client(),
+        "http://stub",
+        "embed",
+        client=stub.client(),
     ) as embedding:
         vectors = await embedding.embed(["query: alpha", "passage: beta"])
     assert vectors == [[1.0, 0.0], [0.0, 1.0]]
@@ -132,7 +135,9 @@ async def test_llm_chat_builds_minimal_payload() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="hi there")
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         resp = await llm.chat([ChatMessage(role="user", content="hello")])
 
@@ -142,7 +147,7 @@ async def test_llm_chat_builds_minimal_payload() -> None:
     assert resp.finish_reason == "stop"
 
     body = stub.last_json()
-    assert body["model"]    == "llm"
+    assert body["model"] == "llm"
     assert body["messages"] == [{"role": "user", "content": "hello"}]
     assert "stream" not in body
 
@@ -151,7 +156,9 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
     monkeypatch.setenv("TRACE_TEST_KEY", "do-not-log-this-key")
     stub = StubOpenAI()
     stub.set_chat_message(
-        content="answer", reasoning="raw thought", reasoning_field="reasoning_content",
+        content="answer",
+        reasoning="raw thought",
+        reasoning_field="reasoning_content",
     )
     stub._chat_response["usage"] = {"prompt_tokens": 7, "completion_tokens": 2}
     stub._chat_response["trace_probe"] = {
@@ -161,12 +168,15 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
     sink_id = logger.add(sink, level="DEBUG", format="{message}")
     try:
         async with OpenAICompatVLM(
-            "http://stub", "vlm", api_key_env="TRACE_TEST_KEY",
+            "http://stub",
+            "vlm",
+            api_key_env="TRACE_TEST_KEY",
             default_extras={"chat_template_kwargs": {"enable_thinking": False}},
             client=stub.client(),
         ) as vlm:
             await vlm.ask_image(
-                "https://private.invalid/image.png", "inspect this",
+                "https://private.invalid/image.png",
+                "inspect this",
                 max_tokens=256,
             )
     finally:
@@ -174,7 +184,9 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
 
     records = _trace_records(sink)
     assert [record["event"] for record in records] == [
-        "request", "provider_response", "end",
+        "request",
+        "provider_response",
+        "end",
     ]
     assert len({record["call_id"] for record in records}) == 1
     request = records[0]["request"]
@@ -182,8 +194,7 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
     assert request["max_tokens"] == 256
     assert request["chat_template_kwargs"] == {"enable_thinking": False}
     assert request["messages"][0]["content"][1]["text"] == "inspect this"
-    assert request["messages"][0]["content"][0]["image_url"]["url"] == \
-        "<image reference redacted>"
+    assert request["messages"][0]["content"][0]["image_url"]["url"] == "<image reference redacted>"
     raw = records[1]["raw"]
     assert raw["choices"][0]["message"]["reasoning_content"] == "raw thought"
     assert raw["usage"] == {"prompt_tokens": 7, "completion_tokens": 2}
@@ -198,25 +209,31 @@ async def test_llm_trace_records_chat_request_and_raw_response_without_secrets(m
 async def test_llm_chat_passes_through_max_tokens_temperature() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         await llm.chat(
             [ChatMessage(role="user", content="hello")],
-            max_tokens=40, temperature=0.7,
+            max_tokens=40,
+            temperature=0.7,
         )
     body = stub.last_json()
-    assert body["max_tokens"]  == 40
+    assert body["max_tokens"] == 40
     assert body["temperature"] == 0.7
 
 
 async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         await llm.chat(
             [ChatMessage(role="user", content="x")],
-            enable_thinking=True, thinking_budget=1024,
+            enable_thinking=True,
+            thinking_budget=1024,
         )
     body = stub.last_json()
     assert body["chat_template_kwargs"] == {
@@ -228,7 +245,8 @@ async def test_llm_chat_folds_thinking_kwargs_into_chat_template_kwargs() -> Non
 async def test_llm_chat_default_extras_merged_with_per_call() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm",
+        "http://stub",
+        "llm",
         default_extras={"chat_template_kwargs": {"enable_thinking": False}},
         client=stub.client(),
     ) as llm:
@@ -251,7 +269,8 @@ async def test_llm_chat_reasoning_field_aliasing() -> None:
         reasoning_field="reasoning_content",
     )
     async with OpenAICompatLLM(
-        "http://stub", "llm",
+        "http://stub",
+        "llm",
         reasoning_field="reasoning_content",
         client=stub.client(),
     ) as llm:
@@ -262,19 +281,27 @@ async def test_llm_chat_reasoning_field_aliasing() -> None:
 async def test_llm_chat_reasoning_default_checks_both_field_names() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(
-        content="answer", reasoning="r1", reasoning_field="reasoning_content",
+        content="answer",
+        reasoning="r1",
+        reasoning_field="reasoning_content",
     )
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         r1 = await llm.chat([ChatMessage(role="user", content="x")])
     assert r1.reasoning == "r1"
 
     stub.set_chat_message(
-        content="a2", reasoning="r2", reasoning_field="reasoning",
+        content="a2",
+        reasoning="r2",
+        reasoning_field="reasoning",
     )
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         r2 = await llm.chat([ChatMessage(role="user", content="x")])
     assert r2.reasoning == "r2"
@@ -292,47 +319,55 @@ async def test_llm_chat_tool_definitions_serialized_to_openai_shape() -> None:
         },
     )
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         await llm.chat([ChatMessage(role="user", content="x")], tools=[tool])
     body = stub.last_json()
-    assert body["tools"] == [{
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get current weather.",
-            "parameters": {
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-                "required": ["city"],
+    assert body["tools"] == [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get current weather.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
             },
-        },
-    }]
+        }
+    ]
 
 
 async def test_llm_chat_tool_calls_parsed_from_response() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(
         content="",
-        tool_calls=[{
-            "id":   "call_abc",
-            "type": "function",
-            "function": {
-                "name":      "get_weather",
-                "arguments": '{"city":"Paris"}',
-            },
-        }],
+        tool_calls=[
+            {
+                "id": "call_abc",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"city":"Paris"}',
+                },
+            }
+        ],
         finish_reason="tool_calls",
     )
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         resp = await llm.chat([ChatMessage(role="user", content="weather?")])
     assert resp.tool_calls is not None
     assert len(resp.tool_calls) == 1
     tc = resp.tool_calls[0]
-    assert tc.id        == "call_abc"
-    assert tc.name      == "get_weather"
+    assert tc.id == "call_abc"
+    assert tc.name == "get_weather"
     assert tc.arguments == '{"city":"Paris"}'
     assert resp.finish_reason == "tool_calls"
 
@@ -348,21 +383,27 @@ async def test_llm_chat_assistant_tool_call_only_turn_sends_null_content() -> No
     stub = StubOpenAI()
     stub.set_chat_message(content="follow-up")
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
-        await llm.chat([
-            ChatMessage(role="user", content="weather in Paris?"),
-            ChatMessage(
-                role="assistant",
-                content="",
-                tool_calls=[ToolCall(
-                    id="call_abc",
-                    name="get_weather",
-                    arguments='{"city":"Paris"}',
-                )],
-            ),
-            ChatMessage(role="tool", content="22C, clear", tool_call_id="call_abc"),
-        ])
+        await llm.chat(
+            [
+                ChatMessage(role="user", content="weather in Paris?"),
+                ChatMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="call_abc",
+                            name="get_weather",
+                            arguments='{"city":"Paris"}',
+                        )
+                    ],
+                ),
+                ChatMessage(role="tool", content="22C, clear", tool_call_id="call_abc"),
+            ]
+        )
     body = stub.last_json()
     assistant_msg = body["messages"][1]
     assert assistant_msg["role"] == "assistant"
@@ -377,7 +418,8 @@ async def test_llm_chat_sends_bearer_when_api_key_env_set(monkeypatch) -> None:
     monkeypatch.setenv("STUB_API_KEY", "sk-test-123")
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm",
+        "http://stub",
+        "llm",
         api_key_env="STUB_API_KEY",
         client=stub.client(),
     ) as llm:
@@ -388,7 +430,9 @@ async def test_llm_chat_sends_bearer_when_api_key_env_set(monkeypatch) -> None:
 async def test_llm_chat_no_auth_header_without_api_key_env() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         await llm.chat([ChatMessage(role="user", content="x")])
     assert "Authorization" not in stub.last_request().headers
@@ -397,7 +441,9 @@ async def test_llm_chat_no_auth_header_without_api_key_env() -> None:
 async def test_llm_chat_forwards_controlled_per_call_headers() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         await llm.chat(
             [ChatMessage(role="user", content="x")],
@@ -409,7 +455,9 @@ async def test_llm_chat_forwards_controlled_per_call_headers() -> None:
 async def test_llm_chat_rejects_per_call_authorization_header() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         with pytest.raises(ValueError, match="cannot override Authorization"):
             await llm.chat(
@@ -420,10 +468,13 @@ async def test_llm_chat_rejects_per_call_authorization_header() -> None:
 
 async def test_llm_chat_raises_on_http_error() -> None:
     import httpx
+
     stub = StubOpenAI()
     stub.set_chat_status(500)
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         with pytest.raises(httpx.HTTPStatusError):
             await llm.chat([ChatMessage(role="user", content="x")])
@@ -456,7 +507,9 @@ async def test_llm_stream_yields_content_tokens_and_stops_at_done() -> None:
     stub.set_stream_tokens(["Hel", "lo", " world"])
     chunks: list[str] = []
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         async for tok in llm.stream([ChatMessage(role="user", content="x")]):
             chunks.append(tok)
@@ -467,13 +520,22 @@ async def test_llm_stream_yields_content_tokens_and_stops_at_done() -> None:
 
 async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {
-            "reasoning_content": "provider-only reasoning",
-        }}]},
-        {"choices": [{"index": 0, "delta": {"content": "visible answer"}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "reasoning_content": "provider-only reasoning",
+                        },
+                    }
+                ]
+            },
+            {"choices": [{"index": 0, "delta": {"content": "visible answer"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+    )
     sink = StringIO()
     sink_id = logger.add(sink, level="DEBUG", format="{message}")
     try:
@@ -485,39 +547,64 @@ async def test_vlm_legacy_stream_trace_keeps_raw_reasoning_fields() -> None:
     assert chunks == ["visible answer"]
     records = _trace_records(sink)
     assert [record["event"] for record in records] == [
-        "request", "provider_chunk", "provider_chunk", "provider_chunk", "provider_done", "end",
+        "request",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_done",
+        "end",
     ]
-    assert records[1]["raw"]["choices"][0]["delta"]["reasoning_content"] == \
-        "provider-only reasoning"
+    assert records[1]["raw"]["choices"][0]["delta"]["reasoning_content"] == "provider-only reasoning"
     assert len({record["call_id"] for record in records}) == 1
 
 
 async def test_llm_stream_events_delivers_text_and_assembles_interleaved_tools() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {"content": "Checking ", "reasoning_content": "plan"}}]},
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 1, "id": "call_b", "function": {"name": "lookup", "arguments": "{\"q\":"}},
-            {"index": 0, "id": "call_a", "function": {"name": "clock", "arguments": "{"}},
-        ]}}]},
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "function": {"name": "_now", "arguments": "}"}},
-            {"index": 1, "function": {"name": "", "arguments": "\"rain\"}"}},
-        ]}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {"choices": [{"index": 0, "delta": {"content": "Checking ", "reasoning_content": "plan"}}]},
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 1, "id": "call_b", "function": {"name": "lookup", "arguments": '{"q":'}},
+                                {"index": 0, "id": "call_a", "function": {"name": "clock", "arguments": "{"}},
+                            ]
+                        },
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 0, "function": {"name": "_now", "arguments": "}"}},
+                                {"index": 1, "function": {"name": "", "arguments": '"rain"}'}},
+                            ]
+                        },
+                    }
+                ]
+            },
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+    )
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
-        events = [event async for event in llm.stream_events([
-            ChatMessage(role="user", content="weather?")
-        ])]
+        events = [event async for event in llm.stream_events([ChatMessage(role="user", content="weather?")])]
 
     assert all(isinstance(event, ChatStreamEvent) for event in events)
     assert [(event.kind, event.text, event.reasoning) for event in events[:2]] == [
         ("text", "Checking ", None),
         ("reasoning", None, "plan"),
     ]
-    assert [(event.tool_call.id, event.tool_call.name, event.tool_call.arguments)
-            for event in events[2:4] if event.tool_call] == [
+    assert [
+        (event.tool_call.id, event.tool_call.name, event.tool_call.arguments)
+        for event in events[2:4]
+        if event.tool_call
+    ] == [
         ("call_a", "clock_now", "{}"),
         ("call_b", "lookup", '{"q":"rain"}'),
     ]
@@ -528,13 +615,29 @@ async def test_llm_trace_records_raw_stream_reasoning_tools_usage_and_finish() -
     stub = StubOpenAI()
     chunks = [
         {"choices": [{"index": 0, "delta": {"reasoning_content": "raw rationale"}}]},
-        {"choices": [{"index": 0, "delta": {
-            "content": "spoken",
-            "image_url": {"url": "data:image/png;base64,stream-media-secret"},
-        }}]},
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "id": "call_x", "function": {"name": "lookup", "arguments": "{}"}},
-        ]}}]},
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "content": "spoken",
+                        "image_url": {"url": "data:image/png;base64,stream-media-secret"},
+                    },
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 0, "id": "call_x", "function": {"name": "lookup", "arguments": "{}"}},
+                        ]
+                    },
+                }
+            ]
+        },
         {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
         {"choices": [], "usage": {"prompt_tokens": 8, "completion_tokens": 3}},
     ]
@@ -543,76 +646,116 @@ async def test_llm_trace_records_raw_stream_reasoning_tools_usage_and_finish() -
     sink_id = logger.add(sink, level="DEBUG", format="{message}")
     try:
         async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
-            events = [event async for event in llm.stream_events(
-                [ChatMessage(role="user", content="lookup")],
-                max_tokens=256,
-                enable_thinking=True,
-                thinking_budget=512,
-            )]
+            events = [
+                event
+                async for event in llm.stream_events(
+                    [ChatMessage(role="user", content="lookup")],
+                    max_tokens=256,
+                    enable_thinking=True,
+                    thinking_budget=512,
+                )
+            ]
     finally:
         logger.remove(sink_id)
 
     records = _trace_records(sink)
     assert [record["event"] for record in records] == [
-        "request", "provider_chunk", "provider_chunk", "provider_chunk",
-        "provider_chunk", "provider_chunk", "provider_done", "end",
+        "request",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_chunk",
+        "provider_done",
+        "end",
     ]
     assert len({record["call_id"] for record in records}) == 1
     assert records[0]["request"]["max_tokens"] == 256
     assert records[0]["request"]["chat_template_kwargs"] == {
-        "enable_thinking": True, "thinking_budget": 512,
+        "enable_thinking": True,
+        "thinking_budget": 512,
     }
     raw_chunks = [record["raw"] for record in records if record["event"] == "provider_chunk"]
     safe_chunks = json.loads(json.dumps(chunks))
-    safe_chunks[1]["choices"][0]["delta"]["image_url"]["url"] = \
-        "<image reference redacted>"
+    safe_chunks[1]["choices"][0]["delta"]["image_url"]["url"] = "<image reference redacted>"
     assert raw_chunks == safe_chunks
-    assert raw_chunks[1]["choices"][0]["delta"]["image_url"]["url"] == \
-        "<image reference redacted>"
+    assert raw_chunks[1]["choices"][0]["delta"]["image_url"]["url"] == "<image reference redacted>"
     assert "stream-media-secret" not in sink.getvalue()
     assert records[-1]["finish_reason"] == "tool_calls"
     assert records[-1]["usage"] == {"prompt_tokens": 8, "completion_tokens": 3}
     assert records[-1]["done"] is True
     assert [(event.kind, event.text, event.reasoning) for event in events[:2]] == [
-        ("reasoning", None, "raw rationale"), ("text", "spoken", None),
+        ("reasoning", None, "raw rationale"),
+        ("text", "spoken", None),
     ]
     assert events[-1] == ChatStreamEvent(kind="finish", finish_reason="tool_calls")
 
 
-@pytest.mark.parametrize(("terminal", "include_done", "message"), [
-    ([], False, "before \\[DONE\\]"),
-    ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}],
-     True, "malformed arguments"),
-])
+@pytest.mark.parametrize(
+    ("terminal", "include_done", "message"),
+    [
+        ([], False, "before \\[DONE\\]"),
+        ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}], True, "malformed arguments"),
+    ],
+)
 async def test_llm_stream_events_rejects_truncated_tool_calls(
-    terminal, include_done: bool, message: str,
+    terminal,
+    include_done: bool,
+    message: str,
 ) -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{"}},
-        ]}}]},
-        *terminal,
-    ], include_done=include_done)
+    stub.set_stream_chunks(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{"}},
+                            ]
+                        },
+                    }
+                ]
+            },
+            *terminal,
+        ],
+        include_done=include_done,
+    )
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(ValueError, match=message):
-            _ = [event async for event in llm.stream_events([
-                ChatMessage(role="user", content="run")
-            ])]
+            _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="run")])]
 
 
-@pytest.mark.parametrize(("chunks", "include_done", "message"), [
-    ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}], False,
-     "before \\[DONE\\]"),
-    ([
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "id": "call_bad", "function": {"name": "run", "arguments": "{"}},
-        ]}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-    ], True, "malformed arguments"),
-])
+@pytest.mark.parametrize(
+    ("chunks", "include_done", "message"),
+    [
+        ([{"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}], False, "before \\[DONE\\]"),
+        (
+            [
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "id": "call_bad", "function": {"name": "run", "arguments": "{"}},
+                                ]
+                            },
+                        }
+                    ]
+                },
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            ],
+            True,
+            "malformed arguments",
+        ),
+    ],
+)
 async def test_llm_stream_trace_marks_post_stream_validation_errors(
-    chunks, include_done: bool, message: str,
+    chunks,
+    include_done: bool,
+    message: str,
 ) -> None:
     stub = StubOpenAI()
     stub.set_stream_chunks(chunks, include_done=include_done)
@@ -621,9 +764,7 @@ async def test_llm_stream_trace_marks_post_stream_validation_errors(
     try:
         async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
             with pytest.raises(ValueError, match=message):
-                _ = [event async for event in llm.stream_events([
-                    ChatMessage(role="user", content="run")
-                ])]
+                _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="run")])]
     finally:
         logger.remove(sink_id)
 
@@ -635,13 +776,24 @@ async def test_llm_stream_trace_marks_post_stream_validation_errors(
 
 async def test_llm_stream_events_validates_batch_before_yielding_tool_calls() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{}"}},
-            {"index": 1, "id": "call_2", "function": {"name": "broken", "arguments": "nope"}},
-        ]}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 0, "id": "call_1", "function": {"name": "run", "arguments": "{}"}},
+                                {"index": 1, "id": "call_2", "function": {"name": "broken", "arguments": "nope"}},
+                            ]
+                        },
+                    }
+                ]
+            },
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+    )
     yielded = []
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(ValueError, match="malformed arguments"):
@@ -655,22 +807,20 @@ async def test_llm_stream_events_requires_finish_reason() -> None:
     stub.set_stream_chunks([{"choices": [{"index": 0, "delta": {}}]}])
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(ValueError, match="without a finish_reason"):
-            _ = [event async for event in llm.stream_events([
-                ChatMessage(role="user", content="x")
-            ])]
+            _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="x")])]
 
 
 async def test_llm_stream_events_accepts_usage_only_chunks() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [], "usage": {"completion_tokens": 1}},
-        {"choices": [{"index": 0, "delta": {"content": "ok"}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {"choices": [], "usage": {"completion_tokens": 1}},
+            {"choices": [{"index": 0, "delta": {"content": "ok"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+    )
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
-        events = [event async for event in llm.stream_events([
-            ChatMessage(role="user", content="x")
-        ])]
+        events = [event async for event in llm.stream_events([ChatMessage(role="user", content="x")])]
     assert events == [
         ChatStreamEvent(kind="text", text="ok"),
         ChatStreamEvent(kind="finish", finish_reason="stop"),
@@ -682,25 +832,37 @@ async def test_llm_stream_events_raises_provider_error_payload() -> None:
     stub.set_stream_chunks([{"error": {"message": "model unavailable"}}])
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(RuntimeError, match="model unavailable"):
-            _ = [event async for event in llm.stream_events([
-                ChatMessage(role="user", content="x")
-            ])]
+            _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="x")])]
 
 
-@pytest.mark.parametrize("fragments", [
-    [None],
-    [{"id": "call_missing_index", "function": {"name": "run", "arguments": "{}"}}],
-    [{"index": 0, "function": "invalid"}],
-])
+@pytest.mark.parametrize(
+    "fragments",
+    [
+        [None],
+        [{"id": "call_missing_index", "function": {"name": "run", "arguments": "{}"}}],
+        [{"index": 0, "function": "invalid"}],
+    ],
+)
 async def test_llm_stream_events_rejects_invalid_tool_fragments(fragments) -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {"tool_calls": [
-            {"index": 0, "id": "call_valid", "function": {"name": "run", "arguments": "{}"}},
-        ]}}]},
-        {"choices": [{"index": 0, "delta": {"tool_calls": fragments}}]},
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 0, "id": "call_valid", "function": {"name": "run", "arguments": "{}"}},
+                            ]
+                        },
+                    }
+                ]
+            },
+            {"choices": [{"index": 0, "delta": {"tool_calls": fragments}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+    )
     yielded = []
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(ValueError, match="(fragment|index|function)"):
@@ -711,14 +873,14 @@ async def test_llm_stream_events_rejects_invalid_tool_fragments(fragments) -> No
 
 async def test_llm_stream_events_rejects_tool_finish_without_fragments() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-    ])
+    stub.set_stream_chunks(
+        [
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+    )
     async with OpenAICompatLLM("http://stub", "llm", client=stub.client()) as llm:
         with pytest.raises(ValueError, match="no tool call data"):
-            _ = [event async for event in llm.stream_events([
-                ChatMessage(role="user", content="run")
-            ])]
+            _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="run")])]
 
 
 async def test_llm_stream_events_raises_on_malformed_event_json() -> None:
@@ -728,12 +890,11 @@ async def test_llm_stream_events_raises_on_malformed_event_json() -> None:
             content=b'data: {"choices": invalid}\n\ndata: [DONE]\n\n',
             headers={"Content-Type": "text/event-stream"},
         )
+
     client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
     async with OpenAICompatLLM("http://stub", "llm", client=client) as llm:
         with pytest.raises(ValueError, match="malformed event JSON"):
-            _ = [event async for event in llm.stream_events([
-                ChatMessage(role="user", content="x")
-            ])]
+            _ = [event async for event in llm.stream_events([ChatMessage(role="user", content="x")])]
     await client.aclose()
 
 
@@ -775,9 +936,12 @@ async def test_llm_stream_events_closes_response_when_cancelled() -> None:
 
 async def test_llm_stream_trace_marks_explicit_close() -> None:
     stub = StubOpenAI()
-    stub.set_stream_chunks([
-        {"choices": [{"index": 0, "delta": {"content": "hello"}}]},
-    ], include_done=False)
+    stub.set_stream_chunks(
+        [
+            {"choices": [{"index": 0, "delta": {"content": "hello"}}]},
+        ],
+        include_done=False,
+    )
     sink = StringIO()
     sink_id = logger.add(sink, level="DEBUG", format="{message}")
     try:
@@ -797,7 +961,9 @@ async def test_llm_stream_trace_marks_explicit_close() -> None:
 async def test_llm_health_true_on_200() -> None:
     stub = StubOpenAI()
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         assert (await llm.health()) is True
 
@@ -806,7 +972,9 @@ async def test_llm_health_false_on_503() -> None:
     stub = StubOpenAI()
     stub.set_health_status(503)
     async with OpenAICompatLLM(
-        "http://stub", "llm", client=stub.client(),
+        "http://stub",
+        "llm",
+        client=stub.client(),
     ) as llm:
         assert (await llm.health()) is False
 
@@ -817,7 +985,10 @@ async def test_llm_health_true_when_health_check_disabled() -> None:
     stub = StubOpenAI()
     stub.set_health_status(503)
     async with OpenAICompatLLM(
-        "http://stub", "llm", health_check=False, client=stub.client(),
+        "http://stub",
+        "llm",
+        health_check=False,
+        client=stub.client(),
     ) as llm:
         assert (await llm.health()) is True
 
@@ -826,15 +997,22 @@ async def test_vlm_stt_tts_health_true_when_health_check_disabled() -> None:
     stub = StubOpenAI()
     stub.set_health_status(503)
     async with OpenAICompatVLM(
-        "http://stub", "vlm", health_check=False, client=stub.client(),
+        "http://stub",
+        "vlm",
+        health_check=False,
+        client=stub.client(),
     ) as vlm:
         assert (await vlm.health()) is True
     async with OpenAICompatSTT(
-        "http://stub", health_check=False, client=stub.client(),
+        "http://stub",
+        health_check=False,
+        client=stub.client(),
     ) as stt:
         assert (await stt.health()) is True
     async with OpenAICompatTTS(
-        "http://stub", health_check=False, client=stub.client(),
+        "http://stub",
+        health_check=False,
+        client=stub.client(),
     ) as tts:
         assert (await tts.health()) is True
 
@@ -844,6 +1022,7 @@ def test_cleartext_key_transport_detection() -> None:
     # credential transmission (CWE-319) — must be flagged. https, loopback,
     # or no key configured are all fine.
     from xr_ai_models._openai_compat import _is_cleartext_key_transport as is_ct
+
     assert is_ct("http://example.com", "k") is True
     assert is_ct("http://example.com:8000", "k") is True
     assert is_ct("https://example.com", "k") is False
@@ -864,7 +1043,9 @@ async def test_vlm_ask_image_with_bytes_builds_data_url() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="it's a cat")
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         resp = await vlm.ask_image(_PNG_HEADER, "what is this?")
     assert resp.content == "it's a cat"
@@ -883,7 +1064,9 @@ async def test_vlm_ask_image_with_path_reads_file(tmp_path) -> None:
     p.write_bytes(_PNG_HEADER)
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         await vlm.ask_image(p, "?")
     body = stub.last_json()
@@ -894,19 +1077,22 @@ async def test_vlm_ask_image_with_path_reads_file(tmp_path) -> None:
 async def test_vlm_ask_image_with_string_passes_through_url() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         await vlm.ask_image("https://example.com/img.png", "?")
     body = stub.last_json()
-    assert body["messages"][0]["content"][0]["image_url"]["url"] == \
-        "https://example.com/img.png"
+    assert body["messages"][0]["content"][0]["image_url"]["url"] == "https://example.com/img.png"
 
 
 async def test_vlm_ask_images_preserves_order_and_uses_one_question() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="the object moved")
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         response = await vlm.ask_images(
             [_PNG_HEADER, "https://example.com/second.png"],
@@ -928,7 +1114,9 @@ async def test_vlm_ask_images_preserves_order_and_uses_one_question() -> None:
 async def test_vlm_multi_image_paths_reject_empty_input() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         with pytest.raises(ValueError, match="at least one image"):
             await vlm.ask_images([], "What changed?")
@@ -939,7 +1127,9 @@ async def test_vlm_multi_image_paths_reject_empty_input() -> None:
 async def test_vlm_ask_image_includes_system_prompt_when_set() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         await vlm.ask_image(_PNG_HEADER, "?", system_prompt="be terse")
     body = stub.last_json()
@@ -950,7 +1140,8 @@ async def test_vlm_ask_image_includes_system_prompt_when_set() -> None:
 async def test_vlm_default_extras_propagate() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm",
+        "http://stub",
+        "vlm",
         default_extras={"chat_template_kwargs": {"enable_thinking": False}},
         client=stub.client(),
     ) as vlm:
@@ -963,7 +1154,9 @@ async def test_vlm_stream_forwards_controlled_per_call_headers() -> None:
     stub = StubOpenAI()
     stub.set_stream_tokens(["visible"])
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         chunks = [
             chunk
@@ -981,7 +1174,9 @@ async def test_vlm_stream_forwards_controlled_per_call_headers() -> None:
 async def test_vlm_rejects_per_call_authorization_header() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm", client=stub.client(),
+        "http://stub",
+        "vlm",
+        client=stub.client(),
     ) as vlm:
         with pytest.raises(ValueError, match="cannot override Authorization"):
             await vlm.ask_image(
@@ -996,10 +1191,7 @@ async def test_vlm_rejects_per_call_authorization_header() -> None:
 
 # ISO BMFF header: 4 bytes box size, "ftyp" magic, "isom" major brand,
 # minor version, then "isom"/"mp42" compat brands. Smallest plausible mp4 prefix.
-_MP4_HEADER = (
-    b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00"
-    b"isomiso2avc1mp41" + b"\x00" * 8
-)
+_MP4_HEADER = b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\x00" * 8
 _WEBM_HEADER = b"\x1a\x45\xdf\xa3" + b"\x00" * 24
 
 
@@ -1007,14 +1199,15 @@ async def test_vlm_ask_video_with_bytes_sniffs_mp4_and_builds_data_url() -> None
     stub = StubOpenAI()
     stub.set_chat_message(content="a person walks left")
     async with OpenAICompatVLM(
-        "http://stub", "vlm",
+        "http://stub",
+        "vlm",
         capabilities=Capabilities(vision=True, video=True),
         client=stub.client(),
     ) as vlm:
         resp = await vlm.ask_video(_MP4_HEADER, "what happens?")
     assert resp.content == "a person walks left"
 
-    body  = stub.last_json()
+    body = stub.last_json()
     parts = body["messages"][0]["content"]
     assert parts[0]["type"] == "video_url"
     url = parts[0]["video_url"]["url"]
@@ -1028,7 +1221,8 @@ async def test_vlm_ask_video_with_path_uses_suffix_mime(tmp_path) -> None:
     p.write_bytes(_WEBM_HEADER)
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm",
+        "http://stub",
+        "vlm",
         capabilities=Capabilities(vision=True, video=True),
         client=stub.client(),
     ) as vlm:
@@ -1041,20 +1235,21 @@ async def test_vlm_ask_video_with_path_uses_suffix_mime(tmp_path) -> None:
 async def test_vlm_ask_video_with_string_passes_through_url() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm",
+        "http://stub",
+        "vlm",
         capabilities=Capabilities(vision=True, video=True),
         client=stub.client(),
     ) as vlm:
         await vlm.ask_video("https://example.com/clip.mp4", "?")
     body = stub.last_json()
-    assert body["messages"][0]["content"][0]["video_url"]["url"] == \
-        "https://example.com/clip.mp4"
+    assert body["messages"][0]["content"][0]["video_url"]["url"] == "https://example.com/clip.mp4"
 
 
 async def test_vlm_ask_video_raises_when_capability_off() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(
-        "http://stub", "vlm",
+        "http://stub",
+        "vlm",
         capabilities=Capabilities(vision=True),
         client=stub.client(),
     ) as vlm:
@@ -1070,7 +1265,8 @@ async def test_stt_transcribe_wav_bytes_passthrough() -> None:
     stub.set_transcribe_text("hello world")
     wav_bytes = b"RIFF\x00\x00\x00\x00WAVEdata"
     async with OpenAICompatSTT(
-        "http://stub", client=stub.client(),
+        "http://stub",
+        client=stub.client(),
     ) as stt:
         text = await stt.transcribe(wav_bytes)
     assert text == "hello world"
@@ -1083,7 +1279,8 @@ async def test_stt_transcribe_pcm_converts_to_wav() -> None:
     stub = StubOpenAI()
     pcm = b"\x00\x01" * 480
     async with OpenAICompatSTT(
-        "http://stub", client=stub.client(),
+        "http://stub",
+        client=stub.client(),
     ) as stt:
         await stt.transcribe(pcm, sample_rate=16000, channels=1)
     sent = stub.last_request().content
@@ -1102,7 +1299,8 @@ async def test_tts_synthesize_returns_audio_bytes() -> None:
     stub = StubOpenAI()
     stub.set_speech_bytes(b"\x01\x02\x03")
     async with OpenAICompatTTS(
-        "http://stub", client=stub.client(),
+        "http://stub",
+        client=stub.client(),
     ) as tts:
         data = await tts.synthesize("hello")
     assert data == b"\x01\x02\x03"
@@ -1113,7 +1311,8 @@ async def test_tts_synthesize_returns_audio_bytes() -> None:
 async def test_tts_response_format_override() -> None:
     stub = StubOpenAI()
     async with OpenAICompatTTS(
-        "http://stub", client=stub.client(),
+        "http://stub",
+        client=stub.client(),
     ) as tts:
         await tts.synthesize("hi", response_format="pcm")
     body = stub.last_json()

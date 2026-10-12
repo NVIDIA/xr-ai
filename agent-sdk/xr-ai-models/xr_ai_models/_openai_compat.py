@@ -8,6 +8,7 @@ are absorbed by ``reasoning_field`` and ``default_extras`` on the
 constructor; per-call quirks (``enable_thinking``, ``thinking_budget``)
 fold into ``chat_template_kwargs`` on the wire.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -178,16 +179,18 @@ def _trace_safe(value: Any, *, key: str | None = None) -> Any:
     """Redact media references before request/response data reaches debug logs."""
 
     if key is not None and key.lower() in {
-        "authorization", "api_key", "access_token", "client_secret", "password",
+        "authorization",
+        "api_key",
+        "access_token",
+        "client_secret",
+        "password",
     }:
         return "<redacted>"
     if key in {"image_url", "video_url"}:
         media = "image" if key == "image_url" else "video"
         if isinstance(value, dict):
             return {
-                name: _trace_safe(item, key=name)
-                if name != "url"
-                else f"<{media} reference redacted>"
+                name: _trace_safe(item, key=name) if name != "url" else f"<{media} reference redacted>"
                 for name, item in value.items()
             }
         return f"<{media} reference redacted>"
@@ -296,9 +299,9 @@ class _LLMCallTrace:
 
 _IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
     (b"\x89PNG\r\n\x1a\n", "image/png"),
-    (b"\xff\xd8\xff",       "image/jpeg"),
-    (b"GIF87a",             "image/gif"),
-    (b"GIF89a",             "image/gif"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
 )
 
 
@@ -313,10 +316,10 @@ def _sniff_mime(data: bytes) -> str:
 
 def _mime_from_suffix(p: Path) -> str:
     return {
-        ".png":  "image/png",
-        ".jpg":  "image/jpeg",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
-        ".gif":  "image/gif",
+        ".gif": "image/gif",
         ".webp": "image/webp",
     }.get(p.suffix.lower(), "application/octet-stream")
 
@@ -338,11 +341,11 @@ def _normalize_image(image: ImageInput) -> str:
 
 
 _VIDEO_SUFFIXES = {
-    ".mp4":  "video/mp4",
-    ".m4v":  "video/mp4",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
     ".webm": "video/webm",
-    ".mov":  "video/quicktime",
-    ".mkv":  "video/x-matroska",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
 }
 
 
@@ -407,20 +410,20 @@ class OpenAICompatLLM:
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
-        self._chat_url   = base + "/v1/chat/completions"
-        self.health_url  = base + health_path
+        self._chat_url = base + "/v1/chat/completions"
+        self.health_url = base + health_path
         """The URL used to check endpoint readiness."""
 
-        self._model      = model_name
+        self._model = model_name
         self.capabilities = capabilities or Capabilities()
         """Features declared for this model endpoint."""
 
         self._reasoning_field = reasoning_field
-        self._default_extras  = default_extras or {}
+        self._default_extras = default_extras or {}
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
-        self._client  = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
+        self._client = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
     def _build_payload(
@@ -480,8 +483,11 @@ class OpenAICompatLLM:
 
         payload = self._build_payload(
             messages,
-            tools=tools, max_tokens=max_tokens, temperature=temperature,
-            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+            tools=tools,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            enable_thinking=enable_thinking,
+            thinking_budget=thinking_budget,
             stream=False,
         )
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
@@ -519,8 +525,11 @@ class OpenAICompatLLM:
 
         payload = self._build_payload(
             messages,
-            tools=tools, max_tokens=max_tokens, temperature=temperature,
-            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+            tools=tools,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            enable_thinking=enable_thinking,
+            thinking_budget=thinking_budget,
             stream=True,
         )
         kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
@@ -572,8 +581,11 @@ class OpenAICompatLLM:
 
         payload = self._build_payload(
             messages,
-            tools=tools, max_tokens=max_tokens, temperature=temperature,
-            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+            tools=tools,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            enable_thinking=enable_thinking,
+            thinking_budget=thinking_budget,
             stream=True,
         )
         kwargs: dict[str, Any] = {
@@ -647,7 +659,8 @@ class OpenAICompatLLM:
                                 if not isinstance(index, int) or isinstance(index, bool) or index < 0:
                                     raise ValueError("LLM stream tool call fragment has an invalid index")
                                 accumulated = tool_fragments.setdefault(
-                                    index, {"id": "", "name": "", "arguments": ""},
+                                    index,
+                                    {"id": "", "name": "", "arguments": ""},
                                 )
                                 call_id = fragment.get("id")
                                 if call_id is not None:
@@ -702,11 +715,13 @@ class OpenAICompatLLM:
                         raise ValueError(
                             f"LLM stream returned non-object arguments for tool call at index {index}",
                         )
-                    calls.append(ToolCall(
-                        id=fragment["id"],
-                        name=fragment["name"],
-                        arguments=fragment["arguments"],
-                    ))
+                    calls.append(
+                        ToolCall(
+                            id=fragment["id"],
+                            name=fragment["name"],
+                            arguments=fragment["arguments"],
+                        )
+                    )
             for call in calls:
                 yield ChatStreamEvent(kind="tool_call", tool_call=call)
             yield ChatStreamEvent(kind="finish", finish_reason=finish_reason)
@@ -844,13 +859,13 @@ class OpenAICompatVLM:
 
         return await self._llm.chat(
             self._build_image_messages(images, question, system_prompt),
-            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
             headers=headers,
         )
 
-    def _build_video_messages(
-        self, video: VideoInput, question: str, system_prompt: str
-    ) -> list[ChatMessage]:
+    def _build_video_messages(self, video: VideoInput, question: str, system_prompt: str) -> list[ChatMessage]:
         url = _normalize_video(video)
         msgs: list[ChatMessage] = []
         if system_prompt:
@@ -888,7 +903,9 @@ class OpenAICompatVLM:
             )
         return await self._llm.chat(
             self._build_video_messages(video, question, system_prompt),
-            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
             headers=headers,
         )
 
@@ -934,7 +951,9 @@ class OpenAICompatVLM:
 
         async for chunk in self._llm.stream(
             self._build_image_messages(images, question, system_prompt),
-            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
             headers=headers,
         ):
             yield chunk
@@ -977,12 +996,12 @@ class OpenAICompatSTT:
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
-        self._url       = base + "/v1/audio/transcriptions"
+        self._url = base + "/v1/audio/transcriptions"
         self.health_url = base + health_path
-        self._api_key   = os.environ.get(api_key_env) if api_key_env else None
+        self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
-        self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
+        self._client = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
     async def transcribe(
@@ -1002,8 +1021,8 @@ class OpenAICompatSTT:
 
         wav_bytes = _pcm_to_wav(audio, sample_rate, channels) if sample_rate is not None else audio
         kwargs: dict[str, Any] = {
-            "files":   {"file": ("audio.wav", wav_bytes, "audio/wav")},
-            "data":    {"response_format": "json"},
+            "files": {"file": ("audio.wav", wav_bytes, "audio/wav")},
+            "data": {"response_format": "json"},
             "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
@@ -1057,12 +1076,12 @@ class OpenAICompatTTS:
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
-        self._url       = base + "/v1/audio/speech"
+        self._url = base + "/v1/audio/speech"
         self.health_url = base + health_path
-        self._api_key   = os.environ.get(api_key_env) if api_key_env else None
+        self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)
         self._health_check = health_check
-        self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
+        self._client = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
     async def synthesize(
@@ -1075,7 +1094,7 @@ class OpenAICompatTTS:
         """Synthesize *text* and return audio bytes in *response_format*."""
 
         kwargs: dict[str, Any] = {
-            "json":    {"input": text, "response_format": response_format},
+            "json": {"input": text, "response_format": response_format},
             "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
@@ -1154,9 +1173,7 @@ class _PocketTTS(OpenAICompatTTS):
                     raise ValueError("Pocket TTS returned an incomplete PCM sample")
 
         if fallback_to_wav:
-            logger.warning(
-                "Pocket TTS server does not support streaming; falling back to WAV"
-            )
+            logger.warning("Pocket TTS server does not support streaming; falling back to WAV")
             wav_bytes = await self.synthesize(text, timeout=timeout)
             with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
                 if wav_file.getsampwidth() != 2:
@@ -1214,7 +1231,11 @@ class OpenAICompatEmbedding:
         return await self._embed_payload(texts, {}, timeout=timeout)
 
     async def _embed_payload(
-        self, texts: Sequence[str], extras: Mapping[str, Any], *, timeout: float | None,
+        self,
+        texts: Sequence[str],
+        extras: Mapping[str, Any],
+        *,
+        timeout: float | None,
     ) -> list[list[float]]:
         if not texts:
             return []
@@ -1268,7 +1289,10 @@ class _EmbeddingWithExtras(OpenAICompatEmbedding):
         super().__init__(**kwargs)
 
     async def embed(
-        self, texts: Sequence[str], *, timeout: float | None = None,
+        self,
+        texts: Sequence[str],
+        *,
+        timeout: float | None = None,
     ) -> list[list[float]]:
         if "input_type" not in self._extras:
             return await self._embed_payload(texts, self._extras, timeout=timeout)
@@ -1278,7 +1302,7 @@ class _EmbeddingWithExtras(OpenAICompatEmbedding):
             for candidate in groups:
                 prefix = candidate + ": "
                 if text.startswith(prefix):
-                    kind, text = candidate, text[len(prefix):]
+                    kind, text = candidate, text[len(prefix) :]
                     break
             groups[kind].append((index, text))
         results: list[list[float]] = [[] for _ in texts]
@@ -1288,7 +1312,9 @@ class _EmbeddingWithExtras(OpenAICompatEmbedding):
             if not group:
                 continue
             vectors = await self._embed_payload(
-                [text for _, text in group], {**self._extras, "input_type": kind}, timeout=timeout,
+                [text for _, text in group],
+                {**self._extras, "input_type": kind},
+                timeout=timeout,
             )
             for (index, _), vector in zip(group, vectors, strict=True):
                 results[index] = vector
