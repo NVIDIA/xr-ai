@@ -524,11 +524,10 @@ The selected image reports this in-container vLLM version:
 ### Cleanup
 
 `model_servers --stop` works for both modes within the selected managed launch
-plan. Cleanup locates labelled
-Docker containers before inspecting ports, then stops them with `docker stop`
-(escalating to `docker kill` after 20 s). Pip-mode processes carry an
-`xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
-cleanup without sending a signal.
+plan. Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with `docker stop` (escalating to `docker kill` after 20 s).
+Pip-mode processes carry an `xr-ai-vllm` ownership marker; unknown listeners
+and failed inspection abort cleanup without sending a signal.
 
 Pip-mode vLLM processes started before the ownership markers were introduced
 cannot be identified safely. After upgrading, stop each unmarked process

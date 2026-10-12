@@ -200,8 +200,8 @@ Model servers persist after the `model_servers` command reports readiness.
 Starting another profile leaves services outside its selection running. Stop
 the old selection explicitly when it is no longer needed or occupies resources
 required by the new deployment. After changing an image, checkpoint, or launch
-setting,
-stop the old stack once so it cannot continue serving stale configuration:
+setting, stop the old stack once so it cannot continue serving stale
+configuration:
 
 ```bash
 uv run --project model-server-samples/model-servers model_servers \

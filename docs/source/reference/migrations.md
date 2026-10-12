@@ -10,9 +10,14 @@
 `model_servers --stop` now stops only managed services in the selected launch
 plan. For custom deployments, pass the same `--models PATH` and explicit
 `--gpu-profile NAME` used at startup. Startup no longer stops omitted services.
-Stop the old selection before editing its ports or replacing its configuration;
-no launch history is tracked. Refer to {doc}`/components/ai-services` for the
-existing service identity guards and their configuration-scoped limitations.
+Before updating the checkout, stop the old deployment using the cleanup
+commands supported by that old checkout; older versions do not support
+combining `--models` with `--stop`. Likewise, stop the selected plan before
+editing its ports or replacing its configuration; no launch history is tracked.
+The updated default launch plan
+cannot stop services omitted from its selection. Refer to
+{doc}`/components/ai-services` for the existing service identity guards and
+their configuration-scoped limitations.
 
 ## Clef model cache configuration
 

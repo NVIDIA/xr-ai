@@ -39,10 +39,9 @@ model-servers: failed to stop persistent servers: one or more persistent servers
 
 **Cause:** the login session lacks Docker socket access. This can affect DGX
 Spark and other Linux model-server hosts. Cleanup checks only managed services
-in the selected deployment; startup does not sweep omitted services. When
-Docker inspection
-fails, the empty-result message does not establish that no servers are running,
-and cleanup aborts because ownership could not be verified.
+in the selected deployment; startup does not sweep omitted services. When Docker
+inspection fails, the empty-result message does not establish that no servers
+are running, and cleanup aborts because ownership could not be verified.
 
 **Diagnosis:** run `docker ps` without `sudo` from the same login session. If
 it reports permission denied for `/var/run/docker.sock`, the launcher cannot
