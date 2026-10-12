@@ -177,6 +177,7 @@ class _ParticipantSession:
     observation_count: int = 0
     frame_count: int = 0
     audio_chunk_count: int = 0
+    video_error: str | None = None
     lock: threading.RLock = field(default_factory=threading.RLock)
 
 
@@ -385,19 +386,24 @@ class SessionRecorder:
 
     def record_video(self, frame: FrameData) -> None:
         session = self._session(frame.participant_id, frame.pts_us)
-        with session.lock:
-            writer = session.video.get(frame.track_id)
-            if writer is None:
-                writer = _H264TrackWriter(
-                    nvc=self._nvc,
-                    root=session.root / "video",
-                    track_id=frame.track_id,
-                    stream_name="raw",
-                    config=self._config,
-                    frontend=self._raw_frontend,
-                )
-                session.video[frame.track_id] = writer
-        raw_frame = writer.write(frame, "", ())
+        try:
+            with session.lock:
+                writer = session.video.get(frame.track_id)
+                if writer is None:
+                    writer = _H264TrackWriter(
+                        nvc=self._nvc,
+                        root=session.root / "video",
+                        track_id=frame.track_id,
+                        stream_name="raw",
+                        config=self._config,
+                        frontend=self._raw_frontend,
+                    )
+                    session.video[frame.track_id] = writer
+            raw_frame = writer.write(frame, "", ())
+        except Exception as exc:
+            with session.lock:
+                session.video_error = f"video capture failed: {type(exc).__name__}: {exc}"
+            raise
         if raw_frame is None:
             with session.lock:
                 session.dropped_video_frames += 1
@@ -446,6 +452,7 @@ class SessionRecorder:
             return None
         pts_us = max(session.start_us, pts_us)
         with session.lock:
+            incomplete_reason = incomplete_reason or session.video_error
             complete = incomplete_reason is None
             self._event(
                 session,

@@ -65,6 +65,10 @@ def _minimal_fast_start_mp4() -> bytes:
     return box(b"ftyp") + box(b"moov") + box(b"mdat")
 
 
+def _fake_encoder_caps(_gpu_id, _codec):
+    return {"width_min": 16, "height_min": 16, "width_max": 4096, "height_max": 4096}
+
+
 @pytest.mark.parametrize("failure_stage", ["config", "construct", "start", "run"])
 async def test_capture_main_logs_fatal_exception_before_cleanup(
     tmp_path, monkeypatch, failure_stage,
@@ -766,6 +770,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
             ))]
 
     fake_module = types.SimpleNamespace(
+        GetEncoderCaps=_fake_encoder_caps,
         CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
         CreateDecoder=lambda **_kwargs: FakeDecoder(),
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
@@ -901,6 +906,7 @@ def test_raw_capture_does_not_attempt_mp4_finalization(
         sys.modules,
         "PyNvVideoCodec",
         types.SimpleNamespace(
+            GetEncoderCaps=_fake_encoder_caps,
             CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
             NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
         ),
@@ -946,6 +952,7 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
         sys.modules,
         "PyNvVideoCodec",
         types.SimpleNamespace(
+            GetEncoderCaps=_fake_encoder_caps,
             CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
             NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
         ),
@@ -1017,6 +1024,71 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     assert audio["sample_format"] == "float32_le"
 
 
+@pytest.mark.parametrize("width,height", [(8, 8), (144, 240), (180, 48), (1026, 240), (180, 770)])
+@pytest.mark.parametrize("initial", [False, True])
+def test_unsupported_video_dimensions_preserve_recording(
+    tmp_path, monkeypatch, width, height, initial,
+):
+    encoder = Mock()
+    encoder.Encode.return_value = [{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]
+    encoder.EndEncode.return_value = []
+    nvc = types.SimpleNamespace(
+        GetEncoderCaps=Mock(return_value={
+            "width_min": 145, "height_min": 49, "width_max": 1024, "height_max": 768,
+        }),
+        CreateEncoder=Mock(return_value=encoder),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", nvc)
+    recorder = SessionRecorder(CaptureConfig(out_dir=str(tmp_path), profile="raw", gpu_id=2))
+    recorder.begin_session("alice", 1_000_000)
+    if not initial:
+        recorder.record_video(_frame(width=180, height=240))
+    recorder.record_video(_frame(pts_us=1_100_000, width=width, height=height))
+    assert recorder.has_session("alice")
+    encoder.EndEncode.assert_not_called()
+    recorder.record_audio("device", _audio("device", pts_us=1_150_000))
+    recorder.record_voice_caption("user", DataMessage(
+        participant_id="alice", topic=CAPTURE_STT_TOPIC,
+        data=b'{"text":"Continue the demonstration"}', pts_us=1_150_000,
+    ))
+    recorder.record_video(_frame(pts_us=1_200_000, width=180, height=240))
+    nvc.GetEncoderCaps.assert_called_once_with(2, "h264")
+    nvc.CreateEncoder.assert_called_once()
+    encoder.EndEncode.assert_not_called()
+    root = recorder.end_session("alice", 1_300_000)
+    encoder.EndEncode.assert_called_once()
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert manifest["complete"] is True
+    assert manifest["dropped_video_frames"] == 1
+    assert manifest["counts"]["video_frames"] == (1 if initial else 2)
+    assert manifest["counts"]["audio_chunks"] == 1
+    assert manifest["counts"]["transcripts"] == 1
+    rows = [json.loads(line) for line in (root / "video/frames.jsonl").read_text().splitlines()]
+    assert {(row["source_width"], row["source_height"]) for row in rows} == {(180, 240)}
+
+
+@pytest.mark.parametrize("failure_stage", ["caps", "create", "encode"])
+def test_video_failure_is_propagated_and_sealed_incomplete(tmp_path, monkeypatch, failure_stage):
+    encoder = Mock(EndEncode=Mock(return_value=[]))
+    nvc = types.SimpleNamespace(
+        GetEncoderCaps=Mock(side_effect=_fake_encoder_caps),
+        CreateEncoder=Mock(return_value=encoder),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
+    operation = {"caps": nvc.GetEncoderCaps, "create": nvc.CreateEncoder, "encode": encoder.Encode}
+    operation[failure_stage].side_effect = RuntimeError("encoder unavailable")
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", nvc)
+    recorder = SessionRecorder(CaptureConfig(out_dir=str(tmp_path), profile="raw"))
+    recorder.begin_session("alice", 1_000_000)
+    with pytest.raises(RuntimeError, match="encoder unavailable"):
+        recorder.record_video(_frame())
+    [root] = recorder.close()
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert manifest["complete"] is False
+    assert "encoder unavailable" in manifest["incomplete_reason"]
+
+
 def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
     tmp_path: Path,
     monkeypatch,
@@ -1032,6 +1104,7 @@ def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
         sys.modules,
         "PyNvVideoCodec",
         types.SimpleNamespace(
+            GetEncoderCaps=_fake_encoder_caps,
             CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
             NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
         ),
@@ -1664,6 +1737,7 @@ def test_session_bundle_merges_resolution_and_track_segments_into_one_video(
             return []
 
     fake_module = types.SimpleNamespace(
+        GetEncoderCaps=_fake_encoder_caps,
         CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
     )
@@ -1739,6 +1813,7 @@ async def test_capture_service_observes_both_sides_of_media_hub(
         sys.modules,
         "PyNvVideoCodec",
         types.SimpleNamespace(
+            GetEncoderCaps=_fake_encoder_caps,
             CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
             NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
         ),

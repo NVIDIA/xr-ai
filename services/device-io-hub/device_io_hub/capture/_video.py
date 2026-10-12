@@ -82,6 +82,7 @@ class _H264TrackWriter:
         self._stream_name = stream_name
         self._config = config
         self._frontend = frontend
+        self._encoder_caps = nvc.GetEncoderCaps(config.gpu_id, "h264")
         self._encoder = None
         self._stream = None
         self._width = 0
@@ -115,6 +116,21 @@ class _H264TrackWriter:
         )
         width = rendered.width
         height = rendered.height
+        caps = self._encoder_caps
+        if not (
+            caps["width_min"] <= width <= caps["width_max"]
+            and caps["height_min"] <= height <= caps["height_max"]
+        ):
+            # Camera mute can deliver a tiny placeholder. Keep the current
+            # encoder alive so subsequent camera frames resume the same track.
+            logger.warning(
+                "media capture dropped unsupported frame track={!r} size={}x{}; "
+                "NVENC limits={}x{}..{}x{}",
+                self._track_id, width, height,
+                caps["width_min"], caps["height_min"],
+                caps["width_max"], caps["height_max"],
+            )
+            return None
         if self._encoder is None or (width, height) != (self._width, self._height):
             self._start_segment(width, height, frame.pts_us)
         picture_params = self._nvc.NV_ENC_PIC_PARAMS()
