@@ -44,6 +44,16 @@ def pick_free_port(preferred: int | None = None) -> int:
         return s.getsockname()[1]
 
 
+def pick_free_udp_port() -> int:
+    """Select an ephemeral UDP port available across local IPv4 interfaces.
+
+    Closing the probe releases the port; the child still needs to bind it.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.bind(("0.0.0.0", 0))
+        return probe.getsockname()[1]
+
+
 def health_ok(port: int, timeout: float = 2.0) -> bool:
     """True iff ``GET http://127.0.0.1:<port>/health`` returns HTTP 200."""
     try:
