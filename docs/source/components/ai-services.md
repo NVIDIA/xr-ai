@@ -76,9 +76,11 @@ does not release the inference lock while native inference is still running.
 Health also includes a deterministic fingerprint of the active non-secret
 configuration used for reuse checks.
 
-The shared launcher refuses to adopt another profile's listener or an unrelated
-listener on the same port. The default profile starts and stops the local model
-stack, including Clef. From `model-server-samples/model-servers/`, run
+Compatible existing listeners may be reused without transferring ownership;
+they remain unowned by this deployment and are not stopped with it. An
+incompatible or unrelated listener on the same port is rejected. The default
+profile starts and stops the local model stack, including Clef. From
+`model-server-samples/model-servers/`, run
 `uv run model_servers --stop` to stop resources attributed to the default
 deployment. Clef shutdown waits for the owned process to exit and
 drain native work; on Linux, termination and timeout escalation remain tied to
