@@ -10,6 +10,8 @@ name = "clef-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # CVE-2026-104874: fixed C-extension items-view reference leak.
+    "multidict>=6.9.1",
     "accelerate>=1.2.0",
     "fastapi>=0.115.0",
     "huggingface-hub>=0.32.0",

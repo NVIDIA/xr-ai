@@ -10,6 +10,12 @@ name = "xr-ai-speaker-stt"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    # CVE-2026-104874: fixed C-extension items-view reference leak.
+    "multidict>=6.9.1",
+    # CVE-2026-102598: reject Windows device names with empty ADS markers.
+    "werkzeug>=3.1.9",
+    # CVE-2026-58659: restrict checkpoint instantiators in this distribution.
+    "pytorch-lightning>=2.6.6",
     "fastapi>=0.115.0", "uvicorn[standard]>=0.34.0", "anyio>=4.8.0", "numpy>=1.24", "pyyaml>=6.0",
     "xr-ai-voicegate", "xr-ai-logging", "xr-ai-vllm",
     "nemo-toolkit[asr]", "lightning>2.2.1,<=2.4.0", "lhotse==2.0.0a6",

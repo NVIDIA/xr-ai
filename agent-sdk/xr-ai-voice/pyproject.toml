@@ -10,6 +10,8 @@ name = "xr-ai-voice"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    # CVE-2026-104874: fixed C-extension items-view reference leak.
+    "multidict>=6.9.1",
     "nemo-relay>=0.7.2,<0.8",
     "pydantic>=2.10",
     "xr-ai-agent-runtime",

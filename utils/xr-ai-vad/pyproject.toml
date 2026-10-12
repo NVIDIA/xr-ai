@@ -17,6 +17,8 @@ requires-python = ">=3.11,<3.15"
 # `load_silero_vad(onnx=True)` so the ONNX runtime is mandatory at import
 # time, and any consumer venv (simple-vlm-example/worker, etc.) needs it.
 dependencies = [
+    # CVE-2026-104874: fixed C-extension items-view reference leak.
+    "multidict>=6.9.1",
     "numpy>=1.24",
     "silero-vad>=5.1",
     "onnxruntime>=1.17",

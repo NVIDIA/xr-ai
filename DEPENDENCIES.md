@@ -63,23 +63,25 @@ dependency refresh because it can change unrelated Python and web packages.
 
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
 `dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
-every package in the repository, so
-its lock records the complete resolved runtime dependency set at the
+every package except the independently resolved speaker ASR service. Together
+with `dependency-manifest/speaker-stt/uv.lock`, it records the runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
 such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
 and `uv.lock` describe the repository as of the last cutoff change or targeted
 dependency security refresh. Regenerate and commit both files for either event;
 ordinary project changes remain deferred to the next refresh. A release yanked
 from the index changes the next fresh resolution.
-`uv run --script .github/scripts/generate_dependency_manifest.py` generates both
+`uv run --script .github/scripts/generate_dependency_manifest.py` generates both inventories
 files and always resolves with the uv version pinned inside the script,
 because lock output varies across uv releases. The manifest's `requires-python`
-is the range of interpreters every project accepts, so a project with a narrower
-declaration narrows the manifest. vLLM service projects resolve in a `vllm`
-extra, while all other projects resolve in a `repository` extra. Those extras
-are mutually exclusive because their PyNvVideoCodec and protobuf constraints
-are incompatible; the universal lock inventories both real environments
-without overriding either one. The pre-commit hook runs the script when
+is the range of interpreters its included projects accept. vLLM service projects
+resolve in a `vllm` extra, while the other shared projects resolve in a
+`repository` extra. Those extras are mutually exclusive because their
+PyNvVideoCodec and protobuf constraints are incompatible. Speaker ASR has a
+separate Linux-only manifest, resolved with Python 3.12, that preserves its
+Git-pinned NeMo and wheel-pinned Lhotse sources without applying them to other
+services. The inventories preserve each environment's dependency requirements.
+The pre-commit hook runs the script when
 `uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
 generator scripts. Nothing installs from the directory.
@@ -187,6 +189,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `nemo-relay>=0.7.2,<0.8`
   - `pydantic>=2.10`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
@@ -240,6 +243,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -275,6 +279,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `accelerate>=1.2.0`
   - `fastapi>=0.115.0`
   - `huggingface-hub>=0.32.0`
@@ -311,6 +316,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `pyjwt>=2.15.1`
   - `urllib3>=2.8.0`
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -338,6 +344,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -357,6 +364,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -376,6 +384,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
@@ -398,6 +409,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -417,6 +429,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -451,6 +464,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.0.2`
@@ -486,6 +500,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `fastapi>=0.115.0`
   - `uvicorn[standard]>=0.34.0`
   - `anyio>=4.8.0`
@@ -507,6 +524,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
@@ -544,6 +564,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -816,15 +837,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
     - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-    - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `xr-ai-models[riva,speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
     - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+    - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
     - `model-servers-nim`
     - `nim-model-adapter`
     - `nim-riva-server`
+    - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
     - `magpie-nim-tts`
@@ -847,6 +870,15 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
+- Commands: none
+
+#### `xr-ai-speaker-dependency-manifest` — [`dependency-manifest/speaker-stt/`](dependency-manifest/speaker-stt/)
+
+- Python: `>=3.12,<3.14`
+- Build dependencies: none
+- Runtime dependencies:
+  - `xr-ai-speaker-stt` → [`xr-ai-speaker-stt`](services/speaker-stt/) (local, editable)
+- Optional dependency groups: none
 - Commands: none
 
 <!-- END GENERATED PYTHON DEPENDENCY MAP -->

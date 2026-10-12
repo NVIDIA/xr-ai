@@ -12,6 +12,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.specifiers import SpecifierSet
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS = _ROOT / ".github" / "scripts"
@@ -193,6 +194,100 @@ def test_manifest_narrows_python_range_to_what_every_project_accepts(tmp_path: P
     _write_project(tmp_path, "services/server", name="server", requires_python=">= 3.12")
 
     assert 'requires-python = ">=3.12,<3.13"' in _render(tmp_path)
+
+
+def _speaker_project(root: Path):
+    _write_project(root, "services/speaker-stt", name="xr-ai-speaker-stt", requires_python=">=3.12,<3.14")
+    return next(project for project in dependency_map.discover_projects(root) if project.name == "xr-ai-speaker-stt")
+
+
+def test_speaker_inventory_isolates_its_python_range_and_platform(tmp_path: Path) -> None:
+    _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11,<3.12")
+    speaker = _speaker_project(tmp_path)
+
+    shared = tomllib.loads(_render(tmp_path))
+    isolated = tomllib.loads(dependency_manifest.speaker_manifest_toml(speaker))
+
+    assert shared["project"]["requires-python"] == ">=3.11,<3.12"
+    assert "xr-ai-speaker-stt" not in shared["tool"]["uv"]["sources"]
+    assert isolated["project"]["requires-python"] == ">=3.12,<3.14"
+    assert SpecifierSet(isolated["project"]["requires-python"]).contains(dependency_manifest.SPEAKER_LOCK_PYTHON)
+    assert isolated["tool"]["uv"]["environments"] == ["sys_platform == 'linux'"]
+    assert isolated["tool"]["uv"]["sources"] == {
+        "xr-ai-speaker-stt": {"path": "../../services/speaker-stt", "editable": True},
+    }
+
+
+def test_committed_inventories_preserve_both_nemo_sources() -> None:
+    shared = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
+    isolated = tomllib.loads((_ROOT / dependency_manifest.SPEAKER_MANIFEST_DIRECTORY / "uv.lock").read_text())
+    runtime = tomllib.loads((_ROOT / "services/speaker-stt/pyproject.toml").read_text())
+    manifest = tomllib.loads((_ROOT / dependency_manifest.SPEAKER_MANIFEST_DIRECTORY / "pyproject.toml").read_text())
+    assert manifest["tool"]["uv"]["environments"] == runtime["tool"]["uv"]["environments"]
+
+    registry_nemo = [package for package in shared["package"] if package["name"] == "nemo-toolkit"]
+    speaker_nemo = next(package for package in isolated["package"] if package["name"] == "nemo-toolkit")
+    speaker_lhotse = next(package for package in isolated["package"] if package["name"] == "lhotse")
+    source = runtime["tool"]["uv"]["sources"]["nemo-toolkit"]
+    assert registry_nemo
+    assert all(package["source"] == {"registry": "https://pypi.org/simple"} for package in registry_nemo)
+    assert source["git"] in speaker_nemo["source"]["git"]
+    assert source["rev"] in speaker_nemo["source"]["git"]
+    assert speaker_lhotse["source"] == runtime["tool"]["uv"]["sources"]["lhotse"]
+
+
+@pytest.mark.parametrize("fresh", ["original lock\n", "changed lock\n"])
+def test_speaker_check_compares_and_restores_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fresh: str) -> None:
+    speaker = _speaker_project(tmp_path)
+    directory = tmp_path / dependency_manifest.SPEAKER_MANIFEST_DIRECTORY
+    directory.mkdir(parents=True)
+    (directory / "pyproject.toml").write_text(dependency_manifest.speaker_manifest_toml(speaker))
+    lock = directory / "uv.lock"
+    lock.write_text("original lock\n")
+    calls = []
+
+    def run(args, *, cwd, check):
+        calls.append((args, cwd, check))
+        lock.write_text(fresh)
+
+    monkeypatch.setattr(dependency_manifest.subprocess, "run", run)
+
+    assert dependency_manifest.refresh_speaker_manifest(tmp_path, speaker, check=True) == (fresh != "original lock\n")
+    assert lock.read_text() == "original lock\n"
+    assert calls[0][0][-3:] == [dependency_manifest.SPEAKER_LOCK_PYTHON, "--project", "dependency-manifest/speaker-stt"]
+
+
+def test_speaker_check_restores_lock_after_resolver_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    speaker = _speaker_project(tmp_path)
+    directory = tmp_path / dependency_manifest.SPEAKER_MANIFEST_DIRECTORY
+    directory.mkdir(parents=True)
+    (directory / "pyproject.toml").write_text(dependency_manifest.speaker_manifest_toml(speaker))
+    lock = directory / "uv.lock"
+    lock.write_text("original lock\n")
+
+    def run(args, *, cwd, check):
+        lock.write_text("partial lock\n")
+        raise subprocess.CalledProcessError(2, args)
+
+    monkeypatch.setattr(dependency_manifest.subprocess, "run", run)
+
+    assert dependency_manifest.refresh_speaker_manifest(tmp_path, speaker, check=True) == 1
+    assert lock.read_text() == "original lock\n"
+
+
+def test_main_generates_the_speaker_inventory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_repo(tmp_path)
+    speaker = _speaker_project(tmp_path)
+    directory = tmp_path / dependency_manifest.SPEAKER_MANIFEST_DIRECTORY
+    monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock([]))
+    monkeypatch.setattr(
+        dependency_manifest.subprocess, "run",
+        lambda args, *, cwd, check: (directory / "uv.lock").write_text("speaker lock\n"),
+    )
+
+    assert dependency_manifest.main([], root=tmp_path) == 0
+    assert (directory / "pyproject.toml").read_text() == dependency_manifest.speaker_manifest_toml(speaker)
+    assert (directory / "uv.lock").read_text() == "speaker lock\n"
 
 
 def test_manifest_rejects_disjoint_python_ranges(tmp_path: Path) -> None:
