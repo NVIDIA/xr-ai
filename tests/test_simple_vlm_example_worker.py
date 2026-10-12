@@ -610,6 +610,9 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
 
     assert by_name["general_question_without_camera"]["route"] == "direct"
     assert by_name["general_question_without_camera"]["image"] == "blank"
+    unavailable_action = by_name["unavailable_external_action"]
+    assert unavailable_action["route"] == "direct"
+    assert unavailable_action["any_of"] == ["can't", "cannot", "unable"]
     assert by_name["read_visible_sign_text"]["route"] == "current_view"
     followup = by_name["resolve_visual_followup_referent"]
     assert followup["route"] == "current_view"

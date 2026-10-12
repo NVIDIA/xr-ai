@@ -51,7 +51,11 @@ class ConversationFrontEnd:
         self._destinations_used: dict[str, set[str]] = {}
 
     async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
-        """Route and answer one turn, emitting source-tagged text chunks."""
+        """Route and answer one turn, emitting source-tagged text chunks.
+
+        Destination failures propagate to the caller, which owns any
+        turn-level recovery after already-emitted progress text.
+        """
 
         participant_id = turn.participant_id
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
@@ -104,12 +108,22 @@ class ConversationFrontEnd:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def stop(self) -> None:
-        """Cancel active work and release all destination-owned focus."""
+        """Cancel active work and attempt every owned destination release.
+
+        Raises an ``ExceptionGroup`` after all participants are attempted.
+        Destinations whose release failed remain tracked for a later retry.
+        """
 
         await self.interrupt()
         participants = self._destinations_used.keys() | self._focus.keys()
+        errors = []
         for participant_id in tuple(participants):
-            await self.participant_left(participant_id)
+            try:
+                await self.participant_left(participant_id)
+            except Exception as error:
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("failed to release conversation destinations", errors)
 
     async def _handle(self, turn: ConversationTurn, *, emit: Emit, generation: object) -> DestinationResult:
 
@@ -190,25 +204,38 @@ class ConversationFrontEnd:
                 if self._focus.get(turn.participant_id) == name:
                     self._focus.pop(turn.participant_id, None)
                 self._forget_destination(turn.participant_id, name)
-            elif result.disposition == "answer" and self._focus.get(turn.participant_id) == name:
-                self._focus.pop(turn.participant_id, None)
             if result.disposition in {"answer", "focus", "release"} and result.text.strip():
                 self._remember(turn, result.text)
             return result
         raise AssertionError("bounded routing loop exhausted")
 
     async def participant_left(self, participant_id: str) -> None:
-        """Release destination-owned state and history for one departed participant."""
+        """Release one participant's state and history.
+
+        Attempts every destination used by the participant. Failed releases
+        remain tracked for a caller-triggered retry and are raised together in
+        an ``ExceptionGroup``.
+        """
 
         await self.interrupt(participant_id)
-        used = self._destinations_used.pop(participant_id, set())
+        used = set(self._destinations_used.get(participant_id, ()))
         focused = self._focus.pop(participant_id, None)
         if focused is not None:
             used.add(focused)
+        if used:
+            self._destinations_used.setdefault(participant_id, set()).update(used)
         self._history.pop(participant_id, None)
         self._locks.pop(participant_id, None)
+        errors = []
         for name in used:
-            await self._destinations[name].release(participant_id)
+            try:
+                await self._destinations[name].release(participant_id)
+            except Exception as error:
+                errors.append(error)
+            else:
+                self._forget_destination(participant_id, name)
+        if errors:
+            raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
 
     def _forget_destination(self, participant_id: str, destination: str) -> None:
         used = self._destinations_used.get(participant_id)

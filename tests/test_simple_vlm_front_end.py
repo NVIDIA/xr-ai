@@ -155,6 +155,32 @@ async def test_explicit_focus_routes_cross_domain_turns_until_release_per_partic
 
 
 @pytest.mark.asyncio
+async def test_focused_destination_answer_retains_focus_until_explicit_release():
+    decisions = _Decisions("tea", "conversation")
+    conversation = _Destination("conversation")
+    tea = _Destination(
+        "tea",
+        results=(
+            DestinationResult("focus"),
+            DestinationResult("answer", "Still guiding."),
+            DestinationResult("release", "Guide closed."),
+        ),
+    )
+    front_end = ConversationFrontEnd({"conversation": conversation, "tea": tea}, decisions)
+
+    await _run(front_end, query="Start the guide.")
+    await _run(front_end, query="What does this step mean?")
+    await _run(front_end, query="Leave the guide.")
+    await _run(front_end, query="What did we discuss?")
+
+    assert tea.releases == ["alice"]
+    assert ("answer", "What does this step mean?") in tea.calls
+    assert ("answer", "Leave the guide.") in tea.calls
+    assert conversation.calls[-2][1] == "What did we discuss?"
+    assert len(decisions.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_result():
     decisions = _Decisions("tea", "xr")
     conversation = _Destination("conversation")
@@ -216,6 +242,76 @@ async def test_departure_and_stop_release_destinations_used_without_focus():
     await front_end.stop()
 
     assert conversation.releases == ["alice", "bob"]
+
+
+@pytest.mark.asyncio
+async def test_departure_attempts_all_releases_and_retains_failures_for_retry():
+    class _FailOnce(_Destination):
+        def __init__(self, name):
+            super().__init__(name)
+            self.fail = True
+
+        async def release(self, participant_id):
+            self.releases.append(participant_id)
+            if self.fail:
+                raise RuntimeError(f"{self.name} release failed")
+
+    decisions = _Decisions("tea", "xr")
+    tea = _FailOnce("tea")
+    xr = _FailOnce("xr")
+    front_end = ConversationFrontEnd({"conversation": _Destination("conversation"), "tea": tea, "xr": xr}, decisions)
+    await _run(front_end, query="Start the guide.")
+    await _run(front_end, query="Add a cube.")
+
+    with pytest.raises(ExceptionGroup, match="failed to release destinations") as error:
+        await front_end.participant_left("alice")
+    assert len(error.value.exceptions) == 2
+    assert tea.releases == ["alice"]
+    assert xr.releases == ["alice"]
+
+    tea.fail = False
+    xr.fail = False
+    await front_end.participant_left("alice")
+    assert tea.releases == ["alice", "alice"]
+    assert xr.releases == ["alice", "alice"]
+
+
+@pytest.mark.asyncio
+async def test_stop_attempts_release_for_every_participant_after_failure():
+    class _AlwaysFail(_Destination):
+        async def release(self, participant_id):
+            self.releases.append(participant_id)
+            raise RuntimeError(f"{participant_id} release failed")
+
+    decisions = _Decisions("conversation", "conversation")
+    conversation = _AlwaysFail("conversation")
+    front_end = ConversationFrontEnd({"conversation": conversation}, decisions)
+    await _run(front_end, participant="alice", query="A")
+    await _run(front_end, participant="bob", query="B")
+
+    with pytest.raises(ExceptionGroup, match="failed to release conversation destinations") as error:
+        await front_end.stop()
+
+    assert len(error.value.exceptions) == 2
+    assert set(conversation.releases) == {"alice", "bob"}
+
+
+@pytest.mark.asyncio
+async def test_destination_error_after_preamble_propagates_to_turn_caller():
+    class _BrokenAnswer(_Destination):
+        async def answer(self, turn, *, emit):
+            raise RuntimeError("destination failed")
+
+    destination = _BrokenAnswer("xr", admissions=(Admission("accept", preamble="I will try."),))
+    front_end = ConversationFrontEnd({"xr": destination}, _Decisions(), default_destination="xr")
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    with pytest.raises(RuntimeError, match="destination failed"):
+        await front_end.handle(ConversationTurn("alice", "turn-1", "Do it."), emit=emit)
+    assert output == [("xr", "I will try.")]
 
 
 @pytest.mark.asyncio

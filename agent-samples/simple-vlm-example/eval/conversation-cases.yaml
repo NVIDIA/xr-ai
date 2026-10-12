@@ -7,6 +7,12 @@
   query: What is twice eleven?
   any_of: ["22", twenty-two]
 
+- name: unavailable_external_action
+  image: blank
+  route: direct
+  query: Book me a flight to Denver.
+  any_of: ["can't", "cannot", "unable"]
+
 - name: read_visible_sign_text
   image: closed_sign
   route: current_view
