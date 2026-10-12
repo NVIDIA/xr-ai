@@ -25,7 +25,6 @@ from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
     Frame,
-    InputAudioRawFrame,
     InterruptionFrame,
     OutputAudioRawFrame,
     StartFrame,
@@ -46,7 +45,7 @@ from xr_ai_hub._capture import CAPTURE_TTS_TOPIC
 
 from ._audio import float32_to_int16, int16_to_float32
 from ._capture_frames import _CaptureTtsCaptionFrame
-from ._frames import ParticipantJoinedFrame, ParticipantLeftFrame
+from ._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _TrackedInputAudioFrame
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -165,10 +164,11 @@ class DeviceIOHubInputTransport(BaseInputTransport):
         pcm_int16 = _hub_pcm_to_mono_16k(
             float32_to_int16(chunk.data), chunk.channels, chunk.sample_rate,
         )
-        frame = InputAudioRawFrame(
+        frame = _TrackedInputAudioFrame(
             audio=pcm_int16,
             sample_rate=SAMPLE_RATE,
             num_channels=NUM_CHANNELS,
+            track_id=chunk.track_id,
         )
         # pipecat's ``transport_source`` is the standard "which input
         # track did this come from" hook — set it to the hub-side

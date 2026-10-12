@@ -25,6 +25,7 @@ from ._processors.io import _VoiceIOProcessor
 from ._processors.streaming_tts import StreamingTtsProcessor
 from ._processors.vad_stt import VadConfig, VadSttProcessor
 from ._processors.voice_gate import VoiceGateProcessor
+from ._processors.speaker_stt import _SpeakerSttProcessor
 from ._transport import HubVoiceTransport
 
 
@@ -39,6 +40,7 @@ def _build_voice_pipeline(
     on_final_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
     text_topic: str = "agent.response",
     idle_timeout_secs: float | None = None,
+    use_speaker_asr: bool = False,
 ) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
 
@@ -64,7 +66,8 @@ def _build_voice_pipeline(
     silently drop idle sessions.
     """
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
-    # Closed conversations and control phrases must not reach transcript sinks.
+    voice_gate_proc._use_speaker_asr = use_speaker_asr
+    # Control phrases and closed-session speech must not reach caption sinks.
     if voice_gate_cfg._conversation is not None:
         voice_gate_proc._on_conversation_transcript = on_final_transcript
         on_final_transcript = None
@@ -77,18 +80,28 @@ def _build_voice_pipeline(
     voice_gate_proc.set_tts_response_active_probe(
         streaming_tts.has_active_response,
     )
-    vad_stt = VadSttProcessor(
-        stt=stt,
-        vad_cfg=vad_cfg,
-        on_partial_transcript=(
-            voice_gate_proc.handle_partial_transcript
-            if voice_gate_cfg.magic_phrases or voice_gate_cfg._conversation is not None
-            else None
-        ),
-        on_final_transcript=on_final_transcript,
-    )
-
-    vad_stt._gate_controls_partial_stop = voice_gate_cfg._conversation is not None
+    if use_speaker_asr:
+        if voice_gate_cfg._speaker is None:
+            raise ValueError("speaker ASR needs speaker configuration")
+        vad_stt = _SpeakerSttProcessor(
+            cfg=voice_gate_cfg._speaker,
+            on_partial_transcript=(
+                voice_gate_proc.handle_partial_transcript
+                if voice_gate_cfg._conversation is not None else None
+            ),
+            on_final_transcript=on_final_transcript,
+        )
+    else:
+        vad_stt = VadSttProcessor(
+            stt=stt,
+            vad_cfg=vad_cfg,
+            on_partial_transcript=(
+                voice_gate_proc.handle_partial_transcript
+                if voice_gate_cfg.magic_phrases or voice_gate_cfg._conversation is not None else None
+            ),
+            on_final_transcript=on_final_transcript,
+        )
+        vad_stt._gate_controls_partial_stop = voice_gate_cfg._conversation is not None
 
     pipeline = Pipeline([
         transport.input(),

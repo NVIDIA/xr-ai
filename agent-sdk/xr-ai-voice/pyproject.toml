@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-logging",
-    "xr-ai-models",
+    "xr-ai-models[speaker]",
     "xr-ai-vad",
     "xr-ai-voicegate",
     "pipecat-ai>=1.6",
