@@ -67,6 +67,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Publication for the buffer-capturer track. Published after the first injected frame.
     private var bufferPublication: LocalTrackPublication?
     private var cameraPublishDefaults = VideoPublishOptions()
+    private var cameraPublishTask: (track: LocalVideoTrack, task: Task<LocalTrackPublication, any Error>)?
 
     /// Currently active local camera track (device camera, ARKit, or simulator
     /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
@@ -249,12 +250,67 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         try cameraPublishOptions(encoding, defaults: cameraPublishDefaults)
     }
 
+    private func publishCameraTrack(_ track: LocalVideoTrack, room: Room,
+                                    encoding: CameraEncodingConfig?) async throws -> LocalTrackPublication {
+        let generation = cameraGeneration
+        if let pending = cameraPublishTask, pending.track === track {
+            let publication = try await pending.task.value
+            try Task.checkCancellation()
+            guard cameraGeneration == generation else { throw CancellationError() }
+            return publication
+        }
+        let connection = connectionGeneration
+        let task = Task {
+            try await performCameraPublication(track, room: room, encoding: encoding,
+                                               generation: generation, connection: connection)
+        }
+        cameraPublishTask = (track, task)
+        defer { if cameraPublishTask?.track === track { cameraPublishTask = nil } }
+        let publication = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: { task.cancel() }
+        guard cameraGeneration == generation else { throw CancellationError() }
+        return publication
+    }
+
+    private func performCameraPublication(_ track: LocalVideoTrack, room: Room,
+                                          encoding: CameraEncodingConfig?,
+                                          generation: UInt64, connection: UInt64) async throws -> LocalTrackPublication {
+        var options = try videoPublishOptions(encoding)
+        do {
+            try Task.checkCancellation()
+            if let encoding, options?.simulcast == true, cameraPublishDefaults.simulcastLayers.isEmpty {
+                // The SDK starts capture before computing its default layers.
+                // Resolve the same real metadata, not capture hints or ratios.
+                try await track.start()
+                let dimensions = try await cameraDimensions(track.capturer)
+                options = try cameraPublishOptions(encoding, defaults: cameraPublishDefaults, dimensions: dimensions)
+            }
+            try Task.checkCancellation()
+            guard self.room === room, room.connectionState == .connected,
+                  connectionGeneration == connection else { throw StreamError.notConnected }
+            guard cameraGeneration == generation else { throw CancellationError() }
+            let publication = try await room.localParticipant.publish(videoTrack: track, options: options)
+            guard self.room === room, connectionGeneration == connection,
+                  cameraGeneration == generation else {
+                try await room.localParticipant.unpublish(publication: publication)
+                throw CancellationError()
+            }
+            return publication
+        } catch {
+            // This helper owns capture until a publication is handed back.
+            // SDK stop is idempotent when publish already rolled capture back.
+            try await track.stop()
+            throw error
+        }
+    }
+
     public func startCamera(config: CameraConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
 
-        let publishOptions = try videoPublishOptions(config.encoding)
+        _ = try videoPublishOptions(config.encoding)
 
         // Stop any currently active camera before starting a new one.
         try await stopCamera()
@@ -285,7 +341,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         if let seed = seedBuffer, let capturer = simTrack.capturer as? BufferCapturer {
             capturer.capture(seed)
         }
-        bufferPublication = try await room.localParticipant.publish(videoTrack: simTrack, options: publishOptions)
+        bufferPublication = try await publishCameraTrack(simTrack, room: room, encoding: config.encoding)
         localCameraTrack = simTrack
         simulatorFrameTask = Task { [weak self] in
             await self?.runSimulatorFrameLoop(startingAt: 1)
@@ -295,19 +351,29 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // ARKit passthrough camera — device only, requires an open ImmersiveSpace and
         // the com.apple.developer.arkit.main-camera-access.allow enterprise entitlement.
         let track = makeVisionOSTrack()
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
+        cameraPublication = try await publishCameraTrack(track, room: room, encoding: config.encoding)
         localCameraTrack = track
 
         #else
         // Physical iOS/iPadOS camera.
         let track = makeIOSTrack(config: config)
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
+        cameraPublication = try await publishCameraTrack(track, room: room, encoding: config.encoding)
         localCameraTrack = track
         #endif
     }
 
     public func stopCamera() async throws {
         cameraGeneration &+= 1
+        if let pending = cameraPublishTask {
+            pending.task.cancel()
+            // Drain owned capture/publication before releasing its track. If
+            // the task completed just before stop, take its exact publication
+            // into the usual retryable cleanup fields before the caller resumes.
+            if let publication = try? await pending.task.value {
+                if pending.track === bufferTrack { bufferPublication = publication }
+                else { cameraPublication = publication }
+            }
+        }
         #if targetEnvironment(simulator)
         // Stop the synthetic frame generator first so no more frames are injected.
         simulatorFrameTask?.cancel()
@@ -400,7 +466,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
         // Subsequent frames retain the publication's policy. Validate/map only
         // when these options can actually be consumed by a first publication.
-        let publishOptions = bufferPublication == nil ? try videoPublishOptions(encoding) : nil
+        if bufferPublication == nil { _ = try videoPublishOptions(encoding) }
 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
@@ -427,7 +493,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
         // Publish the track lazily — dimensions are now known from the frame above.
         if bufferPublication == nil {
-            bufferPublication = try await room.localParticipant.publish(videoTrack: track, options: publishOptions)
+            bufferPublication = try await publishCameraTrack(track, room: room, encoding: encoding)
         }
     }
 

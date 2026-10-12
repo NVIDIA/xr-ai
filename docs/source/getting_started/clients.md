@@ -52,6 +52,11 @@ Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
 overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
 Omitting `encoding` preserves backend defaults. C++ also retains its existing
 zero-as-unset numeric fields; its named presets supply the explicit ceilings.
+The C++ LiveKit SDK exposes the primary encoding limit but not lower simulcast
+layer controls. With simulcast enabled, that SDK still chooses lower-layer
+budgets; StreamKit cannot enforce their ordering relative to a custom primary
+limit. No C++ runtime behavior is changed to hide this limitation. Explicitly
+disabling simulcast avoids that unsupported combination.
 
 ```javascript
 const encoding = new CameraEncodingConfig({
@@ -81,6 +86,16 @@ session.StartCamera(camera);
 ```
 
 The preference and `simulcast` switch can also be configured independently.
+On web, Android, and Apple clients, publishing with an explicit bitrate limit
+keeps configured lower-layer budgets at or below the primary budget. If the
+largest SDK lower-layer budget exceeds the requested primary budget, all lower
+budgets are reduced by the same SDK-derived proportion. This preserves their
+relative ordering, dimensions, and frame-rate settings without inventing a new
+layer profile. Lower budgets remain unchanged when no reduction is needed;
+when reduction is needed, even an already smaller lower-layer budget can decrease.
+An encoding profile that cannot preserve positive integer budgets and distinct
+budget ordering is rejected during publication rather than silently rounded into
+a different profile. This is not an aggregate bandwidth or power-management policy.
 Favoring detail alone changes encoder adaptation; the Detail preset additionally
 disables lower simulcast layers. Capture format remains selected by the platform
 or external frame producer, preserving the camera's aspect ratio.

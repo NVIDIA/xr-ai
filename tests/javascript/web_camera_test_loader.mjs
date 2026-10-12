@@ -37,6 +37,16 @@ export async function load(url, context, nextLoad) {
             return globalThis.__livekitRoom;
           }
         }
+        // Published SDK2.17.2 camera preset references, not simulated encoding
+        // computation: the backend must preserve geometry and clamp budgets.
+        export const VideoPresets = {
+          h180: { width: 320, height: 180, encoding: { maxBitrate: 160000, maxFramerate: 20 } },
+          h360: { width: 640, height: 360, encoding: { maxBitrate: 450000, maxFramerate: 20 } },
+        };
+        export const VideoPresets43 = {
+          h180: { width: 240, height: 180, encoding: { maxBitrate: 125000, maxFramerate: 20 } },
+          h360: { width: 480, height: 360, encoding: { maxBitrate: 330000, maxFramerate: 20 } },
+        };
         export const RoomEvent = Object.freeze({
           ConnectionStateChanged: 'connectionStateChanged',
           DataReceived: 'dataReceived',

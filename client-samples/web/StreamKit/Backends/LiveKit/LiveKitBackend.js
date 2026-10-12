@@ -25,7 +25,8 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
-import { CameraEncodingConfig, VideoQualityPreference } from '../../Config/CameraConfig.js';
+import { CameraEncodingConfig } from '../../Config/CameraConfig.js';
+import { cameraPublishOptions } from './CameraOptions.js';
 import {
   ByteStreamConnectionChanged,
   INTERNAL_SEND_BYTE_STREAM,
@@ -482,17 +483,7 @@ export class LiveKitBackend {
     try {
       const publication = await this.#room.localParticipant.publishTrack(mediaTrack, {
         source: Track.Source.Camera,
-        ...(encoding && {
-          videoEncoding: { maxBitrate: encoding.maxBitrateBps, maxFramerate: encoding.maxFramerate },
-          ...(encoding.simulcast !== null && { simulcast: encoding.simulcast }),
-          ...(encoding.qualityPreference !== null && {
-            degradationPreference: {
-              [VideoQualityPreference.DETAIL]: 'maintain-resolution',
-              [VideoQualityPreference.MOTION]: 'maintain-framerate',
-              [VideoQualityPreference.BALANCED]: 'balanced',
-            }[encoding.qualityPreference],
-          }),
-        }),
+        ...cameraPublishOptions(encoding, mediaTrack.getSettings(), this.#room.options.publishDefaults),
       });
       const track = publication.videoTrack;
       if (!track) throw new Error('LiveKit did not publish the camera track');

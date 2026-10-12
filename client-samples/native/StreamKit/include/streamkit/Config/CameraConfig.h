@@ -14,8 +14,11 @@ enum class VideoQualityPreference { kBalanced, kDetail, kMotion };
 
 /// Optional publish-side encoding controls. Capture format is unchanged.
 ///
-/// Limits apply to each encoded stream, not aggregate network traffic. Backends
-/// apply supported settings. The C++ LiveKitBackend consumes it through FrameSink
+/// Limits configure encoders, not aggregate network traffic. Backends apply
+/// supported settings. The C++ LiveKit SDK exposes only the primary limit;
+/// lower simulcast budgets remain SDK-controlled and may exceed a custom primary
+/// limit. Disable simulcast explicitly when that limitation is unacceptable.
+/// The C++ LiveKitBackend consumes it through FrameSink
 /// to specify publish options before the first frame creates the
 /// LocalVideoTrack. Restart the camera to apply changes.
 struct CameraEncodingConfig {

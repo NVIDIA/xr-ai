@@ -10,6 +10,9 @@ register('./web_camera_test_loader.mjs', import.meta.url);
 const { LiveKitBackend } = await import(
   '../../client-samples/web/StreamKit/Backends/LiveKit/LiveKitBackend.js'
 );
+const { cameraPublishOptions } = await import(
+  '../../client-samples/web/StreamKit/Backends/LiveKit/CameraOptions.js'
+);
 const { StreamSession } = await import(
   '../../client-samples/web/StreamKit/StreamSession.js'
 );
@@ -31,7 +34,7 @@ const {
   '../../client-samples/web/App/core.js'
 );
 
-function makeMediaTrack(settings = {}) {
+function makeMediaTrack(settings = { width: 1280, height: 720 }) {
   return {
     stopCount: 0,
     getSettings: () => ({ width: 1280, height: 720, facingMode: 'environment', ...settings }),
@@ -60,6 +63,7 @@ function makeRoom(publishTrack, {
 } = {}) {
   const handlers = new Map();
   const room = {
+    options: { publishDefaults: { simulcast: true } },
     state: 'disconnected',
     streamedByteOptions: [],
     remoteParticipants: new Map(remoteTracks.length ? [[
@@ -316,9 +320,8 @@ test('camera encoding presets reach publication and reset on restart without con
   await session.startCamera(new CameraConfig());
   assert.deepEqual(publications.at(-1), { source: 'camera' });
   await session.startCamera(new CameraConfig({ encoding: new CameraEncodingConfig({ maxFramerate: 5 }) }));
-  assert.deepEqual(publications.at(-1), {
-    source: 'camera', videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 5 },
-  });
+  assert.deepEqual(publications.at(-1).videoEncoding, { maxBitrate: 3_000_000, maxFramerate: 5 });
+  assert.deepEqual(publications.at(-1).videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [160000, 450000]);
   for (const constraints of captured) {
     assert.deepEqual(constraints, { audio: false, video: { facingMode: 'user', resizeMode: 'none' } });
   }
@@ -343,6 +346,45 @@ test('invalid encoding is rejected before capture or stopping an active camera',
   assert.equal(mediaTrack.stopCount, 0);
   assert.equal(room.unpublishedTracks.length, 0);
   assert.equal(backend.cameraTrack, mediaTrack);
+});
+
+test('simulcast budgets retain SDK layers but never exceed the configured primary', async (t) => {
+  const publications = [];
+  const customLayers = [
+    { width: 240, height: 180, encoding: { maxBitrate: 20000, maxFramerate: 15, priority: 'low' } },
+    { width: 480, height: 360, encoding: { maxBitrate: 330000, maxFramerate: 20 } },
+  ];
+  const snapshot = structuredClone(customLayers);
+  const policy = new CameraEncodingConfig({ maxBitrateBps: 50000 });
+  const custom = cameraPublishOptions(policy, { width: 1280, height: 960 }, {
+    simulcast: true, videoSimulcastLayers: customLayers,
+  });
+  assert.deepEqual(custom.videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [3030, 50000]);
+  assert.deepEqual(custom.videoSimulcastLayers.map(layer => [layer.width, layer.height]), [[240, 180], [480, 360]]);
+  assert.equal(custom.videoSimulcastLayers[0].encoding.priority, 'low');
+  assert.deepEqual(customLayers, snapshot);
+  assert.equal('videoSimulcastLayers' in cameraPublishOptions(
+    new CameraEncodingConfig({ simulcast: false }), { width: 1280, height: 720 }, { simulcast: true },
+  ), false);
+  assert.deepEqual(cameraPublishOptions(null, {}, { simulcast: true, videoSimulcastLayers: customLayers }), {});
+  installMediaDevices(async () => ({ getVideoTracks: () => [makeMediaTrack()] }));
+  const { backend } = await connectedBackend(t, async (track, options) => {
+    publications.push(options);
+    return { videoTrack: makePublishedTrack(track) };
+  });
+  await backend.startCamera({ encoding: policy });
+  assert.deepEqual(publications[0].videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [17777, 50000]);
+  assert.equal(publications[0].videoEncoding.maxBitrate, 50000);
+  assert.deepEqual(publications[0].videoSimulcastLayers.map(layer => [layer.width, layer.height]), [[320, 180], [640, 360]]);
+  assert.throws(() => cameraPublishOptions(new CameraEncodingConfig({ maxBitrateBps: 1 }),
+                                          { width: 1280, height: 720 }, { simulcast: true }), RangeError);
+  const equal = cameraPublishOptions(policy, { width: 1280, height: 720 }, {
+    simulcast: true, videoSimulcastLayers: [
+      { width: 320, height: 180, encoding: { maxBitrate: 160000, maxFramerate: 20 } },
+      { width: 640, height: 360, encoding: { maxBitrate: 160000, maxFramerate: 20 } },
+    ],
+  });
+  assert.deepEqual(equal.videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [50000, 50000]);
 });
 
 test('reports the highest selected-transport RTT and all inbound-track jitter', async (t) => {

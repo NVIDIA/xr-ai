@@ -28,6 +28,7 @@ import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.VideoTrackPublishOptions
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.CameraPosition
@@ -277,7 +278,27 @@ internal class LiveKitBackend(
             deviceId = config.deviceId,
             position = position,
         )
-        lp.setCameraEnabled(true)
+        if (config.encoding != null && publishDefaults.simulcast &&
+            lp.getTrackPublication(Track.Source.CAMERA) == null) {
+            // Capture options are the same ones setCameraEnabled would consume.
+            // Resolve the SDK's hardware format before selecting default layers.
+            val track = lp.createVideoTrack(name = "camera")
+            try {
+                track.start()
+                track.startCapture()
+                val dimensions = track.dimensions
+                val options = cameraLayerDefaults(config.encoding, publishDefaults, dimensions.width, dimensions.height)
+                check(lp.publishVideoTrack(track, VideoTrackPublishOptions(base = options, source = Track.Source.CAMERA))) {
+                    "Camera publication failed"
+                }
+                if (!isConnected) throw StreamError.CameraRequiresConnection
+            } catch (error: Throwable) {
+                releaseFailedCamera(lp, track)
+                throw error
+            }
+        } else {
+            lp.setCameraEnabled(true)
+        }
         Unit
     }
 
@@ -294,6 +315,19 @@ internal class LiveKitBackend(
             return
         }
         room?.localParticipant?.setCameraEnabled(false)
+    }
+
+    private fun releaseFailedCamera(lp: LocalParticipant, track: LocalVideoTrack) {
+        if (lp.getTrackPublication(Track.Source.CAMERA)?.track === track) {
+            lp.unpublishTrack(track)
+        } else {
+            // The SDK does not own an allocation whose publication failed.
+            try { track.stopCapture() }
+            finally {
+                try { track.stop() }
+                finally { track.dispose() }
+            }
+        }
     }
 
     override suspend fun captureImage(config: CameraConfig): CapturedImage {
@@ -362,8 +396,10 @@ internal class LiveKitBackend(
                 track.startCapture()
                 // Publish as CAMERA for both the preview and the hub.
                 check(lp.publishVideoTrack(track, VideoTrackPublishOptions(
-                    base = videoPublishDefaults(encoding), source = Track.Source.CAMERA,
+                    base = cameraLayerDefaults(encoding, videoPublishDefaults(encoding), width, height),
+                    source = Track.Source.CAMERA,
                 ))) { "Injected camera publication failed" }
+                if (!isConnected) throw StreamError.NotConnected
                 injectedVideoTrack = track
                 injectedCapturer = newCapturer
                 // First delivery has the same lifetime protection as cached
@@ -374,12 +410,7 @@ internal class LiveKitBackend(
                 injectedCapturer = null
                 // Publish can fail/cancel before the SDK owns the track. Its
                 // unpublish operation is a no-op for an unpublished track.
-                if (lp.getTrackPublication(Track.Source.CAMERA)?.track === track) {
-                    lp.unpublishTrack(track)
-                } else {
-                    track.stop()
-                    track.dispose()
-                }
+                releaseFailedCamera(lp, track)
                 throw error
             }
         }

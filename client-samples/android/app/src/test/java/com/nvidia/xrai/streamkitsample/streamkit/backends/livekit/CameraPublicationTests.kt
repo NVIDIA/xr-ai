@@ -15,6 +15,11 @@ import io.livekit.android.room.track.LocalTrackPublication
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.Track
+import io.livekit.android.room.track.CustomVideoPreset
+import io.livekit.android.room.track.VideoPreset169
+import io.livekit.android.room.track.VideoEncoding
+import io.livekit.android.room.track.CameraPosition
+import livekit.org.webrtc.RtpParameters
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -26,6 +31,8 @@ import java.nio.ByteBuffer
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 
 /** Runs the real backend transaction; mocks only the SDK/native boundary.
  * Continuations force the original interleaving without sleeps or a device.
@@ -38,11 +45,15 @@ class CameraPublicationTests {
         val publication = Mockito.mock(LocalTrackPublication::class.java)
         val backend = LiveKitBackend(LiveKitConfig(host = "test"), Mockito.mock(Context::class.java))
         var defaults = VideoTrackPublishDefaults(simulcast = false, videoCodec = "h264")
+        var captureDefaults = LocalVideoTrackOptions()
         var active: LocalTrackPublication? = null
 
         init {
             Mockito.`when`(room.localParticipant).thenReturn(participant)
-            Mockito.`when`(participant.videoTrackCaptureDefaults).thenReturn(LocalVideoTrackOptions())
+            Mockito.`when`(participant.videoTrackCaptureDefaults).thenAnswer { captureDefaults }
+            Mockito.doAnswer { captureDefaults = it.getArgument(0); null }
+                .`when`(participant).videoTrackCaptureDefaults =
+                    Mockito.any(LocalVideoTrackOptions::class.java) ?: captureDefaults
             Mockito.`when`(participant.videoTrackPublishDefaults).thenAnswer { defaults }
             Mockito.doAnswer { defaults = it.getArgument(0); null }
                 .`when`(participant).videoTrackPublishDefaults =
@@ -183,6 +194,7 @@ class CameraPublicationTests {
                 Mockito.verify(f.participant).unpublishTrack(device)
                 Mockito.verify(f.track).stop()
                 Mockito.verify(f.track).dispose()
+                Mockito.verify(f.track).stopCapture()
             }
         }
     }
@@ -224,5 +236,98 @@ class CameraPublicationTests {
         assertTrue(f.policy(CameraEncodingConfig(simulcast = true)).simulcast)
         assertFalse(f.policy(CameraEncodingConfig(simulcast = false)).simulcast)
         assertFalse(f.policy(CameraEncodingConfig.MOTION).simulcast)
+    }
+
+    @Test fun SDKComputedEncodingsKeepTheirGeometryAndCoherentLimits() {
+        val f = Fixture()
+        val policy = CameraEncodingConfig(maxBitrateBps = 50_000)
+        val defaults = VideoTrackPublishDefaults(videoEncoding = VideoEncoding(50_000, 30), simulcast = true)
+        val bounded = cameraLayerDefaults(policy, defaults, 1280, 720)
+        val compute = LocalParticipant::class.java.getDeclaredMethod(
+            "computeVideoEncodings", Boolean::class.javaPrimitiveType, Track.Dimensions::class.java,
+            VideoTrackPublishOptions::class.java,
+        ).apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        fun actual(options: VideoTrackPublishDefaults) = compute.invoke(
+            f.participant, false, Track.Dimensions(1280, 720), VideoTrackPublishOptions(base = options),
+        ) as List<RtpParameters.Encoding>
+        val before = actual(defaults)
+        val after = actual(bounded)
+        assertTrue(before.any { it.maxBitrateBps!! > 50_000 })
+        assertTrue(after.all { it.maxBitrateBps!! <= 50_000 })
+        assertEquals(before.map { it.rid to it.scaleResolutionDownBy }, after.map { it.rid to it.scaleResolutionDownBy })
+        assertEquals(before.map { it.maxFramerate }, after.map { it.maxFramerate })
+        assertNull(defaults.simulcastLayers)
+        val custom = listOf(CustomVideoPreset(VideoPreset169.H180.capture, VideoEncoding(20_000, 12)), VideoPreset169.H360)
+        val customDefaults = defaults.copy(simulcastLayers = custom)
+        val limited = cameraLayerDefaults(policy, customDefaults, 1280, 720)
+        assertEquals(listOf(2_222, 50_000), limited.simulcastLayers!!.map { it.encoding.maxBitrate })
+        assertEquals(custom.map { it.capture }, limited.simulcastLayers!!.map { it.capture })
+        assertEquals(custom.map { it.encoding.maxFps }, limited.simulcastLayers!!.map { it.encoding.maxFps })
+        assertSame(defaults, cameraLayerDefaults(null, defaults, 0, 0))
+        val disabled = defaults.copy(simulcast = false)
+        assertSame(disabled, cameraLayerDefaults(policy, disabled, 0, 0))
+        assertThrows(IllegalArgumentException::class.java) {
+            cameraLayerDefaults(CameraEncodingConfig(maxBitrateBps = 1), defaults, 1280, 720)
+        }
+    }
+
+    @Test fun devicePolicyUsesActualSDKDimensionsAndExistingCaptureSelection() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        f.defaults = f.defaults.copy(simulcast = true)
+        f.setField("cameraPublishBaseline", f.defaults)
+        Mockito.`when`(f.track.dimensions).thenReturn(Track.Dimensions(1280, 960))
+        val captureArgument = LocalVideoTrackOptions()
+        Mockito.doReturn(f.track).`when`(f.participant).createVideoTrack(
+            Mockito.anyString(), Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
+        )
+        f.backend.startCamera(CameraConfig(deviceId = "pinned", facing = CameraConfig.CameraFacing.BACK,
+                                          encoding = CameraEncodingConfig(maxBitrateBps = 50_000)))
+        assertSame(f.publication, f.active)
+        assertEquals("pinned", f.captureDefaults.deviceId)
+        assertEquals(CameraPosition.BACK, f.captureDefaults.position)
+        val options = org.mockito.ArgumentCaptor.forClass(VideoTrackPublishOptions::class.java)
+        Mockito.verify(f.participant).publishVideoTrack(Mockito.eq(f.track) ?: f.track,
+                                                       options.capture() ?: VideoTrackPublishOptions(base = f.defaults), Mockito.isNull())
+        assertTrue(options.value.simulcastLayers!!.all { it.encoding.maxBitrate <= 50_000 })
+        assertEquals(listOf(240, 480), options.value.simulcastLayers!!.map { it.capture.width })
+    }
+
+    @Test fun cancelledFirstPublicationCleansItsOwnedAllocationBeforeReleasingCamera() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        val options = VideoTrackPublishOptions(base = f.defaults)
+        var pending: Continuation<Boolean>? = null
+        Mockito.doAnswer {
+            @Suppress("UNCHECKED_CAST")
+            pending = it.rawArguments.last() as Continuation<Boolean>
+            COROUTINE_SUSPENDED
+        }.`when`(f.participant).publishVideoTrack(Mockito.eq(f.track) ?: f.track,
+                                                Mockito.any(VideoTrackPublishOptions::class.java) ?: options, Mockito.isNull())
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            val frame = launch(start = CoroutineStart.UNDISPATCHED) {
+                f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            }
+            try {
+                assertNotNull(pending)
+                frame.cancel()
+                val stop = launch(start = CoroutineStart.UNDISPATCHED) { f.backend.stopCamera() }
+                assertFalse(stop.isCompleted)
+                val completed = pending!!
+                pending = null
+                completed.resumeWithException(CancellationException())
+                frame.join()
+                stop.join()
+                Mockito.verify(f.track).stop()
+                Mockito.verify(f.track).dispose()
+                Mockito.verify(f.track).stopCapture()
+                assertNull(f.active)
+            } finally {
+                val unfinished = pending
+                pending = null
+                unfinished?.resumeWithException(CancellationException())
+            }
+        }
     }
 }
