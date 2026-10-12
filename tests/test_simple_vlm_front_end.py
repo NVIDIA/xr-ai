@@ -302,8 +302,10 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.fail_once = True
+            self.answer_histories = []
 
         async def answer(self, turn, *, emit):
+            self.answer_histories.append(turn.history)
             if self.fail_once:
                 self.fail_once = False
                 raise RuntimeError("destination failed")
@@ -324,6 +326,7 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
     result = await front_end.handle(ConversationTurn("alice", "turn-2", "Try again."), emit=emit)
     assert result.text == "Recovered."
     assert output == [("xr", "I will try."), ("xr", "Recovered.")]
+    assert destination.answer_histories == [(), ()]
 
 
 @pytest.mark.asyncio
