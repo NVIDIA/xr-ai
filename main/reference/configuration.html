@@ -602,6 +602,13 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Probe once at worker startup. Ordinary STT keeps the same controls when the</span>
+<span class="c1"># diarization service is unavailable; use required to demand speaker filtering.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 </section>
@@ -754,6 +761,13 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="c1"># Join exact control fragments whose onsets are within this window.</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Probe once at worker startup. Ordinary STT keeps the same controls when the</span>
+<span class="c1"># diarization service is unavailable; use required to demand speaker filtering.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 </section>
@@ -909,6 +923,13 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Probe once at worker startup. Ordinary STT keeps the same controls when the</span>
+<span class="c1"># diarization service is unavailable; use required to demand speaker filtering.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 </section>
@@ -930,6 +951,13 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Probe once at worker startup. Ordinary STT keeps the same controls when the</span>
+<span class="c1"># diarization service is unavailable; use required to demand speaker filtering.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 </section>
@@ -1394,6 +1422,13 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Probe once at worker startup. Ordinary STT keeps the same controls when the</span>
+<span class="c1"># diarization service is unavailable; use required to demand speaker filtering.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 </section>

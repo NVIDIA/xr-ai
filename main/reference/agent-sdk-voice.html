@@ -639,12 +639,99 @@ If the final transcript remains a global stop, normal stop handling emits the
 acknowledgement. If STT revises partial <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code> to final <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>, the final transcript instead dispatches <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span> <span class="pre">xyz</span></code>
 to the agent; the latency-saving interruption is not undone.</p>
 </section>
+<section id="speaker-filtering-and-backend-selection">
+<span id="speaker-enrollment"></span><h2>Speaker filtering and backend selection<a class="headerlink" href="#speaker-filtering-and-backend-selection" title="Link to this heading">#</a></h2>
+<p>The same conversation controls work with ordinary STT and optional speaker
+filtering. Add <code class="docutils literal notranslate"><span class="pre">speaker</span></code> alongside <code class="docutils literal notranslate"><span class="pre">conversation</span></code> in the worker’s voice-gate YAML:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
+</pre></div>
+</div>
+<p>Before announcing readiness, the worker probes the service’s HTTP <code class="docutils literal notranslate"><span class="pre">/health</span></code>
+endpoint. A ready compatible service selects diarization. In automatic mode,
+connection absence selects the configured ordinary <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, including the
+unchanged NIM stack’s HTTP STT adapter. Once a listener is observed, an unresponsive
+or interrupted response means not-ready: the worker waits using the existing
+service-readiness polling instead of silently selecting unfiltered STT. A stalled
+listener can therefore hold startup until it is ready or startup is cancelled.
+Incompatible identities and HTTP error statuses fail startup. Ambient proxy
+settings do not redirect either the HTTP probe or the WebSocket stream.
+The worker logs its selection. Ordinary STT cannot identify or reject other voices
+on the same microphone. Set <code class="docutils literal notranslate"><span class="pre">speaker.backend:</span> <span class="pre">required</span></code> to wait for diarization
+even when the service is absent, or <code class="docutils literal notranslate"><span class="pre">speaker.enabled:</span> <span class="pre">false</span></code> to select ordinary
+STT while retaining conversation controls. Restart the worker to change backends.
+Loss of a selected diarization service resets enrollment instead of switching to
+unfiltered STT.</p>
+<p>Speaker filtering uses Nemotron 3 Diarization with Multitalker Parakeet. A private
+inference process shares model weights across workers. The private model adapter
+opens one WebSocket at <code class="docutils literal notranslate"><span class="pre">/v1/audio/transcriptions/stream</span></code> per participant. The
+connection owns that participant’s enrollment and closes when the participant
+leaves or its audio worker resets. After one configuration and audio-origin
+message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
+each event response before sending the next frame. The service derives timestamps
+from accepted sample counts; reconnecting starts a fresh timeline and requires
+enrollment again. Other voices contribute to
+diarization and interference conditioning, but are not transcribed after
+enrollment. Before enrollment, the service independently decodes each detected
+speaker and enrolls the one whose conditioned transcript completes the start
+phrase, including during overlapping speech. If multiple speakers complete the
+phrase in the same accepted audio step, neither is selected. Once enrolled,
+another voice’s later start phrase cannot take over the connection.</p>
+<p>The hub’s existing microphone track identity is retained privately. Switching
+to a different track closes the old stream, discards pending audio and controls,
+revokes enrollment, and opens a new timeline at the next track’s first audio.
+Microphone stop and republish therefore cannot join old phrase fragments across
+tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
+do not establish capture continuity, and delivery jitter does not trigger guessed
+resets. Explicit same-track capture epochs are outside this integration.</p>
+<p>Start the inference process separately from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/speaker-stt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>speaker_stt<span class="w"> </span>--config<span class="w"> </span>services/speaker-stt/speaker_stt.yaml
+</pre></div>
+</div>
+<p>Say the exact start phrase to nominate its speaker. Other speech can continue:
+the service conditions each candidate transcript on that speaker’s target and
+interference masks. Candidate phrases finalize on each speaker’s configured
+inactivity boundary, without requiring global silence. A tie means multiple
+exact matches completed in the same accepted audio step, not a claim about
+absolute acoustic simultaneity. Split controls retain the same speaker label;
+truncated candidate episodes cannot nominate from their continuing tail. No
+candidate transcript dispatches a query before enrollment. After enrollment,
+only the selected speaker can send queries or release the conversation. Wake
+phrases remain optional through <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase</span></code>; filtering
+cannot determine whom the wearer is addressing.</p>
+<p>Conversation state belongs to a participant connection. Disconnect, inference
+failure or processing overload requires
+enrollment again. Per-participant queues retain at most two seconds or 200 audio
+frames; overload drops pending audio and revokes enrollment. Workers wait two
+seconds before retrying after failure or overload. Closing the WebSocket releases
+its inference session, and the service bounds their count. At <code class="docutils literal notranslate"><span class="pre">max_utterance_s</span></code>,
+an enrolled speaker’s final transcript is retained, but the incomplete utterance
+cannot activate a conversation control or enroll a new speaker.</p>
+<p>Departure closes admission before asynchronous cleanup, and only an explicit
+participant join permits new audio. Cleanup retains task and queue ownership
+through stream close. Participant lifecycle and enrollment transitions retain
+their order and survive pipeline interruptions. An active-to-reset transition
+interrupts the current answer and emits one listening-reset notice; subsequent
+outage retries do not repeatedly interrupt or announce the same reset.</p>
+<p>Worker phrase settings do not require restarting the model service. When both
+<code class="docutils literal notranslate"><span class="pre">conversation</span></code> and <code class="docutils literal notranslate"><span class="pre">speaker</span></code> are present, <code class="docutils literal notranslate"><span class="pre">conversation</span></code> owns the control settings.
+Speaker-only YAML remains supported. Disabling conversation controls also disables
+speaker enrollment; typed input retains its existing behavior.</p>
+<p>Speech accuracy, identity stability, interference suppression, latency and GPU
+memory require live qualification on the intended microphones. Enrollment selects
+a session speaker; it is not authentication or a persistent biometric identity.
+No speaker profiles are saved to disk.</p>
+</section>
 <section id="relay-telemetry">
 <h2>Relay telemetry<a class="headerlink" href="#relay-telemetry" title="Link to this heading">#</a></h2>
 <p>Voice output fragments use a low-cardinality runtime topic. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> emits
 one semantic <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> scope per finite response or completed stream.
-The media pipeline emits one <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> scope per transcription and one
-<code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> scope per sentence synthesis. STT records audio size, duration, and
+The batch-STT path emits one <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> scope per transcription; speaker
+filtering does not currently emit STT scopes. The media pipeline emits one
+<code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> scope per sentence synthesis. Batch STT records audio size, duration, and
 sample rate plus a transcript result mark; TTS records its sentence. Raw audio
 is never written to Relay events, and these timings end at provider handoff,
 not client playback.</p>
@@ -705,6 +792,7 @@ not client playback.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-controls">Conversation controls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gating-and-early-probes">Voice gating and early probes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speaker-filtering-and-backend-selection">Speaker filtering and backend selection</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relay-telemetry">Relay telemetry</a></li>
 </ul>
   </nav></div>
