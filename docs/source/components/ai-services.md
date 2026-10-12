@@ -326,7 +326,8 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
 serving so the next start reuses hot weights. Use `model_servers --stop`
-for the local stack. Independently deployed NIMs follow their operator's
+for the selected local deployment. Startup does not sweep services omitted
+from its configuration. Independently deployed NIMs follow their operator's
 lifecycle. At startup a wrapper
 that finds a *different* persistent xr-ai container holding its port (found
 by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
@@ -393,7 +394,26 @@ failed inspection abort cleanup without sending a signal, and
 `model_servers --stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
 
-The target ports and container names match the defaults in the per-profile YAML files.
+Stop targets are the managed services in the same launch plan used for
+startup, with ports read from the selected hardware YAMLs. Entries explicitly
+marked `external` or `reused`, and services omitted from the deployment, are
+not stop targets. For a custom deployment, use the same selection as at launch:
+
+```bash
+uv run --project model-server-samples/model-servers model_servers \
+  --models /path/to/models.custom.json --gpu-profile dual_48G_ada --stop
+```
+
+Automatic GPU detection remains the default; use the same `--gpu-profile` when
+it was explicitly selected at launch or detection is unavailable. Stop does
+not require model-download credentials. Stop the old selection before changing
+its JSON, hardware profile, or service ports; no previous configuration is
+recorded or rediscovered.
+
+This is configuration-scoped cleanup, not exclusive launch-instance ownership.
+A matching managed-service listener on a selected port can be stopped even if
+it was started independently. Existing identity checks reject unknown listeners;
+they do not identify which deployment originally started a recognized service.
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
@@ -503,11 +523,11 @@ The selected image reports this in-container vLLM version:
 
 ### Cleanup
 
-`model_servers --stop` works for both modes. Cleanup locates labelled
-Docker containers before inspecting ports, then stops them with `docker stop`
-(escalating to `docker kill` after 20 s). Pip-mode processes carry an
-`xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
-cleanup without sending a signal.
+`model_servers --stop` works for both modes within the selected managed launch
+plan. Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with `docker stop` (escalating to `docker kill` after 20 s).
+Pip-mode processes carry an `xr-ai-vllm` ownership marker; unknown listeners
+and failed inspection abort cleanup without sending a signal.
 
 Pip-mode vLLM processes started before the ownership markers were introduced
 cannot be identified safely. After upgrading, stop each unmarked process
