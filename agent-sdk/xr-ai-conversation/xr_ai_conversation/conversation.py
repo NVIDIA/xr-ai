@@ -24,15 +24,17 @@ from .contracts import (
     RoutingAid,
 )
 
-_CONVERSATION_PROMPT = (Path(__file__).parent / "prompts" / "conversation.txt").read_text(encoding="utf-8").strip()
+_CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 _MAX_HISTORY_EXCHANGES = 4
 _MAX_HISTORY_TEXT = 240
 _CURRENT_VIEW_NAME = "current_view"
 _CURRENT_VIEW_TOOL = ToolDef(
     name=_CURRENT_VIEW_NAME,
     description=(
-        "Inspect the participant's present camera view. Provide a concise, standalone "
-        "visual question with any follow-up referents resolved from conversation history."
+        "Inspect the participant's present camera view only for current appearance, visible text, "
+        "counts, or spatial relations. Do not use this for general knowledge, memory, or application "
+        "actions. Provide one concise, standalone VLM question with follow-up referents resolved from "
+        "conversation history. Do not speak a preamble before calling this tool."
     ),
     parameters={
         "type": "object",
@@ -54,54 +56,46 @@ class _CurrentViewRequest(StrictRequest):
 
 
 class Conversation:
-    """General conversation destination with optional current-view routing.
+    """Stream an application-instructed conversation with optional current-view tools.
 
     Args:
         llm: Typed streamed language model service.
-        name: Route and output source name, defaulting to ``conversation``.
+        instructions: Application-owned prompt text defining domain, role, tone,
+            and handling policy.
+        routing: Concise destination metadata for the front end; defaults to a
+            general conversation description, adjusted when vision is unavailable.
         frames: Native current-frame tool. Configure together with ``vision``.
         vision: Native streaming visual-query tool. Configure together with ``frames``.
-        persona: Optional application-owned response guidance added to the prompt.
-        scope: Optional routing scope; defaults to general conversation plus visual
-            questions when vision tools are configured, and general conversation only otherwise.
-        exclusions: Application-owned requests this destination must not claim.
     """
 
     def __init__(
         self,
         llm: LLMService,
         *,
-        name: str = "conversation",
+        instructions: str = "",
+        routing: RoutingAid | None = None,
         frames: CurrentFrameTool | None = None,
         vision: StreamingImageQueryTool | None = None,
-        persona: str | None = None,
-        scope: str | None = None,
-        exclusions: str = "application-specific actions or persistent application workflows",
     ) -> None:
         if (frames is None) != (vision is None):
             raise ValueError("frames and vision must be configured together")
-        if not name.strip():
-            raise ValueError("name must not be empty")
-        self._name = name.strip()
         self._frames = frames
         self._vision = vision
         self._llm = llm
-        self._persona = persona.strip() if persona else None
-        self._scope = scope or (
-            "ordinary conversation, general questions, and visual questions about the current view"
-            if vision is not None
-            else "ordinary conversation and general questions; no current-view inspection capability"
+        self._instructions = instructions.strip()
+        self._routing = routing or RoutingAid(
+            name="conversation",
+            description=(
+                "General conversation and current-view visual questions"
+                if vision is not None
+                else "General conversation; no current-view visual tools are configured"
+            ),
         )
-        self._exclusions = exclusions
 
     def routing_aid(self, _participant_id: str) -> RoutingAid:
-        """Declare this destination's general conversation and current-view scope."""
+        """Return this destination's routing metadata."""
 
-        return RoutingAid(
-            name=self._name,
-            scope=self._scope,
-            exclusions=self._exclusions,
-        )
+        return self._routing
 
     async def admit(self, _turn: ConversationTurn, *, focused: bool) -> Admission:
         """Accept ordinary turns without retaining participant focus."""
@@ -117,7 +111,7 @@ class Conversation:
         try:
             async for text in stream:
                 fragments.append(text)
-                await emit(self._name, text)
+                await emit(self._routing.name, text)
         finally:
             await stream.aclose()
         return DestinationResult("answer", "".join(fragments).strip())
@@ -137,8 +131,7 @@ class Conversation:
         messages = _messages(
             request,
             history,
-            persona=self._persona,
-            scope=self._scope,
+            instructions=self._instructions,
             vision_available=self._vision is not None,
         )
 
@@ -202,13 +195,12 @@ def _messages(
     request: str,
     history: tuple[ConversationExchange, ...],
     *,
-    persona: str | None,
-    scope: str,
+    instructions: str,
     vision_available: bool,
 ) -> tuple[ChatMessage, ...]:
-    system_prompt = f"{_CONVERSATION_PROMPT}\n\nThis destination's configured scope is: {scope}."
-    if persona:
-        system_prompt += f"\n\nApplication-provided persona and response guidance:\n{persona}"
+    system_prompt = _CORE_PROMPT
+    if instructions:
+        system_prompt += f"\n\nApplication instructions:\n{instructions}"
     if not vision_available:
         system_prompt += (
             "\n\nNo camera or visual-inspection tool is available. Do not claim to inspect the current view; "

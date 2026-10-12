@@ -21,7 +21,7 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
-from xr_ai_models import ChatResponse, ChatStreamEvent, ToolCall, VLMService
+from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse, ToolCall, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
@@ -43,7 +43,13 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from xr_ai_conversation import Conversation, ConversationExchange  # noqa: E402  # pyright: ignore[reportMissingImports]
+from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    Conversation,
+    ConversationExchange,
+    ConversationFrontEnd,
+    ConversationTurn,
+    RoutingAid,
+)
 from xr_ai_tools import Tool  # noqa: E402
 from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
 from xr_ai_tools.current_frame import (  # noqa: E402
@@ -293,26 +299,86 @@ async def test_text_only_conversation_has_no_visual_tool_and_advertises_no_camer
 
     assert answer == ["Hello ", "there."]
     assert llm.requests[0][1] == ()
-    assert "no current-view inspection capability" in aid.scope
+    assert "no current-view visual tools are configured" in aid.description
     assert "No camera or visual-inspection tool is available" in llm.requests[0][0][0].content
 
 
-async def test_conversation_persona_and_domain_scope_are_application_configured() -> None:
+async def test_application_instructions_and_routing_metadata_are_separate_inputs() -> None:
     llm = _ConversationService(visual=False)
+    instructions = (
+        "Answer general questions about museum exhibits. If asked for a medical diagnosis, "
+        "say you cannot diagnose and suggest consulting a clinician."
+    )
+    routing = RoutingAid(
+        name="museum_guide",
+        description="Questions about museum exhibits and visible exhibit labels",
+        priority=3,
+    )
     conversation = Conversation(
         llm,  # type: ignore[arg-type]
-        persona="You are a museum guide. Keep answers accessible to children.",
-        scope="questions about museum exhibits, including visual questions about the current display",
-        exclusions="medical advice and application control",
+        instructions=instructions,
+        routing=routing,
     )
 
     [chunk async for chunk in conversation.stream("What is this?", "alice")]
     aid = conversation.routing_aid("alice")
 
-    assert "museum guide" in llm.requests[0][0][0].content
-    assert "museum exhibits" in llm.requests[0][0][0].content
-    assert aid.scope.startswith("questions about museum exhibits")
-    assert aid.exclusions == "medical advice and application control"
+    assert f"Application instructions:\n{instructions}" in llm.requests[0][0][0].content
+    assert "medical diagnosis" in llm.requests[0][0][0].content
+    assert aid == routing
+
+
+async def test_domain_visual_request_routes_to_configured_conversation_destination() -> None:
+    class Decisions:
+        def __init__(self) -> None:
+            self.state = None
+
+        async def decide(self, state, _questions, *, timeout=None):
+            self.state = state
+            return DecisionResponse(
+                answers={"destination": DecisionAnswer("museum_guide", 1.0, {"museum_guide": 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    decisions = Decisions()
+    llm = _ConversationService(visual_query="Read the label on the exhibit display.")
+    frames = _ConversationFrames()
+    vision = _StreamingImageQueryTool()
+    museum = Conversation(
+        llm,  # type: ignore[arg-type]
+        instructions="Answer questions about museum exhibits.",
+        routing=RoutingAid(
+            name="museum_guide",
+            description="Questions about museum exhibits and visible display labels",
+        ),
+        frames=frames,  # type: ignore[arg-type]
+        vision=vision,  # type: ignore[arg-type]
+    )
+    general = Conversation(_ConversationService(visual=False))  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd(
+        {"conversation": general, "museum_guide": museum},
+        decisions,  # type: ignore[arg-type]
+    )
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    result = await front_end.handle(
+        ConversationTurn("alice", "museum-1", "Read the label on this exhibit."),
+        emit=emit,
+    )
+
+    assert result.text == "a blue square"
+    assert output == [("museum_guide", "a "), ("museum_guide", "blue square")]
+    assert llm.requests[0][1][0].name == "current_view"
+    assert vision.requests[0].query == "Read the label on the exhibit display."
+    assert (
+        next(item for item in decisions.state["destinations"] if item["name"] == "museum_guide")["description"]
+        == "Questions about museum exhibits and visible display labels"
+    )
 
 
 def test_conversation_rejects_half_configured_vision_tools() -> None:
@@ -367,10 +433,11 @@ async def test_simple_vlm_agent_publishes_one_safe_fallback_on_llm_failure() -> 
         async def publish(self, topic, output) -> None:
             published.append((topic, output))
 
+    llm = _ConversationService(error=RuntimeError("offline"))
     agent = SimpleVlmAgent(
         lambda: (_ConversationFrames(), _StreamingImageQueryTool()),  # type: ignore[arg-type]
         _ignore_status,
-        llm=_ConversationService(error=RuntimeError("offline")),  # type: ignore[arg-type]
+        llm=llm,  # type: ignore[arg-type]
     )
 
     await agent._stream(  # noqa: SLF001
@@ -381,6 +448,7 @@ async def test_simple_vlm_agent_publishes_one_safe_fallback_on_llm_failure() -> 
     assert len(published) == 1
     assert published[0][1].text == "I couldn't complete that request. Please try again."
     assert published[0][1].timestamp_us == 456
+    assert "You are a fast voice conversational assistant" in llm.requests[0][0][0].content
 
 
 class _LiveEndpoint:

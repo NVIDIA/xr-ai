@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -36,6 +37,9 @@ PARTICIPANT_LEFT_TOPIC = Topic(
     VoiceParticipantLeft,
 )
 INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
+_CONVERSATION_INSTRUCTIONS = (
+    (Path(__file__).parent / "prompts" / "conversation.txt").read_text(encoding="utf-8").strip()
+)
 
 
 class SimpleVlmAgent(Agent):
@@ -141,6 +145,7 @@ class SimpleVlmAgent(Agent):
                 self._frames, self._vision = self._vision_factory()
                 self._conversation = Conversation(
                     self._llm,
+                    instructions=_CONVERSATION_INSTRUCTIONS,
                     frames=self._frames,
                     vision=self._vision,
                 )

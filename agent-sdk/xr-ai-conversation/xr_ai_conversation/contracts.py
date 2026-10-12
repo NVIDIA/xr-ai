@@ -40,25 +40,22 @@ class ConversationTurn:
 
 @dataclass(frozen=True, slots=True)
 class RoutingAid:
-    """A destination's concise declared scope for route selection."""
+    """Brief routing metadata, separate from the destination's full instructions."""
 
     name: str
     """Stable route name used for attribution and decision labels."""
 
-    scope: str
-    """Requests this destination is equipped to handle."""
+    description: str
+    """Concise description used as a route-selection hint, not an authorization rule."""
 
-    exclusions: str = ""
-    """Requests this destination must not claim."""
+    priority: int = 0
+    """Tie-breaking preference after request relevance."""
 
     eligible: bool = True
-    """Whether routing may select this destination for the participant now."""
+    """Whether this destination may be selected for this participant now."""
 
     eligibility: str = "available"
     """Current participant-specific eligibility state."""
-
-    priority: int = 0
-    """Tie-breaking preference applied after scope relevance."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,10 +74,10 @@ class Admission:
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
-    """Completion text for history and an optional foreground transition."""
+    """Front-end outcome with completed answer text and optional focus transition."""
 
-    disposition: Literal["answer", "decline", "focus", "release", "clarify"] = "answer"
-    """Outcome of this destination's admitted work."""
+    disposition: Literal["answer", "focus", "release", "clarify"] = "answer"
+    """Front end outcome; destinations return answer, focus, or release after work."""
 
     text: str = ""
     """Completed answer to retain in history; progress acknowledgements are excluded."""
@@ -99,7 +96,12 @@ class ConversationDestination(Protocol):
         """Accept, decline, clarify, or release before producing spoken output."""
 
     async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
-        """Answer an admitted turn, streaming each chunk with its source name."""
+        """Answer an admitted turn, streaming chunks; return answer, focus, or release.
+
+        Destinations decline or clarify in ``admit()``, before output or work begins.
+        The front end itself uses ``DestinationResult("clarify", ...)`` when no
+        eligible route can proceed.
+        """
 
     async def release(self, participant_id: str) -> None:
         """Release destination-owned foreground resources for one participant."""

@@ -19,22 +19,35 @@ resolved follow-up references; the conversation then executes
 `CurrentFrameTool` and streams `StreamingImageQueryTool` output. Frame selection
 and visual inference remain separate tools. Tool-call preamble guidance is a
 prompt contract: text already emitted before a later tool call cannot be
-retracted.
+retracted. The core prompt is deliberately small; the application supplies its
+own instructions, while the tool definition describes how to formulate a
+standalone visual question.
 
 ```python
-from xr_ai_conversation import Conversation, ConversationExchange
+from xr_ai_conversation import Conversation, ConversationExchange, RoutingAid
 
-conversation = Conversation(llm, frames=frames, vision=streaming_vision)
+conversation = Conversation(
+    llm,
+    instructions=load_text("conversation.txt"),
+    routing=RoutingAid(
+        name="conversation",
+        description="General conversation and current-view visual questions",
+    ),
+    frames=frames,
+    vision=streaming_vision,
+)
 history = (ConversationExchange(user="Which bottle is fullest?", assistant="The left one."),)
 async for text in conversation.stream("Read its label", "participant-1", history=history):
     await speak(text)
 ```
 
-For a text-only destination, construct `Conversation(llm)` without camera or
-visual-query tools. It will not register `current_view` and advertises no
-current-view inspection capability. Applications can set `name`, `persona`,
-`scope`, and `exclusions` to align route selection and response guidance with
-their domain; the application still owns the meaning of that configuration.
+For a text-only destination, construct `Conversation(llm, instructions=...)`
+without camera or visual-query tools. It will not register `current_view` and
+its default routing description says that visual tools are unavailable.
+Application instructions define the destination's domain, role, tone, and
+handling policy. `RoutingAid` separately gives the front end a concise name,
+description, and optional tie-breaking priority; it guides route selection and
+does not enforce the application's policy.
 
 ## Multi-destination routing
 
@@ -46,14 +59,20 @@ foreground guide. `ConversationFrontEnd` uses the typed `DecisionService` to
 select among real destinations, lets an explicitly focused destination receive
 the next turn first, and returns to route selection when it releases or declines.
 A declined route is excluded from one reroute; uncertain or unavailable work
-ends with a clarification instead of invoking a guessed destination.
+ends with a clarification instead of invoking a guessed destination. Routing
+descriptions and priority are selection hints; application policy belongs in
+the destination's instructions and admission check. Destinations decline or
+clarify in `admit()` before work begins; after work, `answer()` returns only
+`answer`, `focus`, or `release`. The front end may return `clarify` when no route
+can proceed.
 
 The front end owns per-participant reply tasks and focus assignment. Each
 destination owns its persistent application state and cleanup. `interrupt()`
 cancels current work while preserving focus; `participant_left()` cancels the
-turn and releases only that participant's focused destination; `stop()` drains
-work and releases all focus. Output callbacks receive the destination name and
-text so applications can keep speech attribution aligned with the route.
+turn and calls `release()` on destinations that handled that participant;
+`stop()` drains work and releases all tracked participant state. Output
+callbacks receive the destination name and text so applications can keep speech
+attribution aligned with the route.
 
 ```python
 from xr_ai_conversation import ConversationFrontEnd

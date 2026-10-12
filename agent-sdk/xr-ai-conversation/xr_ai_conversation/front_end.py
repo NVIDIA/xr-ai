@@ -48,6 +48,7 @@ class ConversationFrontEnd:
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._history: dict[str, deque[ConversationExchange]] = {}
+        self._destinations_used: dict[str, set[str]] = {}
 
     async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
         """Route and answer one turn, emitting source-tagged text chunks."""
@@ -106,30 +107,43 @@ class ConversationFrontEnd:
         """Cancel active work and release all destination-owned focus."""
 
         await self.interrupt()
-        for participant_id in tuple(self._focus):
+        participants = self._destinations_used.keys() | self._focus.keys()
+        for participant_id in tuple(participants):
             await self.participant_left(participant_id)
 
     async def _handle(self, turn: ConversationTurn, *, emit: Emit, generation: object) -> DestinationResult:
 
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
+        if focused is not None:
+            aid = self._destinations[focused].routing_aid(turn.participant_id)
+            if not aid.eligible:
+                await self._destinations[focused].release(turn.participant_id)
+                if self._generation.get(turn.participant_id) is not generation:
+                    raise asyncio.CancelledError()
+                self._focus.pop(turn.participant_id, None)
+                self._forget_destination(turn.participant_id, focused)
+                candidates = [name for name in self._destinations if name != focused]
+                focused = None
         for attempt in range(2):
             name = candidates[0] if focused and attempt == 0 else await self._select(turn, candidates)
             if self._generation.get(turn.participant_id) is not generation:
-                return DestinationResult("decline")
+                raise asyncio.CancelledError()
             if name is None:
                 text = "Which part would you like help with?"
                 await emit(self._default_destination, text)
                 return DestinationResult("clarify", text)
             destination = self._destinations[name]
+            self._destinations_used.setdefault(turn.participant_id, set()).add(name)
             admission = await destination.admit(turn, focused=(name == focused))
             if self._generation.get(turn.participant_id) is not generation:
-                return DestinationResult("decline")
+                raise asyncio.CancelledError()
             if admission.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
-                    return DestinationResult("decline")
+                    raise asyncio.CancelledError()
                 self._focus.pop(turn.participant_id, None)
+                self._forget_destination(turn.participant_id, name)
                 if admission.text:
                     await emit(name, admission.text)
                     self._remember(turn, admission.text)
@@ -143,10 +157,11 @@ class ConversationFrontEnd:
                     await emit(name, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
+                await destination.release(turn.participant_id)
+                if self._generation.get(turn.participant_id) is not generation:
+                    raise asyncio.CancelledError()
+                self._forget_destination(turn.participant_id, name)
                 if name == focused:
-                    await destination.release(turn.participant_id)
-                    if self._generation.get(turn.participant_id) is not generation:
-                        return DestinationResult("decline")
                     self._focus.pop(turn.participant_id, None)
                     focused = None
                 candidates = [item for item in candidates if item != name]
@@ -163,15 +178,18 @@ class ConversationFrontEnd:
                 emit=partial(_emit_from, emit, name),
             )
             if self._generation.get(turn.participant_id) is not generation:
-                return DestinationResult("decline")
+                raise asyncio.CancelledError()
+            if result.disposition not in {"answer", "focus", "release"}:
+                raise ValueError("destinations must decline or clarify in admit(), before answer()")
             if result.disposition == "focus":
                 self._focus[turn.participant_id] = name
             elif result.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
-                    return DestinationResult("decline")
+                    raise asyncio.CancelledError()
                 if self._focus.get(turn.participant_id) == name:
                     self._focus.pop(turn.participant_id, None)
+                self._forget_destination(turn.participant_id, name)
             elif result.disposition == "answer" and self._focus.get(turn.participant_id) == name:
                 self._focus.pop(turn.participant_id, None)
             if result.disposition in {"answer", "focus", "release"} and result.text.strip():
@@ -180,22 +198,38 @@ class ConversationFrontEnd:
         raise AssertionError("bounded routing loop exhausted")
 
     async def participant_left(self, participant_id: str) -> None:
-        """Release only the destination that held this participant's focus."""
+        """Release destination-owned state and history for one departed participant."""
 
         await self.interrupt(participant_id)
-        name = self._focus.pop(participant_id, None)
+        used = self._destinations_used.pop(participant_id, set())
+        focused = self._focus.pop(participant_id, None)
+        if focused is not None:
+            used.add(focused)
         self._history.pop(participant_id, None)
         self._locks.pop(participant_id, None)
-        if name is not None:
+        for name in used:
             await self._destinations[name].release(participant_id)
+
+    def _forget_destination(self, participant_id: str, destination: str) -> None:
+        used = self._destinations_used.get(participant_id)
+        if used is not None:
+            used.discard(destination)
+            if not used:
+                self._destinations_used.pop(participant_id, None)
 
     def _remember(self, turn: ConversationTurn, answer: str) -> None:
         history = self._history.setdefault(turn.participant_id, deque(maxlen=4))
         history.append(ConversationExchange(turn.query[:240], answer[:240]))
 
     async def _select(self, turn: ConversationTurn, candidates: list[str]) -> str | None:
+        if not candidates:
+            return None
         if len(candidates) == 1:
-            return candidates[0]
+            name = candidates[0]
+            aid = self._destinations[name].routing_aid(turn.participant_id)
+            if aid.name != name:
+                raise ValueError(f"routing aid name {aid.name!r} does not match destination {name!r}")
+            return name if aid.eligible else None
         aids = []
         for name in candidates:
             aid = self._destinations[name].routing_aid(turn.participant_id)
@@ -204,7 +238,7 @@ class ConversationFrontEnd:
             aids.append(aid)
         criteria = {
             aid.name: (
-                f"Request belongs to {aid.name}; scope={aid.scope}; exclusions={aid.exclusions}; "
+                f"{aid.name} has routing description={aid.description!r}; "
                 f"eligible={aid.eligible}; eligibility={aid.eligibility}; priority={aid.priority}."
             )
             for aid in aids
@@ -219,8 +253,8 @@ class ConversationFrontEnd:
             "destinations": [
                 {
                     "name": aid.name,
-                    "scope": aid.scope,
-                    "exclusions": aid.exclusions,
+                    "description": aid.description,
+                    "eligible": aid.eligible,
                     "eligibility": aid.eligibility,
                     "priority": aid.priority,
                 }
@@ -232,9 +266,11 @@ class ConversationFrontEnd:
             {
                 "destination": DecisionQuestion(
                     instructions=(
-                        "Choose the best eligible destination by request scope. Use priority only to break "
-                        "ties after relevance; never select an ineligible destination. Choose clarify when "
-                        "no eligible destination can safely handle the request."
+                        "Choose the best eligible destination using its description and routing hints. "
+                        "Descriptions are hints for routing, not access controls or guarantees that a "
+                        "destination can enforce its application policy. Use priority only "
+                        "to break ties after relevance; never select an ineligible destination. Choose "
+                        "clarify when no eligible destination is a suitable match."
                     ),
                     criteria=criteria,
                 )

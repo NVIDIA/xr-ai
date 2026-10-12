@@ -62,7 +62,8 @@ The worker package is under
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `xr_ai_conversation.Conversation` | Streams general answers or delegates standalone visual questions to the frame/VLM tools |
 | `prompts/system.txt` | Defines the default VLM instruction |
-| `eval/conversation-cases.yaml` | Held-out direct-answer, visible-text, and visual-follow-up cases |
+| `prompts/conversation.txt` | Application instructions for the conversation destination |
+| `eval/conversation-cases.yaml` | Direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
 
 ## Readiness and warmup
 

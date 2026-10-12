@@ -55,18 +55,25 @@ class _Destination:
         admissions=(),
         results=(),
         eligibility="available",
-        scope=None,
+        description=None,
+        eligible=True,
     ) -> None:
         self.name = name
         self.admissions = deque(admissions)
         self.results = deque(results)
         self.eligibility = eligibility
-        self.scope = scope or f"requests for {name}"
+        self.description = description or f"Requests for {name}"
+        self.eligible = eligible
         self.calls = []
         self.releases = []
 
     def routing_aid(self, _participant_id):
-        return RoutingAid(self.name, self.scope, eligibility=self.eligibility)
+        return RoutingAid(
+            self.name,
+            self.description,
+            eligible=self.eligible,
+            eligibility=self.eligibility,
+        )
 
     async def admit(self, turn, *, focused):
         self.calls.append(("admit", turn.query, focused))
@@ -168,6 +175,15 @@ async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_res
 
 
 @pytest.mark.asyncio
+async def test_destination_cannot_decline_or_clarify_after_answer_work_starts():
+    destination = _Destination("conversation", results=(DestinationResult("clarify", "too late"),))
+    front_end = ConversationFrontEnd({"conversation": destination}, _Decisions())
+
+    with pytest.raises(ValueError, match="before answer"):
+        await _run(front_end, query="Tell me about this.")
+
+
+@pytest.mark.asyncio
 async def test_participant_departure_releases_only_that_participants_focus():
     decisions = _Decisions("tea", "tea", "conversation")
     tea = _Destination(
@@ -189,6 +205,20 @@ async def test_participant_departure_releases_only_that_participants_focus():
 
 
 @pytest.mark.asyncio
+async def test_departure_and_stop_release_destinations_used_without_focus():
+    decisions = _Decisions("conversation", "conversation")
+    conversation = _Destination("conversation")
+    front_end = ConversationFrontEnd({"conversation": conversation}, decisions)
+
+    await _run(front_end, participant="alice", query="What is a cube?")
+    await front_end.participant_left("alice")
+    await _run(front_end, participant="bob", query="What is a sphere?")
+    await front_end.stop()
+
+    assert conversation.releases == ["alice", "bob"]
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_or_invalid_route_clarifies_without_admitting_a_destination():
     for choice in ("clarify", "not-registered"):
         decisions = _Decisions(choice)
@@ -206,9 +236,9 @@ async def test_ambiguous_or_invalid_route_clarifies_without_admitting_a_destinat
 
 @pytest.mark.asyncio
 async def test_route_prompt_exposes_unavailable_destination_eligibility():
-    decisions = _Decisions("clarify")
+    decisions = _Decisions("xr")
     conversation = _Destination("conversation")
-    xr = _Destination("xr", eligibility="unavailable")
+    xr = _Destination("xr", eligibility="unavailable", eligible=False)
     front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
 
     result, _output = await _run(front_end, query="Change the virtual scene.")
@@ -216,16 +246,29 @@ async def test_route_prompt_exposes_unavailable_destination_eligibility():
     assert result.disposition == "clarify"
     routed_destinations = decisions.calls[0][0]["destinations"]
     assert next(item for item in routed_destinations if item["name"] == "xr")["eligibility"] == "unavailable"
+    assert next(item for item in routed_destinations if item["name"] == "xr")["eligible"] is False
     assert xr.calls == []
+
+
+@pytest.mark.asyncio
+async def test_single_ineligible_destination_is_not_admitted():
+    destination = _Destination("conversation", eligibility="not configured", eligible=False)
+    front_end = ConversationFrontEnd({"conversation": destination}, _Decisions())
+
+    result, output = await _run(front_end, query="What is visible?")
+
+    assert result.disposition == "clarify"
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert destination.calls == []
 
 
 @pytest.mark.asyncio
 async def test_domain_specific_visual_question_routes_by_declared_scope():
     decisions = _Decisions("museum_guide")
-    conversation = _Destination("conversation", scope="general conversation and general knowledge")
+    conversation = _Destination("conversation", description="General conversation and general knowledge")
     museum = _Destination(
         "museum_guide",
-        scope="visual questions about museum exhibits and artwork",
+        description="Visual questions about museum exhibits and artwork",
     )
     front_end = ConversationFrontEnd(
         {"conversation": conversation, "museum_guide": museum},
@@ -234,8 +277,8 @@ async def test_domain_specific_visual_question_routes_by_declared_scope():
 
     result, _output = await _run(front_end, query="What is written on this exhibit label?")
 
-    declared = {item["name"]: item["scope"] for item in decisions.calls[0][0]["destinations"]}
-    assert declared["museum_guide"] == "visual questions about museum exhibits and artwork"
+    declared = {item["name"]: item["description"] for item in decisions.calls[0][0]["destinations"]}
+    assert declared["museum_guide"] == "Visual questions about museum exhibits and artwork"
     assert museum.calls == [
         ("admit", "What is written on this exhibit label?", False),
         ("answer", "What is written on this exhibit label?"),
@@ -276,7 +319,7 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
                     # Simulate a delegate that finishes a callback after cancellation.
                     pass
                 await emit(self.name, "stale result")
-                return DestinationResult("answer", "stale result")
+                return DestinationResult("focus", "stale result")
             await emit(self.name, "fresh result")
             return DestinationResult("answer", "fresh result")
 
@@ -299,8 +342,9 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
         ConversationTurn("alice", "turn-2", "Replacement request"),
         emit=emit,
     )
-    old_result = await task
-
     assert result.text == "fresh result"
-    assert old_result.disposition == "decline"
+    with pytest.raises(asyncio.CancelledError):
+        await task
     assert output == [("xr", "fresh result")]
+    assert front_end._focus == {}  # noqa: SLF001
+    assert [item.assistant for item in front_end._history["alice"]] == ["fresh result"]  # noqa: SLF001
