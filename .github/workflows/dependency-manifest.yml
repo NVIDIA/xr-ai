@@ -50,10 +50,9 @@ jobs:
           cache-dependency-glob: |
             **/pyproject.toml
             uv.toml
-            dependency-manifest/inventories.toml
 
       - name: Check manifest and Python lockfile
-        run: uv run --script .github/scripts/generate_dependency_manifest.py --check
+        run: uv run --script .github/scripts/generate_dependency_manifest.py --check --existing-projects
 
   android-locks:
     name: android lockfiles

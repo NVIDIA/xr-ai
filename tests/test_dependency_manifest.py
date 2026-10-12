@@ -12,7 +12,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from packaging.specifiers import SpecifierSet
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS = _ROOT / ".github" / "scripts"
@@ -61,8 +60,7 @@ def _write_project(
 
 
 def _render(root: Path) -> str:
-    projects = dependency_map.discover_projects(root)
-    return dependency_manifest.manifest_toml(projects, dependency_manifest.read_isolated_inventories(root, projects))
+    return dependency_manifest.manifest_toml(dependency_map.discover_projects(root))
 
 
 def _write_repo(root: Path, *, stale: bool = False, lock: str = "lock v1\n") -> Path:
@@ -197,148 +195,6 @@ def test_manifest_narrows_python_range_to_what_every_project_accepts(tmp_path: P
     assert 'requires-python = ">=3.12,<3.13"' in _render(tmp_path)
 
 
-def _configured_inventory(root: Path):
-    _write_project(
-        root, "services/custom-asr", name="custom-asr", requires_python=">=3.12,<3.14",
-        optional_dependencies={"audio": ("soundfile",)},
-    )
-    project_path = root / "services/custom-asr/pyproject.toml"
-    project_path.write_text(project_path.read_text() + '\n[tool.uv]\nenvironments = ["sys_platform == \'win32\'"]\n')
-    config = root / dependency_manifest.INVENTORY_CONFIG
-    config.parent.mkdir(exist_ok=True)
-    config.write_text(
-        '[isolated.custom]\nproject = "services/custom-asr"\npython = "3.12.12"\n'
-        'refresh-packages = ["nemo-toolkit"]\nenvironment = { NO_VCS_VERSION = "1" }\n'
-    )
-    return dependency_manifest.read_isolated_inventories(root, dependency_map.discover_projects(root))[0]
-
-
-def test_configured_inventory_derives_project_metadata_and_platform(tmp_path: Path) -> None:
-    _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11,<3.12")
-    inventory = _configured_inventory(tmp_path)
-
-    shared = tomllib.loads(_render(tmp_path))
-    isolated = tomllib.loads(dependency_manifest.isolated_manifest_toml(inventory))
-
-    assert shared["project"]["requires-python"] == ">=3.11,<3.12"
-    assert "custom-asr" not in shared["tool"]["uv"]["sources"]
-    assert isolated["project"]["name"] == "custom-asr-dependency-manifest"
-    assert isolated["project"]["requires-python"] == ">=3.12,<3.14"
-    assert isolated["project"]["dependencies"] == ["custom-asr[audio]"]
-    assert SpecifierSet(isolated["project"]["requires-python"]).contains(inventory.python)
-    assert isolated["tool"]["uv"]["environments"] == ["sys_platform == 'win32'"]
-    assert isolated["tool"]["uv"]["sources"] == {
-        "custom-asr": {"path": "../../services/custom-asr", "editable": True},
-    }
-
-
-def test_configuration_isolates_multiple_projects(tmp_path: Path) -> None:
-    _write_project(tmp_path, "agent-sdk/library", name="library")
-    first = _configured_inventory(tmp_path)
-    _write_project(tmp_path, "services/other", name="other", requires_python=">=3.13")
-    config = tmp_path / dependency_manifest.INVENTORY_CONFIG
-    config.write_text(config.read_text() + '\n[isolated.other]\nproject = "services/other"\npython = "3.13.7"\n')
-    projects = dependency_map.discover_projects(tmp_path)
-    inventories = dependency_manifest.read_isolated_inventories(tmp_path, projects)
-
-    assert [item.directory for item in inventories] == [first.directory, Path(MANIFEST) / "other"]
-    assert [project.name for project in dependency_manifest.manifest_members(projects, inventories)] == ["library"]
-    other = tomllib.loads(dependency_manifest.isolated_manifest_toml(inventories[1]))
-    assert other["project"]["dependencies"] == ["other"]
-    assert "environments" not in other["tool"]["uv"]
-
-
-@pytest.mark.parametrize("replacement", [
-    'project = "services/missing"\npython = "3.12.12"',
-    'project = "services/custom-asr"\npython = "3.11.14"',
-    'project = "services/custom-asr"\npython = "3.12"',
-])
-def test_configuration_rejects_missing_projects_or_incompatible_python(tmp_path: Path, replacement: str) -> None:
-    _configured_inventory(tmp_path)
-    (tmp_path / dependency_manifest.INVENTORY_CONFIG).write_text('[isolated.custom]\n' + replacement + '\n')
-    with pytest.raises(ValueError):
-        dependency_manifest.read_isolated_inventories(tmp_path, dependency_map.discover_projects(tmp_path))
-
-
-def test_committed_inventories_preserve_both_nemo_sources() -> None:
-    inventories = dependency_manifest.read_isolated_inventories(_ROOT, dependency_map.discover_projects(_ROOT))
-    inventory = next(item for item in inventories if item.project.relative_directory == Path("services/speaker-stt"))
-    shared = tomllib.loads((_ROOT / MANIFEST / "uv.lock").read_text())
-    isolated = tomllib.loads((_ROOT / inventory.directory / "uv.lock").read_text())
-    runtime = tomllib.loads((inventory.project.directory / "pyproject.toml").read_text())
-    manifest = tomllib.loads((_ROOT / inventory.directory / "pyproject.toml").read_text())
-    assert manifest["tool"]["uv"]["environments"] == runtime["tool"]["uv"]["environments"]
-
-    registry_nemo = [package for package in shared["package"] if package["name"] == "nemo-toolkit"]
-    isolated_nemo = next(package for package in isolated["package"] if package["name"] == "nemo-toolkit")
-    isolated_lhotse = next(package for package in isolated["package"] if package["name"] == "lhotse")
-    source = runtime["tool"]["uv"]["sources"]["nemo-toolkit"]
-    assert registry_nemo
-    assert all(package["source"] == {"registry": "https://pypi.org/simple"} for package in registry_nemo)
-    assert source["git"] in isolated_nemo["source"]["git"]
-    assert source["rev"] in isolated_nemo["source"]["git"]
-    assert isolated_lhotse["source"] == runtime["tool"]["uv"]["sources"]["lhotse"]
-
-
-@pytest.mark.parametrize("fresh", ["original lock\n", "changed lock\n"])
-def test_isolated_check_compares_and_restores_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fresh: str) -> None:
-    inventory = _configured_inventory(tmp_path)
-    directory = tmp_path / inventory.directory
-    directory.mkdir(parents=True)
-    (directory / "pyproject.toml").write_text(dependency_manifest.isolated_manifest_toml(inventory))
-    lock = directory / "uv.lock"
-    lock.write_text("original lock\n")
-    calls = []
-
-    def run(args, *, cwd, check, env):
-        calls.append((args, cwd, check, env))
-        lock.write_text(fresh)
-
-    monkeypatch.setattr(dependency_manifest.subprocess, "run", run)
-
-    result = dependency_manifest.refresh_isolated_manifest(tmp_path, inventory, check=True)
-    assert result == (fresh != "original lock\n")
-    assert lock.read_text() == "original lock\n"
-    args = calls[0][0]
-    assert args[args.index("--python") + 1] == inventory.python
-    assert args[args.index("--project") + 1] == inventory.directory.as_posix()
-    assert args[args.index("--refresh-package") + 1] == inventory.refresh_packages[0]
-    assert calls[0][3]["NO_VCS_VERSION"] == inventory.environment["NO_VCS_VERSION"]
-
-
-def test_isolated_check_restores_lock_after_resolver_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    inventory = _configured_inventory(tmp_path)
-    directory = tmp_path / inventory.directory
-    directory.mkdir(parents=True)
-    (directory / "pyproject.toml").write_text(dependency_manifest.isolated_manifest_toml(inventory))
-    lock = directory / "uv.lock"
-    lock.write_text("original lock\n")
-
-    def run(args, *, cwd, check, env):
-        lock.write_text("partial lock\n")
-        raise subprocess.CalledProcessError(2, args)
-
-    monkeypatch.setattr(dependency_manifest.subprocess, "run", run)
-
-    assert dependency_manifest.refresh_isolated_manifest(tmp_path, inventory, check=True) == 1
-    assert lock.read_text() == "original lock\n"
-
-
-def test_main_generates_configured_inventories(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _write_repo(tmp_path)
-    inventory = _configured_inventory(tmp_path)
-    directory = tmp_path / inventory.directory
-    monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock([]))
-    monkeypatch.setattr(
-        dependency_manifest.subprocess, "run",
-        lambda args, *, cwd, check, env: (directory / "uv.lock").write_text("isolated lock\n"),
-    )
-
-    assert dependency_manifest.main([], root=tmp_path) == 0
-    assert (directory / "pyproject.toml").read_text() == dependency_manifest.isolated_manifest_toml(inventory)
-    assert (directory / "uv.lock").read_text() == "isolated lock\n"
-
-
 def test_manifest_rejects_disjoint_python_ranges(tmp_path: Path) -> None:
     _write_project(tmp_path, "agent-sdk/library", name="library", requires_python=">=3.11,<3.12")
     _write_project(tmp_path, "services/server", name="server", requires_python=">=3.12")
@@ -456,7 +312,7 @@ def test_check_reports_missing_lock(tmp_path: Path, monkeypatch, capsys) -> None
     monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock([]))
 
     assert dependency_manifest.main(["--check"], root=tmp_path) == 1
-    assert "uv.lock is missing" in capsys.readouterr().out
+    assert "generation failed" in capsys.readouterr().out
 
 
 def test_write_regenerates_and_locks(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -487,3 +343,17 @@ def test_generation_error_is_reported(tmp_path: Path, monkeypatch, capsys) -> No
 
     assert dependency_manifest.main(["--check"], root=tmp_path) == 1
     assert "generation failed" in capsys.readouterr().out
+
+
+def test_security_refresh_preserves_existing_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest_dir = _write_repo(tmp_path)
+    original = manifest_dir.joinpath("pyproject.toml").read_text()
+    _write_project(tmp_path, "services/new-server", name="new-server", requires_python=">=3.12")
+    calls: list[Path] = []
+    monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock(calls))
+
+    assert dependency_manifest.main(["--existing-projects"], root=tmp_path) == 0
+    assert manifest_dir.joinpath("pyproject.toml").read_text() == original
+    assert dependency_manifest.main(["--check", "--existing-projects"], root=tmp_path) == 0
+    assert calls == [tmp_path, tmp_path]
+    assert dependency_manifest.main(["--check"], root=tmp_path) == 1

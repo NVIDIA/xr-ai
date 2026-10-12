@@ -55,25 +55,6 @@ wheels = [
 ]
 
 [[package]]
-name = "accelerate"
-version = "1.14.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "huggingface-hub" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
-    { name = "psutil" },
-    { name = "pyyaml" },
-    { name = "safetensors" },
-    { name = "torch" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/75/94cd5d389649578aca399e5aa822637eec18319a1dadc400ffe2f9a7493f/accelerate-1.14.0.tar.gz", hash = "sha256:41b9c4377a54e0b460a959b0defa1b736e4ca0a2373252d9a539964c2afe3c8d", size = 412167, upload-time = "2026-06-11T13:45:52.326Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/db/253133d7e7cb40d3af384bb2f5c0b4a2b7fdcffbc95c688cc67a20a3c103/accelerate-1.14.0-py3-none-any.whl", hash = "sha256:e94390c2863b873be18f623f9df48a0d8fe5eff13ea7f1a00092b0a7904888c6", size = 389246, upload-time = "2026-06-11T13:45:50.477Z" },
-]
-
-[[package]]
 name = "agent-detector"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -618,60 +599,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/35/4f/b911ed898b26a09789eba9c9200c999aff6c61b4bafaf4838e56d1a1e1a3/charset_normalizer-3.5.1-cp37-abi3-win_amd64.whl", hash = "sha256:70055ff39b97c99e7ae40ea3e393fb62aa2e44dbd9b29f8d14f42fb0025c3959", size = 199764, upload-time = "2026-08-15T08:20:13.908Z" },
     { url = "https://files.pythonhosted.org/packages/f0/a7/920baf467bfd9bf689f3b318340f37aee4572a71f162bd8db51da55ba4fa/charset_normalizer-3.5.1-cp37-abi3-win_arm64.whl", hash = "sha256:87e4f41d375c0b9be2fb5251aee4b8a689169e134535aed81bf085c3b647451e", size = 287318, upload-time = "2026-08-15T08:20:15.551Z" },
     { url = "https://files.pythonhosted.org/packages/cc/61/d01fc49b8dea277640b55a9e15960dbca9fdc8c9fde18e572d39c59f4019/charset_normalizer-3.5.1-py3-none-any.whl", hash = "sha256:6df0ec430f9a831772c23ca5a224cba36517a58a84bb32c32bb59a9fa67c47f6", size = 68658, upload-time = "2026-08-15T08:20:43.306Z" },
-]
-
-[[package]]
-name = "clef-flash-model-server"
-version = "0.1.0"
-source = { editable = "../model-server-samples/clef-flash" }
-dependencies = [
-    { name = "xr-ai-launcher" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
-name = "clef-server"
-version = "0.1.0"
-source = { editable = "../services/clef-server" }
-dependencies = [
-    { name = "accelerate" },
-    { name = "fastapi" },
-    { name = "huggingface-hub" },
-    { name = "multidict" },
-    { name = "pillow" },
-    { name = "pyyaml" },
-    { name = "safetensors" },
-    { name = "torch" },
-    { name = "torchvision" },
-    { name = "transformers" },
-    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "accelerate", specifier = ">=1.2.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "multidict", specifier = ">=6.9.1" },
-    { name = "pillow", specifier = ">=10.0.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "safetensors", specifier = ">=0.4.5" },
-    { name = "torch", specifier = ">=2.11.0" },
-    { name = "torchvision", specifier = ">=0.28.0" },
-    { name = "transformers", specifier = ">=5.17.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
 
 [[package]]
@@ -2365,7 +2292,7 @@ dependencies = [
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-logging" },
-    { name = "xr-ai-models" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "marker-tracking", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-voice" },
     { name = "xr-ai-voicegate" },
@@ -2382,7 +2309,7 @@ requires-dist = [
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "marker-tracking", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
     { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },
@@ -2763,33 +2690,6 @@ wheels = [
 ]
 
 [[package]]
-name = "magpie-nim-tts"
-version = "0.1.0"
-source = { editable = "../services/magpie-nim-tts" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "grpcio" },
-    { name = "httpx" },
-    { name = "pyyaml" },
-    { name = "uvicorn" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "grpcio", specifier = ">=1.67" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "uvicorn", specifier = ">=0.30" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
 name = "magpie-tts-server"
 version = "0.1.0"
 source = { editable = "../services/magpie-tts" }
@@ -3076,23 +2976,6 @@ wheels = [
 name = "model-servers"
 version = "0.1.0"
 source = { editable = "../model-server-samples/model-servers" }
-dependencies = [
-    { name = "xr-ai-launcher" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
-name = "model-servers-nim"
-version = "0.1.0"
-source = { editable = "../model-server-samples/model-servers-nim" }
 dependencies = [
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
@@ -3516,69 +3399,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
-]
-
-[[package]]
-name = "nim-model-adapter"
-version = "0.1.0"
-source = { editable = "../model-server-samples/model-servers-nim/compatibility-adapter" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "grpcio" },
-    { name = "httpx" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "uvicorn" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "grpcio", specifier = ">=1.67" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "python-multipart", specifier = ">=0.0.18" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "uvicorn", specifier = ">=0.30" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
-name = "nim-riva-server"
-version = "0.1.0"
-source = { editable = "../model-server-samples/model-servers-nim/riva-server" }
-dependencies = [
-    { name = "pyyaml" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
-]
-
-[[package]]
-name = "nim-server"
-version = "0.1.0"
-source = { editable = "../services/nim-server" }
-dependencies = [
-    { name = "pyyaml" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
 
 [[package]]
@@ -6269,7 +6089,7 @@ dependencies = [
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-logging" },
-    { name = "xr-ai-models" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-voice" },
     { name = "xr-ai-voicegate" },
@@ -6283,7 +6103,7 @@ requires-dist = [
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
     { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },
@@ -6537,7 +6357,7 @@ dependencies = [
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-logging" },
-    { name = "xr-ai-models" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-voice" },
     { name = "xr-ai-voicegate" },
@@ -6553,7 +6373,7 @@ requires-dist = [
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
     { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },
@@ -6924,10 +6744,10 @@ name = "torchvision"
 version = "0.28.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
-    { name = "torch", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
+    { name = "pillow" },
+    { name = "torch" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/b2/1e010052079e4c577007b789db336ea7075f1a426e84d17121fbc3745516/torchvision-0.28.0-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:83fe6c020866a85acd7d97deccc45ff11d66daf42916d04396a4309c66c0ccb8", size = 1856017, upload-time = "2026-07-08T16:07:55.533Z" },
@@ -7652,19 +7472,12 @@ source = { virtual = "." }
 
 [package.optional-dependencies]
 repository = [
-    { name = "clef-flash-model-server" },
-    { name = "clef-server" },
     { name = "cloudxr-runtime" },
     { name = "device-io-hub" },
     { name = "lab-instrument-monitoring" },
     { name = "lab-instrument-monitoring-worker" },
-    { name = "magpie-nim-tts" },
     { name = "magpie-tts-server" },
     { name = "model-servers" },
-    { name = "model-servers-nim" },
-    { name = "nim-model-adapter" },
-    { name = "nim-riva-server" },
-    { name = "nim-server" },
     { name = "pocket-tts-server" },
     { name = "simple-vlm-example" },
     { name = "simple-vlm-example-worker" },
@@ -7701,23 +7514,16 @@ vllm = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clef-flash-model-server", marker = "extra == 'repository'", editable = "../model-server-samples/clef-flash" },
-    { name = "clef-server", marker = "extra == 'repository'", editable = "../services/clef-server" },
     { name = "cloudxr-runtime", marker = "extra == 'repository'", editable = "../services/cloudxr-runtime" },
     { name = "device-io-hub", marker = "extra == 'repository'", editable = "../services/device-io-hub" },
     { name = "embedding-server", marker = "extra == 'vllm'", editable = "../services/embedding-server" },
     { name = "lab-instrument-monitoring", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring" },
     { name = "lab-instrument-monitoring-worker", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring/worker" },
     { name = "llama-nemotron-llm-server", marker = "extra == 'vllm'", editable = "../services/llama-nemotron-llm" },
-    { name = "magpie-nim-tts", marker = "extra == 'repository'", editable = "../services/magpie-nim-tts" },
     { name = "magpie-tts-server", marker = "extra == 'repository'", editable = "../services/magpie-tts" },
     { name = "model-servers", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers" },
-    { name = "model-servers-nim", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim" },
     { name = "nemotron-omni-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron-omni-llm" },
     { name = "nemotron3-nano-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron3-nano-llm" },
-    { name = "nim-model-adapter", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim/compatibility-adapter" },
-    { name = "nim-riva-server", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers-nim/riva-server" },
-    { name = "nim-server", marker = "extra == 'repository'", editable = "../services/nim-server" },
     { name = "pocket-tts-server", marker = "extra == 'repository'", editable = "../services/pocket-tts" },
     { name = "simple-vlm-example", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example" },
     { name = "simple-vlm-example-worker", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example/worker" },
@@ -7816,9 +7622,6 @@ dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
     { name = "device-io-hub" },
     { name = "huggingface-hub" },
-    { name = "magpie-nim-tts" },
-    { name = "nim-model-adapter" },
-    { name = "nim-riva-server" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "pillow" },
@@ -7849,9 +7652,6 @@ requires-dist = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
     { name = "device-io-hub", editable = "../services/device-io-hub" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
-    { name = "magpie-nim-tts", editable = "../services/magpie-nim-tts" },
-    { name = "nim-model-adapter", editable = "../model-server-samples/model-servers-nim/compatibility-adapter" },
-    { name = "nim-riva-server", editable = "../model-server-samples/model-servers-nim/riva-server" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pytest", specifier = ">=8.0" },
@@ -8126,7 +7926,7 @@ dependencies = [
     { name = "xr-ai-agent-runtime" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-logging" },
-    { name = "xr-ai-models" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-voice" },
     { name = "xr-ai-voicegate" },
@@ -8140,7 +7940,7 @@ requires-dist = [
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
     { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },

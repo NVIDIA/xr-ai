@@ -63,33 +63,30 @@ dependency refresh because it can change unrelated Python and web packages.
 
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
 `dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
-every package except the independently resolved speaker ASR service. Together
-with `dependency-manifest/speaker-stt/uv.lock`, it records the runtime dependency set at the
+every package in the repository, so
+its lock records the complete resolved runtime dependency set at the
 qualification cutoff for dependency analysis tooling; build-system requirements
 such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
 and `uv.lock` describe the repository as of the last cutoff change or targeted
 dependency security refresh. Regenerate and commit both files for either event;
 ordinary project changes remain deferred to the next refresh. A release yanked
 from the index changes the next fresh resolution.
-`uv run --script .github/scripts/generate_dependency_manifest.py` generates the
-inventories and always resolves with the uv version pinned inside the script,
-because lock output varies across uv releases. The manifest's `requires-python`
-is the range of interpreters its included projects accept. vLLM service projects
-resolve in a `vllm` extra, while the other shared projects resolve in a
-`repository` extra. Those extras are mutually exclusive because their
-PyNvVideoCodec and protobuf constraints are incompatible. Isolated inventories
-are declared in [`inventories.toml`](dependency-manifest/inventories.toml).
-Each entry selects a project path and a pinned resolver interpreter; the
-generator reads the project name, Python requirement, optional extras, and
-platform support from that project's `pyproject.toml`. Optional package refresh
-and build environment settings keep source metadata reproducible. Speaker ASR's
-entry produces a Linux-only inventory with its Git-pinned NeMo and wheel-pinned
-Lhotse sources. Adding another isolated inventory requires a configuration
-entry. The inventories preserve each environment's dependency requirements.
-The pre-commit hook runs the script when
+`uv run --script .github/scripts/generate_dependency_manifest.py` generates both
+files and always resolves with the uv version pinned inside the script,
+because lock output varies across uv releases. For a targeted security refresh,
+add `--existing-projects` to retain the committed snapshot's project membership;
+enrolling new environments remains part of a full dependency refresh.
+The manifest's `requires-python`
+is the range of interpreters every project accepts, so a project with a narrower
+declaration narrows the manifest. vLLM service projects resolve in a `vllm`
+extra, while all other projects resolve in a `repository` extra. Those extras
+are mutually exclusive because their PyNvVideoCodec and protobuf constraints
+are incompatible; the universal lock inventories both real environments
+without overriding either one. The pre-commit hook retains snapshot membership
+and runs the script when
 `uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
-with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
-generator scripts. Nothing installs from the directory.
+with `--check --existing-projects` on changes that touch `uv.toml`,
+`dependency-manifest/`, or the generator scripts. Nothing installs from the directory.
 
 The same directory holds the client lockfiles. Refresh an affected client lock
 with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
@@ -847,17 +844,10 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
-    - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
-    - `model-servers-nim`
-    - `nim-model-adapter`
-    - `nim-riva-server`
-    - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-    - `magpie-nim-tts`
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-    - `nim-server`
     - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
     - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
     - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
@@ -875,15 +865,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `nemotron-omni-llm-server` → [`nemotron-omni-llm-server`](services/nemotron-omni-llm/) (local, editable)
     - `nemotron3-nano-llm-server` → [`nemotron3-nano-llm-server`](services/nemotron3-nano-llm/) (local, editable)
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
-- Commands: none
-
-#### `xr-ai-speaker-stt-dependency-manifest` — [`dependency-manifest/speaker-stt/`](dependency-manifest/speaker-stt/)
-
-- Python: `>=3.12,<3.14`
-- Build dependencies: none
-- Runtime dependencies:
-  - `xr-ai-speaker-stt` → [`xr-ai-speaker-stt`](services/speaker-stt/) (local, editable)
-- Optional dependency groups: none
 - Commands: none
 
 <!-- END GENERATED PYTHON DEPENDENCY MAP -->
