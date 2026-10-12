@@ -151,8 +151,12 @@ Run the validator, then use
 agent-samples/sop-sample/skills/evaluate-guide/SKILL.md to evaluate the fixed draft
 against the original capture. Prefer a fresh evaluator context when available;
 give it the guide and original evidence, not the author's self-review or expected
-answers. The evaluator writes findings without changing the guide. Use those
-findings, including its literal dispatch and state trace, to revise the guide's
+answers. Provide the replay checkout path and start its configured local models.
+The evaluator must run the bundled recorded-camera runner against the actual
+XR-AI engine, tools, prompts, and local models. GPT Luna is only an observer and
+guide author, never a substitute runtime VLM or source of tool answers.
+The evaluator writes findings without changing the guide. Use those
+findings, including actual tool calls, model outputs, commits, and state traces, to revise the guide's
 prompts and steps. Use at most three evaluation-and-update rounds by default,
 stopping early when no correctable failures remain. Revalidate every update and
 evaluate the final revision before handoff; the final check is not another update
@@ -160,7 +164,7 @@ round. Never weaken requirements to fit the demonstration. Report the actual
 evaluation-and-update round count, guide, authoring review, and evaluation paths,
 actual
 results, changes, untested checks, and approval blockers. Keep the guide draft;
-do not approve it, launch live replay, alter source recordings, or generate a
+do not approve it, connect to a live user, alter source recordings, or generate a
 YAML-writing program.
 ```
 
@@ -222,10 +226,23 @@ self-review or claimed test results. If the same context is used, disclose it.
 The evaluator reports the guide's content hash and task version to distinguish
 findings about different revisions. Evaluation does not grant approval.
 
-This is an offline authoring-model image/state walkthrough, not a built-in
-recorded-media replay runner or a measurement of the production VLM. It does not
-launch the live sample or make a draft approved. Timer boundary calculations are
-labeled as simulations, and unavailable visual tests are marked untested.
+The evaluation skill includes a recorded-camera runner and its invocation
+contract in `references/runtime-replay.md`. It requires a checkout containing
+SOP replay, that checkout's tests environment, and healthy local LLM and VLM
+services. The guide-generation-only branch does not include the replay engine.
+The runner uses isolated hub IPC and original frame intervals with the real
+current-frame tool, replay engine, configured models, prompts, evidence gates,
+conversation tools, aggregation, and wall-clock timers. The camera and typed
+Next commands are simulated; browser, LiveKit, STT, and TTS audio are excluded.
+It preserves the source draft and records hash-pinned YAML, input manifests,
+selected frames, model responses, tool calls, commits, and agent output. Luna
+observes those outputs and revises only the guide. A mental walkthrough or a
+Luna-generated visual answer cannot substitute for a runtime result.
+If a local model is unavailable, evaluation is blocked, not passed. A fixed
+recording cannot respond to instructions, so report timing and evidence gaps
+separately from guide defects. Count modification rounds only when a completed
+runtime evaluation leads to a substantive YAML change; reruns and the final
+verification without edits do not add rounds.
 Recorded replay cannot prove generalization to other demonstrations.
 
 Review the evidence notes and resolve every blocker before manually changing

@@ -4,7 +4,9 @@
 # Schema example, not a recording: replace every task-specific value.
 # Before handoff, use ../../evaluate-guide/SKILL.md: "Are clips attached?"
 # question can pass one clip or inward tabs. Test the full question below on
-# available incomplete and completed views, then refine and retest the draft.
+# available incomplete and completed views through the actual replay VLM/tool,
+# then refine and rerun the draft. The author observes actual responses, never
+# supplies ready itself. Preserve both false positives and missed completions.
 # source_session identifies the voice-bounded SOP packet, not an optional
 # participant-wide media bundle. No raw-media manifest is required.
 # Example evidence: "Center the workpiece in the marked area. Attach two clips,

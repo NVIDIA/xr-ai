@@ -11,8 +11,8 @@ description: Turn a completed SOP sample capture into an evidence-linked draft g
 # Recording to Guide
 
 Author guide YAML directly with file and image tools. The capture worker does
-not invoke this skill. Do not generate code, use a plan compiler, launch live
-replay, or approve a guide. Use the companion
+not invoke this skill. Do not generate code, use a plan compiler, connect to a
+live user, or approve a guide. Use the companion
 [evaluate-guide skill](../evaluate-guide/SKILL.md) before handoff.
 
 SOP packets are voice-bounded. Optional participant-wide media is not required;
@@ -126,6 +126,13 @@ the shared contract and source evidence, not your self-review or expected test
 answers. If evaluation uses the authoring context, disclose that limitation.
 The evaluator writes `<slug>.evaluation.md` without changing the guide.
 
+Evaluation must execute the recorded-camera runner with the real XR-AI replay
+engine, configured local models, prompts, tools, and clock. You are only the
+observer and guide author: do not act as the runtime VLM, supply imagined tool
+answers, modify the runner, or mark a walkthrough as a runtime pass. Read actual
+frame selections, model responses, tool calls, commits, and agent output before
+editing. Report unavailable local models or replay dependencies as blocked tests.
+
 Use its findings to revise the draft's questions, instructions, steps, or state
 logic. Preserve the source-action inventory and required conditions across
 edits; do not weaken them or remove actions just to make the recording pass.
@@ -133,12 +140,14 @@ Keep authoring decisions and changes in `<slug>.review.md`, separate from the
 evaluation findings. Do not change either skill, the examples, or source records
 while generating a guide.
 
-Default to at most three rounds, each consisting of evaluation followed by a
-guide revision when needed; stop earlier when no correctable failures remain.
+Default to at most three rounds, each consisting of executed runtime evaluation
+followed by a substantive guide revision when needed; stop earlier when no
+guide-correctable failures remain. Preserve a hash-pinned YAML snapshot and
+execution artifacts for every run. Run the whole revised guide from fresh state.
 Revalidate every revision. After the last edit, have the evaluator check the
 latest YAML and affected transitions before handoff; this final check is not
 another revision round. If that final evaluation cannot be completed, mark the
 revision unevaluated. Report actual evaluation-and-update rounds, not file-edit
-counts. Report all three
+counts, retries, or verification runs without edits. Report all three
 output paths, the evaluated guide version, results, untested checks, and approval
 blockers. Keep the guide draft; neither skill grants approval.
