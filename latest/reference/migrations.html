@@ -59,8 +59,8 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Shared model servers with NVIDIA NIM" href="model-servers-nim.html" />
-    <link rel="prev" title="Magpie NIM HTTP speech service" href="magpie-nim-tts.html" />
+    <link rel="next" title="NIM model endpoints" href="model-servers-nim.html" />
+    <link rel="prev" title="Magpie NIM speech" href="magpie-nim-tts.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -281,17 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.3.0-beta</option>
+    <option value="0" >v0.3.0-beta</option>
     <option value="1" >v0.2.0-beta.2</option>
     <option value="2" >v0.1.0-beta</option>
-    <option value="3" >main (development)</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["migrations.html", "../../v0.2.0-beta.2/reference/migrations.html", "../../v0.1.0-beta/index.html", "../../main/reference/migrations.html"];
+    var urls = ["../../v0.3.0-beta/reference/migrations.html", "../../v0.2.0-beta.2/reference/migrations.html", "../../v0.1.0-beta/index.html", "migrations.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -333,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -346,12 +347,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -452,6 +454,45 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="clef-model-cache-configuration">
+<h2>Clef model cache configuration<a class="headerlink" href="#clef-model-cache-configuration" title="Link to this heading">#</a></h2>
+<p>Remove <code class="docutils literal notranslate"><span class="pre">model_path</span></code> from Clef server YAML files. Clef first resolves the
+pinned <code class="docutils literal notranslate"><span class="pre">model_name</span></code> and <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> from the Hugging Face cache under
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>; only a cache miss follows the online download path. Set
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to a Hugging Face cache root, not an extracted snapshot directory:
+a directory created with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span> <span class="pre">--local-dir</span></code> or git-lfs does not have
+the required cache layout. Refer to
+<a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache preparation
+and offline startup. Before restarting, stop a running Clef server from
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
+uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>The configuration identity changed, so a server started by an older version
+cannot be reused by the updated launcher.</p>
+</section>
+<section id="native-nim-endpoint-profiles">
+<h2>Native NIM endpoint profiles<a class="headerlink" href="#native-nim-endpoint-profiles" title="Link to this heading">#</a></h2>
+<p>The managed <code class="docutils literal notranslate"><span class="pre">model_servers_nim</span></code> command and its hardware profiles are removed,
+along with <code class="docutils literal notranslate"><span class="pre">nim_model_adapter</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_riva_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr_ai_vllm.serve_nim</span></code>. Deploy model containers with the
+operator’s tooling and configure native endpoint addresses in consumer profiles.
+Use native chat model IDs with <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code>, <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> for speech, and
+embedding <code class="docutils literal notranslate"><span class="pre">default_extras.input_type:</span> <span class="pre">passage</span></code> for prefix-aware asymmetric
+inputs. Local model-server defaults remain unchanged.</p>
+<p>Native Magpie speech does not append the compatibility wrapper’s 300 ms pause.
+Riva client readiness checks channel connectivity; validate inference separately.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for migration and validation commands.</p>
+</section>
+<section id="livekit-sample-credentials">
+<h2>LiveKit sample credentials<a class="headerlink" href="#livekit-sample-credentials" title="Link to this heading">#</a></h2>
+<p>Shipped DeviceIOHub YAML files now leave <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for fixed-pair configuration.</p>
+</section>
 <section id="swift-microphone-cleanup-errors">
 <h2>Swift microphone cleanup errors<a class="headerlink" href="#swift-microphone-cleanup-errors" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">StreamSession.disconnect()</span></code> and <code class="docutils literal notranslate"><span class="pre">StreamingBackend.disconnect()</span></code> now throw
@@ -462,6 +503,56 @@ until cleanup succeeds before discarding it. Connecting that same LiveKit
 backend also retries its pending cleanup before opening another connection.
 A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
 satisfy the throwing protocol requirement.</p>
+</section>
+<section id="launcher-failure-exit-statuses">
+<h2>Launcher failure exit statuses<a class="headerlink" href="#launcher-failure-exit-statuses" title="Link to this heading">#</a></h2>
+<p>Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.</p>
+<p>The launcher preserves positive child exit codes, maps signal termination to
+<code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span> <span class="pre">number</span></code>, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
+shutdown behavior.</p>
+</section>
+<section id="voice-sample-conversation-defaults">
+<h2>Voice sample conversation defaults<a class="headerlink" href="#voice-sample-conversation-defaults" title="Link to this heading">#</a></h2>
+<p>The shipped voice samples now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after
+connecting, then accept speech without a wake phrase until
+<code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the sample’s voice-gate YAML to
+keep wake phrases during an active conversation. Set
+<code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code> to restore the original wake-only behavior, or
+always-on dispatch when <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> is empty. Restart workers after editing
+these settings. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
+<p>Only final transcripts during an active conversation reach
+<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.</p>
+</section>
+<section id="local-model-server-cli">
+<h2>Local model-server CLI<a class="headerlink" href="#local-model-server-cli" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> sample launches only local server wrappers. Its default
+Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+Named <code class="docutils literal notranslate"><span class="pre">--models</span></code> selections are retired:</p>
+<ul class="simple">
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">default</span></code> with <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>.</p></li>
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">vlm_llm_nim</span></code> with an independently deployed
+NIM endpoint profile. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p></li>
+<li><p>Pass custom deployments by JSON path, such as
+<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">./yaml/models.my-stack.json</span></code>, instead of a bare name.
+Custom deployments can no longer select <code class="docutils literal notranslate"><span class="pre">llm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">stt-nim</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">tts-nim</span></code> through the local launcher.</p></li>
+</ul>
+<p>Before updating a checkout that ran the former NIM profile, stop it with the
+old checkout’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code>. The updated local launcher no
+longer discovers the removed NIM-only ports. Stop the old stack before starting
+the separate NIM sample because they share client ports. Caches are not removed.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--help</span></code> now displays usage and exits. Unknown options are rejected instead of
+being silently ignored; <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> remains unsupported by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>.</p>
 </section>
 <section id="streamkit-image-capture-dependencies">
 <h2>StreamKit image-capture dependencies<a class="headerlink" href="#streamkit-image-capture-dependencies" title="Link to this heading">#</a></h2>
@@ -512,6 +603,9 @@ that require the former behavior can explicitly pass
 <section id="operator-visible-runtime-changes">
 <h2>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p>When <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is omitted from the xr-render-demo worker YAML,
+recorded-video perception is now enabled. Set it to <code class="docutils literal notranslate"><span class="pre">false</span></code> to opt out. See
+<a class="reference internal" href="xr-render-demo.html#xr-render-recording-prerequisites"><span class="std std-ref">Recorded-video prerequisites</span></a> for the required recording settings.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">Subscribe.ALL</span></code> is deprecated because it names the pre-file-transfer set of
 data, audio, and video subscriptions rather than every available category.
 Use <code class="docutils literal notranslate"><span class="pre">Subscribe.REALTIME</span></code> for the same behavior. Files remain opt-in through
@@ -529,8 +623,9 @@ segments trigger bounded recreation; incompatible layouts and acknowledgement
 timeouts fail startup. Check the registration error in the hub logs rather
 than treating a running process as ready.</p></li>
 <li><p>DeviceIOHub no longer falls back to embedded LiveKit development credentials.
-Set <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
-<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> through the environment.</p></li>
+The YAML loader generates a fresh pair when both values are missing or blank.
+Set both <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> in a private <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code>, or inject
+<code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code>, to use a fixed pair.</p></li>
 <li><p>Boolean service settings now require YAML booleans or the strings <code class="docutils literal notranslate"><span class="pre">true</span></code>,
 <code class="docutils literal notranslate"><span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">yes</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">1</span></code>, or <code class="docutils literal notranslate"><span class="pre">0</span></code> (case-insensitive). Numeric
 <code class="docutils literal notranslate"><span class="pre">1</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>, null values, and arbitrary strings now fail at startup instead of
@@ -672,7 +767,7 @@ reuse the ignored caches rather than downloading them again.</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Magpie NIM HTTP speech service</p>
+        <p class="prev-next-title">Magpie NIM speech</p>
       </div>
     </a>
     <a class="right-next"
@@ -680,7 +775,7 @@ reuse the ignored caches rather than downloading them again.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Shared model servers with NVIDIA NIM</p>
+        <p class="prev-next-title">NIM model endpoints</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -705,7 +800,13 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-sample-conversation-defaults">Voice sample conversation defaults</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-server-cli">Local model-server CLI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deviceiohub-rename">DeviceIOHub rename</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-server-sample-location">Shared model-server sample location</a></li>

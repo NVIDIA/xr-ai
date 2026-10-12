@@ -333,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -350,9 +351,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -498,53 +499,41 @@ recorded video, and document retrieval.</p>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code></p></td>
-<td><p>8105</p></td>
-<td><p>Magpie speech NIM</p></td>
-<td><p>HTTP adapter over Riva gRPC</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 <td><p>kyutai/pocket-tts</p></td>
 <td><p>Pocket TTS in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
 <td><p>8106</p></td>
 <td><p>Llama-3.1-Nemotron-Nano-8B-v1</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 <td><p>NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108</p></td>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code> via <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code></p></td>
 <td><p>8120</p></td>
 <td><p>Cloudflare Clef-Flash 9B</p></td>
 <td><p>Native SystemOne choice decisions</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nim_server</span></code></p></td>
-<td><p>configured per YAML</p></td>
-<td><p>selected NVIDIA NIM</p></td>
-<td><p>persistent Docker container</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
@@ -562,8 +551,8 @@ recorded video, and document retrieval.</p>
 </table>
 </div>
 <p>Local model artifacts land in the service’s <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> directory, set per
-YAML and resolved relative to the YAML file. Self-hosted NIM containers use
-<code class="docutils literal notranslate"><span class="pre">nim_cache</span></code> for their optimized engines and weights; hosted endpoints keep no
+YAML and resolved relative to the YAML file. Operators configure self-hosted
+NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every <code class="docutils literal notranslate"><span class="pre">models/</span></code> tree is excluded from version
 control. The model-servers profiles share <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root;
 the exact layout per launch style is below.</p>
@@ -829,104 +818,32 @@ table, and the profile contract are in
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
-<p>The LLM and VLM can run on <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a> instead of
-local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>
-API, so this is a model-profile change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.
-Self-hosted speech NIMs are covered below.</p>
-<p>A hosted consumer entry uses an environment-variable reference for its
-credential and omits deployment and health polling metadata:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
-token. The key is a
-managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
-<li><p><strong>Omitted <code class="docutils literal notranslate"><span class="pre">deployment</span></code></strong> defaults to an externally operated endpoint; no
-model process is started or stopped by the profile.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
-</ul>
-<p>To adapt a sample, copy its active model profile, replace the local model entry
-with the hosted entry, and point <code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML at the new
-file. The worker reads the endpoint credential named in <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>; export
-it or configure the credential store. Consumer sample launchers do not inspect
-model profiles to choose model processes.</p>
-<section id="self-hosted-nim-containers">
-<span id="self-hosted-nim-containers-models-vlm-llm-nim-json"></span><h3>Self-hosted NIM containers<a class="headerlink" href="#self-hosted-nim-containers" title="Link to this heading">#</a></h3>
-<p>Compatible models can be pulled from NGC and served as optimized NIM
-containers on your own GPUs. Use the separate
-<a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a> sample:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers-nim<span class="w"> </span>model_servers_nim
-</pre></div>
-</div>
-<p>Its hardware profiles select the container images, ports, and GPU placement;
-its compatibility adapters preserve the endpoints consumed by existing agent
-samples. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> sample launches local server wrappers only.
-Refer to the NIM sample guide for model selection, hardware qualification,
-cache behavior, and shutdown commands.</p>
-<p>Self-hosted Riva speech NIMs also expose a direct gRPC interface.
-Workers reach them through the optional <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> model kind:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span><span class="w">   </span><span class="c1"># the container's gRPC port</span>
-<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
-</pre></div>
-</div>
-<p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
-(default 44100). An explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> call with <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the
-default) runs a gRPC channel-ready probe; consumer startup does not call it.
-The standalone <a class="reference internal" href="../reference/magpie-nim-tts.html"><span class="doc">Magpie NIM HTTP speech service</span></a> service exposes a Magpie Riva
-NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
-the optional SDK dependency; HTTP consumers do not.</p>
-<p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
-<code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
-GPU-matched optimized engine from NGC on first start; multi-GB, cached
-under <code class="docutils literal notranslate"><span class="pre">models/nim/</span></code> for later runs), and GPU capacity for every container.
-<code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> placement lives in the per-GPU-profile
-<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files. Their adjacent comments record profile-specific
-validation status and hardware cautions; verify startup and capacity on the
-target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
-<p>A NIM container serving something the samples don’t ship is the same
-mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
-or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port. Consumer workers do not require a
-health route. Operators can still check the container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>
-endpoint directly.
-With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
-whole change. For an orchestrator to launch or expect it, the entry’s
-<code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service
-table; a service name with no row fails fast at startup, and adding one row plus
-its config YAML is the only orchestrator edit the profile system ever
-needs.</p>
+<p>Develop with the local shared model servers and deploy the same workers against
+independently operated NIM endpoints. The model profile selects a protocol
+adapter and an endpoint; samples continue to use the typed <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>
+interfaces. There is no XR AI NIM container launcher or local HTTP proxy.</p>
+<p>Chat and vision use <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> with native model IDs. Speech uses
+<code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code>, which normalizes Riva audio inside the SDK. Asymmetric embedding
+endpoints use the existing <code class="docutils literal notranslate"><span class="pre">adapter.default_extras.input_type</span></code> field; the SDK
+translates query and passage labels without changing the RAG service.</p>
+<section id="self-hosted-nim-endpoints">
+<span id="self-hosted-nim-containers-models-vlm-llm-nim-json"></span><h3>Self-hosted NIM endpoints<a class="headerlink" href="#self-hosted-nim-endpoints" title="Link to this heading">#</a></h3>
+<p>Operators own container lifecycle, GPU placement, optimized-engine caching,
+health exposure, and endpoint authorization. Consumer profiles use external
+ownership. The local <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher remains a development convenience.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for a complete profile, sample
+configuration paths, smoke checks, and deployment qualification.</p>
 </section>
 </section>
 <section id="model-server-persistence">
 <h2>Model-server persistence<a class="headerlink" href="#model-server-persistence" title="Link to this heading">#</a></h2>
 <p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
-and self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">nim_server</span></code>)
 <strong>survive stack restarts by design</strong>, including when a deployment profile
 marks them <code class="docutils literal notranslate"><span class="pre">managed</span></code>: the stack starts them, but a clean shutdown leaves them
 serving so the next start reuses hot weights. Use <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
-for the local stack or <code class="docutils literal notranslate"><span class="pre">model_servers_nim</span> <span class="pre">--stop</span></code> for the NIM stack. When
-switching between these samples, stop the current stack first. At startup a wrapper
+for the local stack. Independently deployed NIMs follow their operator’s
+lifecycle. At startup a wrapper
 that finds a <em>different</em> persistent xr-ai container holding its port (found
 by the <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code> label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -1247,10 +1164,6 @@ launches; they are not sample configuration. Shared deployments use the
 hardware-specific YAML under
 <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
 resulting endpoints through their models JSON.</p></li>
-<li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
-under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers-nim/yaml/&lt;gpu-profile&gt;/</span></code>; its
-<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
-<code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>
 </section>
 </section>
@@ -1311,7 +1224,7 @@ under <code class="docutils literal notranslate"><span class="pre">model-server-
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-sample-to-shared-model-services">Connecting a sample to shared model services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers">Self-hosted NIM containers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-endpoints">Self-hosted NIM endpoints</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-server-persistence">Model-server persistence</a></li>

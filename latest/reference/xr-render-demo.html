@@ -281,17 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.3.0-beta</option>
+    <option value="0" >v0.3.0-beta</option>
     <option value="1" >v0.2.0-beta.2</option>
     <option value="2" >v0.1.0-beta</option>
-    <option value="3" >main (development)</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["xr-render-demo.html", "../../v0.2.0-beta.2/reference/xr-render-demo.html", "../../v0.1.0-beta/reference/xr-render-demo.html", "../../main/reference/xr-render-demo.html"];
+    var urls = ["../../v0.3.0-beta/reference/xr-render-demo.html", "../../v0.2.0-beta.2/reference/xr-render-demo.html", "../../v0.1.0-beta/reference/xr-render-demo.html", "xr-render-demo.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -333,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -346,12 +347,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-render-demo — architecture</a></li>
@@ -625,7 +627,7 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 <td><p>Native capability endpoints, text-memory directory, VAD, idle timeout, and voice-gate selection</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
-<td><p>Always-on speech or wake phrases, listening chime, and follow-up window</p></td>
+<td><p>Conversation controls, optional wake phrases, listening chime, and follow-up window</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Model adapters and shared endpoints</p></td>
@@ -648,6 +650,9 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 </tbody>
 </table>
 </div>
+<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
+wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for configurable phrases and wake gating.</p>
 <p><code class="docutils literal notranslate"><span class="pre">NV_DEVICE_PROFILE</span></code> in the environment overrides
 <code class="docutils literal notranslate"><span class="pre">cloudxr_env.NV_DEVICE_PROFILE</span></code> in <code class="docutils literal notranslate"><span class="pre">cloudxr_runtime.yaml</span></code>. <code class="docutils literal notranslate"><span class="pre">LOVR_BIN</span></code> similarly
 overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin</span></code> in <code class="docutils literal notranslate"><span class="pre">scene/scene_service.yaml</span></code>. Use a GPU index reported by
@@ -741,11 +746,25 @@ model sees only participant-safe perception facades. Recorded selection is
 grouped into latest tools, whose windows end at the newest recording, and
 historical tools, whose frame or video window begins at one absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>.
 Recorded-frame timestamps are estimates interpolated from chunk metadata.</p>
+<section id="recorded-video-prerequisites">
+<span id="xr-render-recording-prerequisites"></span><h3>Recorded-video prerequisites<a class="headerlink" href="#recorded-video-prerequisites" title="Link to this heading">#</a></h3>
+<p>Recorded selection requires all of the following settings:</p>
+<ul class="simple">
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">video_recording.enabled</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code>.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/video_memory_service.yaml</span></code> to the hub’s
+effective <code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. When <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> is omitted, the hub uses
+<code class="docutils literal notranslate"><span class="pre">/dev/shm/xr-ai/recordings</span></code>.</p></li>
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/xr_render_demo_worker.yaml</span></code>.</p></li>
+</ul>
+<p>Omitting <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> enables history. The checked-in worker YAML
+sets it to <code class="docutils literal notranslate"><span class="pre">false</span></code> because the sample hub disables recording. With history
+disabled, perception uses current frames only.</p>
 <p>Start the shared model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
 The worker does not poll model health endpoints. It retains a tool-shaped LLM
 inference warmup before announcing readiness so that LLM memory settles before
 LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.</p>
+</section>
 </section>
 <section id="stt-parakeet-tdt-0-6b-v3">
 <h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
@@ -836,7 +855,8 @@ the voice subscriber and TTS.</p></li>
 scene diff decides whether the verification pass runs.</p>
 <p>At worker startup, <code class="docutils literal notranslate"><span class="pre">app.py</span></code> composes the five subagent tools from the scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
-instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
+instances provided by <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code>. Video-memory tools are wired only when
+worker <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is enabled. Lifecycle tools (<code class="docutils literal notranslate"><span class="pre">start_xr</span></code>,
 <code class="docutils literal notranslate"><span class="pre">get_health</span></code>) remain worker-managed and are not exposed to the supervisor.</p>
 <p>Final messages are also persisted through native
 text memory without model scratch output or tool traces.</p>
@@ -1201,7 +1221,10 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos3-nano-reasoner">VLM — Cosmos3 Nano Reasoner</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recorded-video-prerequisites">Recorded-video prerequisites</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-pocket-tts">TTS — Pocket TTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>

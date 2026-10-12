@@ -109,7 +109,7 @@ build-backend = "hatchling.build"
 [project]
 name = "<kebab-name>"
 version = "0.1.0"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
@@ -139,7 +139,7 @@ build-backend = "hatchling.build"
 [project]
 name = "<kebab-name>-worker"
 version = "0.1.0"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-hub-client",
     "xr-ai-logging",

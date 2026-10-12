@@ -60,7 +60,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Tea-making guidance — building deterministic visual workflows" href="tea-making-sample.html" />
-    <link rel="prev" title="Shared model servers with NVIDIA NIM" href="model-servers-nim.html" />
+    <link rel="prev" title="NIM model endpoints" href="model-servers-nim.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -281,17 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.3.0-beta</option>
+    <option value="0" >v0.3.0-beta</option>
     <option value="1" >v0.2.0-beta.2</option>
     <option value="2" >v0.1.0-beta</option>
-    <option value="3" >main (development)</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["simple-vlm-example.html", "../../v0.2.0-beta.2/reference/simple-vlm-example.html", "../../v0.1.0-beta/index.html", "../../main/reference/simple-vlm-example.html"];
+    var urls = ["../../v0.3.0-beta/reference/simple-vlm-example.html", "../../v0.2.0-beta.2/reference/simple-vlm-example.html", "../../v0.1.0-beta/index.html", "simple-vlm-example.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -333,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -346,12 +347,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -540,7 +542,7 @@ layout works without command-line configuration arguments.</p>
 <td><p>Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
-<td><p>Wake phrases, listening chime, and follow-up window</p></td>
+<td><p>Conversation controls, optional wake phrases, listening chime, and follow-up window</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Model adapters and shared endpoints</p></td>
@@ -560,8 +562,9 @@ layout works without command-line configuration arguments.</p>
 <p>Edit the owning file, preserve the field’s YAML type, and restart
 <code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code>; configuration is loaded only at process startup. For
 example, lower <code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code> in the worker YAML if quieter speech is being
-missed, or change <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> in the voice-gate YAML to choose the required
-wake phrases. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
+missed, or change <code class="docutils literal notranslate"><span class="pre">conversation.start_phrase</span></code> and <code class="docutils literal notranslate"><span class="pre">conversation.stop_phrase</span></code>
+in the voice-gate YAML. Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require
+its configured <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> during an active conversation. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
 from the shell’s current directory.</p>
 <p>Changing an entry in <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
@@ -570,6 +573,10 @@ For a checkpoint, port, GPU, or model-runtime change, refer to
 persistent stack, and start it again before restarting this sample.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
+<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then ask questions
+without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to finish. These
+controls work with the sample’s existing STT endpoint, including NIM. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for paused phrases and the legacy wake mode.</p>
 </section>
 <section id="opt-in-session-capture">
 <h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
@@ -628,7 +635,7 @@ sensitive. Inspect a running sample with:</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Shared model servers with NVIDIA NIM</p>
+        <p class="prev-next-title">NIM model endpoints</p>
       </div>
     </a>
     <a class="right-next"

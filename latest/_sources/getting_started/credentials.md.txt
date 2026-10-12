@@ -8,12 +8,23 @@
 The launcher manages HuggingFace and NGC API tokens so they are never stored
 in source files or YAML configurations.
 
-DeviceIOHub also requires a LiveKit API key and secret. Set `api_key` and
-`api_secret` in `device_io_hub.yaml`, or supply `LIVEKIT_API_KEY` and
-`LIVEKIT_API_SECRET` in the environment. Environment values override the YAML
-fields, which lets deployed stacks inject credentials without rewriting the
-configuration file. Both values are required; the hub fails at startup when
-either is missing or blank instead of silently using development credentials.
+## LiveKit credentials
+
+DeviceIOHub generates a random LiveKit API key and secret at startup when neither
+environment credential is set and both YAML values are missing or blank.
+Shipped hub YAML files leave both fields blank,
+so samples run without credential setup or a LiveKit account. The generated
+pair configures the local LiveKit server and token endpoint and changes on
+each restart. Clients use the connection token supplied by DeviceIOHub.
+
+For a fixed pair, set `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the launch
+environment, or supply `api_key` and `api_secret` in a private
+`device_io_hub.yaml`. If either environment variable is set, both must contain
+non-blank values; the environment pair replaces the YAML pair together. Partial
+pairs fail at startup, and blank environment values do not trigger credential
+generation. Never commit credentials.
+
+## Model credentials
 
 Tokens are cached in `~/.config/xr-ai/credentials.json` — outside any
 project directory. Values already in `os.environ`
@@ -73,15 +84,17 @@ is reused without any further setup.
 
 ## NGC API key (`NGC_API_KEY`)
 
-**Required for the NIM model backend and restricted `nvcr.io` image pulls.** It
-authenticates those container pulls and **hosted NVIDIA NIM** inference
-inference endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` sends
+**Used for restricted `nvcr.io` image pulls and hosted NVIDIA inference.** It
+authenticates those container pulls and hosted NVIDIA NIM inference
+endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` sends
 it as the `Authorization: Bearer` token (refer to
 {doc}`AI services — hosting models on NVIDIA NIM </components/ai-services>`).
 
-The `vlm_llm_nim` model-server profile calls
-`require_credentials("NGC_API_KEY")`. This check is non-interactive and exits
-when the key is unavailable, so provide the key before starting the profile.
+Deploying self-hosted NIMs requires credentials in the operator's deployment
+environment. Agents connecting to those endpoints need only their inference
+credentials. Configure each role's `endpoint.api_key_env` with the environment
+variable accepted by its gateway; it need not be `NGC_API_KEY`. Refer to
+{doc}`/guides/deploying-with-nim`.
 Get a key at <https://ngc.nvidia.com/setup/api-key>, then export it:
 
 ```bash
@@ -113,7 +126,7 @@ call this helper.
 an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
 token is absent. `model_servers --allow-anonymous` relaxes only the `HF_TOKEN`
-check; credentials required by the selected NIM profile remain strict.
+check.
 
 ## Managing saved tokens
 

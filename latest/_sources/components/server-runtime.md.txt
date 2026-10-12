@@ -18,8 +18,9 @@ uv run --project services/device-io-hub device_io_hub \
 ```
 
 Configuration comes from a `device_io_hub.yaml` file. When none is found,
-non-secret defaults are used, but LiveKit credentials must still come from
-`LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+configuration defaults are used. The loader generates a fresh LiveKit key and
+secret when both are missing or blank. `LIVEKIT_API_KEY` and
+`LIVEKIT_API_SECRET` override YAML values when a fixed pair is needed.
 `services/device-io-hub/device_io_hub.yaml` is the reference copy documenting
 every field; each sample ships its own copy under its `yaml/` directory.
 Relative paths inside the YAML (such as `web_client_dir`) resolve against the
