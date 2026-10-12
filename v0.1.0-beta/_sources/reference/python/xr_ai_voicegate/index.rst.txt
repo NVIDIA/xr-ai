@@ -74,8 +74,7 @@ Package Contents
       Sentence-boundary opt-in phrases.
 
       A match is valid at transcript start or after ``.``, ``?``, or ``!``.
-      An empty tuple dispatches every non-STOP STT transcript, or every transcript
-      when ``stop_commands_enabled`` is false.
+      An empty tuple dispatches every non-STOP STT transcript.
 
 
 
@@ -103,33 +102,12 @@ Package Contents
 
 
 
-   .. py:attribute:: stop_commands_enabled
-      :type:  bool
-      :value: True
-
-
-      Whether STOP recognition interrupts speech or invokes the stop handler.
-
-      Applies to early probes, streaming partials, and final transcripts,
-      including conversations without a wake phrase. Disable for passive
-      narration: STOP words then follow normal transcript and query gating
-      without a STOP interruption or acknowledgement. Probes may remain enabled
-      for wake acknowledgements.
-      This does not disable other conversation controls or speech-start events.
-      Scoped application commands such as "stop recording" remain queries.
-
-
-
 .. py:function:: load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig
 
    Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
    Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
-   bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
-   ``stop_commands_enabled`` (bool, default true).
-   Optional ``conversation`` and ``speaker`` mappings configure session
-   controls and speech-backend selection for the unified voice pipeline.
-   Their settings remain private to that path.
+   bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
    Missing file or empty file → returns the dataclass defaults (gate
    disabled / always-on). ``magic_phrases: null`` and trailing whitespace
    in phrases are normalized the same way the inline-block parser did.
@@ -142,7 +120,7 @@ Package Contents
    Event ladder in ``feed`` — exactly one event fires per call, in this
    deterministic priority order:
 
-   1. STOP enabled and detected on either raw text or the magic-phrase-stripped tail
+   1. STOP detected on raw text OR on the magic-phrase-stripped tail
       → ``on_stop(pid)``; closes the follow-up window.
    2. Magic phrase matched AND query non-empty
       → ``on_query(pid, query, fresh_match=True)``; closes the follow-up
@@ -158,7 +136,7 @@ Package Contents
       defensively.
 
    When ``magic_phrases`` is empty the gate is in always-on mode: STOP
-   takes priority when enabled, and every other
+   still wins (interrupts must work without a phrase) and every other
    utterance dispatches straight to ``on_query`` with
    ``fresh_match=True``. The follow-up / phrase-only / drop branches
    are inert in this mode — they only make sense once a phrase exists
@@ -170,10 +148,6 @@ Package Contents
    questions, reported speech, unconfigured arbitrary prefixes, and scoped or
    multi-action commands such as ``stop monitoring`` are ordinary queries,
    not global stops.
-
-   Set ``stop_commands_enabled=False`` for passive transcription. In that
-   mode neither partial nor final transcripts trigger STOP; their words
-   instead follow the ordinary query-gating rules.
 
    Handler exceptions are logged and swallowed so one bad handler does
    not kill the gate.

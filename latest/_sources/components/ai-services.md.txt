@@ -22,14 +22,12 @@ recorded video, and document retrieval.
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
-| `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
@@ -41,98 +39,6 @@ YAML and resolved relative to the YAML file. Self-hosted NIM containers use
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
-
-## Speaker-conditioned STT
-
-`services/speaker-stt` is a private local inference process. It shares
-Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
-while keeping each session's diarization history, enrollment and ASR caches
-separate. A session enrolls one speaker with the configured start phrase and
-releases that identity with the stop phrase. Background voices do not reach
-the transcript as separate speakers after enrollment: the decoder receives the
-mixed audio with owner and interference masks and is conditioned on the owner.
-Before enrollment, each detected speaker has independent conditioned decoding
-and phrase-matching state. Someone already talking does not reserve ownership:
-another speaker can say the start phrase over that conversation and enroll when
-their own utterance completes. Non-speech background noise does not impose a
-silence gate. Each speaker's existing inactivity interval ends their utterance;
-there is no requirement that every speaker become quiet together.
-
-All complete start phrases finalized in one accepted audio step are considered
-before ownership changes. One match enrolls its speaker; multiple matches in
-that step enroll nobody and require a fresh attempt. A phrase finalized later
-cannot take over an existing owner. This is a streaming decision boundary, not
-a guarantee of distinguishing all acoustically simultaneous requests. Speaker
-labels are session-local identities; actual attribution and interference
-suppression require qualification on the intended microphones.
-
-The process follows the model-service HTTP pattern and exposes health and model
-identity endpoints. A private WebSocket carries mono signed 16-bit PCM
-at 16 kHz and returns enrollment and transcription events. It serializes
-inference because model conditioning is mutable.
-Opening a session establishes the capture timestamp of its first sample.
-Subsequent audio requests form one ordered, contiguous PCM stream; the service
-derives all later timestamps from the number of samples it has accepted. The
-caller must close and reopen the session if its capture or transport layer drops
-audio, because that layer owns the information needed to detect the loss.
-Utterances forced to end at the configured duration limit cannot enroll or
-release a speaker; an enrolled owner's forced segment is still transcribed.
-Start and stop phrases can span utterances within the conversation phrase
-window, retaining separate enrollment fragments for each speaker. A truncated
-candidate cannot enroll from the tail of the same continuing speech episode;
-that speaker must end its episode before making another attempt.
-
-The private protocol makes that ownership explicit: the opening JSON message
-supplies `audio_origin_us` once, and subsequent binary WebSocket messages
-supply only PCM bytes. Each connection owns one session, and the caller waits
-for the event response before sending the next audio message. Audio must be
-serialized in capture order. The service neither reorders audio nor guesses
-whether samples are missing from wall-clock arrival times.
-Binary messages retain the existing limit of one second of audio (16,000
-complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
-or incomplete PCM samples are protocol errors. The server's standard transport
-message-size and heartbeat defaults are retained; JSON controls do not inherit
-an unrelated audio-duration limit.
-
-Configure model IDs, device, precision, host, port and session capacity
-in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
-`http://127.0.0.1:8102`. Keep the unauthenticated private streaming endpoint on
-a loopback or trusted interface. Hardware profiles or `CUDA_VISIBLE_DEVICES`
-select a GPU; the generic configuration uses the first visible GPU. From the
-repository root, start it with:
-
-```bash
-uv --config-file uv.toml run --project services/speaker-stt speaker_stt
-```
-
-The service warms both streaming and final decoding before signaling ready.
-Reuse verifies the local listener's managed-process ownership and resolved
-configuration before launching a child; a changed configuration requires
-stopping that process first. A matching listener still warming its models
-refuses another launch rather than allocating a duplicate GPU copy. Persistent
-reuse exits after signaling readiness; monitored reuse keeps its readiness
-proxy alive.
-
-Each session owns one diarization cache and at most eight temporary ASR caches
-before enrollment, bounded by the model's speaker-label capacity. Features and
-model weights are shared. After enrollment only the owner's ASR cache is needed
-unless the dependent diagnostics layer requests other transcripts. With the
-default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
-GPU memory and latency at that bound have not been qualified. Candidate-decoding
-failure revokes the session because dropping a candidate could conceal a phrase
-tie. All cache allocation, inference, and release use one serialization boundary.
-A connected session may pause without losing enrollment. Disconnect, transport
-liveness failure, or inference failure releases it; `max_sessions` bounds
-retained sessions. Cancelled model work finishes before its cache and
-serialization ownership are released, including repeated cancellation.
-The model environment is isolated from workers and the existing batch STT
-service. Model weights are downloaded on first use and then reused from the
-configured cache. As with the sibling NeMo services, existing `HF_HOME` and
-`NEMO_CACHE_DIR` values take precedence over cache defaults.
-
-The WebSocket session is not a public model API. It is reserved for the private
-typed voice integration; applications continue to use the public voice and
-model interfaces rather than connecting to this route directly.
 
 ## Two HuggingFace cache roots
 
@@ -165,52 +71,6 @@ HF_HOME=models hf download nvidia/Cosmos3-Nano
 # NeMo STT server launched from its standalone YAML:
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
-
-(starting-model-services-without-network-access)=
-
-## Starting without network access
-
-The following model services look up their models in the Hugging Face cache
-before contacting the Hub, and load cached models from their local paths:
-
-| Service | Cached artifact | Loaded through |
-|---|---|---|
-| Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
-| STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
-| Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
-| Clef | Snapshot at `model_revision` | Native release loader with the snapshot directory |
-
-The listed services use cached artifacts without refreshing them from the Hub.
-Only a cache miss follows the online download path. Pocket TTS accepts its
-ungated weights when the gated voice-cloning weights are not cached. Pip-mode
-vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.
-
-Offline startup supports a previously working cache. A local snapshot lookup
-does not establish completeness or integrity. Interrupted or damaged caches
-may require an online re-download; automatic partial-cache repair is not
-provided. The underlying loader may fail or apply defaults for missing files.
-To recover, re-download the affected model and revision with `hf download
-<model-id> --revision <revision> --force-download`, using the same `HF_HOME`
-or `--cache-dir` as the service, then start the service again while online.
-
-A cache hit is never refreshed. A model without a pinned revision keeps the
-`main` commit it was downloaded at; update it with `hf download`, as shown
-above.
-
-After a successful online start, the listed services can reuse their working
-model cache without network access. This assumes their runtime dependencies
-and Docker images are already installed. To forbid downloads, set
-`HF_HUB_OFFLINE=1`. The host services inherit it, and the vLLM wrapper forwards
-it into its containers:
-
-```bash
-HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers
-```
-
-In this mode, a service whose model is not cached fails at startup with an
-error that names the model, its revision, and the cache directory. Like the
-other forwarded Hub settings, changing `HF_HUB_OFFLINE` recreates persistent
-vLLM containers.
 
 (migrating-model-caches-from-ai-services)=
 
@@ -260,8 +120,7 @@ readiness, refer to {ref}`consumer-model-readiness`.
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, `make_embedding`, and
-`make_decision`. The SDK encapsulates the
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.
@@ -344,24 +203,41 @@ file. The worker reads the endpoint credential named in `api_key_env`; export
 it or configure the credential store. Consumer sample launchers do not inspect
 model profiles to choose model processes.
 
-(self-hosted-nim-containers-models-vlm-llm-nim-json)=
-### Self-hosted NIM containers
+### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
-Compatible models can be pulled from NGC and served as optimized NIM
-containers on your own GPUs. Use the separate
-{doc}`/reference/model-servers-nim` sample:
+Compatible models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM and no network hop.
+
+The NIM containers are owned by the shared model-servers stack, exactly
+like the local vLLM servers. Its deployment profiles pick the mix: every
+`managed` entry launches as a `nim_server` process (`services/nim-server`, a
+generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
+image and ports) or as a local server:
 
 ```bash
-uv run --project model-server-samples/model-servers-nim model_servers_nim
+uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 ```
 
-Its hardware profiles select the container images, ports, and GPU placement;
-its compatibility adapters preserve the endpoints consumed by existing agent
-samples. The `model-servers` sample launches local server wrappers only.
-Refer to the NIM sample guide for model selection, hardware qualification,
-cache behavior, and shutdown commands.
+- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
+  containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
+  these endpoints; they never launch or stop the containers.
 
-Self-hosted Riva speech NIMs also expose a direct gRPC interface.
+To configure a sample with these endpoints, refer to
+{doc}`/guides/customizing-model-servers`.
+
+The container `image:` is the model, so swapping models is a
+`nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
+per entry, not per profile: each model role independently picks a local
+server, a self-hosted NIM container, or a hosted endpoint through its own
+`adapter` and `endpoint` sections. The model-server launcher also requires
+`deployment` metadata; consumer profiles omit it. The shipped profiles are
+presets, not a closed set; a mixed setup is a copy of a shipped profile
+with the relevant entries changed, saved under any name and selected with
+`--models` (model-servers) or `models_config` (workers). When mixing, mind
+port overlaps: give a NIM container a free port or drop the overlapping
+local server from the profile.
+
+A custom model-server profile can still launch self-hosted Riva speech NIMs.
 Workers reach them through the optional `riva_grpc` model kind:
 
 ```yaml
@@ -396,7 +272,8 @@ endpoint directly.
 With `ownership: external` (you run the container yourself) that is the
 whole change. For an orchestrator to launch or expect it, the entry's
 `deployment.service` must name a process row in that orchestrator's service
-table; a service name with no row fails fast at startup, and adding one row plus
+table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
+a service name with no row fails fast at startup, and adding one row plus
 its config YAML is the only orchestrator edit the profile system ever
 needs.
 
@@ -407,9 +284,8 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 and self-hosted NIM containers (`nim_server`)
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. Use `model_servers --stop`
-for the local stack or `model_servers_nim --stop` for the NIM stack. When
-switching between these samples, stop the current stack first. At startup a wrapper
+serving so the next start reuses hot weights. `model_servers --stop` is the
+teardown. Switching profiles needs no manual teardown: at startup a wrapper
 that finds a *different* persistent xr-ai container holding its port (found
 by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -550,15 +426,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
-- Before `vllm serve` starts, the container resolves the model snapshot from
-  the mounted cache, as described in
-  {ref}`starting-model-services-without-network-access`. Only when the snapshot
-  must be downloaded does the wrapper verify that the image's Hub exposes its
-  Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
+- Before `vllm serve` starts, the wrapper verifies that the image's Hub exposes
+  its Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
   incompatible `hf-xet` wheel and checks the complete integration again; an
   unavailable accelerator therefore fails startup instead of silently falling
-  back to plain HTTPS. The download completes and is synced to disk before
-  vLLM initializes CUDA.
+  back to plain HTTPS.
 - `HF_XET_HIGH_PERFORMANCE=1` is the default in pip and docker modes. Setting
   it to `0` disables high-performance tuning, not Xet itself. Set
   `HF_HUB_DISABLE_XET=1` to disable Xet. To use legacy `hf_transfer` with a
@@ -711,6 +583,6 @@ cleanup.
   `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
 - The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `model-server-samples/model-servers-nim/yaml/<gpu-profile>/`; its
+  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
   `nim_<role>_server.yaml` files use `nim_cache`, normally
   `../../../../models/nim` from that location.

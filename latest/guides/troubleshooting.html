@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" selected>v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/guides/troubleshooting.html", "../../v0.1.0-beta/guides/troubleshooting.html", "troubleshooting.html"];
+    var urls = ["troubleshooting.html", "../../v0.2.0-beta.2/guides/troubleshooting.html", "../../v0.1.0-beta/guides/troubleshooting.html", "../../main/guides/troubleshooting.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -345,7 +346,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -454,16 +454,6 @@
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h1>
 <p>Common issues and their fixes. If you hit something not listed here, open an
 issue on the <a class="reference external" href="https://github.com/NVIDIA/xr-ai">repository</a>.</p>
-<section id="investigating-a-failed-run">
-<h2>Investigating a failed run<a class="headerlink" href="#investigating-a-failed-run" title="Link to this heading">#</a></h2>
-<p>Start with the launcher’s failure summary to identify the failed service,
-command, configuration, and exit status. Inspect that service’s terminal
-output and the run-log directory printed in the summary for the underlying
-error and recovery advice. If the run-log directory is unavailable, use the
-terminal output.</p>
-<p>Refer to <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure behavior,
-exit codes, and process ownership.</p>
-</section>
 <section id="setup-time-issues">
 <h2>Setup-time issues<a class="headerlink" href="#setup-time-issues" title="Link to this heading">#</a></h2>
 <section id="docker-socket-permission-denied-during-model-server-cleanup">
@@ -489,9 +479,10 @@ fails, the empty-result message does not establish that no servers are running,
 and cleanup aborts because ownership could not be verified.</p>
 <p><strong>Diagnosis:</strong> run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the same login session. If
 it reports permission denied for <code class="docutils literal notranslate"><span class="pre">/var/run/docker.sock</span></code>, the launcher cannot
-inspect persistent containers. The ownership check includes Docker’s error
-output in the launch log. These cleanup errors can have other causes; use
-that output or the direct command to confirm socket access is the problem.</p>
+inspect persistent containers. Its internal Docker check suppresses stderr,
+so running the command directly exposes the underlying error. These cleanup
+errors can have other causes; use the Docker output to confirm socket access
+is the problem.</p>
 <p><strong>Fix:</strong> complete the Docker group setup and refresh the launch session as
 described in <a class="reference internal" href="../getting_started/requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>. Verify that <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> succeeds without
 <code class="docutils literal notranslate"><span class="pre">sudo</span></code>, then retry the model-server command.</p>
@@ -537,12 +528,12 @@ startup failure on UMA systems.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">MemAvailable</span></code> is much larger than <code class="docutils literal notranslate"><span class="pre">MemFree</span></code> and <code class="docutils literal notranslate"><span class="pre">Cached</span></code> is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.</p>
-<p><strong>Fix:</strong> every Docker-backed vLLM service resolves its Hugging Face snapshot
-before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
-that point, so transfer, reconstruction, and dirty writeback allocations do not
-overlap the CUDA context allocation. The bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile also enables
-<code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each of these services: if the driver allocation still fails,
-the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
+<p><strong>Fix:</strong> the bundled <code class="docutils literal notranslate"><span class="pre">spark</span></code> profile enables <code class="docutils literal notranslate"><span class="pre">spark_uma</span></code> for each Docker-backed
+vLLM service. The wrapper downloads and syncs the complete Hugging Face
+snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
+writeback allocations do not overlap the CUDA context allocation. If the
+driver allocation still fails, the wrapper waits for reclamation and restarts
+the stopped container once. Only the wrapper that launched the current
 container attempt may restart it; another wrapper that adopts the running
 container observes it without taking ownership. The retry applies only when
 Docker reports that the container was not OOM-killed and the traceback reaches
@@ -602,8 +593,8 @@ the target hardware.</p>
 settings into a custom Spark profile. Do not flush the filesystem cache
 routinely for this symptom: doing so makes the next checkpoint read cold and
 can reproduce the profiling variation. An explicit KV cache cannot bypass an
-earlier CUDA driver-allocation failure; the pre-CUDA snapshot download and
-bounded retry are separate safeguards for that stage.</p>
+earlier CUDA driver-allocation failure; the prefetch and bounded retry are
+separate safeguards for that stage.</p>
 </section>
 <section id="dgx-spark-lovr-auto-download-is-not-supported">
 <h3>DGX Spark — LOVR auto-download is not supported<a class="headerlink" href="#dgx-spark-lovr-auto-download-is-not-supported" title="Link to this heading">#</a></h3>
@@ -1019,7 +1010,6 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#investigating-a-failed-run">Investigating a failed run</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-time-issues">Setup-time issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-socket-permission-denied-during-model-server-cleanup">Docker socket permission denied during model-server cleanup</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dgx-spark-uv-sync-fails-to-build-a-wheel">DGX Spark — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> fails to build a wheel</a></li>

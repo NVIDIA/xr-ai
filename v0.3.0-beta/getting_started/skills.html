@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Clef-Flash local decision server &#8212; XR AI</title>
+    <title>Skills &#8212; XR AI</title>
   
   
   
@@ -52,15 +52,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/clef-flash';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'getting_started/skills';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Command-line reference" href="command-line.html" />
-    <link rel="prev" title="xr-ai-web-events" href="agent-sdk-web-events.html" />
+    <link rel="next" title="Requirements" href="requirements.html" />
+    <link rel="prev" title="Quickstart" href="quickstart.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" selected>v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/index.html", "../../v0.1.0-beta/index.html", "clef-flash.html"];
+    var urls = ["skills.html", "../../v0.2.0-beta.2/getting_started/skills.html", "../../v0.1.0-beta/index.html", "../../main/getting_started/skills.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -310,13 +311,13 @@
   <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Getting Started</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="credentials.html">Credentials</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -338,58 +339,57 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Clef-Flash local decision server</a></li>
-<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
-<li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
-<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
-<li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
-<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
 </ul>
 </details></li>
 </ul>
@@ -427,9 +427,9 @@
       </a>
     </li>
     
-    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Getting Started</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Clef-Flash local decision server</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Skills</span></li>
   </ul>
 </nav>
 </div>
@@ -450,77 +450,89 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="clef-flash-local-decision-server">
-<h1>Clef-Flash local decision server<a class="headerlink" href="#clef-flash-local-decision-server" title="Link to this heading">#</a></h1>
-<p>The optional Clef-Flash 9B service exposes the upstream joint-schema model over
-the typed SystemOne HTTP contract used by <code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. It loads the pinned
-release’s <code class="docutils literal notranslate"><span class="pre">joint_schema_model.py</span></code> directly from the model directory and calls
-its native <code class="docutils literal notranslate"><span class="pre">load_release_model</span></code> and <code class="docutils literal notranslate"><span class="pre">systemone</span></code> functions. The service does not
-route decisions through a generation endpoint.</p>
-<p>The service supports text-only choice questions. A request must name the
-configured model, include state, and provide at least one question with a
-string instruction and two or more named choices. An empty instruction uses
-the upstream question-ID fallback. The service rejects
-multimodal fields, unsupported question types, model-name mismatches, oversized
-bodies, and tokenized inputs above <code class="docutils literal notranslate"><span class="pre">max_length</span></code>. This length check uses the
-release tokenizer before inference so state is never silently truncated by the
-upstream encoder.</p>
-<p>The server loads weights once, runs a two-choice warmup, and signals launcher
-readiness only after the model and HTTP listener are ready. Inference executes
-one request at a time on a dedicated worker thread; HTTP health and model
-metadata remain responsive while requests wait. Client cancellation, including
-repeated cancellation, does not release the inference lock until the running
-worker call finishes. <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/health</span></code> and
-<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> include model and <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> provenance.
-<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> returns the standard answers and usage object with the
-same provenance fields.</p>
-<section id="launching">
-<h2>Launching<a class="headerlink" href="#launching" title="Link to this heading">#</a></h2>
-<p>From <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>, run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
-uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model
+<section id="skills">
+<h1>Skills<a class="headerlink" href="#skills" title="Link to this heading">#</a></h1>
+<p>Skills are how a coding agent sets itself up to work with xr-ai: small
+<code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> modules under the open <a class="reference external" href="https://agentskills.io">Agent Skills</a> spec
+that the agent installs and follows. This is the primary way to get started.
+Paste this to your agent:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up xr-ai for me: ask me whether to build against the latest release
+(newest stable tag; a prerelease only if no stable exists) or main, then
+fetch skills/getting-started/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist
+at that ref, the release predates agent setup: get my OK to use main for
+both the skill and the checkout. Install the skill (or just follow it), and
+walk me through the rest of the setup.
 </pre></div>
 </div>
-<p>The sample starts <code class="docutils literal notranslate"><span class="pre">services/clef-server</span></code> persistently on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>.
-Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> pins model revision
-<code class="docutils literal notranslate"><span class="pre">17f0b0ad64efb65d273590632833508766b2aae6</span></code> from the
-<code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository. The service resolves the configured
-pinned snapshot from the repository’s ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache first and passes
-its directory to the native loader. A cache
-miss follows the online download path; with <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>, it fails before
-model loading with the model, revision, and cache directory. Offline startup
-assumes a previously working cache. Refer to
-<a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache behavior.</p>
-<p>With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
-sample directory to stop only a listener carrying the matching Clef ownership
-and port markers. It waits for that process to exit, including request and native
-inference cleanup, before reporting success; closing the HTTP listener alone
-does not complete shutdown. Linux process handles keep termination and timeout
-escalation tied to the same verified process. The stop command never treats a
-Docker container on that port as the Clef service. A server already listening on the configured port is reused
-only when it has those ownership markers and its health response matches the
-complete requested server configuration; any other listener causes startup to
-fail before loading model weights.</p>
-<p>The YAML sets the bind address, port, device, inference dtype, maximum token
-length, and maximum request-body size. The checked-in values use <code class="docutils literal notranslate"><span class="pre">cuda:0</span></code>,
-BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
-limit receive HTTP 422; increase <code class="docutils literal notranslate"><span class="pre">max_length</span></code> only when GPU memory allows it.</p>
+<p>The skill has the agent ask two setup questions (latest release or <code class="docutils literal notranslate"><span class="pre">main</span></code>;
+models on the local GPU or a hosted endpoint), clone the repo, and route
+itself to the working contract, the docs, and the reference sample. An agent
+with no skills mechanism can follow the <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> contents directly.</p>
+<p>For application work, <code class="docutils literal notranslate"><span class="pre">build-your-app</span></code> is also a complete entry point. It uses
+the published build guide before the checkout exists and continues with the
+same guide from the selected repository ref after cloning.</p>
+<p>To start directly with an application, describe its goal in this prompt and
+paste it to your coding agent:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Build an xr-ai application that &lt;describe what it should do&gt;. Ask me whether
+to use the latest stable release (or the latest prerelease if no stable release
+exists) or main, then fetch skills/build-your-app/SKILL.md at that ref from
+https://raw.githubusercontent.com/NVIDIA/xr-ai/. If the file does not exist at
+that ref, get my approval before using main for the skill, guide, and checkout.
+Install the skill (or just follow it), then build and verify the application.
+</pre></div>
+</div>
+<p>Prefer to do it by hand? Follow <a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a>.</p>
+<section id="available-skills">
+<h2>Available skills<a class="headerlink" href="#available-skills" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Skill</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/getting-started/SKILL.md"><code class="docutils literal notranslate"><span class="pre">getting-started</span></code></a></p></td>
+<td><p>Sets an agent up to build on xr-ai: repo, working contract, docs, reference sample</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/build-your-app/SKILL.md"><code class="docutils literal notranslate"><span class="pre">build-your-app</span></code></a></p></td>
+<td><p>Guides your coding agent from checkout setup through building an application</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-review-xr-ai/SKILL.md"><code class="docutils literal notranslate"><span class="pre">gh-review-xr-ai</span></code></a></p></td>
+<td><p>Reviews xr-ai PRs with strict scope discipline and comment-only feedback</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/skills/gh-manage-xr-ai-reviews/SKILL.md"><code class="docutils literal notranslate"><span class="pre">gh-manage-xr-ai-reviews</span></code></a></p></td>
+<td><p>Tracks an XR-AI review inbox with overall status, next actions, and safe batching</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The bank lives at
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/main/skills"><code class="docutils literal notranslate"><span class="pre">skills/</span></code></a> in the
+repository; new skills land there with the features they cover.</p>
 </section>
-<section id="http-contract">
-<h2>HTTP contract<a class="headerlink" href="#http-contract" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> accepts the SystemOne request fields <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">state</span></code>,
-and <code class="docutils literal notranslate"><span class="pre">questions</span></code>. The response contains the configured model name, one choice
-answer per question, input-token usage, and the pinned revision. The service
-does not accept images, videos, <code class="docutils literal notranslate"><span class="pre">noul</span></code>, or <code class="docutils literal notranslate"><span class="pre">score</span></code> questions. The pinned model
-rounds native probabilities to four decimal places. Before returning them, the
-service validates their shape and values, normalizes them to a complete
-distribution, and derives confidence from the selected normalized probability.</p>
-<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/health</span></code> reports the Clef service, model and revision, plus a deterministic
-fingerprint of the active non-secret server configuration. The launcher uses
-that complete identity only to decide whether an owned listener is reusable.</p>
-<p>Workers use <code class="docutils literal notranslate"><span class="pre">xr_ai_models.make_decision</span></code> and the model profile’s SystemOne
-adapter. They do not call this HTTP endpoint directly.</p>
+<section id="manual-installation">
+<h2>Manual installation<a class="headerlink" href="#manual-installation" title="Link to this heading">#</a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">REF</span></code> to the repository ref you will build against, choose a <code class="docutils literal notranslate"><span class="pre">SKILL</span></code> from
+the table, and download it into the directory used by your coding agent:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">SKILLS_DIR</span><span class="o">=</span>/path/to/your/agent/skills
+<span class="nv">REF</span><span class="o">=</span>main<span class="w">  </span><span class="c1"># or a release tag such as v0.3.0</span>
+<span class="nv">SKILL</span><span class="o">=</span>getting-started
+curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/</span><span class="nv">$SKILL</span><span class="s2">/SKILL.md"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">gh-manage-xr-ai-reviews</span></code> composes <code class="docutils literal notranslate"><span class="pre">gh-review-xr-ai</span></code>; install both review
+skills together. The review skills also ship <code class="docutils literal notranslate"><span class="pre">agents/openai.yaml</span></code>, optional
+Codex interface metadata for their display name, short description, and default
+prompt. After setting <code class="docutils literal notranslate"><span class="pre">SKILL</span></code> to either review skill, install that metadata with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-fsSL<span class="w"> </span>--create-dirs<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$SKILLS_DIR</span><span class="s2">/</span><span class="nv">$SKILL</span><span class="s2">/agents/openai.yaml"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"https://raw.githubusercontent.com/NVIDIA/xr-ai/</span><span class="nv">$REF</span><span class="s2">/skills/</span><span class="nv">$SKILL</span><span class="s2">/agents/openai.yaml"</span>
+</pre></div>
+</div>
+<p>If the selected release predates the skill bank, use <code class="docutils literal notranslate"><span class="pre">main</span></code> for both the skill
+and your checkout. An agent without a skill installation mechanism can read the
+downloaded <code class="docutils literal notranslate"><span class="pre">SKILL.md</span></code> and follow it directly in the current session.</p>
 </section>
 </section>
 
@@ -535,20 +547,20 @@ adapter. They do not call this HTTP endpoint directly.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="agent-sdk-web-events.html"
+       href="quickstart.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">xr-ai-web-events</p>
+        <p class="prev-next-title">Quickstart</p>
       </div>
     </a>
     <a class="right-next"
-       href="command-line.html"
+       href="requirements.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Command-line reference</p>
+        <p class="prev-next-title">Requirements</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -573,8 +585,8 @@ adapter. They do not call this HTTP endpoint directly.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launching">Launching</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#http-contract">HTTP contract</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#available-skills">Available skills</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-installation">Manual installation</a></li>
 </ul>
   </nav></div>
 

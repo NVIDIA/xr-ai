@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" selected>v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/guides/testing.html", "../../v0.1.0-beta/index.html", "testing.html"];
+    var urls = ["testing.html", "../../v0.2.0-beta.2/guides/testing.html", "../../v0.1.0-beta/index.html", "../../main/guides/testing.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -345,7 +346,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -463,7 +463,7 @@ required for the browser camera tests.</p>
 uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-v
 </pre></div>
 </div>
-<p>CI runs the same selection on Python 3.11 through 3.14 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
+<p>CI runs the same selection on Python 3.11 and 3.12 from <code class="docutils literal notranslate"><span class="pre">tests/</span></code>, with the
 project environment at the repository root for nltk compatibility. The
 equivalent repository-root command is:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>

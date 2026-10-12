@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" selected>v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../../../v0.2.0-beta.2/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
+    var urls = ["index.html", "../../../../v0.2.0-beta.2/index.html", "../../../../v0.1.0-beta/index.html", "../../../../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -345,7 +346,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-web-events.html">xr-ai-web-events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
@@ -655,17 +655,13 @@ to tell the launcher not to kill the wrapper on shutdown.</p>
 <p><em>container_name</em> is only consulted in docker mode. Use a stable,
 service-specific name (e.g. <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-&lt;entry-point&gt;</span></code>) so the stop
 helper can find it.</p>
-<p>Docker mode resolves <em>model</em> from the mounted <em>model_cache</em> inside the
-container and serves the cached snapshot directory under
-<code class="docutils literal notranslate"><span class="pre">--served-model-name</span></code> without contacting the Hub. Only when the snapshot
-is absent does it verify a Xet-capable Hub, repairing a
-missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel, and download the snapshot before
-CUDA starts. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code> a missing snapshot fails startup
-instead. <em>extra_pip</em> is an additional
+<p>Docker mode verifies a Xet-capable Hub inside the container and repairs a
+missing or incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel. <em>extra_pip</em> is an additional
 docker-only list of pip-installable package specs for model architectures
 whose wheels the image doesn’t bundle. Silently ignored in pip mode (deps
 belong in the wrapper’s pyproject.toml there).</p>
-<p><em>spark_uma</em> enables the DGX Spark cold-start safeguard in docker mode:
+<p><em>spark_uma</em> enables the DGX Spark cold-start safeguards in docker mode:
+prefetching and syncing the Hugging Face snapshot before CUDA starts, and
 one bounded restart of a container attempt launched by this wrapper after
 a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
 Docker lifecycle option, preserving the one-field backend switch used by
