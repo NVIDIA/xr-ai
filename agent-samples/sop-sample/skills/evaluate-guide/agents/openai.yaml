@@ -4,4 +4,4 @@
 interface:
   display_name: "Evaluate Guide"
   short_description: "Check a draft SOP against its recorded evidence"
-  default_prompt: "Use $evaluate-guide to check my draft SOP against its source capture and report findings without modifying the guide."
+  default_prompt: "Use $evaluate-guide to run my draft through XR-AI replay with local models and recorded camera input, then report observed failures without modifying the guide."

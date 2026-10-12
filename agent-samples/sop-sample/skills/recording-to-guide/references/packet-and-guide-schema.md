@@ -147,6 +147,10 @@ Keep authoring changes in those notes. The
 [evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
 untested checks, and revision findings separately in `<slug>.evaluation.md`.
 Do not add test results to YAML.
+Runtime evaluation uses the replay engine and configured local models with
+recorded camera input. The authoring model observes actual traces and revises
+the guide; it does not replace visual inference, tool results, or state commits.
+Test artifacts and recording timestamps stay outside the executable guide.
 Write these outputs under `agent-samples/sop-sample/guides/` from the repository
 root, unless a different output directory was requested. Links between these
 references resolve relative to their containing files, not the working directory.

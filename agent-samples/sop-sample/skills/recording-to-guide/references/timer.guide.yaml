@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example only. Ten seconds must not be copied unless instructed.
-# Evaluation follows ../../evaluate-guide/SKILL.md. A simulated clock is
-# unexpired at setup + 9 seconds
-# and expired at setup + 10. These are calculated checks, not measured video
-# duration or production clock calls. Never write the simulated start into YAML.
+# Evaluation follows ../../evaluate-guide/SKILL.md using the real replay engine
+# and local models. Inspect the actual clock__now result, accepted commit, and
+# clock__timer calls: unexpired before ten elapsed seconds and expired afterward.
+# A calculated answer or author-provided ready is not a runtime test. Missing
+# boundary coverage is untested. Never write a recording timestamp into YAML.
 # Placement and live clock initialization form ONE setup step. Do not insert
 # another placement step or reuse an already-completed boolean for setup.
 # Evaluation traces the actual setup dispatch: evidence.commit is absent,
