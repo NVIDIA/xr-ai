@@ -436,6 +436,54 @@ async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, a
             assert call.read_finished.is_set()
 
 
+@pytest.mark.parametrize("action", ["timeout", "cancel"])
+async def test_riva_recognition_joins_native_read_before_returning(tmp_path, riva_stub, action):
+    class BlockingRecognition:
+        def __init__(self):
+            self.started = threading.Event()
+            self.cancelled = threading.Event()
+            self.release = threading.Event()
+            self.finished = threading.Event()
+
+        def cancel(self):
+            self.cancelled.set()
+
+        def result(self):
+            self.started.set()
+            try:
+                assert self.cancelled.wait(5), "RPC was not cancelled"
+                assert self.release.wait(5), "test did not release native read"
+                raise RuntimeError("RPC cancelled")
+            finally:
+                self.finished.set()
+
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_stt(cfg, "stt") as client:
+        call = BlockingRecognition()
+        client._asr.offline_recognize = lambda *args, **kwargs: call
+        task = asyncio.create_task(client.transcribe(
+            b"\x01\x00", sample_rate=16000, timeout=0.1 if action == "timeout" else 5,
+        ))
+        try:
+            assert await asyncio.to_thread(call.started.wait, 2)
+            if action == "cancel":
+                task.cancel()
+            assert await asyncio.to_thread(call.cancelled.wait, 2)
+            assert not task.done()
+            assert not call.finished.is_set()
+            if action == "cancel":
+                task.cancel()
+                await asyncio.sleep(0)
+                assert not task.done()
+            call.release.set()
+            with pytest.raises(TimeoutError if action == "timeout" else asyncio.CancelledError):
+                await task
+            assert call.finished.is_set()
+        finally:
+            call.release.set()
+            await asyncio.gather(task, return_exceptions=True)
+
+
 @pytest.mark.parametrize("client_mode", ["stream", "buffered", "direct"])
 @pytest.mark.parametrize("initial_exit", ["timeout", "cancel"])
 async def test_riva_stream_join_survives_repeated_cancellation(tmp_path, riva_stub, initial_exit, client_mode):

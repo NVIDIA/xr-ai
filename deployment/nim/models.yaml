@@ -46,7 +46,7 @@ models:
     category: stt
     adapter:
       kind: riva_grpc
-      # The Parakeet v3 NIM used by the bundled stack advertises en-GB.
+      # The example Parakeet v3 NIM advertises en-GB.
       # Select a language supported by your deployed model.
       language: en-GB
       use_ssl: true

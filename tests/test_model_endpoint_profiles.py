@@ -255,6 +255,7 @@ async def test_native_recognition_releases_rpc_before_returning(action):
         }})
         try:
             async with make_stt(config, "stt") as client:
+                assert await client.health()
                 task = asyncio.create_task(client.transcribe(
                     b"\x01\x00" * 160, sample_rate=16000,
                     timeout=0.1 if action == "timeout" else 30,

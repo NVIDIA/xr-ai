@@ -84,9 +84,9 @@ is reused without any further setup.
 
 ## NGC API key (`NGC_API_KEY`)
 
-**Required for the NIM model backend and restricted `nvcr.io` image pulls.** It
-authenticates those container pulls and **hosted NVIDIA NIM** inference
-inference endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` sends
+**Used for restricted `nvcr.io` image pulls and hosted NVIDIA inference.** It
+authenticates those container pulls and hosted NVIDIA NIM inference
+endpoints — a models JSON entry with `api_key_env: NGC_API_KEY` sends
 it as the `Authorization: Bearer` token (refer to
 {doc}`AI services — hosting models on NVIDIA NIM </components/ai-services>`).
 

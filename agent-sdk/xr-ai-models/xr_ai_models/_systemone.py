@@ -158,7 +158,7 @@ class _SystemOneDecision:
     async def health(self) -> bool:
         """Probe the configured endpoint readiness URL."""
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if the adapter owns it."""

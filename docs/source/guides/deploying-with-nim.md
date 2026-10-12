@@ -49,6 +49,15 @@ languages, voices, input limits, and inference options to the deployed versions.
 Changing the serving model can change sample behavior; validate the application's
 prompts and evaluations as well as its transport.
 
+Configure tool calling and reasoning parsing on the server as well as in the
+consumer profile. The removed Nemotron Omni 2.0.4-variant launch profile used
+`--enable-auto-tool-choice`, `--tool-call-parser qwen3_coder`, and
+`--reasoning-parser nemotron_v3` through `NIM_PASSTHROUGH_ARGS`. For another
+container version, use its documented equivalents. Verify that tool calls are
+structured and reasoning is returned in the configured `reasoning` field,
+rather than embedded as `<think>` text in `content`; setting `reasoning_field`
+on the client does not configure the server's parser.
+
 Container-pull and engine-download credentials belong in the deployment
 environment. The agent needs only credentials for inference, when the endpoint
 requires them. The example uses `NIM_ENDPOINT_API_KEY`; each role can name a
@@ -97,7 +106,11 @@ adapter:
 This labels unprefixed inputs as passages. Inputs beginning with `query: ` or
 `passage: ` select their own type; the SDK strips that label once, groups mixed
 batches by type, sends the native model ID and `input_type`, and restores input
-order. The RAG service can keep its existing query and passage prefixes.
+order. For this profile, the RAG service must use its default, case-sensitive
+`query: ` and `passage: ` prefixes. Custom RAG prefixes are not interpreted as
+type labels. Send non-empty text after a label; a label alone does not supply
+embedding content. A mixed batch uses up to two sequential HTTP requests;
+the caller's `timeout` applies to each request, not an overall batch deadline.
 Local profiles omit `input_type`, preserving their original text payloads.
 Refer to NVIDIA's
 [embedding API reference](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/reference.html).

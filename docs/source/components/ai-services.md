@@ -34,8 +34,8 @@ recorded video, and document retrieval.
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
 Local model artifacts land in the service's `model_cache` directory, set per
-YAML and resolved relative to the YAML file. Self-hosted NIM containers use
-`nim_cache` for their optimized engines and weights; hosted endpoints keep no
+YAML and resolved relative to the YAML file. Operators configure self-hosted
+NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
