@@ -118,23 +118,37 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _json_object(text: str) -> dict[str, Any]:
     candidate = text.strip()
-    start = candidate.find("{")
-    end = candidate.rfind("}")
-    if start < 0 or end < start:
-        raise ValueError("caption response did not contain a JSON object")
-    value = json.loads(candidate[start : end + 1])
+    # Tolerate a Markdown wrapper, but never extract observations from reasoning
+    # or arbitrary prose (including an unfinished <think> response).
+    if candidate.startswith("```json\n") and candidate.endswith("```"):
+        candidate = candidate[8:-3].strip()
+    elif candidate.startswith("```\n") and candidate.endswith("```"):
+        candidate = candidate[4:-3].strip()
+    value = json.loads(candidate)
     if not isinstance(value, dict):
         raise ValueError("caption response was not a JSON object")
-    return value
-
-
-def _clean_field(payload: dict[str, Any], name: str, fallback: str) -> str:
-    value = str(payload.get(name, "")).strip()
-    return value[:1000] if value else fallback
+    fields = {"activity", "phase", "caption", "delta"}
+    if set(value) != fields or any(not isinstance(v, str) or not v.strip() for v in value.values()):
+        raise ValueError("caption requires exactly four nonempty string fields: activity, phase, caption, delta")
+    return {key: value[key].strip()[:1000] for key in fields}
 
 
 def _markdown(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _caption_query(previous: dict[str, str] | None) -> str:
+    query = (
+        "Compare image 1 (earlier) with image 2 (current). Describe the visible action, "
+        "relevant object details, and current state; report only changes supported by the images."
+        if previous is not None else
+        "Describe this initial image and its visible state. Use Initial observation for delta."
+    )
+    if previous is not None:
+        query += "\nPrevious grouping labels (not visual evidence): " + json.dumps({
+            "activity": previous["activity"], "phase": previous["phase"],
+        })
+    return query
 
 
 def _clock(timestamp_us: int, started_at_us: int) -> str:
@@ -172,7 +186,8 @@ class RecorderAgent(Agent):
         self._stopped = False
 
     def is_recording(self, participant_id: str) -> bool:
-        return participant_id in self._sessions
+        state = self._sessions.get(participant_id)
+        return state is not None and state.active
 
     async def start_recording(
         self, participant_id: str, *, cancelled: asyncio.Event | None = None, timestamp_us: int | None = None,
@@ -184,11 +199,6 @@ class RecorderAgent(Agent):
             now_us = _now_us() if timestamp_us is None else timestamp_us
             session_id = f"{_session_stamp()}-{_safe(participant_id)[:48]}"
             directory = self._sessions_dir / session_id
-            await asyncio.to_thread(
-                (directory / "frames").mkdir,
-                parents=True,
-                exist_ok=False,
-            )
             state = _Session(
                 participant_id=participant_id,
                 session_id=session_id,
@@ -198,11 +208,17 @@ class RecorderAgent(Agent):
             )
             self._sessions[participant_id] = state
         try:
+            # Register before starting filesystem work so shutdown can drain it.
+            await self._write(state, lambda: (directory / "frames").mkdir(parents=True, exist_ok=False))
             if self._stopped or (cancelled is not None and cancelled.is_set()):
+                state.status = "incomplete"
                 return
             await self._write(state, _atomic_text, state.directory / "transcript.jsonl", "")
             async with state.lock:
                 await self._write_views(state)
+            if self._stopped or (cancelled is not None and cancelled.is_set()):
+                state.status = "incomplete"
+                return
             state.tasks.extend(
                 (
                     asyncio.create_task(
@@ -218,13 +234,17 @@ class RecorderAgent(Agent):
                 )
             )
             logger.info("recording started pid={!r} session={}", participant_id, directory)
-        except Exception:
-            state.status = "incomplete"
+        except BaseException:
+            async with state.lock:
+                state.active = False
+                state.status = "incomplete"
             raise
         finally:
             # Finalization may run concurrently with startup, but may not seal
             # the packet while startup can still add tasks or write metadata.
             state.start_done.set()
+            if state.status == "incomplete":
+                await self._close(participant_id, status="incomplete")
 
     async def record_transcript(self, participant_id: str, text: str, timestamp_us: int) -> None:
         """Save a final VoiceAgent transcript inside the active SOP boundary."""
@@ -269,6 +289,10 @@ class RecorderAgent(Agent):
             raise BaseExceptionGroup("recording finalization failed", errors)
         self._finalizers.clear()
 
+    def release(self, participant_id: str) -> None:
+        """Release live frame references only when their connection ends."""
+        self._current_frame.release(participant_id)
+
     async def _write(self, state: _Session, function: Callable[..., Any], *args: Any) -> Any:
         # Cancelling to_thread's awaiter cannot stop its filesystem operation.
         # Keep the actual task alive so finalization can drain it before sealing.
@@ -279,6 +303,7 @@ class RecorderAgent(Agent):
         except asyncio.CancelledError:
             raise
         except BaseException:
+            state.status = "incomplete"
             state.pending_writes.discard(task)
             raise
         else:
@@ -350,7 +375,6 @@ class RecorderAgent(Agent):
                 record,
             )
             state.frame_ready.set()
-            await self._write_packet(state)
 
     async def _caption_loop(self, state: _Session) -> None:
         await state.frame_ready.wait()
@@ -375,41 +399,15 @@ class RecorderAgent(Agent):
         # Register the saved snapshots at query time: live-frame references can
         # be evicted while a caption request is slow or the camera is idle.
         images = [self._images.put(state.directory / item.path, owner=state.session_id) for item in frames]
-        query = (
-            "Compare image 1 (earlier) with image 2 (current). Describe the visible action, "
-            "relevant object details, and current state; report only changes supported by the images."
-            if previous_frame is not None else
-            "Describe this initial image and its visible state. Use Initial observation for delta."
-        )
+        query = _caption_query(previous)
         result = await self._query_images.execute(MultiImageQueryRequest(images=images, query=query))
         if not result.available:
             raise RuntimeError(result.text)
         try:
             payload = _json_object(result.text)
-        except (ValueError, json.JSONDecodeError):
-            payload = {"caption": result.text}
-        caption = {
-            "activity": _clean_field(
-                payload,
-                "activity",
-                previous["activity"] if previous else "Unclassified activity",
-            ),
-            "phase": _clean_field(
-                payload,
-                "phase",
-                previous["phase"] if previous else "Observed work",
-            ),
-            "caption": _clean_field(
-                payload,
-                "caption",
-                result.text.strip()[:1000] or "Visual observation unavailable",
-            ),
-            "delta": _clean_field(
-                payload,
-                "delta",
-                "Initial observation" if previous is None else "Delta unavailable",
-            ),
-        }
+        except ValueError as exc:
+            raise ValueError(f"Invalid caption: {exc}; raw response: {result.text!r}") from exc
+        caption = payload
         generated_at_us = _now_us()
         async with state.lock:
             if not state.active:
@@ -434,7 +432,6 @@ class RecorderAgent(Agent):
             state.previous_caption = caption
             state.last_captioned_frame = frame
             self._update_hierarchy(state, record)
-            await self._write_views(state)
 
     @staticmethod
     def _update_hierarchy(state: _Session, caption: dict[str, Any]) -> None:
@@ -574,12 +571,15 @@ class RecorderAgent(Agent):
         async with state.lock:
             if not state.active:
                 return
-            await self._write(
-                state,
-                _append_jsonl,
-                state.directory / "errors.jsonl",
-                {"timestamp_us": _now_us(), "kind": kind, "message": message},
-            )
+            try:
+                await self._write(
+                    state,
+                    _append_jsonl,
+                    state.directory / "errors.jsonl",
+                    {"timestamp_us": _now_us(), "kind": kind, "message": message},
+                )
+            except Exception:
+                logger.exception("recording error log failed pid={!r} kind={}", state.participant_id, kind)
 
     async def _close(self, participant_id: str, *, status: str) -> None:
         async with self._sessions_lock:
@@ -601,29 +601,65 @@ class RecorderAgent(Agent):
         await state.start_done.wait()
         participant_id = state.participant_id
         state.ended_at = _iso(state.stop_command["timestamp_us"] if state.stop_command else _now_us())
-        if state.status == "incomplete":
-            status = "incomplete"
         for task in state.tasks:
             task.cancel()
-        if state.tasks:
-            await asyncio.gather(*state.tasks, return_exceptions=True)
-        await self._drain_writes(state)
+        results = await asyncio.gather(*state.tasks, return_exceptions=True)
+        async with state.lock:
+            state.active = False
+        if any(
+            isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError) for result in results
+        ):
+            state.status = "incomplete"
+        try:
+            await self._drain_writes(state)
+        except BaseExceptionGroup:
+            state.status = "incomplete"
+            logger.exception("recording writes failed pid={!r}", participant_id)
+        try:
+            await self._rebuild(state)
+            if state.status != "incomplete":
+                state.status = status
+            await self._write_views(state)
+        except Exception:
+            state.status = "incomplete"
+            logger.exception("recording finalization failed pid={!r}", participant_id)
+            # A failed view must never leave a packet advertised as complete.
+            # If storage is still unavailable, preserve the error in process logs.
+            try:
+                await self._write_views(state)
+            except Exception:
+                logger.exception("incomplete packet seal failed pid={!r}", participant_id)
+        finally:
+            self._images.release_owner(state.session_id)
+            async with self._sessions_lock:
+                if self._sessions.get(participant_id) is state:
+                    self._sessions.pop(participant_id)
+        logger.info(
+            "recording finalized pid={!r} status={} session={}", participant_id, state.status, state.directory,
+        )
+
+    async def _rebuild(self, state: _Session) -> None:
         # A cancelled append awaiter may have skipped the in-memory update.
         # Rebuild derived views from the durable log after all writers finish.
-        def read_captions() -> list[dict[str, Any]]:
-            path = state.directory / "captions.jsonl"
+        def read_records(relative: str) -> list[dict[str, Any]]:
+            path = state.directory / relative
             if not path.exists():
                 return []
             with path.open(encoding="utf-8") as stream:
                 return [json.loads(line) for line in stream if line.strip()]
 
-        captions = await asyncio.to_thread(read_captions)
+        frames = await asyncio.to_thread(read_records, "frames/index.jsonl")
+        state.frame_count = len(frames)
+        captions = await asyncio.to_thread(read_records, "captions.jsonl")
         state.caption_count = len(captions)
         state.activities.clear()
         for caption in captions:
             self._update_hierarchy(state, caption)
         # Count the durable log after all queued transcript writes have drained.
         transcript_path = state.directory / "transcript.jsonl"
+        if not state.tasks and not transcript_path.exists():
+            # Startup was cancelled or failed before narration was initialized.
+            return
 
         def count_transcripts() -> int:
             with transcript_path.open(encoding="utf-8") as stream:
@@ -634,25 +670,5 @@ class RecorderAgent(Agent):
                 state.narration_status = "complete"
         except OSError as exc:
             state.narration_status = "failed"
-            status = "incomplete"
-            await self._error(state, "narration_finalize", str(exc))
-        async with state.lock:
-            state.active = False
-            state.status = status
-            await self._write_packet(state, status=status)
-            await self._write(
-                state,
-                _atomic_text,
-                state.directory / "summary.md",
-                self._summary(state),
-            )
-        self._current_frame.release(participant_id)
-        async with self._sessions_lock:
-            if self._sessions.get(participant_id) is state:
-                self._sessions.pop(participant_id)
-        logger.info(
-            "recording finalized pid={!r} status={} session={}",
-            participant_id,
-            status,
-            state.directory,
-        )
+            state.status = "incomplete"
+            logger.warning("recording narration unavailable pid={!r}: {}", state.participant_id, exc)

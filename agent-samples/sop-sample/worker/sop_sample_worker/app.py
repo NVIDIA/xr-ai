@@ -54,11 +54,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             silence_duration=config.silence_duration,
             min_speech=config.min_speech,
             silero_threshold=config.silero_threshold,
-            # Passive narration has no output to interrupt or wake acknowledgement.
+            # Only sample-owned boundary acknowledgements; no early STOP probe.
             stop_probe_after_s=0,
         ),
         voice_gate=load_voice_gate_config(config.voice_gate_yaml),
-        probes={"stt": stt.health, "vlm": vlm.health},
+        probes={"stt": stt.health, "tts": tts.health, "vlm": vlm.health},
         ready_file=ready_file,
         text_input=False,
     )

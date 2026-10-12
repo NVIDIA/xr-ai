@@ -24,9 +24,13 @@ and connect. Say **start recording**, demonstrate and narrate, then say
 **stop recording**. Say **start recording** again for another SOP packet without
 reconnecting. The worker logs each finalized packet's path and status.
 
-Use live video or on-demand image capture. The worker stays silent throughout
-the connection, including when processing commands. Speak commands directly,
-without a wake phrase.
+Use live video or on-demand image capture. Speak commands directly, without a
+wake phrase. After **start recording**, the worker says "Recording started."
+and stays silent during narration. After **stop recording**, it says
+"Recording stopped." The SOP packet, transcript, and summary then finish saving
+silently; processing errors are logged. This does not generate a guide or finalize
+the independent shared media capture bundle. Disconnecting still finalizes the
+packet without announcements.
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
 
@@ -48,7 +52,8 @@ without streamed video; on-demand stills remain in the SOP packet as snapshots.
 Refer to {doc}`/getting_started/requirements` for model and hub deployment and
 {doc}`/components/server-runtime` for shared media capture. Optional video
 recording uses the shared NVENC encoder and requires supported NVIDIA hardware.
-SOP snapshot recording itself requires STT and VLM services; the NVENC requirement
+SOP snapshot recording requires STT and VLM services, plus TTS for the recording
+acknowledgements; the NVENC requirement
 applies to optional shared video capture.
 
 ## Recording boundaries
@@ -80,6 +85,10 @@ gap are not buffered.
 
 Generated data remains local and Git-ignored. Defaults are relative to the sample:
 
+Frame, caption, and transcript logs append during recording. Packet counts and
+the summary are sealed at stop after pending writes drain; they are not live
+progress indicators.
+
 | Location | Contents |
 |---|---|
 | `artifacts/sessions/<session-id>/packet.json` | SOP status, participant, timestamps, counts, and activity hierarchy |
@@ -90,7 +99,8 @@ Generated data remains local and Git-ignored. Defaults are relative to the sampl
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
 | `artifacts/captures/<bundle>/` | Optional participant-wide media, transcripts, timeline, and manifest from `--capture` |
 
-The captioner checks for a new sampled frame every 5 seconds by default. Each
+The captioner starts when the first sampled frame is available, then waits
+5 seconds after each caption attempt before checking for a new frame. Each
 request compares two saved images in chronological order: the previous
 successfully captioned frame, then the current frame. The first caption of each
 recording uses only the initial image. Requests describe visible actions, object
@@ -99,6 +109,13 @@ latency adds to the caption interval; on-demand sampling also depends on client
 response time. Review captions against the images: they are model observations,
 not verified procedural steps.
 
+`caption` describes the current image; `delta` compares earlier and current
+states. Previous activity and phase names are supplied only to stabilize summary
+grouping, not as visual evidence. Grouping is a navigation aid, not a step list.
+Malformed responses are recorded as `caption_error` in `errors.jsonl`, including
+the raw response, and are excluded from captions and summaries. The next request
+still compares against the last successfully captioned image.
+
 The SOP transcript contains narration between the spoken commands. The optional
 shared transcript covers the connection, including those commands. Match shared
 bundles to SOP packets using participant identity and timestamps.
@@ -106,7 +123,28 @@ bundles to SOP packets using participant identity and timestamps.
 `packet.json.stop_command` records an accepted spoken stop. Packet status
 `complete` means local writes finished; evidence can still be missing or
 incorrect. Review the counts, errors, and source images before using the packet.
+Persistence failures mark a packet `incomplete` when storage permits saving that
+status; otherwise the process log reports the failure. Failed packets are closed
+so subsequent recording commands create separate packets.
 Recordings are retained until manually removed, so monitor disk usage.
+
+## Caption evaluation
+
+With the configured VLM running, run the synthetic visual controls from the
+sample directory. Choose a new output directory for each evaluation:
+
+```bash
+PYTHONPATH=worker uv run --project worker python eval/caption.py --output artifacts/caption-eval
+```
+
+The cases exercise initial observations, chronological direction, unchanged
+images, object appearance and disappearance, and grouping labels that disagree
+with visual evidence. The runner uses the production query, system prompt,
+multi-image tool, and parser. It saves source images, raw responses, and expected
+observations for inspection. Its automatic result measures response structure,
+not visual accuracy: compare every output with its images and expected
+observations. Synthetic controls supplement, rather than replace, evaluations on
+recorded demonstrations.
 
 ## Composition and configuration
 
@@ -117,7 +155,7 @@ and `MultiImageQueryTool` for captions.
 | Configuration | Settings |
 |---|---|
 | `yaml/worker.yaml` | Output paths, frame and caption intervals, speech detection |
-| `yaml/models.json` | STT and VLM endpoints; the voice runtime's required, unused TTS adapter |
+| `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
 | `yaml/media_capture.yaml` | Shared capture output, encoding, and retention; defaults to participant mode and the demo profile |
 | `yaml/device_io_hub.yaml` | Room and web server |

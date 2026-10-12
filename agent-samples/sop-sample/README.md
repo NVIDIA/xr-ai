@@ -33,7 +33,8 @@ uv run sop_sample
 Open the authenticated web-client URL printed by the hub and connect. Enable
 the microphone and use live video or on-demand image capture. Say **start
 recording**, narrate the demonstration, then say **stop recording**. Repeat
-these commands to record another SOP without reconnecting. The worker is silent.
+these commands to record another SOP without reconnecting. The worker announces
+recording start and stop, and stays silent during narration and finalization.
 
 Add `--capture` to either launch command to independently save participant-wide
 video, bidirectional audio, and data traffic for the connection. Use the spoken
@@ -51,7 +52,7 @@ uv run --project ../../model-server-samples/model-servers model_servers --stop
 |---|---|
 | `yaml/worker.yaml` | SOP output directory, frame and caption intervals, speech detection |
 | `yaml/media_capture.yaml` | Shared media output directory, encoding, retention |
-| `yaml/models.json` | STT and VLM endpoints; the voice runtime's unused TTS adapter |
+| `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 

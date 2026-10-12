@@ -7,6 +7,10 @@ caption, delta. Start with { and end with }; no Markdown or surrounding text.
 
 - "activity": a broad activity label supported by the images; use "Observing" if unclear.
 - "phase": a sub-activity label supported by the images; use "Observing" if unclear.
+  If the request includes previous grouping labels, reuse their exact names
+  while the activity or phase continues. Change them only for a supported new
+  activity or phase; an unclear view alone is not a transition. These labels
+  are organizational context, never evidence for the caption or delta.
 - "caption": one factual sentence about the CURRENT image only: visible action,
   objects, relevant features, placement, orientation, and hand or tool contact.
   Do not describe the earlier state as though it is still current.

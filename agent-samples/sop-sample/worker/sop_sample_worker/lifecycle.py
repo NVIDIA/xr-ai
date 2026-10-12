@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
 from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceOutput, VoiceTranscript
 
 from .recorder import RecorderAgent
 
@@ -58,6 +58,23 @@ class CaptureRecording(Agent):
             self._tails[pid] = task
         return task
 
+    async def _say(self, pid: str, connection: _Connection, ctx: RuntimeContext, text: str) -> None:
+        if self._closed or connection.cancelled.is_set() or self._connections.get(pid) is not connection:
+            return
+        try:
+            # Preserve the order of start and stop acknowledgements.
+            await ctx.publish(VOICE_OUTPUT_TOPIC, VoiceOutput(text=text), participant_id=pid)
+        except Exception:
+            # An unavailable voice output must not prevent saving the packet.
+            logger.exception("SOP recording announcement failed pid={!r}", pid)
+
+    def _forget(self, pid: str, recording: _Recording) -> None:
+        # A later start may already be queued on this connection.
+        if recording.connection.recording is recording:
+            recording.connection.recording = None
+        if self._sessions.get(pid) is recording:
+            self._sessions.pop(pid)
+
     def receive(self, event: ParticipantEvent) -> Awaitable[None]:
         pid = event.participant_id
         connection = self._connections.get(pid)
@@ -76,9 +93,15 @@ class CaptureRecording(Agent):
             if not event.joined and not duplicate:
                 return
             recording = self._sessions.get(pid)
-            if recording is not None and recording.connection is connection and not (event.joined and duplicate):
-                await self._recorder.finish_recording(pid)
-                self._sessions.pop(pid, None)
+            try:
+                if recording is not None and recording.connection is connection and not (event.joined and duplicate):
+                    try:
+                        await self._recorder.finish_recording(pid)
+                    finally:
+                        self._forget(pid, recording)
+            finally:
+                if not event.joined and pid not in self._connections:
+                    self._recorder.release(pid)
 
         task = self._enqueue(pid, apply)
 
@@ -107,11 +130,18 @@ class CaptureRecording(Agent):
 
             async def start() -> None:
                 if self._closed or connection.cancelled.is_set():
+                    self._forget(pid, recording)
                     return
                 self._sessions[pid] = recording
-                await self._recorder.start_recording(
-                    pid, cancelled=connection.cancelled, timestamp_us=transcript.timestamp_us,
-                )
+                try:
+                    await self._recorder.start_recording(
+                        pid, cancelled=connection.cancelled, timestamp_us=transcript.timestamp_us,
+                    )
+                    if self._recorder.is_recording(pid):
+                        await self._say(pid, connection, ctx, "Recording started.")
+                finally:
+                    if not self._recorder.is_recording(pid):
+                        self._forget(pid, recording)
 
             self._enqueue(pid, start)
         elif command:
@@ -119,10 +149,14 @@ class CaptureRecording(Agent):
 
             async def finish() -> None:
                 if recording is not None and self._sessions.get(pid) is recording:
-                    await self._recorder.finish_recording(
-                        pid, stop_command={"text": transcript.text.strip(), "timestamp_us": transcript.timestamp_us},
-                    )
-                    self._sessions.pop(pid, None)
+                    await self._say(pid, connection, ctx, "Recording stopped.")
+                    try:
+                        await self._recorder.finish_recording(
+                            pid,
+                            stop_command={"text": transcript.text.strip(), "timestamp_us": transcript.timestamp_us},
+                        )
+                    finally:
+                        self._forget(pid, recording)
 
             self._enqueue(pid, finish)
         elif recording is not None:
@@ -141,4 +175,10 @@ class CaptureRecording(Agent):
         try:
             await asyncio.gather(*self._tails.values())
         finally:
-            await self._recorder.stop()
+            try:
+                await self._recorder.stop()
+            finally:
+                for pid in self._connections.keys() | self._sessions.keys():
+                    self._recorder.release(pid)
+                self._connections.clear()
+                self._sessions.clear()
