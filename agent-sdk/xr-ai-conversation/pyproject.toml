@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-conversation"
+version = "0.1.0"
+description = "Reusable streamed conversation and multi-destination routing contracts."
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "nemo-relay>=0.7.2,<0.8",
+    "xr-ai-hub-client",
+    "xr-ai-models",
+    "xr-ai-tools[frames,vision]",
+]
+
+[tool.uv.sources]
+xr-ai-hub-client = { path = "../xr-ai-hub", editable = true }
+xr-ai-models = { path = "../xr-ai-models", editable = true }
+xr-ai-tools = { path = "../xr-ai-tools", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_conversation"]

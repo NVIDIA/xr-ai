@@ -6,9 +6,10 @@
 # Simple VLM example
 
 The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers spoken or typed questions about each participant's
-current camera view and streams the answer to both Pocket TTS and the
-`vlm.response` data topic. Refer to the {doc}`quickstart
+the repository. It answers ordinary spoken or typed questions with an LLM and
+routes questions about each participant's current camera view to its VLM. The
+reusable `xr_ai_conversation.Conversation` component streams both paths to
+Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
 
@@ -16,20 +17,26 @@ sample's design and operational details.
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
-`yaml/models.json` profile configures the Cosmos3 Nano and Pocket TTS client
-adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
-endpoint. Start those endpoints together with
-the sample's model-server stack.
+`yaml/models.json` profile configures client adapters and shared endpoints for
+Parakeet STT, Nemotron-3 Nano Omni (LLM), Cosmos3 Nano Reasoner (VLM), and Pocket
+TTS. Start those endpoints together with the sample's local model-server stack.
+The worker checks LLM health during readiness and performs an image warmup
+through the VLM.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
-`UserQuery`. `SimpleVlmAgent` always invokes `CurrentFrameTool`. The tool uses
+`UserQuery`. `SimpleVlmAgent` delegates each turn to
+`xr_ai_conversation.Conversation`, which streams ordinary responses from one LLM
+request and routes visual requests to the frame and VLM tools. Visual tool calls
+include a standalone query with follow-up references resolved by the LLM. The
+`CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
 passes it to `StreamingImageQueryTool` before publishing response chunks to
-voice output.
+voice output. Tool-call preamble suppression is prompt-guided: text already
+streamed before a later tool call cannot be recalled.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
 
@@ -39,8 +46,8 @@ already streaming do not receive a redundant capture request.
 
 A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent's cached
-frames and tasks. This is the reference composition for a single foreground
-streaming image query.
+frames and tasks. This is the reference composition for streamed conversation
+and current-view visual questions.
 
 ## Source map
 
@@ -53,7 +60,9 @@ The worker package is under
 | `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
 | `agent.py` | Owns participant-scoped vision turns, cancellation, and cleanup |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
+| `xr_ai_conversation.Conversation` | Streams general answers or delegates standalone visual questions to the frame/VLM tools |
 | `prompts/system.txt` | Defines the default VLM instruction |
+| `eval/conversation-cases.yaml` | Held-out direct-answer, visible-text, and visual-follow-up cases |
 
 ## Readiness and warmup
 
@@ -61,8 +70,9 @@ Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. STT and TTS do not gate worker startup; start the
-sample's model-server stack before the sample so speech requests can succeed.
+call a health endpoint first. Readiness also checks the configured LLM endpoint.
+STT and TTS do not gate worker startup; start the sample's local model-server
+stack before the sample so speech requests can succeed.
 
 ## Configuration
 
@@ -76,7 +86,7 @@ layout works without command-line configuration arguments.
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Model adapters and shared endpoints |
+| `yaml/models.json` | LLM/VLM/STT/TTS adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |

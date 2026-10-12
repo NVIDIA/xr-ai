@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: general_question_without_camera
+  image: blank
+  route: direct
+  query: What is twice eleven?
+  any_of: ["22", twenty-two]
+
+- name: read_visible_sign_text
+  image: closed_sign
+  route: current_view
+  query: Read the large word on the sign.
+  any_of: [closed]
+
+- name: resolve_visual_followup_referent
+  image: red_left_blue_right
+  route: current_view
+  history:
+    - user: Which shape is on the right?
+      assistant: A blue circle.
+  query: What color is the shape on the left?
+  any_of: [red]
+
+- name: domain_scoped_visual_question
+  image: red_left_blue_right
+  route: current_view
+  query: For my exhibit notes, what color is the circle on the right?
+  any_of: [blue]

@@ -10,6 +10,9 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
 import nemo_relay
+from loguru import logger
+from xr_ai_conversation import Conversation, ConversationExchange
+from xr_ai_models import LLMService
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -17,7 +20,6 @@ from xr_ai_runtime import (
     Topic,
     subscribe,
 )
-from xr_ai_models import LLMService
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import (
@@ -27,7 +29,6 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantLeft,
 )
-from .conversation import Conversation, ConversationExchange
 
 USER_QUERY_TOPIC = Topic("simple-vlm.user-query", UserQuery)
 PARTICIPANT_LEFT_TOPIC = Topic(
@@ -134,13 +135,14 @@ class SimpleVlmAgent(Agent):
         opened = False
         cancelled = False
         processing = False
+        generation_failed = False
         try:
             if self._vision is None or self._frames is None:
                 self._frames, self._vision = self._vision_factory()
                 self._conversation = Conversation(
-                    self._frames,
-                    self._vision,
                     self._llm,
+                    frames=self._frames,
+                    vision=self._vision,
                 )
             await self._set_status("processing", participant_id)
             processing = True
@@ -151,7 +153,26 @@ class SimpleVlmAgent(Agent):
                 history=tuple(self._history.get(participant_id, ())),
             )
             try:
-                async for text in stream:
+                while True:
+                    try:
+                        text = await anext(stream)
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        generation_failed = True
+                        logger.exception("conversation generation failed participant={!r}", participant_id)
+                        if not fragments:
+                            with suppress(RuntimeClosedError):
+                                await ctx.publish(
+                                    VOICE_OUTPUT_TOPIC,
+                                    VoiceOutput(
+                                        text="I couldn't complete that request. Please try again.",
+                                        timestamp_us=request.timestamp_us,
+                                    ),
+                                )
+                        break
                     fragments.append(text)
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
@@ -166,7 +187,7 @@ class SimpleVlmAgent(Agent):
                     first = False
                     opened = True
                 answer = "".join(fragments).strip()
-                if answer:
+                if answer and not generation_failed:
                     exchanges = self._history.setdefault(participant_id, [])
                     exchanges.append(ConversationExchange(request.text, answer))
                     del exchanges[:-4]
@@ -213,6 +234,8 @@ class SimpleVlmAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            logger.error("simple VLM turn failed pid={!r}: {!r}", participant_id, error)
 
 
 __all__ = [

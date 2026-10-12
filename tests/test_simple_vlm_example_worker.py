@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import sys
 import time
 import tomllib
@@ -32,6 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _REPO_ROOT / "agent-samples" / "simple-vlm-example"
 _WORKER_DIR = _SAMPLE_DIR / "worker"
 sys.path.insert(0, str(_WORKER_DIR))
+sys.path.insert(0, str(_REPO_ROOT / "agent-sdk" / "xr-ai-conversation"))
 
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -41,7 +43,7 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from simple_vlm_example_worker.conversation import Conversation, ConversationExchange  # noqa: E402  # pyright: ignore[reportMissingImports]
+from xr_ai_conversation import Conversation, ConversationExchange  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_tools import Tool  # noqa: E402
 from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
 from xr_ai_tools.current_frame import (  # noqa: E402
@@ -77,9 +79,7 @@ class _Service:
         max_tokens=None,
         timeout=None,
     ):
-        self.stream_calls.append(
-            (images, question, system_prompt, max_tokens, timeout)
-        )
+        self.stream_calls.append((images, question, system_prompt, max_tokens, timeout))
         yield "gray"
 
     async def close(self) -> None:
@@ -87,23 +87,39 @@ class _Service:
 
 
 class _ConversationService(_Service):
-    def __init__(self, *, visual: bool = True, stream_gate=None, preface: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        visual: bool = True,
+        stream_gate=None,
+        preface: bool = False,
+        visual_query: str = "What color is the square?",
+        error: Exception | None = None,
+    ) -> None:
         super().__init__()
         self.visual = visual
         self.requests = []
         self.stream_gate = stream_gate
         self.preface = preface
+        self.visual_query = visual_query
+        self.error = error
 
     def stream_events(self, messages, *, tools=None, **_kwargs):
         self.requests.append((messages, tools))
 
         async def events():
+            if self.error is not None:
+                raise self.error
             if self.visual:
                 if self.preface:
                     yield ChatStreamEvent(kind="text", text="I will inspect it. ")
                 yield ChatStreamEvent(
                     kind="tool_call",
-                    tool_call=ToolCall("call-1", "current_view", "{}"),
+                    tool_call=ToolCall(
+                        "call-1",
+                        "current_view",
+                        json.dumps({"query": self.visual_query}),
+                    ),
                 )
                 yield ChatStreamEvent(kind="finish", finish_reason="tool_calls")
                 return
@@ -223,30 +239,31 @@ async def _ignore_status(_status: str, _participant_id: str) -> None:
 
 
 async def test_conversation_delegates_native_current_view_without_speaking_preamble() -> None:
-    llm = _ConversationService()
+    llm = _ConversationService(visual_query="Read the label on the bottle on the left.")
     frames = _ConversationFrames()
     vision = _StreamingImageQueryTool()
     conversation = Conversation(
-        frames,  # type: ignore[arg-type]
-        vision,  # type: ignore[arg-type]
         llm,  # type: ignore[arg-type]
+        frames=frames,  # type: ignore[arg-type]
+        vision=vision,  # type: ignore[arg-type]
     )
 
     answer = [
         chunk
         async for chunk in conversation.stream(
-            "What color is the square?",
+            "Read its label",
             "alice",
-            history=(ConversationExchange("What is it?", "A square."),),
+            history=(ConversationExchange("Which bottle is fullest?", "The bottle on the left."),),
         )
     ]
 
     assert answer == ["a ", "blue square"]
     assert frames.requests[0].participant_id == "alice"
     assert vision.requests[0].image.uri == "https://example.com/frame.jpg"
-    assert vision.requests[0].query == "What color is the square?"
+    assert vision.requests[0].query == "Read the label on the bottle on the left."
     assert len(llm.requests[0][1]) == 1
     assert llm.requests[0][1][0].name == "current_view"
+    assert llm.requests[0][1][0].parameters["required"] == ["query"]
     assert "completed_exchanges" in llm.requests[0][0][1].content
 
 
@@ -255,9 +272,9 @@ async def test_conversation_answers_directly_without_selecting_a_frame() -> None
     frames = _ConversationFrames()
     vision = _StreamingImageQueryTool()
     conversation = Conversation(
-        frames,  # type: ignore[arg-type]
-        vision,  # type: ignore[arg-type]
         llm,  # type: ignore[arg-type]
+        frames=frames,  # type: ignore[arg-type]
+        vision=vision,  # type: ignore[arg-type]
     )
 
     answer = [chunk async for chunk in conversation.stream("Say hello", "alice")]
@@ -267,13 +284,49 @@ async def test_conversation_answers_directly_without_selecting_a_frame() -> None
     assert vision.requests == []
 
 
+async def test_text_only_conversation_has_no_visual_tool_and_advertises_no_camera_scope() -> None:
+    llm = _ConversationService(visual=False)
+    conversation = Conversation(llm)  # type: ignore[arg-type]
+
+    answer = [chunk async for chunk in conversation.stream("Say hello", "alice")]
+    aid = conversation.routing_aid("alice")
+
+    assert answer == ["Hello ", "there."]
+    assert llm.requests[0][1] == ()
+    assert "no current-view inspection capability" in aid.scope
+    assert "No camera or visual-inspection tool is available" in llm.requests[0][0][0].content
+
+
+async def test_conversation_persona_and_domain_scope_are_application_configured() -> None:
+    llm = _ConversationService(visual=False)
+    conversation = Conversation(
+        llm,  # type: ignore[arg-type]
+        persona="You are a museum guide. Keep answers accessible to children.",
+        scope="questions about museum exhibits, including visual questions about the current display",
+        exclusions="medical advice and application control",
+    )
+
+    [chunk async for chunk in conversation.stream("What is this?", "alice")]
+    aid = conversation.routing_aid("alice")
+
+    assert "museum guide" in llm.requests[0][0][0].content
+    assert "museum exhibits" in llm.requests[0][0][0].content
+    assert aid.scope.startswith("questions about museum exhibits")
+    assert aid.exclusions == "medical advice and application control"
+
+
+def test_conversation_rejects_half_configured_vision_tools() -> None:
+    with pytest.raises(ValueError, match="configured together"):
+        Conversation(_ConversationService(), frames=_ConversationFrames())  # type: ignore[arg-type]
+
+
 async def test_conversation_streams_answer_before_model_stream_finishes() -> None:
     gate = asyncio.Event()
     llm = _ConversationService(visual=False, stream_gate=gate)
     conversation = Conversation(
-        _ConversationFrames(),  # type: ignore[arg-type]
-        _StreamingImageQueryTool(),  # type: ignore[arg-type]
         llm,  # type: ignore[arg-type]
+        frames=_ConversationFrames(),  # type: ignore[arg-type]
+        vision=_StreamingImageQueryTool(),  # type: ignore[arg-type]
     )
     stream = conversation.stream("Say hello", "alice")
 
@@ -290,14 +343,44 @@ async def test_conversation_streams_answer_before_model_stream_finishes() -> Non
 async def test_conversation_keeps_early_text_once_if_tool_call_arrives_later() -> None:
     llm = _ConversationService(preface=True)
     conversation = Conversation(
-        _ConversationFrames(),  # type: ignore[arg-type]
-        _StreamingImageQueryTool(),  # type: ignore[arg-type]
         llm,  # type: ignore[arg-type]
+        frames=_ConversationFrames(),  # type: ignore[arg-type]
+        vision=_StreamingImageQueryTool(),  # type: ignore[arg-type]
     )
 
     answer = [chunk async for chunk in conversation.stream("What color is it?", "alice")]
 
     assert answer == ["I will inspect it. ", "a ", "blue square"]
+
+
+async def test_simple_vlm_agent_publishes_one_safe_fallback_on_llm_failure() -> None:
+    published = []
+
+    class Context:
+        agent_name = "simple-vlm"
+        metadata = SimpleNamespace(
+            message_id="turn-failed",
+            correlation_id="turn-failed",
+            participant_id="alice",
+        )
+
+        async def publish(self, topic, output) -> None:
+            published.append((topic, output))
+
+    agent = SimpleVlmAgent(
+        lambda: (_ConversationFrames(), _StreamingImageQueryTool()),  # type: ignore[arg-type]
+        _ignore_status,
+        llm=_ConversationService(error=RuntimeError("offline")),  # type: ignore[arg-type]
+    )
+
+    await agent._stream(  # noqa: SLF001
+        UserQuery(text="Hello", timestamp_us=456),
+        Context(),  # type: ignore[arg-type]
+    )
+
+    assert len(published) == 1
+    assert published[0][1].text == "I couldn't complete that request. Please try again."
+    assert published[0][1].timestamp_us == 456
 
 
 class _LiveEndpoint:
@@ -371,19 +454,13 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert project["project"]["scripts"]["simple_vlm_example_worker"] == ("simple_vlm_example_worker.__main__:run")
     assert "xr-ai-hub-client" in dependencies
     assert "xr-ai-agent-runtime" in dependencies
-    assert project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"] == (
-        "../../../agent-sdk/xr-ai-runtime"
-    )
-    assert (
-        _WORKER_DIR
-        / project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"]
-    ).resolve().is_dir()
-    assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == (
-        "../../../agent-sdk/xr-ai-hub"
-    )
-    assert (
-        _WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"]
-    ).resolve().is_dir()
+    assert "xr-ai-conversation" in dependencies
+    assert project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"] == ("../../../agent-sdk/xr-ai-runtime")
+    assert project["tool"]["uv"]["sources"]["xr-ai-conversation"]["path"] == ("../../../agent-sdk/xr-ai-conversation")
+    assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-conversation"]["path"]).resolve().is_dir()
+    assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"]).resolve().is_dir()
+    assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == ("../../../agent-sdk/xr-ai-hub")
+    assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"]).resolve().is_dir()
     assert "xr-ai-tools[frames,vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
@@ -397,8 +474,6 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
         "app.py",
         "config.py",
         "prompts/system.txt",
-        "conversation.py",
-        "prompts/conversation.txt",
     } <= {str(path.relative_to(package)) for path in package.rglob("*") if path.is_file()}
     assert not (_WORKER_DIR / "agent.py").exists()
     assert not (_WORKER_DIR / "simple_vlm_example_worker.py").exists()
@@ -461,6 +536,22 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert "system_prompt_file" not in raw
 
 
+def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> None:
+    cases = yaml.safe_load((_SAMPLE_DIR / "eval" / "conversation-cases.yaml").read_text(encoding="utf-8"))
+    by_name = {case["name"]: case for case in cases}
+
+    assert by_name["general_question_without_camera"]["route"] == "direct"
+    assert by_name["general_question_without_camera"]["image"] == "blank"
+    assert by_name["read_visible_sign_text"]["route"] == "current_view"
+    followup = by_name["resolve_visual_followup_referent"]
+    assert followup["route"] == "current_view"
+    assert followup["history"]
+    assert followup["any_of"] == ["red"]
+    domain_visual = by_name["domain_scoped_visual_question"]
+    assert domain_visual["route"] == "current_view"
+    assert domain_visual["any_of"] == ["blue"]
+
+
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
     prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "system.txt").read_text()
 
@@ -481,11 +572,7 @@ def test_blank_inline_prompt_uses_packaged_default(tmp_path) -> None:
 
 def test_config_keeps_inline_prompt_compatibility(tmp_path) -> None:
     config_path = tmp_path / "worker.yaml"
-    config_path.write_text(
-        "voice_gate_yaml: gate.yaml\n"
-        "system_prompt: custom prompt\n"
-        "idle_timeout_secs: 30\n"
-    )
+    config_path.write_text("voice_gate_yaml: gate.yaml\nsystem_prompt: custom prompt\nidle_timeout_secs: 30\n")
 
     config = load_config(config_path)
 

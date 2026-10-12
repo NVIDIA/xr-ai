@@ -1,0 +1,306 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import asyncio
+import sys
+from collections import deque
+from pathlib import Path
+
+import pytest
+from xr_ai_models import DecisionAnswer, DecisionResponse
+
+_SAMPLE_DIR = Path(__file__).resolve().parents[1] / "agent-samples" / "simple-vlm-example"
+sys.path.insert(0, str(_SAMPLE_DIR / "worker"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-sdk"))
+
+from xr_ai_conversation import (  # noqa: E402
+    Admission,
+    ConversationExchange,
+    ConversationFrontEnd,
+    ConversationTurn,
+    DestinationResult,
+    RoutingAid,
+)
+
+
+class _Decisions:
+    def __init__(self, *choices: str) -> None:
+        self.choices = deque(choices)
+        self.calls = []
+
+    async def decide(self, state, questions, *, timeout=None):
+        self.calls.append((state, questions, timeout))
+        choice = self.choices.popleft()
+        return DecisionResponse(
+            answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+            model="fake",
+            usage={},
+            raw={},
+        )
+
+    async def health(self):
+        return True
+
+    async def close(self):
+        pass
+
+
+class _Destination:
+    def __init__(
+        self,
+        name,
+        *,
+        admissions=(),
+        results=(),
+        eligibility="available",
+        scope=None,
+    ) -> None:
+        self.name = name
+        self.admissions = deque(admissions)
+        self.results = deque(results)
+        self.eligibility = eligibility
+        self.scope = scope or f"requests for {name}"
+        self.calls = []
+        self.releases = []
+
+    def routing_aid(self, _participant_id):
+        return RoutingAid(self.name, self.scope, eligibility=self.eligibility)
+
+    async def admit(self, turn, *, focused):
+        self.calls.append(("admit", turn.query, focused))
+        return self.admissions.popleft() if self.admissions else Admission("accept")
+
+    async def answer(self, turn, *, emit):
+        self.calls.append(("answer", turn.query))
+        result = self.results.popleft() if self.results else DestinationResult()
+        if result.text:
+            await emit(self.name, result.text)
+        return result
+
+    async def release(self, participant_id):
+        self.releases.append(participant_id)
+
+
+async def _run(front_end, *, participant="alice", query="turn", history=()):
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    result = await front_end.handle(
+        ConversationTurn(participant, f"turn-{query}", query, history),
+        emit=emit,
+    )
+    return result, output
+
+
+@pytest.mark.asyncio
+async def test_general_conversation_is_a_normal_route_between_stateless_app_turns():
+    decisions = _Decisions("xr", "conversation", "xr")
+    conversation = _Destination("conversation")
+    xr = _Destination("xr")
+    front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
+
+    await _run(front_end, query="Add a cube.")
+    await _run(front_end, query="What is a cube?")
+    await _run(front_end, query="Delete the cube.")
+
+    assert [call[0] for call in xr.calls] == ["admit", "answer", "admit", "answer"]
+    assert [call[0] for call in conversation.calls] == ["admit", "answer"]
+    assert len(decisions.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_explicit_focus_routes_cross_domain_turns_until_release_per_participant():
+    decisions = _Decisions("tea", "conversation", "xr")
+    conversation = _Destination("conversation")
+    tea = _Destination(
+        "tea",
+        results=(
+            DestinationResult("focus", "Guide started."),
+            DestinationResult("focus"),
+            DestinationResult("release", "Guide closed."),
+        ),
+    )
+    xr = _Destination("xr")
+    front_end = ConversationFrontEnd({"conversation": conversation, "tea": tea, "xr": xr}, decisions)
+
+    await _run(front_end, query="Start the guide.")
+    await _run(front_end, query="Add a cube.")
+    await _run(front_end, query="Leave the guide.")
+    await _run(front_end, query="What is a cube?")
+    await _run(front_end, participant="bob", query="Add a cube.")
+
+    assert [call[:2] for call in tea.calls if call[0] == "answer"] == [
+        ("answer", "Start the guide."),
+        ("answer", "Add a cube."),
+        ("answer", "Leave the guide."),
+    ]
+    assert any(call[2] is True for call in tea.calls if call[0] == "admit")
+    assert xr.calls == [
+        ("admit", "Add a cube.", False),
+        ("answer", "Add a cube."),
+    ]
+    assert conversation.calls[-2][1] == "What is a cube?"
+    assert len(decisions.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_declined_route_reroutes_once_and_preamble_precedes_attributed_result():
+    decisions = _Decisions("tea", "xr")
+    conversation = _Destination("conversation")
+    tea = _Destination("tea", admissions=(Admission("decline"),))
+    xr = _Destination(
+        "xr",
+        admissions=(Admission("accept", preamble="I will add it."),),
+        results=(DestinationResult("answer", "Added."),),
+    )
+    front_end = ConversationFrontEnd({"conversation": conversation, "tea": tea, "xr": xr}, decisions)
+
+    result, output = await _run(front_end, query="Add a blue cube.")
+
+    assert result.disposition == "answer"
+    assert output == [("xr", "I will add it."), ("xr", "Added.")]
+    assert len(decisions.calls) == 2
+    assert "tea" not in decisions.calls[-1][0]["destinations"]
+
+
+@pytest.mark.asyncio
+async def test_participant_departure_releases_only_that_participants_focus():
+    decisions = _Decisions("tea", "tea", "conversation")
+    tea = _Destination(
+        "tea",
+        results=(DestinationResult("focus"), DestinationResult("focus")),
+    )
+    front_end = ConversationFrontEnd({"conversation": _Destination("conversation"), "tea": tea}, decisions)
+
+    await _run(front_end, participant="alice", query="Start guide.")
+    await _run(front_end, participant="bob", query="Start guide.")
+    await front_end.participant_left("alice")
+    await _run(front_end, participant="bob", query="Continue guide.")
+    await _run(front_end, participant="alice", query="What is a cube?")
+
+    assert tea.releases == ["alice"]
+    assert ("admit", "Continue guide.", True) in tea.calls
+    assert ("admit", "What is a cube?", True) not in tea.calls
+    assert len(decisions.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_or_invalid_route_clarifies_without_admitting_a_destination():
+    for choice in ("clarify", "not-registered"):
+        decisions = _Decisions(choice)
+        conversation = _Destination("conversation")
+        xr = _Destination("xr")
+        front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
+
+        result, output = await _run(front_end, query="Help me with this.")
+
+        assert result.disposition == "clarify"
+        assert output == [("conversation", "Which part would you like help with?")]
+        assert conversation.calls == []
+        assert xr.calls == []
+
+
+@pytest.mark.asyncio
+async def test_route_prompt_exposes_unavailable_destination_eligibility():
+    decisions = _Decisions("clarify")
+    conversation = _Destination("conversation")
+    xr = _Destination("xr", eligibility="unavailable")
+    front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
+
+    result, _output = await _run(front_end, query="Change the virtual scene.")
+
+    assert result.disposition == "clarify"
+    routed_destinations = decisions.calls[0][0]["destinations"]
+    assert next(item for item in routed_destinations if item["name"] == "xr")["eligibility"] == "unavailable"
+    assert xr.calls == []
+
+
+@pytest.mark.asyncio
+async def test_domain_specific_visual_question_routes_by_declared_scope():
+    decisions = _Decisions("museum_guide")
+    conversation = _Destination("conversation", scope="general conversation and general knowledge")
+    museum = _Destination(
+        "museum_guide",
+        scope="visual questions about museum exhibits and artwork",
+    )
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "museum_guide": museum},
+        decisions,
+    )
+
+    result, _output = await _run(front_end, query="What is written on this exhibit label?")
+
+    declared = {item["name"]: item["scope"] for item in decisions.calls[0][0]["destinations"]}
+    assert declared["museum_guide"] == "visual questions about museum exhibits and artwork"
+    assert museum.calls == [
+        ("admit", "What is written on this exhibit label?", False),
+        ("answer", "What is written on this exhibit label?"),
+    ]
+    assert conversation.calls == []
+    assert result.disposition == "answer"
+
+
+@pytest.mark.asyncio
+async def test_route_decision_receives_bounded_completed_context():
+    decisions = _Decisions("xr")
+    conversation = _Destination("conversation")
+    xr = _Destination("xr")
+    front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
+    history = tuple(ConversationExchange(f"request {index}", f"reply {index}") for index in range(5))
+
+    await _run(front_end, query="Add the next object.", history=history)
+
+    routed_history = decisions.calls[0][0]["completed_history"]
+    assert routed_history == [{"user": f"request {index}", "assistant": f"reply {index}"} for index in range(1, 5)]
+    assert xr.calls[0] == ("admit", "Add the next object.", False)
+
+
+@pytest.mark.asyncio
+async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
+    class _WaitingDestination(_Destination):
+        def __init__(self):
+            super().__init__("xr")
+            self.started = asyncio.Event()
+
+        async def answer(self, turn, *, emit):
+            self.calls.append(("answer", turn.query))
+            if turn.query == "Slow request":
+                self.started.set()
+                try:
+                    await asyncio.Future()
+                except asyncio.CancelledError:
+                    # Simulate a delegate that finishes a callback after cancellation.
+                    pass
+                await emit(self.name, "stale result")
+                return DestinationResult("answer", "stale result")
+            await emit(self.name, "fresh result")
+            return DestinationResult("answer", "fresh result")
+
+    decisions = _Decisions("xr", "xr")
+    xr = _WaitingDestination()
+    front_end = ConversationFrontEnd({"conversation": _Destination("conversation"), "xr": xr}, decisions)
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    task = asyncio.create_task(
+        front_end.handle(
+            ConversationTurn("alice", "turn-1", "Slow request"),
+            emit=emit,
+        )
+    )
+    await xr.started.wait()
+    result = await front_end.handle(
+        ConversationTurn("alice", "turn-2", "Replacement request"),
+        emit=emit,
+    )
+    old_result = await task
+
+    assert result.text == "fresh result"
+    assert old_result.disposition == "decline"
+    assert output == [("xr", "fresh result")]

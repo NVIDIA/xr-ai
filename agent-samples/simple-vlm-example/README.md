@@ -6,16 +6,18 @@
 # Simple VLM example
 
 This sample is the smallest complete voice-and-vision application in the
-repository. A participant can ask a spoken or typed question about the current
-camera view. The worker uses an existing live video frame when the client is
-streaming; otherwise it asks the client to take one picture for that turn. The
-response streams to Pocket TTS and to the `vlm.response` data topic.
+repository. Its reusable `xr_ai_conversation.Conversation` component answers
+general questions directly and routes visual questions to the current-view
+tools. The worker uses an existing live video frame when the client is
+streaming; otherwise it asks the client to take one picture for that turn.
+Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
-session recording. It reuses speaker ASR, Cosmos3 Nano Reasoner, and Pocket TTS
-from the sample's local model stack. Before the agent reports ready, the worker sends a
-representative image request through the VLM so the first user query does not
-pay the multimodal warmup cost.
+session recording. It reuses the shared speaker-conditioned multi-talker STT
+service, Cosmos3 Nano Reasoner, and Pocket TTS from the sample's local model
+stack. Before the agent reports ready, the worker sends a representative image
+request through the VLM so the first user query does not pay the multimodal
+warmup cost.
 
 ## Configure
 
