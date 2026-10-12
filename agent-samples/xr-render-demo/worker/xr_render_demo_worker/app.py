@@ -39,6 +39,7 @@ async def run_app(
     """Run the render sample until the runtime exits."""
     setup_logging("worker")
     models = load_models_config(config.models_config)
+    voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     llm = make_llm(models, "agent_llm")
 
     async def warmed_llm_probe() -> bool:
@@ -60,7 +61,11 @@ async def run_app(
             logger.opt(exception=True).warning("LLM warmup failed; readiness will retry")
             return False
         return True
-    stt = make_stt(models, "stt")
+    speaker = voice_gate._speaker
+    stt = (
+        None if speaker is not None and speaker.backend == "required"
+        else make_stt(models, "stt")
+    )
     tts = make_tts(models, "tts")
     vlm = make_vlm(models, "vlm")
 
@@ -104,7 +109,7 @@ async def run_app(
                 min_speech=config.min_speech,
                 silero_threshold=config.silero_threshold,
             ),
-            voice_gate=load_voice_gate_config(config.voice_gate_yaml),
+        voice_gate=voice_gate,
             probes={"agent-llm": warmed_llm_probe},
             ready_file=ready_file,
             closeables=(llm, vlm),

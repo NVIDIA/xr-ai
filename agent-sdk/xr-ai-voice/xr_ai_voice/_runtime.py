@@ -203,17 +203,24 @@ class _ResponseStream(AsyncIterator[str]):
 class VoiceAgent(Agent):
     """Own voice media lifecycle and bridge runtime input and output topics.
 
-    Startup waits only for explicitly supplied ``probes``, such as an inference
-    warmup or an application capability dependency. STT and TTS health are not
-    polled automatically. Readiness reports initialized application transport
-    after those explicit probes, not availability of every model endpoint.
+    Startup waits for explicitly supplied ``probes``, such as an inference
+    warmup or an application capability dependency, and required speaker ASR.
+    Batch STT and TTS health are not polled automatically. Readiness reports
+    initialized application transport after those startup requirements, not
+    availability of every model endpoint.
+
+    ``voice_gate`` selects speech through its speaker settings. ``stt=None``
+    is accepted only with enabled, required speaker ASR; startup then waits
+    for that service. Ordinary STT and automatic speaker selection require a
+    batch ``STTService``. Missing that dependency raises :class:`ValueError`
+    before media allocation.
     """
 
     def __init__(
         self,
         *,
         query_topic: Topic[UserQuery],
-        stt: STTService,
+        stt: STTService | None,
         tts: TTSService,
         vad: VadConfig,
         voice_gate: VoiceGateConfig,

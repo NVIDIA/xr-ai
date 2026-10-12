@@ -12,7 +12,7 @@ streaming; otherwise it asks the client to take one picture for that turn. The
 response streams to Pocket TTS and to the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
-session capture. It reuses Parakeet STT, Cosmos3 Nano Reasoner, and Pocket TTS
+session capture. It reuses speaker ASR, Cosmos3 Nano Reasoner, and Pocket TTS
 from the shared model stack. Before the agent reports ready, the worker sends a
 representative image request through the VLM so the first user query does not
 pay the multimodal warmup cost.

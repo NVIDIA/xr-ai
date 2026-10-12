@@ -50,7 +50,8 @@ uv run --project model-server-samples/model-servers model_servers
 The stack uses `yaml/<gpu-profile>/speaker_stt.yaml` for model placement and
 capacity. It waits for speaker ASR readiness,
 reuses matching warm instances, and includes the service in `--stop` cleanup.
-The shipped voice samples enable `speaker.enabled` in their voice-gate YAML.
+The shipped voice samples require speaker ASR in their voice-gate YAML and do
+not configure a batch-STT fallback. Worker readiness waits for speaker ASR.
 Out-of-tree workers must enable enrollment and restart, or select batch STT
 explicitly in a custom server profile. Refer to
 {doc}`/reference/agent-sdk-voice` for enrollment configuration and interaction
@@ -87,8 +88,11 @@ speaker:
   enabled: false
 ```
 
-The worker's own model profile must also contain its batch-STT adapter and
-endpoint. To serve both paths, retain the speaker declaration and add the
+Add the same `adapter` and `endpoint` objects under `models.stt` in the worker's
+own model profile; its application uses the existing `make_stt` factory when
+that entry is present. `VoiceAgent(stt=None)` is valid only for enabled, required
+speaker ASR. Ordinary STT and `backend: auto` require a real batch client; they
+are explicit choices, not the shipped default. To serve both paths, retain the speaker declaration and add the
 managed batch-STT entry; this loads both sets of model weights.
 Run `model_servers --stop` before changing deployment JSON or hardware YAML,
 then launch the desired configuration and restart its consumers.

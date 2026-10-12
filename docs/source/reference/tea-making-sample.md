@@ -12,6 +12,11 @@ observers, and voice output. Refer to the
 architecture reference explains how to adapt the sample to another procedure
 rather than merely changing model settings.
 
+Default speech requires the shared speaker-ASR service on 8102 before worker
+readiness. Batch STT is an explicit alternative, not a fallback when that
+service is absent. Refer to {doc}`/guides/customizing-model-servers` for selecting
+ordinary STT with the existing model profile and voice-gate settings.
+
 The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. A VLM describes each current view, and
 the observation LLM judges that natural-language caption and selects native

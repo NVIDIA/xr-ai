@@ -119,7 +119,11 @@ async def run_app(
     log_file = setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
-    stt = make_stt(models, "stt")
+    speaker = voice_gate._speaker
+    stt = (
+        None if speaker is not None and speaker.backend == "required"
+        else make_stt(models, "stt")
+    )
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
 

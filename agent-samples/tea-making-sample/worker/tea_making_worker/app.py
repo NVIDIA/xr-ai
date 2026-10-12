@@ -124,9 +124,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
 
     setup_logging("worker")
     models = load_models_config(config.models_config)
+    voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     llm = make_llm(models, "llm")
     vlm = make_vlm(models, "vlm")
-    stt = make_stt(models, "stt")
+    speaker = voice_gate._speaker
+    stt = (
+        None if speaker is not None and speaker.backend == "required"
+        else make_stt(models, "stt")
+    )
     tts = make_tts(models, "tts")
     rag = RAGTools(config.rag_endpoint)
     transport = HubVoiceTransport()
@@ -139,7 +144,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             min_speech=config.min_speech,
             silero_threshold=config.silero_threshold,
         ),
-        voice_gate=load_voice_gate_config(config.voice_gate_yaml),
+        voice_gate=voice_gate,
         probes={"rag": rag.health},
         ready_file=ready_file,
         closeables=(llm, vlm, rag),

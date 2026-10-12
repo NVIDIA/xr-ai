@@ -173,8 +173,9 @@ application latency in the deployment environment.
 
 ## Switch an existing sample
 
-Keep a copy of the sample's active local JSON. Replace only the roles it already
-consumes with entries from the customized endpoint profile. This example adapts
+Keep a copy of the sample's active local JSON. Replace its model entries with
+the roles required for native deployment in the table below, including the
+explicit `stt` entry for ordinary Riva speech. This example adapts
 simple VLM; run it from the repository root after validation:
 
 ```bash
@@ -187,6 +188,7 @@ source = yaml.safe_load(Path('/tmp/models.nim.yaml').read_text())['models']
 target = Path('agent-samples/simple-vlm-example/yaml/models.json')
 active = json.loads(target.read_text())
 active['models'] = {name: source[name] for name in active['models']}
+active['models']['stt'] = source['stt']
 target.write_text(json.dumps(active, indent=2) + '\n')
 PYTHON
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models --extra riva \

@@ -12,6 +12,7 @@ from xr_ai_voicegate import VoiceGateConfig
 
 
 @pytest.mark.parametrize("sample, package, expected_probes", [
+    ("simple-vlm-example", "simple_vlm_example_worker", {"vlm"}),
     ("lab-instrument-monitoring", "lab_instrument_monitoring_worker", set()),
     ("tea-making-sample", "tea_making_worker", {"rag"}),
     ("xr-render-demo", "xr_render_demo_worker", {"agent-llm"}),
@@ -28,7 +29,8 @@ async def test_sample_does_not_register_model_health_probes(
         chat=AsyncMock(),
     )
     for factory in ("make_llm", "make_vlm", "make_stt", "make_tts"):
-        monkeypatch.setattr(app, factory, lambda *_args: service)
+        if hasattr(app, factory):
+            monkeypatch.setattr(app, factory, lambda *_args: service)
     monkeypatch.setattr(app, "setup_logging", Mock())
     monkeypatch.setattr(app, "load_models_config", Mock(return_value=object()))
     monkeypatch.setattr(app, "load_voice_gate_config", Mock(return_value=VoiceGateConfig()))
@@ -42,6 +44,8 @@ async def test_sample_does_not_register_model_health_probes(
     rag = SimpleNamespace(health=AsyncMock(return_value=True))
     if sample == "tea-making-sample":
         monkeypatch.setattr(app, "RAGTools", Mock(return_value=rag))
+    if sample == "simple-vlm-example":
+        monkeypatch.setattr(app, "_warm_vlm", AsyncMock(return_value=True))
     if sample == "xr-render-demo":
         for constructor in (
             "SceneTools", "TrackingTools", "TextMemoryTools", "ImageRegistry",
@@ -74,3 +78,60 @@ async def test_sample_does_not_register_model_health_probes(
         assert await probes["agent-llm"]() is False
     if sample == "tea-making-sample":
         rag.health.assert_awaited_once()
+
+
+@pytest.mark.parametrize("sample, package", [
+    ("simple-vlm-example", "simple_vlm_example_worker"),
+    ("lab-instrument-monitoring", "lab_instrument_monitoring_worker"),
+    ("tea-making-sample", "tea_making_worker"),
+    ("xr-render-demo", "xr_render_demo_worker"),
+])
+@pytest.mark.parametrize("optional_batch_entry", [False, True])
+async def test_shipped_speaker_mode_never_constructs_batch_client(
+    sample, package, optional_batch_entry, monkeypatch, tmp_path,
+):
+    from xr_ai_models import load_models_config
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root / "agent-samples" / sample / "worker"))
+    monkeypatch.syspath_prepend(str(root / "agent-samples/xr-render-demo/scene"))
+    app = importlib.import_module(f"{package}.app")
+    model_file = "models.local.json" if sample == "tea-making-sample" else "models.json"
+    profile = load_models_config(root / "agent-samples" / sample / "yaml" / model_file)
+    assert "stt" not in profile.entries
+    if optional_batch_entry:
+        profile.entries["stt"] = load_models_config(root / "deployment/nim/models.yaml").entries["stt"]
+    monkeypatch.setattr(app, "load_models_config", lambda *_args: profile)
+    monkeypatch.setattr(app, "setup_logging", Mock())
+    monkeypatch.setattr(app, "make_stt", lambda *_args: pytest.fail("unused batch client constructed"))
+    service = SimpleNamespace(chat=AsyncMock(), close=AsyncMock())
+    for factory in ("make_llm", "make_vlm", "make_tts"):
+        if hasattr(app, factory):
+            monkeypatch.setattr(app, factory, lambda *_args: service)
+    monkeypatch.setattr(app, "HubVoiceTransport", Mock())
+    if sample == "tea-making-sample":
+        monkeypatch.setattr(app, "RAGTools", Mock())
+    if sample == "xr-render-demo":
+        for constructor in ("SceneTools", "TrackingTools", "TextMemoryTools", "ImageRegistry",
+                            "CurrentFrameTool", "SceneSupervisor", "RenderAgent"):
+            monkeypatch.setattr(app, constructor, Mock())
+        monkeypatch.setattr(app, "close_clients", AsyncMock())
+
+    class WiringComplete(Exception):
+        pass
+
+    def capture(**kwargs):
+        assert kwargs["stt"] is None
+        assert kwargs["voice_gate"]._speaker.backend == "required"
+        raise WiringComplete
+
+    monkeypatch.setattr(app, "VoiceAgent", capture)
+    config = SimpleNamespace(
+        models_config=tmp_path / model_file,
+        voice_gate_yaml=root / "agent-samples" / sample / "yaml/voice_gate.yaml",
+        silence_duration=0.5, min_speech=0.2, silero_threshold=0.5, idle_timeout_secs=None,
+        rag_endpoint="unused", scene_endpoint="unused", openxr_endpoint="unused",
+        text_memory_dir=tmp_path, video_history_enabled=False,
+    )
+    with pytest.raises(WiringComplete):
+        await app.run_app(config)

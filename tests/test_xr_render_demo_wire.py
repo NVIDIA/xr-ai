@@ -141,13 +141,12 @@ def test_models_config_loads() -> None:
     cfg = load_models_config(_MODELS_CONFIG)
     llm_spec      = cfg.llm("llm")
     agent_llm_spec = cfg.llm("agent_llm")
-    stt_spec      = cfg.stt("stt")
+    assert "stt" not in cfg.entries
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
     assert llm_spec.base_url       == "http://localhost:8108"
     assert agent_llm_spec.base_url == "http://localhost:8108"
-    assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
     assert vlm_spec.base_url       == "http://localhost:8100"
 

@@ -90,7 +90,10 @@ shutdown behavior.
 The default shared model profile starts Nemotron 3 Diarization with Multitalker
 Parakeet through its private `services` declaration and reuses matching warm
 speaker-ASR instances. Samples with
-`speaker.backend: auto` select the ready speaker service at worker startup.
+`speaker.backend: required` wait for the speaker service before worker readiness.
+The four shipped voice samples no longer declare a batch-STT endpoint on 8103;
+the default stack does not serve that port. Ordinary STT remains an explicit
+choice configured in both the server deployment and consuming worker.
 Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
 The local default contains no batch-STT model entry. Stop the stack before
 changing deployment configuration. To serve batch STT, explicitly add its

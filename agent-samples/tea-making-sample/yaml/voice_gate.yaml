@@ -15,9 +15,9 @@ conversation:
   require_wake_phrase: false  # true keeps magic_phrases and followup_grace_s
   phrase_window_s: 6.0
 
-# Probe once at worker startup. Ordinary STT keeps the same controls when the
-# diarization service is unavailable; use required to demand speaker filtering.
+# The default stack supplies speaker ASR; wait for it before worker readiness.
+# For explicit batch STT, disable speaker enrollment and add an stt model entry.
 speaker:
   enabled: true
-  backend: auto
+  backend: required
   base_url: http://127.0.0.1:8102

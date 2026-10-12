@@ -233,20 +233,23 @@ to the agent; the latency-saving interruption is not undone.
 
 ## Speaker filtering and backend selection
 
-The same conversation controls work with ordinary STT and optional speaker
-filtering. Add `speaker` alongside `conversation` in the worker's voice-gate YAML:
+The same conversation controls work with ordinary STT and speaker filtering.
+Shipped samples select required speaker ASR alongside `conversation`:
 
 ```yaml
 speaker:
   enabled: true
-  backend: auto
+  backend: required
   base_url: http://127.0.0.1:8102
 ```
 
 Before announcing readiness, the worker probes the service's HTTP `/health`
 endpoint. A ready compatible service selects diarization. In automatic mode,
-connection absence selects the configured ordinary `STTService`, including the
-unchanged NIM stack's HTTP STT adapter. Once a listener is observed, an unresponsive
+connection absence selects an explicitly supplied ordinary `STTService`, including
+native Riva speech. Automatic mode requires that real batch client; it is not
+the shipped default. Required speaker mode accepts `VoiceAgent(stt=None)` and
+waits even when the service is absent; disabled or automatic speaker mode needs
+a batch client. Once a listener is observed, an unresponsive
 or interrupted response means not-ready: the worker waits using the existing
 service-readiness polling instead of silently selecting unfiltered STT. A stalled
 listener can therefore hold startup until it is ready or startup is cancelled.
@@ -290,7 +293,9 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
-The default shared model stack also starts speaker ASR. From the repository root:
+Alternatively, the default shared model stack starts speaker ASR. Stop a
+standalone instance before switching to the stack's hardware configuration;
+their configuration fingerprints can differ. From the repository root:
 
 ```bash
 uv --config-file uv.toml run --project model-server-samples/model-servers \

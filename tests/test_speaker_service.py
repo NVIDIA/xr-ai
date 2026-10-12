@@ -481,7 +481,6 @@ def test_wrapper_execs_owned_listener_with_configured_port(tmp_path, monkeypatch
     monkeypatch.setattr(service, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(sys, "argv", ["speaker_stt", "--config", str(config)])
     monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (None, True, False))
-    monkeypatch.setenv("_XR_AI_MODEL_STACK_PID_DIRECTORY", str(tmp_path / "receipts"))
     captured = {}
 
     class Executed(Exception):
@@ -499,7 +498,6 @@ def test_wrapper_execs_owned_listener_with_configured_port(tmp_path, monkeypatch
     assert captured["argv"][-2:] == ["--config", str(config)]
     assert captured["env"]["XR_AI_VLLM_MANAGED"] == "1"
     assert captured["env"]["XR_AI_VLLM_PORT"] == "8123"
-    assert captured["env"]["_XR_AI_MODEL_STACK_PID_DIRECTORY"] == str(tmp_path / "receipts")
     assert service._READY_PROCESS_MAY_EXIT_ENV not in captured["env"]
 
 

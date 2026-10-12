@@ -535,16 +535,153 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         await processor.cleanup()
 
 
-def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True, stop_enabled=True):
+def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True, stop_enabled=True, backend="auto"):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
         "magic_phrases": ["hey agent"], "listening_chime": False,
         "stop_commands_enabled": stop_enabled,
         "conversation": {"enabled": conversation, "require_wake_phrase": require_wake,
                          "start_phrase": "Hey agent, let's start talking", "phrase_window_s": 6},
-        "speaker": {"enabled": speaker, "backend": "auto"},
+        "speaker": {"enabled": speaker, "backend": backend},
     }))
     return load_voice_gate_config(path)
+
+
+@pytest.mark.parametrize("enabled, backend", [(False, "required"), (False, "auto"), (True, "auto")])
+def test_public_voice_rejects_missing_batch_dependency_before_media(tmp_path, monkeypatch, enabled, backend):
+    from xr_ai_runtime import Topic
+    from xr_ai_voice import UserQuery, VoiceAgent, _session
+
+    monkeypatch.setattr(_session, "HubVoiceTransport", lambda: pytest.fail("media allocated"))
+    with pytest.raises(ValueError, match="stt is required"):
+        VoiceAgent(query_topic=Topic("test.query", UserQuery), stt=None, tts=Mock(), vad=VadConfig(),
+                   voice_gate=_config(tmp_path, speaker=enabled, backend=backend))
+
+
+async def test_required_speaker_without_batch_waits_before_media(tmp_path, monkeypatch):
+    from xr_ai_runtime import Topic
+    from xr_ai_voice import UserQuery, VoiceAgent, _session
+
+    waiting = asyncio.Event()
+    ready = asyncio.Event()
+    probes = 0
+
+    async def available(_client):
+        nonlocal probes
+        probes += 1
+        if probes == 1:
+            return False
+        waiting.set()
+        await ready.wait()
+        return True
+
+    monkeypatch.setattr(_SpeakerClient, "_available", available)
+    transport = Mock()
+    create_transport = Mock(return_value=transport)
+    monkeypatch.setattr(_session, "HubVoiceTransport", create_transport)
+    voice = VoiceAgent(query_topic=Topic("test.query", UserQuery), stt=None,
+                       tts=SimpleNamespace(close=AsyncMock()), vad=VadConfig(),
+                       voice_gate=_config(tmp_path, backend="required"))
+    task = asyncio.create_task(voice._session.__aenter__())
+    try:
+        await asyncio.wait_for(waiting.wait(), 1)
+        assert not task.done()
+        create_transport.assert_not_called()
+        ready.set()
+        await task
+        assert voice._session._use_speaker_asr is True
+        create_transport.assert_called_once()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await voice._session.close()
+
+
+@pytest.mark.parametrize("enabled, backend", [(False, "auto"), (False, "required"), (True, "auto")])
+async def test_explicit_batch_client_is_required_only_for_ordinary_selection(tmp_path, monkeypatch, enabled, backend):
+    from xr_ai_models import load_models_config_from_dict, make_stt
+    from xr_ai_runtime import Topic
+    from xr_ai_voice import UserQuery, VoiceAgent, _session
+
+    real_client = httpx.AsyncClient
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        assert request.url.path == "/v1/audio/transcriptions"
+        return httpx.Response(200, json={"text": "batch transcript"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    profile = load_models_config_from_dict({"stt": {
+        "adapter": {"preset": "parakeet_stt"}, "endpoint": {"base_url": "http://localhost:8103"},
+    }})
+    client = make_stt(profile, "stt")
+    monkeypatch.setattr(_session, "HubVoiceTransport", Mock())
+    monkeypatch.setattr(_SpeakerClient, "_available", AsyncMock(return_value=False))
+    voice = VoiceAgent(query_topic=Topic("test.query", UserQuery), stt=client,
+                       tts=SimpleNamespace(close=AsyncMock()), vad=VadConfig(),
+                       voice_gate=_config(tmp_path, speaker=enabled, backend=backend))
+    try:
+        await voice._session.__aenter__()
+        assert voice._session._use_speaker_asr is False
+        assert voice._session.stt is client
+        transport = HubVoiceTransport()
+        pipeline, _worker = _build_voice_pipeline(
+            transport=transport, stt=client, tts=SimpleNamespace(),
+            io_processor=_VoiceIOProcessor(AsyncMock()), vad_cfg=VadConfig(),
+            voice_gate_cfg=voice._session.voice_gate, use_speaker_asr=False,
+        )
+        processor = pipeline.processors[2]
+        assert isinstance(processor, VadSttProcessor)
+        try:
+            assert await processor._transcribe(bytes(320), sample_rate=16000,
+                                                participant_id="test", mode="final") == "batch transcript"
+            assert len(calls) == 1
+        finally:
+            await processor.cleanup()
+            transport.shutdown()
+    finally:
+        await voice._session.close()
+
+
+async def test_required_speaker_error_does_not_allocate_batch_or_media(tmp_path, monkeypatch):
+    from xr_ai_runtime import Topic
+    from xr_ai_voice import UserQuery, VoiceAgent, _session
+
+    monkeypatch.setattr(_session, "HubVoiceTransport", lambda: pytest.fail("media allocated"))
+    monkeypatch.setattr(_SpeakerClient, "_available", AsyncMock(side_effect=RuntimeError("incompatible service")))
+    voice = VoiceAgent(query_topic=Topic("test.query", UserQuery), stt=None,
+                       tts=SimpleNamespace(close=AsyncMock()), vad=VadConfig(),
+                       voice_gate=_config(tmp_path, backend="required"))
+    with pytest.raises(RuntimeError, match="incompatible service"):
+        await voice._session.__aenter__()
+    assert voice._session._closed
+
+
+async def test_native_nim_factory_remains_explicit_ordinary_speech(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from xr_ai_models import load_models_config, make_stt
+    from xr_ai_runtime import Topic
+    from xr_ai_voice import UserQuery, VoiceAgent, _session
+
+    profile = load_models_config(Path(__file__).resolve().parents[1] / "deployment/nim/models.yaml")
+    client = make_stt(profile, "stt")
+    probe = AsyncMock(side_effect=AssertionError("local speaker backend queried"))
+    monkeypatch.setattr(_SpeakerClient, "_available", probe)
+    monkeypatch.setattr(_session, "HubVoiceTransport", Mock())
+    voice = VoiceAgent(query_topic=Topic("test.query", UserQuery), stt=client,
+                       tts=SimpleNamespace(close=AsyncMock()), vad=VadConfig(),
+                       voice_gate=_config(tmp_path, speaker=False))
+    try:
+        await voice._session.__aenter__()
+        assert voice._session._use_speaker_asr is False
+        assert profile.stt("stt").kind == "riva_grpc"
+        probe.assert_not_awaited()
+    finally:
+        await voice._session.close()
 
 
 @pytest.mark.asyncio

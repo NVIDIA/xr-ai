@@ -66,8 +66,8 @@ def _gpu_profile_name(value: str) -> str:
     return value
 
 # service → (project, command, config basename). Order is launch
-# order: agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
-# the full GPU free on single-GPU profiles.
+# order: agent-llm precedes the VLM for FlashInfer MoE JIT compilation.
+# Speaker ASR and TTS may already occupy the GPU on single-GPU profiles.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "speaker-stt": ("../../services/speaker-stt", "speaker_stt", "speaker_stt"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
