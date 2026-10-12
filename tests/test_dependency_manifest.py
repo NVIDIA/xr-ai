@@ -246,15 +246,19 @@ def test_speaker_check_compares_and_restores_lock(tmp_path: Path, monkeypatch: p
     lock.write_text("original lock\n")
     calls = []
 
-    def run(args, *, cwd, check):
-        calls.append((args, cwd, check))
+    def run(args, *, cwd, check, env):
+        calls.append((args, cwd, check, env))
         lock.write_text(fresh)
 
     monkeypatch.setattr(dependency_manifest.subprocess, "run", run)
 
     assert dependency_manifest.refresh_speaker_manifest(tmp_path, speaker, check=True) == (fresh != "original lock\n")
     assert lock.read_text() == "original lock\n"
-    assert calls[0][0][-3:] == [dependency_manifest.SPEAKER_LOCK_PYTHON, "--project", "dependency-manifest/speaker-stt"]
+    args = calls[0][0]
+    assert args[args.index("--python") + 1] == dependency_manifest.SPEAKER_LOCK_PYTHON
+    assert args[args.index("--project") + 1] == "dependency-manifest/speaker-stt"
+    assert args[args.index("--refresh-package") + 1] == "nemo-toolkit"
+    assert calls[0][3]["NO_VCS_VERSION"] == "1"
 
 
 def test_speaker_check_restores_lock_after_resolver_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -265,7 +269,7 @@ def test_speaker_check_restores_lock_after_resolver_failure(tmp_path: Path, monk
     lock = directory / "uv.lock"
     lock.write_text("original lock\n")
 
-    def run(args, *, cwd, check):
+    def run(args, *, cwd, check, env):
         lock.write_text("partial lock\n")
         raise subprocess.CalledProcessError(2, args)
 
@@ -282,7 +286,7 @@ def test_main_generates_the_speaker_inventory(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock([]))
     monkeypatch.setattr(
         dependency_manifest.subprocess, "run",
-        lambda args, *, cwd, check: (directory / "uv.lock").write_text("speaker lock\n"),
+        lambda args, *, cwd, check, env: (directory / "uv.lock").write_text("speaker lock\n"),
     )
 
     assert dependency_manifest.main([], root=tmp_path) == 0

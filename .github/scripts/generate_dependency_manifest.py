@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import subprocess
 import tomllib
 from collections.abc import Sequence
@@ -181,9 +182,13 @@ def refresh_speaker_manifest(root: Path, project: Project, *, check: bool) -> in
             [
                 "uvx", f"uv@{UV_VERSION}", "--config-file", "uv.toml", "lock", "--upgrade",
                 "--python", SPEAKER_LOCK_PYTHON, "--project", SPEAKER_MANIFEST_DIRECTORY,
+                "--refresh-package", "nemo-toolkit",
             ],
             cwd=root,
             check=True,
+            # NeMo's Git suffix depends on checkout size. Its supported switch
+            # keeps metadata stable; the lock still records the full commit SHA.
+            env={**os.environ, "NO_VCS_VERSION": "1"},
         )
         fresh_lock = lock_path.read_text(encoding="utf-8")
     except (OSError, subprocess.CalledProcessError) as error:
