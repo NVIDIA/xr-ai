@@ -65,7 +65,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     runtime = AgentRuntime()
     runtime.register("voice", voice)
     runtime.register("capture", capture)
-    # Final transcripts control SOP boundaries and narration; no voice output producer.
+    # Final transcripts control SOP boundaries and narration.
     receiver = asyncio.create_task(endpoint.run())
     try:
         await endpoint.wait_until_running()

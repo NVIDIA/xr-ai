@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# No wake phrase or listening chime. "start recording" and "stop recording"
+# Silent, wake-word-free narration. "start recording" and "stop recording"
 # are sample-owned commands, separate from shared media capture.
 # The shared voice pipeline publishes transcripts before gate filtering.
 magic_phrases: []

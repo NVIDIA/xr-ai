@@ -7,7 +7,6 @@
 
 Record narrated demonstrations with spoken start and stop commands. The sample
 saves sampled frames, captions, and narration, with optional shared media capture.
-It does not answer questions or run guides.
 
 ## Run
 
@@ -37,7 +36,8 @@ recording**, narrate the demonstration, then say **stop recording**. Repeat
 these commands to record another SOP without reconnecting. The worker is silent.
 
 Add `--capture` to either launch command to independently save participant-wide
-video, bidirectional audio, and data traffic. It does not start SOP recording.
+video, bidirectional audio, and data traffic for the connection. Use the spoken
+commands above to control SOP recording.
 
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
