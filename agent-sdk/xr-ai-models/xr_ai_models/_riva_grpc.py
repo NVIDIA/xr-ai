@@ -261,6 +261,7 @@ class RivaTTS:
             language_code=self._language,
             encoding=self._rc.AudioEncoding.LINEAR_PCM,
             sample_rate_hz=self._sample_rate,
+            custom_dictionary={},  # No custom pronunciations at the SDK boundary.
         )
         deadline = asyncio.get_running_loop().time() + (timeout or self._timeout)
         read_task = None

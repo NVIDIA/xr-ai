@@ -76,11 +76,12 @@ class _FakeSynthesisService:
         self.pcm = b"\x01\x02" * 32
 
     def synthesize_online(self, text, voice_name=None, language_code="en-US",
-                          encoding=None, sample_rate_hz=44100):
+                          encoding=None, sample_rate_hz=44100, custom_dictionary=None):
         self.calls.append({
             "text": text, "voice_name": voice_name,
             "language_code": language_code, "encoding": encoding,
             "sample_rate_hz": sample_rate_hz,
+            "custom_dictionary": custom_dictionary,
         })
         half = len(self.pcm) // 2
         return _ControlledAudio([self.pcm[:half], self.pcm[half:]])
@@ -249,6 +250,7 @@ async def test_tts_synthesize_wraps_pcm_in_wav(tmp_path, riva_stub) -> None:
     assert call["voice_name"] == "Magpie-Multilingual.EN-US.Sofia"
     assert call["language_code"] == "en-US"
     assert call["sample_rate_hz"] == 22050
+    assert call["custom_dictionary"] == {}
     with wave.open(io.BytesIO(data), "rb") as wf:
         assert wf.getframerate() == 22050
         assert wf.getnchannels() == 1

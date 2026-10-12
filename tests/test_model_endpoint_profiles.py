@@ -161,12 +161,15 @@ async def test_smoke_check_accepts_native_embedding_dimensions(endpoint, tmp_pat
 
 
 async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
+    import datetime
     import io
     import wave
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import aclosing
 
     import grpc
+    from cryptography.hazmat.primitives import serialization
+    from device_io_hub.transport.livekit import _tls
     from riva.client.proto import riva_asr_pb2 as asr
     from riva.client.proto import riva_asr_pb2_grpc as asr_grpc
     from riva.client.proto import riva_tts_pb2 as tts
@@ -175,6 +178,26 @@ async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
 
     calls = []
     pcm = b"\x01\x00" * 160
+    now = datetime.datetime.now(datetime.timezone.utc)
+    root, root_key = _tls._generate_root(now)
+    certificate, key = _tls._generate_leaf(root, root_key, {"127.0.0.1"}, now)
+    root_pem = root.public_bytes(serialization.Encoding.PEM)
+    credentials = grpc.ssl_server_credentials([(
+        key.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ), certificate.public_bytes(serialization.Encoding.PEM),
+    )])
+    ssl_credentials = grpc.ssl_channel_credentials
+
+    def trusted_credentials(root_certificates=None, private_key=None, certificate_chain=None):
+        return ssl_credentials(
+            root_certificates=root_pem if root_certificates is None else root_certificates,
+            private_key=private_key, certificate_chain=certificate_chain,
+        )
+
+    # Trust only this test's CA, retaining certificate/hostname verification.
+    monkeypatch.setattr(grpc, "ssl_channel_credentials", trusted_credentials)
 
     class Speech(asr_grpc.RivaSpeechRecognitionServicer, tts_grpc.RivaSpeechSynthesisServicer):
         def Recognize(self, request, context):
@@ -197,11 +220,12 @@ async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
         peer = Speech()
         asr_grpc.add_RivaSpeechRecognitionServicer_to_server(peer, server)
         tts_grpc.add_RivaSpeechSynthesisServicer_to_server(peer, server)
-        port = server.add_insecure_port("127.0.0.1:0")
+        port = server.add_secure_port("127.0.0.1:0", credentials)
         server.start()
         config = load_models_config_from_dict({name: {
             "category": name,
-            "adapter": {"kind": "riva_grpc", "language": "en-US", "voice": "test-voice", "sample_rate": 22050},
+            "adapter": {"kind": "riva_grpc", "language": "en-US", "voice": "test-voice",
+                        "sample_rate": 22050, "use_ssl": True},
             "endpoint": {"base_url": f"127.0.0.1:{port}", "api_key_env": "NIM_TEST_KEY"},
         } for name in ("stt", "tts")})
         try:
@@ -224,6 +248,7 @@ async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
     assert all(metadata["authorization"] == "Bearer inference-token" for _, _, metadata in calls)
     assert calls[0][1].config.sample_rate_hertz == 16000
     assert calls[1][1].voice_name == "test-voice"
+    assert all(request.custom_dictionary == "" for kind, request, _ in calls if kind == "tts")
 
 
 @pytest.mark.parametrize("action", ["cancel", "timeout"])
