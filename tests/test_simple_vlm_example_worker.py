@@ -618,6 +618,16 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert followup["route"] == "current_view"
     assert followup["history"]
     assert followup["any_of"] == ["red"]
+    stale_clarification = by_name["new_question_after_stale_clarification"]
+    assert stale_clarification["route"] == "direct"
+    assert stale_clarification["image"] == "blank"
+    assert stale_clarification["history"][0]["assistant"].startswith("Could you clarify")
+    assert stale_clarification["any_of"] == ["63", "sixty-three"]
+    explicit_recall = by_name["explicit_recall_uses_completed_answer"]
+    assert explicit_recall["route"] == "direct"
+    assert explicit_recall["image"] == "blank"
+    assert explicit_recall["history"]
+    assert explicit_recall["any_of"] == ["Lisbon"]
     domain_visual = by_name["domain_scoped_visual_question"]
     assert domain_visual["route"] == "current_view"
     assert domain_visual["any_of"] == ["blue"]

@@ -28,6 +28,24 @@
   query: What color is the shape on the left?
   any_of: [red]
 
+- name: new_question_after_stale_clarification
+  image: blank
+  route: direct
+  history:
+    - user: What do you see in front of me?
+      assistant: Could you clarify what you would like me to check in the scene?
+  query: What is nine times seven?
+  any_of: ["63", "sixty-three"]
+
+- name: explicit_recall_uses_completed_answer
+  image: blank
+  route: direct
+  history:
+    - user: What is the capital of Portugal?
+      assistant: Lisbon.
+  query: What was that again?
+  any_of: [Lisbon]
+
 - name: domain_scoped_visual_question
   image: red_left_blue_right
   route: current_view
