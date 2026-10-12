@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
 -- LuaJIT FFI wrapper for ZMQ PULL sockets.
 --
 -- The scene service sets RENDER_ZMQ_LIB to the libzmq bundled with pyzmq before

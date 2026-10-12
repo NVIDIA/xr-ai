@@ -36,6 +36,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     )
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
         ("--expose-web-events",),
+        ("--capture",),
     ]
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
         ("--stop",),
@@ -54,6 +55,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     ]
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
+        ("--capture",),
     ]
     assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
         ("--capture",),

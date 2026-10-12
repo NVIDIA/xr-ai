@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from unittest.mock import Mock
 
 import pytest
@@ -209,6 +210,33 @@ class TestRunStackShutdownContract:
         assert stub_stack["no_kill"] == {"vlm"}
         assert stub_stack["spawn_options"] == {"vlm": True, "worker": False}
         assert "Process failure:" not in capsys.readouterr().err
+
+    def test_leaves_hugging_face_policy_to_model_services(
+        self, stub_stack, tmp_path, monkeypatch,
+    ):
+        # Stacks that own no model must not probe the Hub or change the
+        # Hugging Face environment their children inherit.
+        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+        connect = Mock(side_effect=AssertionError("run_stack opened a socket"))
+        monkeypatch.setattr(socket, "create_connection", connect)
+        monkeypatch.setattr(socket.socket, "connect", connect)
+
+        def hf_environment() -> dict[str, str]:
+            return {
+                key: value
+                for key, value in os.environ.items()
+                if key.startswith(("HF_", "HUGGINGFACE_", "TRANSFORMERS_"))
+            }
+
+        before = hf_environment()
+        _stack.run_stack(
+            [_stack.Process("worker", "../../worker", "worker")],
+            tmp_path,
+            exit_after_ready=True,
+        )
+
+        assert hf_environment() == before
+        connect.assert_not_called()
 
     def test_parallel_exit_after_ready_allows_only_persist_zero_exit(
         self, stub_stack, tmp_path, monkeypatch,

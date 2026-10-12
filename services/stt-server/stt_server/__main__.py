@@ -35,7 +35,7 @@ import time
 import urllib.request
 import warnings
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Silence verbose third-party startup chatter that floods the launcher's
 # terminal and the per-run log file. Set before any import that pulls in
@@ -82,6 +82,37 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     return p
 
 
+def _cached_nemo_checkpoint(model_name: str) -> str | None:
+    """Return the cached ``.nemo`` checkpoint of a Hub model, or ``None``.
+
+    Makes no network request. With ``HF_HUB_OFFLINE`` set, an uncached
+    checkpoint fails here with the model name instead of inside NeMo.
+    """
+    if "/" not in model_name:
+        return None  # NGC catalog name, resolved by NeMo
+    from huggingface_hub import constants, try_to_load_from_cache
+    from huggingface_hub.utils import HFValidationError
+
+    # NeMo's Hub loader uses the same file name. hf_hub_download is avoided
+    # because even with local_files_only it can build request headers, which
+    # some Hub releases resolve over the network.
+    filename = PurePosixPath(model_name).name + ".nemo"
+    try:
+        path = try_to_load_from_cache(repo_id=model_name, filename=filename)
+    except HFValidationError:
+        return None  # not a Hub repository ID
+    if isinstance(path, str):
+        return path
+    if constants.HF_HUB_OFFLINE:
+        raise RuntimeError(
+            f"{model_name} (revision main, file {filename}) is not cached "
+            f"under {constants.HF_HUB_CACHE}, and HF_HUB_OFFLINE is set. "
+            "Start once with network access to download it, or unset "
+            "HF_HUB_OFFLINE."
+        )
+    return None
+
+
 class _AsrBackend:
     """Thread-safe lazy loader for NeMo ASR models."""
 
@@ -106,8 +137,13 @@ class _AsrBackend:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
             logger.info("Loading NeMo ASR {!r} on {}…", self._model_name, device)
-            # from_pretrained resolves the correct model subclass automatically.
-            model = nemo_asr.models.ASRModel.from_pretrained(self._model_name)
+            # Both loaders resolve the model subclass from the checkpoint.
+            checkpoint = _cached_nemo_checkpoint(self._model_name)
+            if checkpoint:
+                logger.info("Restoring cached checkpoint {}", checkpoint)
+                model = nemo_asr.models.ASRModel.restore_from(restore_path=checkpoint)
+            else:
+                model = nemo_asr.models.ASRModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()

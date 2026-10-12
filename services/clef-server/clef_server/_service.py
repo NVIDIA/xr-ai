@@ -22,6 +22,34 @@ from loguru import logger
 from ._config import ServerConfig, identity
 
 
+def _resolve_model_directory(config: ServerConfig) -> Path:
+    """Resolve the cached Clef release before trying the Hub."""
+    if config.model_path is not None:
+        if not config.model_path.is_dir():
+            raise ValueError(f"model_path is not a directory: {config.model_path}")
+        return config.model_path
+
+    from huggingface_hub import constants, snapshot_download
+    from huggingface_hub.utils import LocalEntryNotFoundError
+
+    config.model_cache.mkdir(parents=True, exist_ok=True)
+    lookup = {
+        "repo_id": config.model_name,
+        "revision": config.model_revision,
+        "cache_dir": config.model_cache,
+    }
+    try:
+        return Path(snapshot_download(**lookup, local_files_only=True))
+    except LocalEntryNotFoundError:
+        if constants.HF_HUB_OFFLINE:
+            raise RuntimeError(
+                f"{config.model_name} (revision {config.model_revision}) is not cached "
+                f"under {config.model_cache}, and HF_HUB_OFFLINE is set. "
+                "Start once with network access to download it, or unset HF_HUB_OFFLINE."
+            ) from None
+    return Path(snapshot_download(**lookup))
+
+
 class ClefBackend:
     """Own the downloaded code, model, processor, and serialized GPU calls."""
 
@@ -35,22 +63,8 @@ class ClefBackend:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clef-inference")
 
     def load(self) -> None:
+        model_dir = _resolve_model_directory(self.config)
         import torch
-        from huggingface_hub import snapshot_download
-
-        if self.config.model_path is not None:
-            model_dir = self.config.model_path
-            if not model_dir.is_dir():
-                raise ValueError(f"model_path is not a directory: {model_dir}")
-        else:
-            self.config.model_cache.mkdir(parents=True, exist_ok=True)
-            model_dir = Path(
-                snapshot_download(
-                    repo_id=self.config.model_name,
-                    revision=self.config.model_revision,
-                    cache_dir=self.config.model_cache,
-                )
-            )
         source = model_dir / "joint_schema_model.py"
         if not source.is_file():
             raise ValueError(f"missing upstream model implementation: {source}")

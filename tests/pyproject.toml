@@ -38,6 +38,8 @@ dependencies = [
     "numpy>=1.24",
     # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "audioop-lts; python_version >= '3.13'",
+    # Local-first model resolution tests run the real Hub cache lookup.
+    "huggingface-hub>=0.32.0",
     "Pillow>=10.0",
     "python-multipart>=0.0.9",
     "pyyaml>=6.0",

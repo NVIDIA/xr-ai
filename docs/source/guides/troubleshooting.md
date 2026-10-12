@@ -111,12 +111,12 @@ If `MemAvailable` is much larger than `MemFree` and `Cached` is large, the
 failure is consistent with reclaimable-cache pressure rather than the next
 model being too large for the configured profile.
 
-**Fix:** the bundled `spark` profile enables `spark_uma` for each Docker-backed
-vLLM service. The wrapper downloads and syncs the complete Hugging Face
-snapshot before vLLM initializes CUDA, so transfer, reconstruction, and dirty
-writeback allocations do not overlap the CUDA context allocation. If the
-driver allocation still fails, the wrapper waits for reclamation and restarts
-the stopped container once. Only the wrapper that launched the current
+**Fix:** every Docker-backed vLLM service resolves its Hugging Face snapshot
+before vLLM initializes CUDA. A missing snapshot is downloaded and synced at
+that point, so transfer, reconstruction, and dirty writeback allocations do not
+overlap the CUDA context allocation. The bundled `spark` profile also enables
+`spark_uma` for each of these services: if the driver allocation still fails,
+the wrapper waits for reclamation and restarts the stopped container once. Only the wrapper that launched the current
 container attempt may restart it; another wrapper that adopts the running
 container observes it without taking ownership. The retry applies only when
 Docker reports that the container was not OOM-killed and the traceback reaches
@@ -185,8 +185,8 @@ Enable `spark_uma` on each Docker-backed vLLM service when copying the bundled
 settings into a custom Spark profile. Do not flush the filesystem cache
 routinely for this symptom: doing so makes the next checkpoint read cold and
 can reproduce the profiling variation. An explicit KV cache cannot bypass an
-earlier CUDA driver-allocation failure; the prefetch and bounded retry are
-separate safeguards for that stage.
+earlier CUDA driver-allocation failure; the pre-CUDA snapshot download and
+bounded retry are separate safeguards for that stage.
 
 ### DGX Spark — LOVR auto-download is not supported
 

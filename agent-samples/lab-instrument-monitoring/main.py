@@ -18,6 +18,14 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml" / "lab_instrument_monitoring_worker.yaml"
 
+_CAPTURE_PROCESS = Process(
+    "capture",
+    "../../services/device-io-hub",
+    "device_io_capture",
+    config="yaml/media_capture.yaml",
+)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run marker-associated lab instrument monitoring.",
@@ -28,6 +36,14 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "bind the unauthenticated event viewer to all IPv4 interfaces "
             "instead of loopback"
+        ),
+    )
+    parser.add_argument(
+        "--capture",
+        action="store_true",
+        help=(
+            "record participant video, bidirectional audio, and data-channel "
+            "traffic"
         ),
     )
     return parser
@@ -80,8 +96,10 @@ def _materialize_worker_config(
     return worker_config
 
 
-def _build_processes(worker_config: Path = _WORKER_CONFIG) -> list[Process]:
-    return [
+def _build_processes(
+    worker_config: Path = _WORKER_CONFIG, *, capture: bool = False
+) -> list[Process]:
+    processes = [
         Process(
             "hub",
             "../../services/device-io-hub",
@@ -95,6 +113,9 @@ def _build_processes(worker_config: Path = _WORKER_CONFIG) -> list[Process]:
             config=worker_config,
         ),
     ]
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
+    return processes
 
 
 def run(argv: Sequence[str] | None = None) -> None:
@@ -105,7 +126,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config), _BASE)
+        run_stack(_build_processes(worker_config, capture=args.capture), _BASE)
 
 
 if __name__ == "__main__":

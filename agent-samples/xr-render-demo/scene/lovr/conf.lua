@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
 -- LOVR configuration for the XR render demo scene.
 --
 -- Changes to this file must be tested end-to-end against a headset: module and
