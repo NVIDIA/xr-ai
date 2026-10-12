@@ -21,6 +21,15 @@ from .config import CaptureConfig
 _MAX_SAFE_NAME = 96
 
 
+def _supported_dimensions(width: int, height: int, caps: dict[str, int]) -> bool:
+    """NV12 requires even dimensions within the selected GPU's H.264 limits."""
+    return (
+        width % 2 == 0 and height % 2 == 0
+        and caps["width_min"] <= width <= caps["width_max"]
+        and caps["height_min"] <= height <= caps["height_max"]
+    )
+
+
 def _sample_deadline(
     next_pts_us: int | None,
     pts_us: int,
@@ -70,6 +79,7 @@ class _H264TrackWriter:
         self,
         *,
         nvc: object,
+        encoder_caps: dict[str, int],
         root: Path,
         track_id: str,
         stream_name: str,
@@ -82,7 +92,7 @@ class _H264TrackWriter:
         self._stream_name = stream_name
         self._config = config
         self._frontend = frontend
-        self._encoder_caps = nvc.GetEncoderCaps(config.gpu_id, "h264")
+        self._encoder_caps = encoder_caps
         self._encoder = None
         self._stream = None
         self._width = 0
@@ -117,20 +127,15 @@ class _H264TrackWriter:
         width = rendered.width
         height = rendered.height
         caps = self._encoder_caps
-        if not (
-            caps["width_min"] <= width <= caps["width_max"]
-            and caps["height_min"] <= height <= caps["height_max"]
-        ):
-            # Camera mute can deliver a tiny placeholder. Keep the current
-            # encoder alive so subsequent camera frames resume the same track.
-            logger.warning(
-                "media capture dropped unsupported frame track={!r} size={}x{}; "
-                "NVENC limits={}x{}..{}x{}",
-                self._track_id, width, height,
-                caps["width_min"], caps["height_min"],
-                caps["width_max"], caps["height_max"],
+        if not _supported_dimensions(width, height, caps):
+            # Live source frames are filtered by the recorder. A derived
+            # rendering outside these limits is an error, not a frame drop.
+            raise ValueError(
+                f"capture {self._stream_name} frame {width}x{height} cannot be encoded; "
+                f"NVENC H.264 requires even dimensions within "
+                f"{caps['width_min']}x{caps['height_min']}..{caps['width_max']}x{caps['height_max']} "
+                f"on GPU {self._config.gpu_id}"
             )
-            return None
         if self._encoder is None or (width, height) != (self._width, self._height):
             self._start_segment(width, height, frame.pts_us)
         picture_params = self._nvc.NV_ENC_PIC_PARAMS()

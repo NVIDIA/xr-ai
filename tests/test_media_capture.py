@@ -14,6 +14,7 @@ import threading
 import types
 import wave
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -770,7 +771,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
             ))]
 
     fake_module = types.SimpleNamespace(
-        GetEncoderCaps=_fake_encoder_caps,
+        GetEncoderCaps=Mock(side_effect=_fake_encoder_caps),
         CreateEncoder=lambda *_args, **_kwargs: FakeEncoder(),
         CreateDecoder=lambda **_kwargs: FakeDecoder(),
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
@@ -873,7 +874,11 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert encoded_inputs[0].shape == (48, 64)
     assert manifest["renderings"] == {}
 
-    output = CaptureRenderer().render(session)
+    fake_module.GetEncoderCaps.assert_called_once_with(0, "h264")
+    renderer = CaptureRenderer()
+    assert fake_module.GetEncoderCaps.call_count == 2
+    output = renderer.render(session)
+    assert fake_module.GetEncoderCaps.call_count == 2
     manifest = json.loads((session / "manifest.json").read_text(encoding="utf-8"))
     rendering = manifest["renderings"]["captioned_mp4"]
     assert output == session / rendering["path"]
@@ -889,6 +894,23 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     assert finalized_video_pts == [1_000_000, 1_040_000, 1_073_333]
     assert not (session / "video" / "rendering.264").exists()
     assert not (session / "video" / "session.timeline.mkv.pending").exists()
+
+    # Reusing a renderer does not re-query hardware or replace the raw bundle.
+    renderer.render(session)
+    assert fake_module.GetEncoderCaps.call_count == 2
+    saved_manifest = (session / "manifest.json").read_bytes()
+    saved_raw = (session / "video/session.264").read_bytes()
+    saved_output = output.read_bytes()
+    high_resolution = np.zeros((2160 * 3 // 2, 3840), dtype=np.uint8)
+    monkeypatch.setattr(renderer, "_decode_packets", lambda *args, **kwargs: iter([
+        ({"pts_us": 1_000_000, "track_id": "camera"}, high_resolution),
+    ]))
+    with pytest.raises(ValueError, match=r"capture render frame 5376x\d+.*NVENC H.264.*4096x4096"):
+        renderer.render(session)
+    assert (session / "manifest.json").read_bytes() == saved_manifest
+    assert (session / "video/session.264").read_bytes() == saved_raw
+    assert output.read_bytes() == saved_output
+    assert not list((session / "video").glob("render_*.264"))
 
 
 def test_raw_capture_does_not_attempt_mp4_finalization(
@@ -1024,7 +1046,10 @@ def test_raw_profile_preserves_camera_pixels_and_timestamp_indexes(
     assert audio["sample_format"] == "float32_le"
 
 
-@pytest.mark.parametrize("width,height", [(8, 8), (144, 240), (180, 48), (1026, 240), (180, 770)])
+@pytest.mark.parametrize("width,height", [
+    (8, 8), (9, 9), (181, 240), (180, 241), (145, 49),
+    (144, 240), (180, 48), (1026, 240), (180, 770),
+])
 @pytest.mark.parametrize("initial", [False, True])
 def test_unsupported_video_dimensions_preserve_recording(
     tmp_path, monkeypatch, width, height, initial,
@@ -1044,7 +1069,11 @@ def test_unsupported_video_dimensions_preserve_recording(
     recorder.begin_session("alice", 1_000_000)
     if not initial:
         recorder.record_video(_frame(width=180, height=240))
-    recorder.record_video(_frame(pts_us=1_100_000, width=width, height=height))
+    with monkeypatch.context() as patch:
+        render = Mock(side_effect=AssertionError("unsupported frame reached conversion"))
+        patch.setattr(recorder._raw_frontend, "render_frame", render)
+        recorder.record_video(_frame(pts_us=1_100_000, width=width, height=height))
+        render.assert_not_called()
     assert recorder.has_session("alice")
     encoder.EndEncode.assert_not_called()
     recorder.record_audio("device", _audio("device", pts_us=1_150_000))
@@ -1068,25 +1097,69 @@ def test_unsupported_video_dimensions_preserve_recording(
     assert {(row["source_width"], row["source_height"]) for row in rows} == {(180, 240)}
 
 
-@pytest.mark.parametrize("failure_stage", ["caps", "create", "encode"])
-def test_video_failure_is_propagated_and_sealed_incomplete(tmp_path, monkeypatch, failure_stage):
+def test_encoder_caps_are_queried_before_sessions_and_reused_across_tracks(tmp_path, monkeypatch):
+    nvc = types.SimpleNamespace(
+        GetEncoderCaps=Mock(return_value={
+            "width_min": 146, "height_min": 50, "width_max": 1024, "height_max": 768,
+        }),
+        CreateEncoder=Mock(side_effect=lambda *args, **kwargs: Mock(
+            Encode=Mock(return_value=[{"data": b"\x00\x00\x00\x01\x65frame", "picture_type": 3}]),
+            EndEncode=Mock(return_value=[]),
+        )),
+        NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
+    )
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", nvc)
+    recorder = SessionRecorder(CaptureConfig(out_dir=str(tmp_path), profile="raw", gpu_id=2))
+    nvc.GetEncoderCaps.assert_called_once_with(2, "h264")
+    nvc.GetEncoderCaps.side_effect = AssertionError("hardware queried during recording")
+    for pid in ("alice", "bob"):
+        recorder.begin_session(pid, 1_000_000)
+        for index, (width, height) in enumerate(((146, 50), (1024, 768))):
+            frame = replace(_frame(width=width, height=height, track_id=f"camera-{index}"), participant_id=pid)
+            recorder.record_video(frame)
+    roots = recorder.close()
+    assert nvc.CreateEncoder.call_count == 4
+    for root in roots:
+        manifest = json.loads((root / "manifest.json").read_text())
+        assert manifest["complete"] is True
+        assert manifest["dropped_video_frames"] == 0
+        assert manifest["counts"]["video_frames"] == 2
+
+
+def test_capability_failure_stops_startup_before_creating_bundles(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(
+        GetEncoderCaps=Mock(side_effect=RuntimeError("GPU unavailable")),
+    ))
+    with pytest.raises(RuntimeError, match="GPU unavailable"):
+        SessionRecorder(CaptureConfig(out_dir=str(tmp_path / "captures")))
+    with pytest.raises(RuntimeError, match="GPU unavailable"):
+        CaptureRenderer()
+    assert not (tmp_path / "captures").exists()
+
+
+@pytest.mark.parametrize("failure_stage", ["create", "encode"])
+@pytest.mark.parametrize("drain_timeout", [False, True])
+def test_video_failure_is_propagated_and_sealed_incomplete(tmp_path, monkeypatch, failure_stage, drain_timeout):
     encoder = Mock(EndEncode=Mock(return_value=[]))
     nvc = types.SimpleNamespace(
         GetEncoderCaps=Mock(side_effect=_fake_encoder_caps),
         CreateEncoder=Mock(return_value=encoder),
         NV_ENC_PIC_PARAMS=type("NV_ENC_PIC_PARAMS", (), {}),
     )
-    operation = {"caps": nvc.GetEncoderCaps, "create": nvc.CreateEncoder, "encode": encoder.Encode}
+    operation = {"create": nvc.CreateEncoder, "encode": encoder.Encode}
     operation[failure_stage].side_effect = RuntimeError("encoder unavailable")
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", nvc)
     recorder = SessionRecorder(CaptureConfig(out_dir=str(tmp_path), profile="raw"))
     recorder.begin_session("alice", 1_000_000)
     with pytest.raises(RuntimeError, match="encoder unavailable"):
         recorder.record_video(_frame())
-    [root] = recorder.close()
+    if drain_timeout:
+        root = recorder.end_session("alice", 1_100_000, incomplete_reason="return_traffic_drain_timeout")
+    else:
+        [root] = recorder.close()
     manifest = json.loads((root / "manifest.json").read_text())
     assert manifest["complete"] is False
-    assert "encoder unavailable" in manifest["incomplete_reason"]
+    assert manifest["incomplete_reason"] == "video_capture_failed"
 
 
 def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
@@ -1130,7 +1203,7 @@ async def test_explicit_session_control_records_only_between_reserved_commands(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         profile="raw",
@@ -1216,7 +1289,7 @@ async def test_explicit_stop_does_not_block_return_traffic(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         profile="raw",
@@ -1253,7 +1326,7 @@ async def test_explicit_session_control_rejects_unsafe_wrapper_targets(
     monkeypatch,
     target: str,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         profile="raw",
@@ -1281,7 +1354,7 @@ def test_retention_counts_incomplete_capture_directories(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     target = tmp_path / "workflow"
     target.mkdir()
     incomplete = target / "1_incomplete"
@@ -1309,7 +1382,7 @@ def test_retention_ignores_unowned_directories(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     unrelated = tmp_path / "unrelated-project"
     unrelated.mkdir()
     (unrelated / "events.jsonl").write_bytes(b"x" * 100)
@@ -1334,7 +1407,7 @@ async def test_retention_keeps_waiting_session_active_until_render_finishes(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     render_started = asyncio.Event()
     release_render = threading.Event()
     rendered: list[tuple[Path, bool]] = []
@@ -1390,7 +1463,7 @@ async def test_duplicate_stop_has_one_finalization_owner(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         max_total_bytes=0,
@@ -1436,7 +1509,7 @@ async def test_shutdown_drains_participant_finalization_before_executors(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     render_started = asyncio.Event()
@@ -1503,7 +1576,7 @@ async def test_shutdown_commits_all_raw_bundles_before_waiting_for_render(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     monkeypatch.setattr(
         service_module,
         "CaptureRenderer",
@@ -1558,7 +1631,7 @@ async def test_cancelled_stop_still_finishes_cleanup(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
         max_total_bytes=0,
@@ -1611,7 +1684,7 @@ async def test_departure_waits_for_published_return_traffic(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     pull, publish = hub_addrs
     service = CaptureService(CaptureConfig(
         hub_push_addr=pull,
@@ -1687,7 +1760,7 @@ async def test_missing_return_departure_finalizes_incomplete_bundle(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
     monkeypatch.setattr(service_module, "_RETURN_TRAFFIC_DRAIN_TIMEOUT_S", 0.01)
     service = CaptureService(CaptureConfig(
         out_dir=str(tmp_path),
