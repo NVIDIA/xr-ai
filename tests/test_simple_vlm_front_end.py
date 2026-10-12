@@ -299,8 +299,16 @@ async def test_stop_attempts_release_for_every_participant_after_failure():
 @pytest.mark.asyncio
 async def test_destination_error_after_preamble_propagates_to_turn_caller():
     class _BrokenAnswer(_Destination):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.fail_once = True
+
         async def answer(self, turn, *, emit):
-            raise RuntimeError("destination failed")
+            if self.fail_once:
+                self.fail_once = False
+                raise RuntimeError("destination failed")
+            await emit(self.name, "Recovered.")
+            return DestinationResult("answer", "Recovered.")
 
     destination = _BrokenAnswer("xr", admissions=(Admission("accept", preamble="I will try."),))
     front_end = ConversationFrontEnd({"xr": destination}, _Decisions(), default_destination="xr")
@@ -312,6 +320,10 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
     with pytest.raises(RuntimeError, match="destination failed"):
         await front_end.handle(ConversationTurn("alice", "turn-1", "Do it."), emit=emit)
     assert output == [("xr", "I will try.")]
+
+    result = await front_end.handle(ConversationTurn("alice", "turn-2", "Try again."), emit=emit)
+    assert result.text == "Recovered."
+    assert output == [("xr", "I will try."), ("xr", "Recovered.")]
 
 
 @pytest.mark.asyncio
