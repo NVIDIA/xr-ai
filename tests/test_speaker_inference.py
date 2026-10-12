@@ -5,81 +5,8 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from xr_ai_voicegate._speaker import _SpeakerConfig
-
-
-@pytest.fixture
-def _streaming_models(monkeypatch):
-    """Drive the live adapter with generated features and stubbed NeMo models."""
-    import sys
-    from types import ModuleType
-
-    import torch
-
-    activity = []
-    asr_calls = []
-    masks = []
-    cache_allocations = []
-    text = [""]
-
-    class Adapter:
-        def __init__(self, cfg, asr, diar):
-            self.instance_manager = SimpleNamespace()
-
-        def _forward_diarization_streaming_step(self, features, lengths, drop):
-            predictions = torch.zeros(1, 2, 8)
-            predictions[:, :, activity] = 1
-            previous = self.instance_manager.diar_states.diar_pred_out_stream
-            return object(), torch.cat((previous, predictions), dim=1)
-
-        def forward_pre_encoded(self, features, lengths, drop):
-            assert drop == 2
-            return torch.zeros(1, 2, 128), torch.tensor([2])
-
-    class Buffer:
-        def __init__(self, **kwargs):
-            pass
-
-        def preprocess_audio(self, audio, device):
-            return torch.zeros(1, 128, 16, device=device), torch.tensor([16], device=device)
-
-    def initial_cache(*, batch_size):
-        cache_allocations.append(batch_size)
-        return torch.zeros(1, 1, 2), torch.zeros(1, 1, 2), torch.tensor([0])
-
-    def decode(**kwargs):
-        asr_calls.append(kwargs)
-        return (None, [SimpleNamespace(text=text[0])], *initial_cache(batch_size=1), [SimpleNamespace()])
-
-    for name, symbol, value in [
-        ("nemo.collections.asr.parts.utils.multispk_transcribe_utils", "SpeakerTaggedASR", Adapter),
-        ("nemo.collections.asr.parts.utils.streaming_utils", "CacheAwareStreamingAudioBuffer", Buffer),
-    ]:
-        module = ModuleType(name)
-        setattr(module, symbol, value)
-        monkeypatch.setitem(sys.modules, name, module)
-
-    models = SimpleNamespace(
-        cfg={},
-        device=torch.device("cpu"),
-        precision="float32",
-        cache_samples=0,
-        hop_samples=2560,
-        nframes=2,
-        asr=SimpleNamespace(
-            encoder=SimpleNamespace(
-                get_initial_cache_state=initial_cache,
-                streaming_cfg=SimpleNamespace(valid_out_len=2, drop_extra_pre_encoded=2),
-            ),
-            set_speaker_targets=lambda target, others: masks.append((target.clone(), others.clone())),
-            conformer_stream_step=decode,
-        ),
-        diar=SimpleNamespace(sortformer_modules=SimpleNamespace(init_streaming_state=lambda **kwargs: object())),
-    )
-    return models, activity, asr_calls, masks, cache_allocations, text
 
 
 def test_inference_runs_one_target_stream_and_bounds_diarization_history(_streaming_models):
