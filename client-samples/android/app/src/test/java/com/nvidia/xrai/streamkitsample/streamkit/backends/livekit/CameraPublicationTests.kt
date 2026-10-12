@@ -45,7 +45,8 @@ class CameraPublicationTests {
             Mockito.`when`(participant.videoTrackCaptureDefaults).thenReturn(LocalVideoTrackOptions())
             Mockito.`when`(participant.videoTrackPublishDefaults).thenAnswer { defaults }
             Mockito.doAnswer { defaults = it.getArgument(0); null }
-                .`when`(participant).videoTrackPublishDefaults = defaults
+                .`when`(participant).videoTrackPublishDefaults =
+                    Mockito.any(VideoTrackPublishDefaults::class.java) ?: defaults
             Mockito.`when`(participant.getTrackPublication(Track.Source.CAMERA)).thenAnswer { active }
             Mockito.`when`(publication.track).thenReturn(track)
             setField("room", room)
@@ -55,6 +56,27 @@ class CameraPublicationTests {
 
         fun setField(name: String, value: Any) {
             backend.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(backend, value)
+        }
+
+        suspend fun prepareDeviceCamera() {
+            Mockito.doAnswer { true }.`when`(participant).setCameraEnabled(false)
+            Mockito.doAnswer {
+                // A retained publication is unmuted, not replaced. A removed
+                // publication gets a new track identity on the next enable.
+                if (active == null) {
+                    val deviceTrack = Mockito.mock(LocalVideoTrack::class.java)
+                    val devicePublication = Mockito.mock(LocalTrackPublication::class.java)
+                    Mockito.`when`(devicePublication.track).thenReturn(deviceTrack)
+                    active = devicePublication
+                }
+                true
+            }.`when`(participant).setCameraEnabled(true)
+            Mockito.doAnswer {
+                if (active?.track === it.getArgument<Track>(0)) active = null
+                null
+            }.`when`(participant).unpublishTrack(
+                Mockito.any(Track::class.java) ?: track, Mockito.anyBoolean(),
+            )
         }
 
         suspend fun prepareInjection() {
@@ -94,20 +116,74 @@ class CameraPublicationTests {
             val start = launch(start = CoroutineStart.UNDISPATCHED) {
                 f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig.DETAIL))
             }
-            assertNotNull(stopped)
-            val frame = launch(start = CoroutineStart.UNDISPATCHED) {
-                f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            fun releaseStop() {
+                val pending = stopped
+                stopped = null
+                pending?.resume(true)
             }
-            // On the former code this frame published during stop, then the
-            // resumed start re-looked up CAMERA and disposed the injected track.
-            assertTrue(capturers.constructed().isEmpty())
-            assertFalse(frame.isCompleted)
-            stopped!!.resume(true)
-            start.join()
-            frame.join()
-            assertSame(f.publication, f.active)
-            assertEquals(1, capturers.constructed().size)
-            Mockito.verify(f.participant, Mockito.never()).unpublishTrack(f.track)
+            try {
+                assertNotNull(stopped)
+                val frame = launch(start = CoroutineStart.UNDISPATCHED) {
+                    f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+                }
+                // First injection must wait until the device switch completes.
+                assertTrue(capturers.constructed().isEmpty())
+                assertFalse(frame.isCompleted)
+                releaseStop()
+                start.join()
+                frame.join()
+                assertSame(f.publication, f.active)
+                assertEquals(1, capturers.constructed().size)
+                Mockito.verify(f.participant, Mockito.never()).unpublishTrack(f.track)
+            } finally {
+                // Raw SDK continuations are not cancelled with the test's Job.
+                // Assertion failure must still release the suspended child.
+                releaseStop()
+            }
+        }
+    }
+
+    @Test fun retainedDeviceCameraRepublishesOnlyWhenPolicyChanges() = runBlocking {
+        val f = Fixture()
+        f.prepareDeviceCamera()
+        f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig.DETAIL))
+        val retained = f.active!!
+        val previousTrack = retained.track!!
+        assertEquals(f.policy(CameraEncodingConfig.DETAIL), f.defaults)
+
+        f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig.DETAIL))
+        assertSame(retained, f.active)
+        Mockito.verify(f.participant, Mockito.never()).unpublishTrack(previousTrack)
+
+        f.backend.startCamera(CameraConfig())
+        assertNotSame(retained, f.active)
+        Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(previousTrack)
+        assertEquals(f.policy(null), f.defaults)
+        assertEquals("h264", f.defaults.videoCodec)
+        assertFalse(f.defaults.simulcast)
+    }
+
+    @Test fun firstInjectionPreemptsDeviceAndFailedPublicationDoesNotRestoreIt() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        f.prepareDeviceCamera()
+        f.backend.startCamera(CameraConfig())
+        val device = f.active!!.track!!
+        val publishArgument = VideoTrackPublishOptions(base = f.defaults)
+        Mockito.doAnswer { false }.`when`(f.participant).publishVideoTrack(
+            Mockito.eq(f.track) ?: f.track,
+            Mockito.any(VideoTrackPublishOptions::class.java) ?: publishArgument, Mockito.isNull(),
+        )
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            try {
+                f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+                fail("A rejected publication must fail the first injection")
+            } catch (_: IllegalStateException) {
+                assertNull(f.active)
+                Mockito.verify(f.participant).unpublishTrack(device)
+                Mockito.verify(f.track).stop()
+                Mockito.verify(f.track).dispose()
+            }
         }
     }
 

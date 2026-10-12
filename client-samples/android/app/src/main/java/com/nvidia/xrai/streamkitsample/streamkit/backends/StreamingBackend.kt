@@ -122,6 +122,10 @@ interface StreamingBackend {
      * camera adapters, screen capture, synthetic frame sources) instead of
      * Camera2/CameraX. Mirror of iOS
      * `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     * The Android LiveKit backend uses one CAMERA source: first injection
+     * replaces its device camera. If that first publication fails, no camera
+     * remains published; callers may explicitly start the device camera again.
+     * Other backends may use different source ownership.
      *
      * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
      */

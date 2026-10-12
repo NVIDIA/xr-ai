@@ -345,8 +345,9 @@ internal class LiveKitBackend(
                 return
             }
             val lp = room?.localParticipant ?: throw StreamError.NotConnected
-            // Switch source by exact track identity while owning the entire
-            // transaction, not a CAMERA lookup after a suspended stop.
+            // Lookup and remove the existing CAMERA publication inside this
+            // transaction, before any suspension. First injection preempts the
+            // device camera; failed publication leaves no camera published.
             lp.getTrackPublication(Track.Source.CAMERA)?.track?.let { lp.unpublishTrack(it) }
             val newCapturer = InjectedVideoCapturer()
             val track = lp.createVideoTrack(

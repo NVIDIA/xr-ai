@@ -43,6 +43,10 @@ stays inside the backend; other backends apply the settings they support.
 | Balanced | Allow both resolution and FPS to change | Backend default |
 
 All three presets start with ceilings of 3 Mbps per encoded stream and 30 FPS.
+These are configurable policy defaults, not values derived from a survey of
+glasses or device measurements. They match LiveKit's 16:9 1080p preset reference;
+the adaptation preference distinguishes the three presets, not a measured
+quality or bandwidth guarantee for a particular device.
 Override the FPS ceiling for workloads that need fewer, more detailed frames.
 Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
 overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
