@@ -280,6 +280,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         var options = try videoPublishOptions(encoding)
         do {
             try Task.checkCancellation()
+            // A failed rollback remains owned; a retry must release it before
+            // replacing the retained cleanup obligation with another track.
+            if let cleanup = cameraCaptureCleanup {
+                try await cleanup.stop()
+                if cameraCaptureCleanup === cleanup { cameraCaptureCleanup = nil }
+            }
+            try Task.checkCancellation()
             cameraCaptureCleanup = track
             if let encoding, options?.simulcast == true, cameraPublishDefaults.simulcastLayers.isEmpty {
                 // The SDK starts capture before computing its default layers.
