@@ -15,7 +15,7 @@ import httpx
 import pytest
 import uvicorn
 import yaml
-from pipecat.frames.frames import CancelFrame, InputAudioRawFrame, InterruptionFrame, TranscriptionFrame
+from pipecat.frames.frames import CancelFrame, InputAudioRawFrame, InterruptionFrame, TextFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection
 from speaker_stt.__main__ import _build_app, _Server
 from speaker_stt._selection import _Selection
@@ -535,15 +535,72 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         await processor.cleanup()
 
 
-def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True):
+def _config(tmp_path, *, require_wake=False, conversation=True, speaker=True, stop_enabled=True):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
         "magic_phrases": ["hey agent"], "listening_chime": False,
+        "stop_commands_enabled": stop_enabled,
         "conversation": {"enabled": conversation, "require_wake_phrase": require_wake,
                          "start_phrase": "Hey agent, let's start talking", "phrase_window_s": 6},
         "speaker": {"enabled": speaker, "backend": "auto"},
     }))
     return load_voice_gate_config(path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_enabled", [False, True])
+@pytest.mark.parametrize("require_wake", [False, True])
+@pytest.mark.parametrize("text", ["stop", "stop recording"])
+async def test_speaker_pipeline_honors_stop_policy_for_partial_and_final_transcripts(
+    tmp_path, stop_enabled, require_wake, text,
+):
+    cfg = _config(tmp_path, require_wake=require_wake, stop_enabled=stop_enabled)
+    transcripts = AsyncMock()
+    transport = HubVoiceTransport()
+    pipeline, _worker = _build_voice_pipeline(
+        transport=transport, stt=SimpleNamespace(), tts=SimpleNamespace(),
+        io_processor=_VoiceIOProcessor(AsyncMock()), vad_cfg=VadConfig(),
+        voice_gate_cfg=cfg, use_speaker_asr=True, on_final_transcript=transcripts,
+    )
+    processor, gate = pipeline.processors[2:4]
+    emitted = []
+
+    async def to_gate(frame, *_args):
+        if isinstance(frame, InterruptionFrame):
+            emitted.append(frame)
+        else:
+            await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+    gate.push_frame = AsyncMock(side_effect=lambda frame, *_args: emitted.append(frame))
+    final_text = f"hey agent {text}" if require_wake else text
+    try:
+        await processor._event("wearer", {"kind": "enrolled"})
+        emitted.clear()
+        # A partial bare STOP can precede a scoped application command.
+        await processor._event("wearer", {"kind": "partial", "text": "stop"})
+        assert any(isinstance(f, InterruptionFrame) for f in emitted) == stop_enabled
+        assert not any(isinstance(f, TextFrame) for f in emitted)
+        transcripts.assert_not_awaited()
+        emitted.clear()
+
+        await processor._event("wearer", {
+            "kind": "transcript", "text": final_text, "pts_us": 123, "speaker_id": 7,
+        })
+        final_stop = stop_enabled and text == "stop"
+        assert any(isinstance(f, InterruptionFrame) for f in emitted) == final_stop
+        assert [f.text for f in emitted if isinstance(f, TextFrame)] == (
+            ["Okay, I will stop."] if final_stop else []
+        )
+        assert [f.text for f in emitted if isinstance(f, GatedQueryFrame)] == ([] if final_stop else [text])
+        transcripts.assert_awaited_once_with("wearer", final_text, 123)
+        assert "wearer" in gate._conversation_active
+        await processor._event("wearer", {"kind": "released"})
+        assert "wearer" not in gate._conversation_active
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+        transport.shutdown()
 
 
 @pytest.mark.asyncio
