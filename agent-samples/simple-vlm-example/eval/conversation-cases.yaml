@@ -59,7 +59,7 @@
     - user: Help me make pasta.
       assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
   query: Stop repeating, just show me how to make pasta.
-  any_of: [pasta, boil]
+  any_of: ["add the pasta", "cook according to the package directions"]
 
 - name: direct_howto_after_visual_clarification
   image: blank

@@ -649,7 +649,8 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert pasta_loop["route"] == "direct"
     assert pasta_loop["image"] == "blank"
     assert len(pasta_loop["history"]) == 4
-    assert pasta_loop["any_of"] == ["pasta", "boil"]
+    assert pasta_loop["any_of"] == ["add the pasta", "cook according to the package directions"]
+    assert "pasta" not in pasta_loop["any_of"]
     bowline = by_name["direct_howto_after_visual_clarification"]
     assert bowline["route"] == "direct"
     assert bowline["image"] == "blank"
