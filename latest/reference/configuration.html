@@ -745,6 +745,11 @@ workflow.</p></li>
 <span class="c1"># before STT+VLM finish — so the user knows the agent is processing.</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 
+<span class="c1"># Enable global STOP interruption and final-transcript acknowledgement.</span>
+<span class="c1"># Set false for passive narration; probes and conversation controls stay independent.</span>
+<span class="c1"># Scoped commands such as "stop recording" remain ordinary agent queries.</span>
+<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
 <span class="c1"># Follow-up grace window. After a successful magic-phrase match, the</span>
 <span class="c1"># next utterance from the same participant within this many seconds</span>
 <span class="c1"># bypasses the gate so "hey agent" → pause → "what am I looking at?"</span>

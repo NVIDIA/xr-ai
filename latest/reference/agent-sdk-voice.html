@@ -605,11 +605,19 @@ immediate always-on speech dispatch.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
+<p>Global STOP recognition is enabled by default. For passive narration, set
+<code class="docutils literal notranslate"><span class="pre">stop_commands_enabled:</span> <span class="pre">false</span></code> in the voice-gate YAML. This disables STOP
+interruptions and acknowledgements for both partial and final transcripts,
+including conversations without a wake phrase. Final transcripts still follow
+the configured transcript and query-gating rules. Conversation controls and
+scoped application commands such as <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">recording</span></code> retain their own routing.
+Probes can remain enabled for wake acknowledgements; their timing is independent
+of the STOP policy.</p>
 <p>VAD and STT probe the opening audio while the user is still speaking. Probe
 audio includes a silent tail so offline STT can finalize a phrase. During an
-active conversation, a partial global-STOP match interrupts output immediately,
-but it does not commit
-the user’s intent: final STT remains authoritative for global-stop versus query
+active conversation with STOP enabled, a partial global-STOP match interrupts
+output immediately, but it does not commit the user’s intent: final STT remains
+authoritative for global-stop versus query
 routing. A slow probe receives a short grace period and is then cancelled.
 With wake phrases or conversation controls configured, one utterance can make
 up to three bounded partial STT requests plus the authoritative final request. Set <code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code> to
@@ -624,8 +632,8 @@ text and the tail after a configured wake phrase, so <code class="docutils liter
 <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">false</span></code>, final transcripts remain intact and
 only a standalone short stop uses the global-stop path; <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span> <span class="pre">stop</span></code>
 remains a query.</p>
-<p>Global STOP uses a closed imperative grammar for direct requests such as
-<code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code>, with a bounded set
+<p>When enabled, global STOP uses a closed imperative grammar for direct requests
+such as <code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">it</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">talking</span></code>, <code class="docutils literal notranslate"><span class="pre">be</span> <span class="pre">quiet</span></code>, and <code class="docutils literal notranslate"><span class="pre">shut</span> <span class="pre">up</span></code>, with a bounded set
 of conversational prefixes and punctuation. Up to two prefixes may be drawn
 from <code class="docutils literal notranslate"><span class="pre">please</span></code>, <code class="docutils literal notranslate"><span class="pre">hey</span></code>, <code class="docutils literal notranslate"><span class="pre">okay</span></code>, <code class="docutils literal notranslate"><span class="pre">ok</span></code>, <code class="docutils literal notranslate"><span class="pre">uh</span></code>, <code class="docutils literal notranslate"><span class="pre">um</span></code>, <code class="docutils literal notranslate"><span class="pre">wait</span></code>, <code class="docutils literal notranslate"><span class="pre">no</span></code>, <code class="docutils literal notranslate"><span class="pre">just</span></code>,
 <code class="docutils literal notranslate"><span class="pre">alright</span></code>, <code class="docutils literal notranslate"><span class="pre">sorry</span></code>, <code class="docutils literal notranslate"><span class="pre">whoa</span></code>, <code class="docutils literal notranslate"><span class="pre">hang</span> <span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">I</span> <span class="pre">said</span></code>, or <code class="docutils literal notranslate"><span class="pre">can</span></code>, <code class="docutils literal notranslate"><span class="pre">could</span></code>, <code class="docutils literal notranslate"><span class="pre">would</span></code>,
