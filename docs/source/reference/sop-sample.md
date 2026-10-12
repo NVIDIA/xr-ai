@@ -141,7 +141,9 @@ The cases exercise initial observations, chronological direction, unchanged
 images, object appearance and disappearance, and grouping labels that disagree
 with visual evidence. The runner uses the production query, system prompt,
 multi-image tool, and parser. It saves source images, raw responses, and expected
-observations for inspection. Its automatic result measures response structure,
+observations for inspection. The command exits nonzero if any case fails the
+response contract or cannot obtain a model response; all cases are still saved
+for inspection. Its automatic result measures response structure,
 not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.
@@ -151,6 +153,11 @@ recorded demonstrations.
 The launcher starts the hub, optional shared capture service, and SOP worker.
 The worker uses `VoiceAgent` for transcripts, `CurrentFrameTool` for snapshots,
 and `MultiImageQueryTool` for captions.
+
+The always-on voice gate passes commands and narration through the same accepted
+input path. Recording acknowledgements follow voice-input handling, so a command
+cannot cancel its own response. Shared media capture independently receives the
+raw final transcripts.
 
 | Configuration | Settings |
 |---|---|

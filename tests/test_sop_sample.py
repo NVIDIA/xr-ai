@@ -22,13 +22,13 @@ from xr_ai_models import load_models_config
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceTranscript
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery
 
 _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/sop-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from sop_sample_worker.config import load_config  # noqa: E402
-from sop_sample_worker.lifecycle import CaptureRecording  # noqa: E402
+from sop_sample_worker.lifecycle import SOP_INPUT_TOPIC, CaptureRecording  # noqa: E402
 from sop_sample_worker.recorder import RecorderAgent  # noqa: E402
 
 
@@ -53,6 +53,37 @@ def test_config_and_cli(monkeypatch):
     for args, expected in (([], ["hub", "worker"]), (["--capture"], ["hub", "capture", "worker"])):
         module.run(args)
         assert [p.name for p in stack.call_args.args[0]] == expected
+
+
+@pytest.mark.parametrize("failure", [None, "one_invalid", "all_invalid", "unavailable"])
+def test_caption_eval_cli_reports_contract_failures(tmp_path, monkeypatch, capsys, failure):
+    import runpy
+
+    import xr_ai_models
+    import yaml
+
+    cases = yaml.safe_load((_SAMPLE / "eval/caption_cases.yaml").read_text())["cases"]
+    valid = json.dumps({"activity": "Arrange", "phase": "Place", "caption": "A block", "delta": "Unchanged"})
+    replies = [SimpleNamespace(content=valid) for _ in cases]
+    if failure == "one_invalid":
+        replies[0] = SimpleNamespace(content="not JSON")
+    elif failure == "all_invalid":
+        replies = [SimpleNamespace(content="not JSON") for _ in cases]
+    vlm = Mock(ask_images=AsyncMock(side_effect=(RuntimeError("offline") if failure == "unavailable" else replies)),
+               close=AsyncMock())
+    monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *args: vlm)
+    output = tmp_path / "caption-eval"
+    monkeypatch.setattr(sys, "argv", [str(_SAMPLE / "eval/caption.py"), "--output", str(output)])
+    with pytest.raises(SystemExit) as result:
+        runpy.run_path(str(_SAMPLE / "eval/caption.py"), run_name="__main__")
+    assert result.value.code == (0 if failure is None else 1)
+    vlm.close.assert_awaited_once()
+    assert vlm.ask_images.await_count == len(cases)
+    records = [json.loads((output / f'{case["id"]}.json').read_text()) for case in cases]
+    expected_passes = len(cases) if failure is None else len(cases) - 1 if failure == "one_invalid" else 0
+    assert sum("caption" in record for record in records) == expected_passes
+    assert f"Caption contract: {expected_passes}/{len(cases)}" in capsys.readouterr().out
+    assert (output / "prompt.txt").is_file()
 
 
 async def test_capture_voice_gate_does_not_interrupt_or_acknowledge_stop():
@@ -103,8 +134,8 @@ def joined(pid="user", session="session", pts_us=1):
 
 async def speak(demo, text, pid="user", timestamp_us=None, wait=True):
     timestamp_us = time.time_ns() // 1000 if timestamp_us is None else timestamp_us
-    await demo.capture.transcript(
-        VoiceTranscript(text=text, timestamp_us=timestamp_us),
+    await demo.capture.on_input(
+        UserQuery(text=text, timestamp_us=timestamp_us),
         SimpleNamespace(metadata=SimpleNamespace(participant_id=pid), publish=demo.output),
     )
     if wait and (task := demo.capture._tails.get(pid)):
@@ -218,6 +249,82 @@ async def test_finalization_exception_does_not_add_announcements(demo, monkeypat
     ]
 
 
+async def test_runtime_shutdown_during_stop_announcement_preserves_stop_record(demo):
+    from xr_ai_runtime import Agent, RuntimeContext, subscribe
+    from xr_ai_voice import VoiceOutput
+
+    entered = asyncio.Event()
+
+    class BlockedOutput(Agent):
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def output(self, message: VoiceOutput, ctx: RuntimeContext):
+            assert message.text == "Recording stopped."
+            entered.set()
+            await asyncio.Future()
+
+    await demo.capture.receive(joined())
+    await speak(demo, "start recording")
+    state = demo.recorder._sessions["user"]
+    await speak(demo, "Place the cup")
+    runtime = AgentRuntime()
+    runtime.register("capture", demo.capture)
+    runtime.register("output", BlockedOutput())
+    ts = time.time_ns() // 1000
+    try:
+        async with runtime:
+            await runtime.publish(
+                SOP_INPUT_TOPIC, UserQuery(text="Stop recording.", timestamp_us=ts), participant_id="user",
+            )
+            await asyncio.wait_for(entered.wait(), 2)
+            # Use the real runtime cancellation: publication wraps the cancelled
+            # output subscriber in BaseExceptionGroup, not ExceptionGroup.
+            await runtime.stop()
+        await demo.capture.close()
+    finally:
+        await runtime.stop()
+    assert packet(state)["stop_command"] == {"text": "Stop recording.", "timestamp_us": ts}
+    assert packet(state)["status"] == "complete"
+    assert narration(state) == ["Place the cup"]
+
+
+async def test_close_drains_other_participants_after_cancelled_action(demo, monkeypatch):
+    for pid in ("user", "other"):
+        await demo.capture.receive(joined(pid))
+        await speak(demo, "start recording", pid)
+    state = demo.recorder._sessions["other"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = demo.recorder.record_transcript
+
+    async def delayed(*args):
+        entered.set()
+        await release.wait()
+        await original(*args)
+
+    monkeypatch.setattr(demo.recorder, "record_transcript", delayed)
+    # A failed participant tail must not short-circuit draining another one.
+    failed = demo.capture._enqueue("user", lambda: asyncio.sleep(60))
+    failed.cancel()
+    await asyncio.gather(failed, return_exceptions=True)
+    await speak(demo, "Finish placing the cup", "other", wait=False)
+    await asyncio.wait_for(entered.wait(), 2)
+    original_stop = demo.recorder.stop
+
+    async def stop_after_drain():
+        assert demo.capture._tails["other"].done()
+        await original_stop()
+
+    monkeypatch.setattr(demo.recorder, "stop", stop_after_drain)
+    closing = asyncio.create_task(demo.capture.close())
+    try:
+        await asyncio.sleep(0)
+        assert not closing.done()
+    finally:
+        release.set()
+        await asyncio.wait_for(closing, 2)
+    assert packet(state)["status"] == "complete"
+    assert narration(state) == ["Finish placing the cup"]
+
+
 async def test_disconnect_and_old_events_cannot_stop_new_recording(demo):
     await demo.capture.receive(joined())
     await speak(demo, "start recording")
@@ -238,6 +345,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     from sop_sample_worker import app
     from xr_ai_voice._session import _VoiceSession
+    from xr_ai_voice._types import VoiceQuery
 
     receiving = asyncio.Event()
     receiver_cancelled = asyncio.Event()
@@ -303,23 +411,27 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     async def run_session(self, *args, **kwargs):
         assert self.vad.stop_probe_after_s == 0
+        async def speech(text):
+            ts = time.time_ns() // 1000
+            await voices[0]._publish_transcript("user", text, ts)
+            await voices[0]._publish_input(VoiceQuery(participant_id="user", text=text, timestamp_us=ts))
+
         await callbacks["participant"](joined())
         # End the voice run while the participant is still connected.
         # VoiceAgent's real finally path closes only its own transport.
-        await voices[0]._publish_transcript("user", "Start recording.", time.time_ns() // 1000)
+        await speech("Start recording.")
         async with asyncio.timeout(2):
             while not list((demo.root / "app-sessions/sessions").glob("*/packet.json")):
                 await asyncio.sleep(0.001)
             while spoken.await_count < 1:
                 await asyncio.sleep(0.001)
-        await voices[0]._publish_transcript("user", "Place a cup", time.time_ns() // 1000)
+        await speech("Place a cup")
         # Delivered final transcripts must drain into the packet; speech still
         # awaiting STT at transport shutdown is outside this guarantee.
         await voices[0]._transcript_queue.join()
         if stop_command:
-            # Exercise VoiceAgent's real transcript queue, shared transcript
-            # publication, and the app's registered capture subscriber.
-            await voices[0]._publish_transcript("user", "Stop recording.", time.time_ns() // 1000)
+            # Exercise shared transcript publication and accepted command delivery.
+            await speech("Stop recording.")
             async with asyncio.timeout(2):
                 while True:
                     packets = list((demo.root / "app-sessions/sessions").glob("*/packet.json"))
@@ -353,6 +465,138 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
     if stop_command:
         assert spoken.await_args_list[1].args == ("user", "Recording stopped.")
     assert spoken.await_count == (2 if stop_command else 1)
+
+
+@pytest.mark.parametrize("raw_transcript_first", [True, False])
+async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, raw_transcript_first):
+    """Exercise both STT delivery paths through real gate, I/O, runtime, and TTS."""
+    import wave
+
+    from pipecat.frames.frames import EndFrame, OutputAudioRawFrame, TranscriptionFrame, TTSStoppedFrame
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.worker import PipelineWorker
+    from pipecat.processors.frame_processor import FrameProcessor
+    from pipecat.workers.runner import WorkerRunner
+    from xr_ai_voice import VadConfig, VoiceAgent
+    from xr_ai_voice._processors import StreamingTtsProcessor, VoiceGateProcessor, _VoiceIOProcessor
+    from xr_ai_voicegate import load_voice_gate_config
+
+    wav_bytes = io.BytesIO()
+    with wave.open(wav_bytes, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(bytes(640))
+    tts = SimpleNamespace(synthesize=AsyncMock(return_value=wav_bytes.getvalue()), close=AsyncMock())
+    transport = SimpleNamespace(
+        endpoint=Mock(), shutdown=Mock(), send_return_data=AsyncMock(),
+    )
+    voice = VoiceAgent(
+        query_topic=SOP_INPUT_TOPIC, stt=Mock(close=AsyncMock()), tts=tts,
+        vad=VadConfig(stop_probe_after_s=0),
+        voice_gate=load_voice_gate_config(_SAMPLE / "yaml/voice_gate.yaml"),
+        transport=transport, text_input=False,
+    )
+    boundaries = asyncio.Queue()
+    audio_frames = []
+
+    class OutputSink(FrameProcessor):
+        async def process_frame(self, frame, direction):
+            await super().process_frame(frame, direction)
+            if isinstance(frame, OutputAudioRawFrame):
+                audio_frames.append(frame)
+            elif isinstance(frame, TTSStoppedFrame):
+                boundaries.put_nowait(frame)
+            await self.push_frame(frame, direction)
+
+    async def run_session(input_sink, *, on_transcript, **kwargs):
+        delivered = asyncio.Event()
+
+        async def accept(query):
+            await input_sink(query)
+            delivered.set()
+
+        gate = VoiceGateProcessor(cfg=voice._session.voice_gate, tts=tts)
+        voice_io = _VoiceIOProcessor(accept)
+        voice._session._io_processor = voice_io
+        pipeline = Pipeline([
+            gate, voice_io,
+            StreamingTtsProcessor(
+                tts=tts, voice_gate=gate.gate, transport=transport, text_topic=voice._session.text_topic,
+            ),
+            OutputSink(),
+        ])
+        worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+        runner = WorkerRunner()
+        await runner.add_workers(worker)
+        started = asyncio.Event()
+
+        @worker.event_handler("on_pipeline_started")
+        async def on_started(*args):
+            started.set()
+
+        async def utterance(text, acknowledgement=False):
+            ts = time.time_ns() // 1000
+            delivered.clear()
+            if raw_transcript_first:
+                previous_action = demo.capture._tails.get("user")
+                await on_transcript("user", text, ts)
+                await voice._transcript_queue.join()
+                # Raw STT is for shared capture, never a second command path.
+                assert demo.capture._tails.get("user") is previous_action
+            frame = TranscriptionFrame(text=text, user_id="user", timestamp="")
+            frame.transport_source = "user"
+            frame.pts = ts * 1000
+            await worker.queue_frame(frame)
+            await delivered.wait()
+            await asyncio.shield(demo.capture._tails["user"])
+            if acknowledgement:
+                boundary = await boundaries.get()
+                assert boundary.transport_destination == "user"
+            if not raw_transcript_first:
+                previous_action = demo.capture._tails.get("user")
+                await on_transcript("user", text, ts)
+                await voice._transcript_queue.join()
+                assert demo.capture._tails.get("user") is previous_action
+
+        task = asyncio.create_task(runner.run())
+        try:
+            async with asyncio.timeout(5):
+                await started.wait()
+                await demo.capture.receive(joined())
+                for _ in range(2):
+                    await utterance("Start recording.", acknowledgement=True)
+                    state = demo.recorder._sessions["user"]
+                    await utterance("Place a cup")
+                    await utterance("Stop recording.", acknowledgement=True)
+                    await utterance("Stop recording.")  # Already stopped: no duplicate reply.
+                    assert packet(state)["status"] == "complete"
+                    assert narration(state) == ["Place a cup"]
+                await demo.capture.close()
+                await worker.queue_frame(EndFrame())
+                await task
+        finally:
+            if not task.done():
+                await worker.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            voice._session._io_processor = None
+
+    monkeypatch.setattr(voice._session, "run", run_session)
+    runtime = AgentRuntime()
+    runtime.register("voice", voice)
+    runtime.register("capture", demo.capture)
+    async with runtime:
+        await voice.run(runtime)
+
+    expected = ["Recording started.", "Recording stopped."] * 2
+    assert [call.args[0] for call in tts.synthesize.await_args_list] == expected
+    assert audio_frames and all(frame.transport_destination == "user" for frame in audio_frames)
+    echoes = [call.args[0].data.decode() for call in transport.send_return_data.await_args_list
+              if call.args[0].topic == "agent.response"]
+    assert echoes == expected
+    transcripts = [call.args[0].data.decode() for call in transport.send_return_data.await_args_list
+                   if call.args[0].topic == CAPTURE_STT_TOPIC]
+    assert transcripts == ["Start recording.", "Place a cup", "Stop recording.", "Stop recording."] * 2
 
 
 async def test_participants_are_independent(demo):
@@ -440,7 +684,7 @@ async def test_optional_media_capture_is_independent_of_sop_commands(demo, monke
                 ts = time.time_ns() // 1000
                 await service._on_agent_data(DataMessage("user", CAPTURE_STT_TOPIC, ts, text.encode()))
                 await runtime.publish(
-                    VOICE_TRANSCRIPT_TOPIC, VoiceTranscript(text=text, timestamp_us=ts), participant_id="user",
+                    SOP_INPUT_TOPIC, UserQuery(text=text, timestamp_us=ts), participant_id="user",
                 )
                 await asyncio.shield(demo.capture._tails["user"])
             assert service._recorder.has_session("user")  # SOP stop cannot stop shared capture.

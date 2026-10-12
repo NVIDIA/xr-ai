@@ -11,15 +11,15 @@ from pathlib import Path
 from xr_ai_hub import ProcessorEndpoint
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import MultiImageQueryTool
-from xr_ai_voice import UserQuery, VadConfig, VoiceAgent
+from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
-from .lifecycle import CaptureRecording
+from .lifecycle import SOP_INPUT_TOPIC, CaptureRecording
 from .recorder import RecorderAgent
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
@@ -47,7 +47,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     capture = CaptureRecording(recorder)
     endpoint.on_participant(capture.receive)
     voice = VoiceAgent(
-        query_topic=Topic("sop.narration", UserQuery),
+        query_topic=SOP_INPUT_TOPIC,
         stt=stt,
         tts=tts,
         vad=VadConfig(
@@ -65,7 +65,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     runtime = AgentRuntime()
     runtime.register("voice", voice)
     runtime.register("capture", capture)
-    # Final transcripts control SOP boundaries and narration.
+    # The always-on gate delivers commands and narration on one ordered path.
     receiver = asyncio.create_task(endpoint.run())
     try:
         await endpoint.wait_until_running()

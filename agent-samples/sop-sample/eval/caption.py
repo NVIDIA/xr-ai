@@ -39,7 +39,7 @@ def render(objects: list, path: Path) -> None:
     image.save(path)
 
 
-async def evaluate(output: Path, config_path: Path) -> None:
+async def evaluate(output: Path, config_path: Path) -> bool:
     # Never overwrite a previous evaluation's evidence.
     output.mkdir(parents=True, exist_ok=False)
     config = load_config(config_path)
@@ -72,6 +72,7 @@ async def evaluate(output: Path, config_path: Path) -> None:
     finally:
         await vlm.close()
     print(f"Caption contract: {passed}/{len(cases)}. Inspect visual accuracy separately: {output}")
+    return bool(cases) and passed == len(cases)
 
 
 if __name__ == "__main__":
@@ -79,4 +80,4 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True, help="New directory for evaluation evidence")
     parser.add_argument("--config", type=Path, default=_SAMPLE / "yaml/worker.yaml")
     args = parser.parse_args()
-    asyncio.run(evaluate(args.output.resolve(), args.config))
+    raise SystemExit(0 if asyncio.run(evaluate(args.output.resolve(), args.config)) else 1)

@@ -12,12 +12,13 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 from xr_ai_hub import ParticipantEvent
-from xr_ai_runtime import Agent, RuntimeContext, subscribe
-from xr_ai_voice import VOICE_OUTPUT_TOPIC, VOICE_TRANSCRIPT_TOPIC, VoiceOutput, VoiceTranscript
+from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceOutput
 
 from .recorder import RecorderAgent
 
 _COMMAND = re.compile(r"\s*(start|stop)\s+recording[.!?]*\s*", re.IGNORECASE)
+SOP_INPUT_TOPIC = Topic("sop.narration", UserQuery)
 
 
 @dataclass
@@ -64,8 +65,9 @@ class CaptureRecording(Agent):
         try:
             # Preserve the order of start and stop acknowledgements.
             await ctx.publish(VOICE_OUTPUT_TOPIC, VoiceOutput(text=text), participant_id=pid)
-        except Exception:
-            # An unavailable voice output must not prevent saving the packet.
+        except (Exception, BaseExceptionGroup):
+            # Runtime shutdown wraps cancelled output deliveries in a group.
+            # Announcement delivery is best effort, not a prerequisite for saving.
             logger.exception("SOP recording announcement failed pid={!r}", pid)
 
     def _forget(self, pid: str, recording: _Recording) -> None:
@@ -111,8 +113,10 @@ class CaptureRecording(Agent):
 
         return wait()
 
-    @subscribe(VOICE_TRANSCRIPT_TOPIC)
-    async def transcript(self, transcript: VoiceTranscript, ctx: RuntimeContext) -> None:
+    @subscribe(SOP_INPUT_TOPIC)
+    async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
+        # VoiceAgent dispatches accepted input after cancelling prior output.
+        # Responding to the earlier raw-transcript event races that cancellation.
         pid = ctx.metadata.participant_id
         connection = self._connections.get(pid)
         if (
@@ -165,15 +169,18 @@ class CaptureRecording(Agent):
                     await self._recorder.record_transcript(pid, transcript.text, transcript.timestamp_us)
 
             self._enqueue(pid, narrate)
-        # Return promptly: VoiceAgent shares one transcript delivery queue across
-        # participants. This owner drains per-participant writes and boundaries.
+        # Return promptly; this owner drains per-participant writes and boundaries.
 
     async def close(self) -> None:
         self._closed = True
         for connection in self._connections.values():
             connection.cancelled.set()
         try:
-            await asyncio.gather(*self._tails.values())
+            pending = tuple(self._tails.items())
+            results = await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
+            for (pid, _), result in zip(pending, results):
+                if isinstance(result, BaseException):
+                    logger.opt(exception=result).error("SOP recording action failed during shutdown pid={!r}", pid)
         finally:
             try:
                 await self._recorder.stop()
