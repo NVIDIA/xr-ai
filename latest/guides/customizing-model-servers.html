@@ -643,14 +643,21 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </pre></div>
 </div>
 <p>Model servers persist after the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command reports readiness.
-Starting another profile stops persisted services outside the new selection
-before launching it. After changing an image, checkpoint, or launch setting,
-stop the old stack once so it cannot continue serving stale configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+Starting another profile leaves services outside its selection running. Stop
+the old selection explicitly when it is no longer needed or occupies resources
+required by the new deployment. After changing an image, checkpoint, or launch
+setting, stop the old stack once so it cannot continue serving stale
+configuration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json<span class="w"> </span>--stop
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
 </pre></div>
 </div>
+<p>Use the same hardware-profile selection for start and stop, including
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> when it was explicitly selected. Stop before editing
+service ports or replacing the deployment JSON: cleanup reads the current
+managed launch plan and does not remember its prior contents.</p>
 <p>For adapter fields and model capabilities, refer to
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. For server runtime behavior, persistence,
 and NIM credentials, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>

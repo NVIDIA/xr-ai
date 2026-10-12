@@ -454,6 +454,20 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="selected-model-server-cleanup">
+<h2>Selected model-server cleanup<a class="headerlink" href="#selected-model-server-cleanup" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> now stops only managed services in the selected launch
+plan. For custom deployments, pass the same <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> and explicit
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at startup. Startup no longer stops omitted services.
+Before updating the checkout, stop the old deployment using the cleanup
+commands supported by that old checkout; older versions do not support
+combining <code class="docutils literal notranslate"><span class="pre">--models</span></code> with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>. Likewise, stop the selected plan before
+editing its ports or replacing its configuration; no launch history is tracked.
+The updated default launch plan
+cannot stop services omitted from its selection. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for the existing service identity guards and
+their configuration-scoped limitations.</p>
+</section>
 <section id="clef-model-cache-configuration">
 <h2>Clef model cache configuration<a class="headerlink" href="#clef-model-cache-configuration" title="Link to this heading">#</a></h2>
 <p>Remove <code class="docutils literal notranslate"><span class="pre">model_path</span></code> from Clef server YAML files. Clef first resolves the
@@ -800,6 +814,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>

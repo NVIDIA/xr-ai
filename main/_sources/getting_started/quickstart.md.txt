@@ -50,11 +50,17 @@ cd model-server-samples/model-servers
 ```
 
 :::{important}
-After updating, stop any existing model servers before starting this stack:
+Before updating the checkout, stop the model servers using the old checkout
+and its selected configuration:
 
 ```bash
 uv run model_servers --stop
 ```
+
+For a custom deployment, use the cleanup commands supported by that old
+checkout to stop its services. The updated default launch plan cannot stop
+services omitted from its selection. Once using the selected-plan cleanup,
+pass the same `--models PATH` and explicit `--gpu-profile NAME` used at startup.
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
 models and images even though the checked-in configuration now selects
@@ -90,13 +96,16 @@ can stall indefinitely. Refer to the
 {doc}`credentials guide </getting_started/credentials>` for how to set it, or
 pass `--allow-anonymous` to run without one.
 
-To stop all model servers when done:
+To stop the default deployment's managed model services when done:
 
 ```bash
 uv run model_servers --stop
 ```
 
-`--stop` stops every model-server port, so it takes no profile selection.
+For a custom deployment, combine `--models PATH` with `--stop`; use the same
+`--gpu-profile NAME` if you selected one at startup. Cleanup targets only that
+managed launch plan, not every model-server port. Refer to
+{doc}`/components/ai-services` for service guards and configuration changes.
 
 ## Simple VLM example (vision Q&A over voice + text)
 

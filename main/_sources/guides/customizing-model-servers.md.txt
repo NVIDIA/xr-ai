@@ -197,15 +197,23 @@ uv run --project tests pytest -q \
 ```
 
 Model servers persist after the `model_servers` command reports readiness.
-Starting another profile stops persisted services outside the new selection
-before launching it. After changing an image, checkpoint, or launch setting,
-stop the old stack once so it cannot continue serving stale configuration:
+Starting another profile leaves services outside its selection running. Stop
+the old selection explicitly when it is no longer needed or occupies resources
+required by the new deployment. After changing an image, checkpoint, or launch
+setting, stop the old stack once so it cannot continue serving stale
+configuration:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project model-server-samples/model-servers model_servers \
+  --models model-server-samples/model-servers/yaml/models.my-stack.json --stop
 uv run --project model-server-samples/model-servers \
   model_servers --models model-server-samples/model-servers/yaml/models.my-stack.json
 ```
+
+Use the same hardware-profile selection for start and stop, including
+`--gpu-profile NAME` when it was explicitly selected. Stop before editing
+service ports or replacing the deployment JSON: cleanup reads the current
+managed launch plan and does not remember its prior contents.
 
 For adapter fields and model capabilities, refer to
 {doc}`/reference/agent-sdk-models`. For server runtime behavior, persistence,
