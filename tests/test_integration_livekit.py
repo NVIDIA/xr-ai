@@ -29,7 +29,7 @@ from typing import AsyncIterator
 import pytest
 from livekit import rtc
 
-from _helpers_subprocess import pick_free_port
+from _helpers_subprocess import pick_free_port, pick_free_udp_port
 from device_io_hub.ipc                       import ConnectorEndpoint
 from device_io_hub.transport.livekit         import _docker as _docker_mod
 from device_io_hub.transport.livekit         import _tls as _tls_mod
@@ -93,7 +93,7 @@ def _build_cfg() -> LiveKitConnectorConfig:
     """Build a config bound to free ports and a unique room name."""
     lk_ws  = pick_free_port(7880)
     lk_tcp = pick_free_port(7881)
-    lk_udp = pick_free_port(7882)
+    lk_udp = pick_free_udp_port()
     return LiveKitConnectorConfig(
         api_key="devkey",
         api_secret="devsecret-xr-livekit-prototype-2026",

@@ -34,6 +34,31 @@ def _config():
     )
 
 
+@pytest.mark.parametrize("enabled,key", [(True, None), (True, "test-token"), (False, "test-token")])
+async def test_decision_health_auth_and_disabled_probe(monkeypatch, enabled, key):
+    if key is None:
+        monkeypatch.delenv("CLEF_TEST_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("CLEF_TEST_TOKEN", key)
+    seen = []
+
+    def handle(request):
+        seen.append(request)
+        assert str(request.url) == "https://clef.test/health"
+        assert request.headers.get("authorization") == (f"Bearer {key}" if key else None)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle), trust_env=False) as http:
+        service = _systemone._SystemOneDecision(
+            base_url="https://clef.test", model_name="clef", api_key_env="CLEF_TEST_TOKEN",
+            timeout=9, health_check=enabled, health_path="/health", client=http,
+        )
+        assert await service.health()
+        await service.close()
+        assert not http.is_closed
+    assert len(seen) == int(enabled)
+
+
 @pytest.mark.asyncio
 async def test_make_decision_resolves_config_and_validates_systemone_wire_contract(monkeypatch) -> None:
     config = _config()
@@ -45,6 +70,8 @@ async def test_make_decision_resolves_config_and_validates_systemone_wire_contra
     def handle(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         if request.url.path == "/health":
+            assert request.url.host == "clef.test"
+            assert request.headers["authorization"] == "Bearer test-token"
             return httpx.Response(200)
         assert request.url.path == "/v1/systemone"
         assert request.headers["authorization"] == "Bearer test-token"

@@ -51,7 +51,7 @@ class _FakeASRService:
         self.calls: list[tuple[bytes, _FakeRecognitionConfig]] = []
         self.transcripts = ["hello ", "world"]
 
-    def offline_recognize(self, audio, config):
+    def offline_recognize(self, audio, config, future=False):
         self.calls.append((audio, config))
         results = [
             types.SimpleNamespace(
@@ -60,7 +60,13 @@ class _FakeASRService:
             for t in self.transcripts
         ]
         results.append(types.SimpleNamespace(alternatives=[]))
-        return types.SimpleNamespace(results=results)
+        response = types.SimpleNamespace(results=results)
+        if future:
+            from concurrent.futures import Future
+            call = Future()
+            call.set_result(response)
+            return call
+        return response
 
 
 class _FakeSynthesisService:
@@ -70,11 +76,12 @@ class _FakeSynthesisService:
         self.pcm = b"\x01\x02" * 32
 
     def synthesize_online(self, text, voice_name=None, language_code="en-US",
-                          encoding=None, sample_rate_hz=44100):
+                          encoding=None, sample_rate_hz=44100, custom_dictionary=None):
         self.calls.append({
             "text": text, "voice_name": voice_name,
             "language_code": language_code, "encoding": encoding,
             "sample_rate_hz": sample_rate_hz,
+            "custom_dictionary": custom_dictionary,
         })
         half = len(self.pcm) // 2
         return _ControlledAudio([self.pcm[:half], self.pcm[half:]])
@@ -243,6 +250,7 @@ async def test_tts_synthesize_wraps_pcm_in_wav(tmp_path, riva_stub) -> None:
     assert call["voice_name"] == "Magpie-Multilingual.EN-US.Sofia"
     assert call["language_code"] == "en-US"
     assert call["sample_rate_hz"] == 22050
+    assert call["custom_dictionary"] == {}
     with wave.open(io.BytesIO(data), "rb") as wf:
         assert wf.getframerate() == 22050
         assert wf.getnchannels() == 1
@@ -428,6 +436,54 @@ async def test_riva_stream_releases_rpc_and_blocking_read(tmp_path, riva_stub, a
         assert call.cancelled.is_set()
         if action != "close":
             assert call.read_finished.is_set()
+
+
+@pytest.mark.parametrize("action", ["timeout", "cancel"])
+async def test_riva_recognition_joins_native_read_before_returning(tmp_path, riva_stub, action):
+    class BlockingRecognition:
+        def __init__(self):
+            self.started = threading.Event()
+            self.cancelled = threading.Event()
+            self.release = threading.Event()
+            self.finished = threading.Event()
+
+        def cancel(self):
+            self.cancelled.set()
+
+        def result(self):
+            self.started.set()
+            try:
+                assert self.cancelled.wait(5), "RPC was not cancelled"
+                assert self.release.wait(5), "test did not release native read"
+                raise RuntimeError("RPC cancelled")
+            finally:
+                self.finished.set()
+
+    cfg = load_models_config(_write(tmp_path, _NIM_SPEECH_YAML))
+    async with make_stt(cfg, "stt") as client:
+        call = BlockingRecognition()
+        client._asr.offline_recognize = lambda *args, **kwargs: call
+        task = asyncio.create_task(client.transcribe(
+            b"\x01\x00", sample_rate=16000, timeout=0.1 if action == "timeout" else 5,
+        ))
+        try:
+            assert await asyncio.to_thread(call.started.wait, 2)
+            if action == "cancel":
+                task.cancel()
+            assert await asyncio.to_thread(call.cancelled.wait, 2)
+            assert not task.done()
+            assert not call.finished.is_set()
+            if action == "cancel":
+                task.cancel()
+                await asyncio.sleep(0)
+                assert not task.done()
+            call.release.set()
+            with pytest.raises(TimeoutError if action == "timeout" else asyncio.CancelledError):
+                await task
+            assert call.finished.is_set()
+        finally:
+            call.release.set()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.parametrize("client_mode", ["stream", "buffered", "direct"])
