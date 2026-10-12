@@ -184,6 +184,8 @@ async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
             )])
 
         def SynthesizeOnline(self, requests, context):
+            if isinstance(requests, tts.SynthesizeSpeechRequest):
+                requests = (requests,)
             for request in requests:
                 calls.append(("tts", request, dict(context.invocation_metadata())))
                 yield tts.SynthesizeSpeechResponse(audio=pcm[:1])
