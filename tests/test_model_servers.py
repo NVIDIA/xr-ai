@@ -52,15 +52,15 @@ _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
 @pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
-def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, gpu_profile) -> None:
+def test_default_profile_uses_shared_services(monkeypatch: pytest.MonkeyPatch, gpu_profile) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
 
     processes, credentials = _model_servers._build_processes()
 
     assert [process.name for process in processes] == [
-        "stt", "tts", "omni", "vlm", "embedding",
+        "stt", "tts", "omni", "vlm", "embedding", "clef",
     ]
-    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109, 8120]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -245,19 +245,15 @@ def test_stop_fails_when_any_service_remains(
 
 
 @pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
-def test_clef_profile_manages_full_stack_and_stops_only_its_receipt(
+def test_default_profile_manages_clef_and_stops_only_its_receipt(
     monkeypatch: pytest.MonkeyPatch,
     gpu_profile: str,
 ) -> None:
-    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.clef.json"
+    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     deployment = json.loads(profile.read_text(encoding="utf-8"))["models"]
 
     assert all(model["deployment"]["ownership"] == "managed" for model in deployment.values())
     assert deployment["decision"]["deployment"]["service"] == "clef"
-    assert "decision" not in json.loads(
-        (_REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json")
-        .read_text(encoding="utf-8")
-    )["models"]
 
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
     processes, credentials = _model_servers._build_processes(profile)
@@ -267,8 +263,8 @@ def test_clef_profile_manages_full_stack_and_stops_only_its_receipt(
     assert credentials == ()
     assert Path(next(p for p in processes if p.name == "clef").config).parent.name == gpu_profile
 
-    default_profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
-    with _stack_ownership._stack_owner(default_profile, create=True) as foreign_owner:
+    other_profile = _REPO_ROOT / "other-profile.json"
+    with _stack_ownership._stack_owner(other_profile, create=True) as foreign_owner:
         pass
     with _stack_ownership._stack_owner(profile, create=True) as owner:
         pass

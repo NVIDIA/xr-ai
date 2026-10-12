@@ -33,22 +33,19 @@ selects the deployment profile independently.
 ## Start from a shipped deployment profile
 
 The default `yaml/models.default.json` profile starts local Parakeet STT,
-Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
-services. Run `model_servers` without `--models` to use it.
-
-The opt-in `yaml/models.clef.json` profile manages those same services plus
-Clef on port 8120. It does not reuse listeners from another profile. Stop a
-currently running profile before switching, and use the same `--models` path
-for shutdown that you used for startup. The default profile remains Clef-free.
-Clef's BF16 weights historically allocate about 18 GiB; the combined profile's
-GPU placements have not been qualified to fit on a busy GPU. Check capacity
-before starting. From `model-server-samples/model-servers/`:
+Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, Nemotron embedding, and Clef
+on port 8120. Clef's BF16 weights historically allocate about 18 GiB; the
+checked-in GPU placements have not been qualified to fit the complete stack on
+a busy GPU. Check capacity before starting. From
+`model-server-samples/model-servers/`:
 
 ```bash
+uv run model_servers
 uv run model_servers --stop
-uv run model_servers --models yaml/models.clef.json
-uv run model_servers --stop --models yaml/models.clef.json
 ```
+
+For a custom deployment, pass the same `--models` path when starting and
+stopping it.
 
 For NIM deployment, configure independently deployed endpoints with the same
 SDK factories. Refer to {doc}`deploying-with-nim`. The `model-servers` service

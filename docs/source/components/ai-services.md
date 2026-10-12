@@ -28,7 +28,7 @@ recorded video, and document retrieval.
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
-| `services/clef-server/` | `model_servers --models yaml/models.clef.json` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
+| `services/clef-server/` | `model_servers` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
@@ -36,14 +36,12 @@ recorded video, and document retrieval.
 (clef-decision-service)=
 ## Clef decision service
 
-The opt-in shared `model-servers` profile `yaml/models.clef.json` manages the
-default local STT, TTS, Omni, VLM, and embedding services together with
-`services/clef-server/` on `127.0.0.1:8120`. It does not reuse endpoints owned
-by another profile. The default profile does not start Clef. The Clef BF16
+The default shared `model-servers` profile starts local STT, TTS, Omni, VLM,
+embedding, and `services/clef-server/` on `127.0.0.1:8120`. The service's BF16
 weights historically allocate about 18 GiB; the checked-in GPU placements do
-not qualify the combined stack to fit on a busy GPU. The service's
+not qualify the complete stack to fit on a busy GPU. The service's
 `clef_server.yaml` does not reserve memory. See
-{doc}`/guides/customizing-model-servers` for profile selection.
+{doc}`/guides/customizing-model-servers` before starting the local stack.
 
 The service exposes the upstream joint-schema model through the typed SystemOne
 contract used by `xr_ai_models.make_decision`. It loads the pinned release's
@@ -56,7 +54,7 @@ types, model-name mismatches, oversized bodies, and tokenized inputs above
 `max_length` rather than silently truncating them. An empty question instruction
 uses the upstream question-ID fallback.
 
-The model revision is pinned in the profile YAML. The service resolves that
+The model revision is pinned in the server YAML. The service resolves that
 snapshot from the configured Hugging Face `model_cache` first, then downloads
 on a cache miss. With `HF_HUB_OFFLINE=1`, a missing snapshot fails before model
 loading with the model, revision, and cache directory. Offline startup therefore
@@ -79,10 +77,10 @@ Health also includes a deterministic fingerprint of the active non-secret
 configuration used for reuse checks.
 
 The shared launcher refuses to adopt another profile's listener or an unrelated
-listener on the same port. Use the same profile for startup and shutdown. From
-`model-server-samples/model-servers/`, run
-`uv run model_servers --stop --models yaml/models.clef.json` to stop only
-resources attributed to the Clef-enabled profile. Clef shutdown waits for the owned process to exit and
+listener on the same port. The default profile starts and stops the local model
+stack, including Clef. From `model-server-samples/model-servers/`, run
+`uv run model_servers --stop` to stop resources attributed to the default
+deployment. Clef shutdown waits for the owned process to exit and
 drain native work; on Linux, termination and timeout escalation remain tied to
 the same verified process handle. It does not stop an unrelated listener or
 container. The checked-in configuration uses `cuda:0`, BF16, 4096 tokens, and a

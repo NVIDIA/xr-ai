@@ -7,7 +7,7 @@
 
 This sample starts the reusable inference services consumed by the agent
 samples. The default deployment includes Parakeet STT, Pocket TTS, Nemotron-3
-Nano Omni, Cosmos3 Nano Reasoner, and the Nemotron embedding model.
+Nano Omni, Cosmos3 Nano Reasoner, the Nemotron embedding model, and Clef.
 
 The launcher waits for every selected service to become healthy. It then prints
 the `All processes ready` banner and exits, while the services remain running
@@ -23,12 +23,11 @@ Model configuration has two layers:
 | Which services and endpoints belong to the stack | `yaml/models.default.json` or a custom JSON path |
 | Model, port, GPU placement, memory budget, cache, and runtime options | `yaml/<gpu-profile>/*.yaml` |
 
-`yaml/models.clef.json` is opt-in: it manages the complete default stack plus
-Clef on port 8120. It does not reuse endpoints from another profile. The default
-profile remains Clef-free. The Clef BF16 weights historically allocate about
-18 GiB; the checked-in GPU placements do not qualify the combined stack to fit
-on a busy GPU. Check available capacity before starting, and edit
-`yaml/<gpu-profile>/clef_server.yaml` only to use an explicitly suitable device.
+The default profile manages Clef on port 8120 with the rest of the local model
+services. Clef's BF16 weights historically allocate about 18 GiB; the checked-in
+GPU placements do not qualify the complete stack to fit on a busy GPU. Check
+available capacity before starting, and edit `yaml/<gpu-profile>/clef_server.yaml`
+only to use an explicitly suitable device.
 
 The launcher detects the GPU profile and reads its YAML automatically. To tune
 a server, edit the matching file before starting the stack. For example,
@@ -64,12 +63,11 @@ uv sync
 uv run model_servers
 ```
 
-Use the Clef-enabled profile to start the full stack, including Clef, on a GPU
-with enough available memory. Stop a currently running default profile first:
+Start the default deployment to launch the local model services and Clef. Check
+that enough GPU memory is available for the complete stack:
 
 ```bash
-uv run model_servers --stop
-uv run model_servers --models yaml/models.clef.json
+uv run model_servers
 ```
 
 Alternatively, run the source file directly after synchronization:
@@ -81,15 +79,13 @@ uv run main.py
 The first cold start downloads model weights and can take tens of minutes.
 Later starts can reuse a previously working cache without network access; refer to
 [starting without network access](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#starting-model-services-without-network-access).
-Stop only resources attributed to the selected deployment by passing the same
-profile used to start them:
+Stop resources attributed to the default deployment with:
 
 ```bash
-uv run model_servers --stop --models yaml/models.clef.json
+uv run model_servers --stop
 ```
 
-Without `--models`, `--stop` selects the default profile. It does not stop
-resources owned by a different profile.
+For a custom deployment, pass the same `--models PATH` on start and stop.
 Refer to the
 [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html) and
 configure the required credentials before starting the stack.
