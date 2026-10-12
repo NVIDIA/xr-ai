@@ -17,9 +17,16 @@ uv run --project services/device-io-hub device_io_hub \
   --config services/device-io-hub/device_io_hub.yaml
 ```
 
-Configuration comes from a `device_io_hub.yaml` file. When none is found,
-configuration defaults are used. The loader generates a fresh LiveKit key and
-secret when both are missing or blank. `LIVEKIT_API_KEY` and
+Configuration comes from `device_io_hub.yaml` in the working directory;
+pass `--config <path>` to select another file. A missing default file or an
+empty YAML document uses defaults and logs the fallback. An explicitly
+supplied missing file fails. Unknown top-level and `video_recording` keys
+are ignored with warnings naming the source file, section, unknown keys,
+and accepted keys. The top-level configuration and a non-null
+`video_recording` section must be YAML mappings.
+
+The loader generates a fresh LiveKit key and secret when both are missing or
+blank. `LIVEKIT_API_KEY` and
 `LIVEKIT_API_SECRET` override YAML values when a fixed pair is needed.
 `services/device-io-hub/device_io_hub.yaml` is the reference copy documenting
 every field; each sample ships its own copy under its `yaml/` directory.
