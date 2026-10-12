@@ -24,11 +24,6 @@ from ._config import ServerConfig, identity
 
 def _resolve_model_directory(config: ServerConfig) -> Path:
     """Resolve the cached Clef release before trying the Hub."""
-    if config.model_path is not None:
-        if not config.model_path.is_dir():
-            raise ValueError(f"model_path is not a directory: {config.model_path}")
-        return config.model_path
-
     from huggingface_hub import constants, snapshot_download
     from huggingface_hub.utils import LocalEntryNotFoundError
 

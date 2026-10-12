@@ -21,7 +21,6 @@ DEFAULT_REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
 class ServerConfig:
     model_name: str
     model_revision: str
-    model_path: Path | None
     model_cache: Path
     host: str
     port: int
@@ -36,7 +35,6 @@ def identity(config: ServerConfig) -> dict[str, str]:
     configuration = {
         "model_name": config.model_name,
         "model_revision": config.model_revision,
-        "model_path": str(config.model_path) if config.model_path is not None else None,
         "model_cache": str(config.model_cache),
         "host": config.host,
         "port": config.port,
@@ -76,15 +74,10 @@ def load_config(path: Path) -> ServerConfig:
 
     model_name = _string(raw, "model_name", DEFAULT_MODEL)
     revision = _string(raw, "model_revision", DEFAULT_REVISION)
-    model_path_value = raw.get("model_path")
-    if model_path_value is not None and (not isinstance(model_path_value, str) or not model_path_value.strip()):
-        raise ValueError("model_path must be a non-empty path when supplied")
-    model_path = resolve_path(model_path_value) if model_path_value else None
 
     return ServerConfig(
         model_name=model_name,
         model_revision=revision,
-        model_path=model_path,
         model_cache=resolve_path(_string(raw, "model_cache", "../../models")),
         host=_string(raw, "host", "127.0.0.1"),
         port=_integer(raw, "port", 8120, minimum=1, maximum=65535),
