@@ -181,9 +181,12 @@ class _SpeakerSttProcessor(FrameProcessor):
             text = event["text"]
             if self._cfg._could_be_control(text):
                 return
-            stop = bool(STOP_RE.match(text))
-            if self._on_partial is not None:
-                stop = await self._on_partial(pid, text) or stop
+            # The assembled pipeline owns STOP policy, including its opt-out.
+            # Only standalone processors fall back to default recognition.
+            stop = (
+                await self._on_partial(pid, text)
+                if self._on_partial is not None else bool(STOP_RE.match(text))
+            )
             if not stop or pid in self._interrupted:
                 return
             self._interrupted.add(pid)

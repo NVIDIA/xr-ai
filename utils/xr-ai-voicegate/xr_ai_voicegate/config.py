@@ -62,10 +62,11 @@ class VoiceGateConfig:
     stop_commands_enabled: bool = True
     """Whether STOP recognition interrupts speech or invokes the stop handler.
 
-    Applies to early probes and final transcripts, including conversations
-    without a wake phrase. Disable for passive narration: STOP words then
-    follow normal transcript and query gating without a STOP interruption or
-    acknowledgement. Probes may remain enabled for wake acknowledgements.
+    Applies to early probes, streaming partials, and final transcripts,
+    including conversations without a wake phrase. Disable for passive
+    narration: STOP words then follow normal transcript and query gating
+    without a STOP interruption or acknowledgement. Probes may remain enabled
+    for wake acknowledgements.
     This does not disable other conversation controls or speech-start events.
     Scoped application commands such as "stop recording" remain queries.
     """
