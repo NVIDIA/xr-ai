@@ -62,31 +62,27 @@ cutoff still bounds resolver-selected versions; moving it remains a dedicated
 dependency refresh because it can change unrelated Python and web packages.
 
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
-`dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
-every package in the repository, so
-its lock records the complete resolved runtime dependency set at the
-qualification cutoff for dependency analysis tooling; build-system requirements
-such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
-and `uv.lock` describe the repository as of the last cutoff change or targeted
-dependency security refresh. Regenerate and commit both files for either event;
-ordinary project changes remain deferred to the next refresh. A release yanked
-from the index changes the next fresh resolution.
+`dependency-manifest/uv.lock`: the manifest aggregates repository projects except
+those explicitly listed in the generator's `EXCLUDED_PROJECTS`. Speaker STT is
+excluded because its pinned NeMo Speech revision and lhotse artifact conflict
+with the other ASR services' sources; validate its local lock separately. The
+committed lock records the resolved runtime dependency set at the qualification
+cutoff for dependency analysis tooling. Build-system requirements such as
+`hatchling` are not part of a uv lock. Regenerate and commit the manifest and lock
+for a cutoff change, targeted security refresh, or project metadata change.
+A release yanked from the index changes the next fresh resolution.
+
 `uv run --script .github/scripts/generate_dependency_manifest.py` generates both
-files and always resolves with the uv version pinned inside the script,
-because lock output varies across uv releases. For a targeted security refresh,
-add `--existing-projects` to retain the committed snapshot's project membership;
-enrolling new environments remains part of a full dependency refresh.
-The manifest's `requires-python`
-is the range of interpreters every project accepts, so a project with a narrower
-declaration narrows the manifest. vLLM service projects resolve in a `vllm`
-extra, while all other projects resolve in a `repository` extra. Those extras
-are mutually exclusive because their PyNvVideoCodec and protobuf constraints
-are incompatible; the universal lock inventories both real environments
-without overriding either one. The pre-commit hook retains snapshot membership
-and runs the script when
-`uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
-with `--check --existing-projects` on changes that touch `uv.toml`,
-`dependency-manifest/`, or the generator scripts. Nothing installs from the directory.
+files with the uv version pinned inside the script because lock output varies
+across uv releases. The manifest's `requires-python` is the range of interpreters
+every included project accepts, so a narrower declaration narrows the manifest.
+vLLM service projects resolve in a `vllm` extra; all other included projects
+resolve in a `repository` extra. These extras are mutually exclusive because
+their PyNvVideoCodec and protobuf constraints are incompatible. The universal
+lock inventories both environments without overriding either one. Pre-commit
+regenerates the inventory on changes to project metadata, `uv.toml`, the manifest,
+or its generator scripts. The `dependency-manifest` workflow verifies both files
+with `--check` on those changes. Nothing installs from the directory.
 
 The same directory holds the client lockfiles. Refresh an affected client lock
 with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
@@ -245,7 +241,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `multidict>=6.9.1`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -466,7 +461,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.0.2`
@@ -844,7 +838,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+    - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
+    - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)

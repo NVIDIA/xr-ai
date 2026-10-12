@@ -4,8 +4,8 @@
 name: dependency-manifest
 
 # dependency-manifest/ holds the committed, fully resolved dependency set as of
-# the last uv.toml cutoff change, so ordinary pull requests never trigger these
-# checks; only the cutoff, the manifest, or the files that generate it do. Each
+# the last uv.toml cutoff change or targeted security refresh. The
+# checks also run on project metadata changes to enforce enrollment. Each
 # job regenerates one lock the way DEPENDENCIES.md describes and fails on drift.
 
 on:
@@ -13,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'uv.toml'
+      - '**/pyproject.toml'
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
@@ -21,6 +22,7 @@ on:
   pull_request:
     paths:
       - 'uv.toml'
+      - '**/pyproject.toml'
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
@@ -52,7 +54,7 @@ jobs:
             uv.toml
 
       - name: Check manifest and Python lockfile
-        run: uv run --script .github/scripts/generate_dependency_manifest.py --check --existing-projects
+        run: uv run --script .github/scripts/generate_dependency_manifest.py --check
 
   android-locks:
     name: android lockfiles

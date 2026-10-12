@@ -14,7 +14,8 @@ dependencies = [
     "multidict>=6.9.1",
     # CVE-2026-102598: reject Windows device names with empty ADS markers.
     "werkzeug>=3.1.9",
-    # CVE-2026-58659: restrict checkpoint instantiators in this distribution.
+    # CVE-2026-58659: restrict pytorch-lightning checkpoint instantiators.
+    # NeMo also loads the separately pinned lightning 2.4.0, which remains unpatched.
     "pytorch-lightning>=2.6.6",
     # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
     "urllib3>=2.8.0",

@@ -133,11 +133,11 @@ When preparing a repository sample, refer to
   per-project lockfiles; the locks under `dependency-manifest/` are the
   exception, and `uv.lock` there is produced by
   `uv run --script .github/scripts/generate_dependency_manifest.py`
-  (pre-commit runs it when `uv.toml` is staged). Regenerate
+  (pre-commit also runs it for project metadata changes). Regenerate
   `dependency-manifest/` for a `uv.toml` qualification refresh or a targeted
-  dependency security refresh, and commit the generated project and lock in
-  the same change. Do not regenerate it for ordinary dependency or project
-  changes, even when a new project is missing from it.
+  dependency security refresh or project metadata change, and commit the
+  generated project and lock in the same change. The generator explicitly
+  excludes incompatible projects; validate their local locks separately.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.

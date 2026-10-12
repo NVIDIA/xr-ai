@@ -10,8 +10,6 @@ name = "pocket-tts-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
-    # CVE-2026-104874: fixed C-extension items-view reference leak.
-    "multidict>=6.9.1",
     # CVE-2026-97687 and CVE-2026-97689: fixed HTTP transport.
     "urllib3>=2.8.0",
     "anyio>=4.0",
