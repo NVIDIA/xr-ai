@@ -24,29 +24,23 @@ exit codes, and process ownership.
 (dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
 ### Docker socket permission denied during model-server cleanup
 
-**Symptom:** launching `model_servers` prints a line like this for each port
+**Symptom:** stopping `model_servers` prints a line like this for a selected port
 whose ownership cannot be inspected:
 
 ```text
 [<service>] cannot inspect :<port> ownership — not stopping
 ```
 
-It can then print `No persistent servers found running` before failing with:
-
-```text
-RuntimeError: could not stop persistent servers outside the profile
-```
-
-Running `uv run model_servers --stop` encounters the same inspection failure
-but ends with:
+It can then print `No persistent servers found running` before ending with:
 
 ```text
 model-servers: failed to stop persistent servers: one or more persistent servers are still running
 ```
 
 **Cause:** the login session lacks Docker socket access. This can affect DGX
-Spark and other Linux model-server hosts. Startup checks for persistent servers
-outside the selected profile before launching new ones. When Docker inspection
+Spark and other Linux model-server hosts. Cleanup checks only managed services
+in the selected deployment; startup does not sweep omitted services. When
+Docker inspection
 fails, the empty-result message does not establish that no servers are running,
 and cleanup aborts because ownership could not be verified.
 
@@ -583,6 +577,12 @@ persistence*.
 cd xr-ai
 uv run --project model-server-samples/model-servers model_servers --stop
 ```
+
+For a custom deployment, add the same `--models PATH` and any explicit
+`--gpu-profile NAME` used at launch. This stops the selected managed services,
+not every model server on the host. Stop before changing the old configuration
+so its service ports can still be resolved. A recognized matching service on
+a selected port can be stopped even if another invocation started it.
 
 For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
 group, waits up to 20 s, then sends `SIGKILL`. Pocket TTS remains in that group

@@ -5,6 +5,15 @@
 
 # Release migration
 
+## Selected model-server cleanup
+
+`model_servers --stop` now stops only managed services in the selected launch
+plan. For custom deployments, pass the same `--models PATH` and explicit
+`--gpu-profile NAME` used at startup. Startup no longer stops omitted services.
+Stop the old selection before editing its ports or replacing its configuration;
+no launch history is tracked. Refer to {doc}`/components/ai-services` for the
+existing service identity guards and their configuration-scoped limitations.
+
 ## Clef model cache configuration
 
 Remove `model_path` from Clef server YAML files. Clef first resolves the

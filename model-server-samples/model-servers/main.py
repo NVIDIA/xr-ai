@@ -26,7 +26,7 @@ defaults.
 How to run:
     uv run --project model-server-samples/model-servers model_servers
 
-To stop all model servers:
+To stop the selected model services:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
@@ -147,23 +147,11 @@ def _build_processes(
     return processes, deployment.required_credentials
 
 
-def _known_service_ports() -> list[tuple[str, int]]:
-    """Discover cleanup targets from the YAML files that own their ports."""
-    targets: set[tuple[str, int]] = set()
-    for service, (project, _, config_base) in _MODEL_SERVICES.items():
-        configs = list((_BASE / "yaml").glob(f"*/{config_base}*.yaml"))
-        configs.append((_BASE / project / f"{config_base}.yaml").resolve())
-        for config in configs:
-            if config.is_file() and (port := _read_service_port(config)) is not None:
-                targets.add((service, port))
-    return sorted(targets)
-
-
-def _stop_models() -> None:
+def _stop_models(processes: list[Process]) -> None:
     # Surface docker/ss/lsof failures so operators see why --stop aborted
     # instead of a silent traceback exit.
     try:
-        if not stop_persistent_servers(_known_service_ports()):
+        if not stop_persistent_servers([(process.name, process.port) for process in processes]):
             raise RuntimeError("one or more persistent servers are still running")
     except Exception as exc:
         raise SystemExit(
@@ -171,33 +159,15 @@ def _stop_models() -> None:
         ) from exc
 
 
-def _stop_unselected_services(processes: list[Process]) -> None:
-    """Free capacity held by services outside the selected profile.
-
-    Stops by port, keeping any port the profile uses: a persistent server
-    already holding a selected port is reused (or evicted by the incoming
-    wrapper when a different container owns it).
-    """
-    selected_ports = {process.port for process in processes}
-    unselected = [
-        (service, port)
-        for service, port in _known_service_ports()
-        if port not in selected_ports
-    ]
-    if not stop_persistent_servers(unselected):
-        raise RuntimeError("could not stop persistent servers outside the profile")
-
-
 def run() -> None:
     setup_logging("orchestrator", namespace="model-servers")
 
     p = argparse.ArgumentParser(description=__doc__)
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument(
+    p.add_argument(
         "--stop", action="store_true",
-        help="Stop every persisted model-server stack and exit.",
+        help="Stop managed services in the selected model deployment and exit.",
     )
-    mode.add_argument(
+    p.add_argument(
         "--models", type=_models_path, metavar="PATH",
         help="Custom local deployment JSON; defaults to yaml/models.default.json.",
     )
@@ -211,10 +181,6 @@ def run() -> None:
     )
     ns = p.parse_args()
 
-    if ns.stop:
-        _stop_models()
-        return
-
     try:
         processes, credentials = _build_processes(ns.models, ns.gpu_profile)
     except GPUInventoryError as exc:
@@ -225,12 +191,15 @@ def run() -> None:
     except ValueError as exc:
         p.error(str(exc))
 
+    if ns.stop:
+        _stop_models(processes)
+        return
+
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         require_credentials(credential)
-    _stop_unselected_services(processes)
     run_stack(processes, _BASE, exit_after_ready=True)
 
 

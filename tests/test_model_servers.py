@@ -7,11 +7,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import os.path
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from xr_ai_vllm import _docker
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAIN_PATH = _REPO_ROOT / "model-server-samples/model-servers/main.py"
@@ -112,17 +114,6 @@ def test_read_service_port_rejects_invalid_values(
         _model_servers._read_service_port(config)
 
 
-def test_known_ports_are_discovered_from_service_yaml() -> None:
-    assert set(_model_servers._known_service_ports()) == {
-        ("stt", 8103),
-        ("tts", 8105),
-        ("agent-llm", 8107),
-        ("omni", 8108),
-        ("vlm", 8100),
-        ("embedding", 8109),
-    }
-
-
 @pytest.mark.parametrize(
     ("service", "config_name", "gpu"),
     [
@@ -220,7 +211,7 @@ def test_repository_yaml_paths_exclude_apps_and_virtual_environments(
     assert _repository_yaml_paths(tmp_path) == sorted((included, nested_apps))
 
 
-def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
@@ -228,12 +219,12 @@ def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda services: stopped.extend(services) or True,
     )
 
-    _model_servers._stop_models()
+    processes, _ = _model_servers._build_processes(gpu_profile="dual_48G_ada")
+    _model_servers._stop_models(processes)
 
     assert set(stopped) == {
         ("stt", 8103),
         ("tts", 8105),
-        ("agent-llm", 8107),
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
@@ -250,24 +241,7 @@ def test_stop_fails_when_any_service_remains(
     )
 
     with pytest.raises(SystemExit, match="one or more persistent servers"):
-        _model_servers._stop_models()
-
-
-def test_starting_profile_stops_unselected_services(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-    stopped: list[tuple[str, int]] = []
-    monkeypatch.setattr(
-        _model_servers,
-        "stop_persistent_servers",
-        lambda services: stopped.extend(services) or True,
-    )
-
-    processes, _ = _model_servers._build_processes()
-    _model_servers._stop_unselected_services(processes)
-
-    assert {port for _, port in stopped} == {8107}
+        _model_servers._stop_models([])
 
 
 @pytest.mark.parametrize(
@@ -285,7 +259,6 @@ def test_cli_selects_requested_profile(
     selected: list[Path | None] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
@@ -302,7 +275,6 @@ def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> Non
     selected: list[tuple[Path | None, str | None]] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers,
         "_build_processes",
@@ -423,7 +395,6 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
         _model_servers, "require_credentials",
         lambda name, **kw: required.append(name),
     )
-    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
         _model_servers, "_build_processes",
         lambda _selection, _gpu_profile=None: ([], ("CUSTOM_API_KEY",)),
@@ -436,7 +407,7 @@ def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     assert required == ["HF_TOKEN", "CUSTOM_API_KEY"]
 
 
-def test_cli_aborts_when_unselected_services_cannot_stop(
+def test_cli_start_does_not_stop_unselected_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started: list[bool] = []
@@ -450,10 +421,8 @@ def test_cli_aborts_when_unselected_services_cannot_stop(
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
     monkeypatch.setattr(sys, "argv", ["model_servers"])
 
-    with pytest.raises(RuntimeError, match="could not stop persistent servers"):
-        _model_servers.run()
-
-    assert started == []
+    _model_servers.run()
+    assert started == [True]
 
 
 @pytest.mark.parametrize("moe_backend", ["cutlass", None])
@@ -704,15 +673,72 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
         assert "kv_cache_memory_bytes" not in config
 
 
-def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_uses_same_selection_without_start_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_models", lambda: calls.append("stop"))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--stop"])
+    monkeypatch.setattr(_model_servers, "_build_processes", lambda models, gpu: (calls.append((models, gpu)) or [], ()))
+    monkeypatch.setattr(_model_servers, "_stop_models", lambda processes: calls.append(processes))
+    monkeypatch.setattr(_model_servers, "require_credentials",
+                        lambda *_a, **_k: pytest.fail("stop needs no credentials"))
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "custom.json",
+                                      "--gpu-profile", "spark", "--stop"])
 
     _model_servers.run()
 
-    assert calls == ["stop"]
+    assert calls == [(Path("custom.json"), "spark"), []]
+
+
+@pytest.mark.parametrize("service", ["stt", "agent-llm", "vlm"])
+def test_custom_stop_uses_only_selected_managed_yaml_port(tmp_path, monkeypatch, service):
+    configs = tmp_path / "yaml" / "custom"
+    configs.mkdir(parents=True)
+    config_base = _model_servers._MODEL_SERVICES[service][2]
+    (configs / f"{config_base}.yaml").write_text("port: 19001\n", encoding="utf-8")
+    (configs / "embedding_server.yaml").write_text("port: 19002\n", encoding="utf-8")
+    (configs / "pocket_tts_server.yaml").write_text("port: 19004\n", encoding="utf-8")
+    other = tmp_path / "yaml" / "other"
+    other.mkdir()
+    (other / "vlm_server.yaml").write_text("port: 19003\n", encoding="utf-8")
+    profile = tmp_path / "models.selected.json"
+    profile.write_text(json.dumps({"models": {
+        "selected": {"adapter": {}, "endpoint": {},
+                     "deployment": {"ownership": "managed", "service": service}},
+        "external": {"adapter": {}, "endpoint": {"base_url": "http://localhost:8103"},
+                     "deployment": {"ownership": "external", "service": "embedding"}},
+        "reused": {"adapter": {}, "endpoint": {},
+                   "deployment": {"ownership": "reused", "service": "tts"}},
+    }}), encoding="utf-8")
+    # Excluded services and another hardware profile have real configs;
+    # the selected plan must not collect any of their ports.
+    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
+    targets = []
+    monkeypatch.setattr(_model_servers, "stop_persistent_servers",
+                        lambda selected: targets.extend(selected) or True)
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "require_credentials",
+                        lambda *_a, **_k: pytest.fail("stop needs no credentials"))
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", str(profile),
+                                      "--gpu-profile", "custom", "--stop"])
+    _model_servers.run()
+    assert targets == [(service, 19001)]
+
+
+def test_stop_preserves_existing_unknown_listener_guard(monkeypatch):
+    child = subprocess.Popen([sys.executable, "-u", "-c",
+                              "import signal; print('ready',flush=True); signal.pause()"],
+                             stdout=subprocess.PIPE, text=True)
+    try:
+        assert child.stdout.readline().strip() == "ready"
+        monkeypatch.setattr(_docker, "container_on_port_checked", lambda port: (None, True))
+        monkeypatch.setattr(_docker, "pid_on_port_checked", lambda port: (child.pid, True, True))
+        selected = [_model_servers.Process("vlm", ".", "vlm_server", port=19001)]
+        with pytest.raises(SystemExit, match="one or more persistent servers"):
+            _model_servers._stop_models(selected)
+        assert child.poll() is None
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=10)
 
 
 @pytest.mark.parametrize(("argv", "message", "code"), [
@@ -727,7 +753,7 @@ def test_cli_help_and_invalid_options_do_not_touch_servers(monkeypatch, capsys, 
         pytest.fail("argument handling must not inspect GPUs, credentials, or servers")
 
     for name in ("detect_gpu_config", "_build_processes", "require_credentials",
-                 "_stop_unselected_services", "_stop_models", "run_stack"):
+                 "_stop_models", "run_stack"):
         monkeypatch.setattr(_model_servers, name, unexpected)
     monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
     with pytest.raises(SystemExit) as error:
