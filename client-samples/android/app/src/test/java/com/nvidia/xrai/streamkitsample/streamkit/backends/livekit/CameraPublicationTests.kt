@@ -270,6 +270,12 @@ class CameraPublicationTests {
         assertThrows(IllegalArgumentException::class.java) {
             cameraLayerDefaults(CameraEncodingConfig(maxBitrateBps = 1), defaults, 1280, 720)
         }
+        val large = defaults.copy(simulcastLayers = listOf(
+            CustomVideoPreset(VideoPreset169.H180.capture, VideoEncoding(Int.MAX_VALUE - 1, 20)),
+            CustomVideoPreset(VideoPreset169.H360.capture, VideoEncoding(Int.MAX_VALUE, 20)),
+        ))
+        assertEquals(listOf(49_999, 50_000), cameraLayerDefaults(policy, large, 1280, 720)
+            .simulcastLayers!!.map { it.encoding.maxBitrate })
     }
 
     @Test fun devicePolicyUsesActualSDKDimensionsAndExistingCaptureSelection() = runBlocking {

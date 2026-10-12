@@ -385,6 +385,13 @@ test('simulcast budgets retain SDK layers but never exceed the configured primar
     ],
   });
   assert.deepEqual(equal.videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [50000, 50000]);
+  const large = cameraPublishOptions(policy, { width: 1280, height: 720 }, {
+    simulcast: true, videoSimulcastLayers: [
+      { width: 320, height: 180, encoding: { maxBitrate: Number.MAX_SAFE_INTEGER - 1, maxFramerate: 20 } },
+      { width: 640, height: 360, encoding: { maxBitrate: Number.MAX_SAFE_INTEGER, maxFramerate: 20 } },
+    ],
+  });
+  assert.deepEqual(large.videoSimulcastLayers.map(layer => layer.encoding.maxBitrate), [49999, 50000]);
 });
 
 test('reports the highest selected-transport RTT and all inbound-track jitter', async (t) => {

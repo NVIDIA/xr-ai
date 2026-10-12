@@ -85,5 +85,11 @@ struct CameraOptionsTests {
         #expect(throws: StreamKit.StreamError.self) {
             try cameraPublishOptions(CameraEncodingConfig(maxBitrateBps: 1), defaults: defaults)
         }
+        let large = VideoPublishOptions(simulcastLayers: [
+            VideoParameters(dimensions: .h180_169, encoding: VideoEncoding(maxBitrate: Int.max - 1, maxFps: 20)),
+            VideoParameters(dimensions: .h360_169, encoding: VideoEncoding(maxBitrate: Int.max, maxFps: 20)),
+        ])
+        let bounded = try #require(try cameraPublishOptions(CameraEncodingConfig(maxBitrateBps: 50_000), defaults: large))
+        #expect(bounded.simulcastLayers.map(\.encoding.maxBitrate) == [49_999, 50_000])
     }
 }
