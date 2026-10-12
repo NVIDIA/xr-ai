@@ -10,6 +10,8 @@ name = "embedding-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    # CVE-2026-104874: fixed C-extension items-view reference leak.
+    "multidict>=6.9.1",
     # Security floors for vLLM's HTTP and JWT dependencies.
     "urllib3>=2.8.0",
     "pyjwt>=2.15.1",

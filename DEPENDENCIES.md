@@ -181,6 +181,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `nemo-relay>=0.7.2,<0.8`
   - `pydantic>=2.10`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
@@ -234,6 +235,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `numpy>=1.24`
   - `silero-vad>=5.1`
   - `onnxruntime>=1.17`
@@ -283,6 +285,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `pyjwt>=2.15.1`
   - `urllib3>=2.8.0`
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -310,6 +313,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -329,6 +333,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -366,6 +371,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
@@ -388,6 +396,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -407,6 +416,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -454,6 +464,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.0.2`
@@ -489,6 +500,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
@@ -526,6 +540,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
