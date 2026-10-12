@@ -5,19 +5,6 @@
     }
   },
   "models": {
-    "stt": {
-      "adapter": {
-        "preset": "parakeet_stt"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8103",
-        "readiness": "health"
-      },
-      "deployment": {
-        "ownership": "external",
-        "service": "stt"
-      }
-    },
     "tts": {
       "adapter": {
         "preset": "pocket_tts"

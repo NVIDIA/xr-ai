@@ -73,7 +73,7 @@ configure the required credentials before starting the stack.
 For deployment using NVIDIA NIM endpoints, refer to
 [Deploying samples with NIM endpoints](https://nvidia.github.io/xr-ai/latest/guides/deploying-with-nim.html).
 
-The default profile starts enrolled-speaker ASR. The NIM profile retains batch STT. Configure placement in
+The default profile starts enrolled-speaker ASR. Configure placement in
 `yaml/<gpu-profile>/speaker_stt.yaml`; the shipped voice samples enable
 `speaker.enabled` in their voice-gate YAML. Refer to the
 [speaker enrollment reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-voice.html#speaker-enrollment)

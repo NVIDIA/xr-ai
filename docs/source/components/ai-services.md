@@ -366,7 +366,8 @@ Configuration changes require stopping and restarting the service. `--stop`
 uses the same port discovery and verified process ownership as the other model
 services. The speaker service listens on port 8102 and supports streaming audio
 over a private WebSocket.
-The separate NIM sample retains its existing speech services. Refer to
+Native NIM speech uses independently deployed Riva endpoints rather than this
+local model stack. Refer to {doc}`/guides/deploying-with-nim` and
 {doc}`/reference/agent-sdk-voice` for worker backend selection and enrollment.
 
 Pocket TTS uses the launcher's persistent process group directly. Its bootstrap

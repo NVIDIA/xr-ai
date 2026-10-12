@@ -88,12 +88,14 @@ shutdown behavior.
 ## Shared model-stack speaker filtering
 
 The default shared model profile starts Nemotron 3 Diarization with Multitalker
-Parakeet through its private `services` declaration. It stops unselected managed
-batch-STT services and reuses matching warm speaker-ASR instances. Samples with
+Parakeet through its private `services` declaration and reuses matching warm
+speaker-ASR instances. Samples with
 `speaker.backend: auto` select the ready speaker service at worker startup.
-The separate NIM sample retains its existing speech configuration.
-To serve batch STT from the default stack, copy its profile, remove
-`services.speaker-stt`, and set `models.stt.deployment.ownership: managed`.
+Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
+The local default contains no batch-STT model entry. Stop the stack before
+changing deployment configuration. To serve batch STT, explicitly add its
+managed model entry and configure the consuming worker's batch adapter;
+for batch-only speech omit `services.speaker-stt` and disable speaker enrollment.
 Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
 
 ## Voice sample conversation defaults
@@ -118,7 +120,8 @@ controls.
 ## Local model-server CLI
 
 The `model-servers` sample launches only local server wrappers. Its default
-Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+speaker ASR, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is described
+in {doc}`/guides/customizing-model-servers`.
 Named `--models` selections are retired:
 
 - Replace `model_servers --models default` with `model_servers`.
@@ -131,8 +134,8 @@ Named `--models` selections are retired:
 
 Before updating a checkout that ran the former NIM profile, stop it with the
 old checkout's `uv run model_servers --stop`. The updated local launcher no
-longer discovers the removed NIM-only ports. Stop the old stack before starting
-the separate NIM sample because they share client ports. Caches are not removed.
+longer discovers the removed NIM-only ports. Deploy native endpoints using the
+operator's tooling instead of starting a NIM sample. Caches are not removed.
 
 `--help` now displays usage and exits. Unknown options are rejected instead of
 being silently ignored; `--dry-run` remains unsupported by `model-servers`.

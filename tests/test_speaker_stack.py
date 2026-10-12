@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 from xr_ai_vllm import _docker
+from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location(
@@ -21,6 +22,19 @@ _SPEC = importlib.util.spec_from_file_location(
 assert _SPEC and _SPEC.loader
 stack = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(stack)
+
+
+@pytest.fixture
+def batch_deployment(tmp_path):
+    profile = tmp_path / "models.batch.json"
+    profile.write_text(json.dumps({"models": {"stt": {
+        "adapter": {"preset": "parakeet_stt"},
+        "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+        "deployment": {"ownership": "managed", "service": "stt"},
+    }}}))
+    voice_gate = tmp_path / "voice_gate.yaml"
+    voice_gate.write_text("speaker:\n  enabled: false\n")
+    return profile, voice_gate
 
 
 def test_speaker_config_requires_http_port(tmp_path, monkeypatch):
@@ -38,6 +52,9 @@ def test_speaker_config_requires_http_port(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "spark"])
 def test_normal_profile_selects_speaker_asr_and_uses_hardware_profile(hardware):
+    profile = json.loads((stack._BASE / "yaml/models.default.json").read_text())
+    assert "stt" not in profile["models"]
+    assert profile["services"] == {"speaker-stt": {"ownership": "managed"}}
     processes, credentials = stack._build_processes(gpu_profile=hardware)
     names = [p.name for p in processes]
     assert "stt" not in names and "stt-nim" not in names
@@ -52,15 +69,12 @@ def test_normal_profile_selects_speaker_asr_and_uses_hardware_profile(hardware):
     assert credentials == ()
 
 
-def test_custom_batch_profile_remains_supported(tmp_path):
-    profile = tmp_path / "models.speech.json"
-    profile.write_text(json.dumps({"models": {"stt": {
-        "adapter": {"preset": "parakeet_stt"}, "endpoint": {"base_url": "http://localhost:8103"},
-        "deployment": {"ownership": "managed", "service": "stt"},
-    }}}))
+def test_explicit_batch_deployment_selects_batch_stt_and_disables_speaker(batch_deployment):
+    profile, voice_gate = batch_deployment
     processes, credentials = stack._build_processes(profile, "dual_48G_ada")
     assert [p.name for p in processes] == ["stt"]
     assert credentials == ()
+    assert _SpeakerConfig._from_yaml(yaml.safe_load(voice_gate.read_text())["speaker"]) is None
 
 
 @pytest.mark.parametrize("declaration", [
@@ -84,28 +98,6 @@ def test_normal_cli_passes_only_profile_selection(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "models.custom.json"])
     stack.run()
     assert selected == [((Path("models.custom.json"), None), {})]
-
-
-def test_profile_switches_stop_only_unselected_ports(tmp_path, monkeypatch):
-    stopped = []
-    monkeypatch.setattr(stack, "stop_persistent_servers", lambda services: stopped.extend(services) or True)
-    processes, _ = stack._build_processes(gpu_profile="dual_48G_ada")
-    stack._stop_unselected_services(processes)
-    assert ("speaker-stt", 8102) not in stopped
-    assert {8103, 8107} <= {port for _, port in stopped}
-    stopped.clear()
-    profile = tmp_path / "models.batch.json"
-    body = json.loads((stack._BASE / "yaml/models.default.json").read_text())
-    body.pop("services")
-    body["models"]["stt"]["deployment"]["ownership"] = "managed"
-    profile.write_text(json.dumps(body))
-    processes, _ = stack._build_processes(profile, "dual_48G_ada")
-    stack._stop_unselected_services(processes)
-    assert ("speaker-stt", 8102) in stopped
-    assert ("stt", 8103) not in stopped
-    stopped.clear()
-    stack._stop_models()
-    assert ("speaker-stt", 8102) in stopped
 
 
 def test_speaker_cleanup_uses_configured_port_not_default(tmp_path, monkeypatch):

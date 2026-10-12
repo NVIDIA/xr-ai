@@ -90,6 +90,19 @@ Applications copied from an earlier sample must enable that extra in their
 worker's dependency before selecting Riva speech. The SDK base installation
 continues to defer the vendor dependency until a Riva factory is selected.
 
+When selecting native NIM speech, disable the local enrolled-speaker backend
+in each consuming worker's voice-gate YAML:
+
+```yaml
+speaker:
+  enabled: false
+```
+
+Model endpoint selection and speaker-backend selection are separate settings.
+Changing the model profile alone does not disable a reachable local speaker
+service. The native deployment profile connects to external Riva endpoints;
+it does not start, stop, or use the local speaker-ASR service.
+
 ### Embedding inputs
 
 For an asymmetric HTTP embedding endpoint, configure the existing adapter

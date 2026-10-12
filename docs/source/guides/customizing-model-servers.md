@@ -48,7 +48,7 @@ uv run --project model-server-samples/model-servers model_servers
 ```
 
 The stack uses `yaml/<gpu-profile>/speaker_stt.yaml` for model placement and
-capacity. It stops unselected STT services, waits for speaker ASR readiness,
+capacity. It waits for speaker ASR readiness,
 reuses matching warm instances, and includes the service in `--stop` cleanup.
 The shipped voice samples enable `speaker.enabled` in their voice-gate YAML.
 Out-of-tree workers must enable enrollment and restart, or select batch STT
@@ -68,13 +68,30 @@ declares it outside the typed model-client entries:
 
 The model-stack launcher owns this declaration; it does not change the shared
 model-client or launcher SDK schemas. Its host, port and model settings live in
-`speaker_stt.yaml`. The profile's `models.stt` entry remains an external
-batch-STT adapter for consumers of the existing SDK, and does not launch an HTTP
-STT server. To run batch STT instead, remove the private `speaker-stt`
-declaration and change `models.stt.deployment.ownership` to `managed`. Set
-`speaker.enabled: false` in the consuming workers. To serve both paths, retain
-the private declaration and manage batch STT too; this retains both sets of
-model weights.
+`speaker_stt.yaml`. The default profile contains no batch-STT entry or server.
+To run batch STT, add this entry under `models` in an explicit deployment JSON:
+
+```json
+"stt": {
+  "adapter": {"preset": "parakeet_stt"},
+  "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+  "deployment": {"ownership": "managed", "service": "stt"}
+}
+```
+
+For batch-only speech, omit `services.speaker-stt` and set the consuming worker's
+voice-gate YAML to:
+
+```yaml
+speaker:
+  enabled: false
+```
+
+The worker's own model profile must also contain its batch-STT adapter and
+endpoint. To serve both paths, retain the speaker declaration and add the
+managed batch-STT entry; this loads both sets of model weights.
+Run `model_servers --stop` before changing deployment JSON or hardware YAML,
+then launch the desired configuration and restart its consumers.
 
 Copy the default profile to customize it:
 
