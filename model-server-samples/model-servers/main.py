@@ -86,6 +86,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "embedding_server",
         "embedding_server",
     ),
+    "clef": ("../../services/clef-server", "clef_server", "clef_server"),
 }
 
 

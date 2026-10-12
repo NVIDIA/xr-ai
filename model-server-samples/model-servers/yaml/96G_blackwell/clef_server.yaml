@@ -1,14 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The pinned snapshot downloads into model_cache on first launch and is reused.
+# Keep at least 18 GiB available for Clef BF16 weights. The combined stack
+# has not been qualified to fit a busy GPU.
 model_name: Cloudflare/clef-flash
 model_revision: 17f0b0ad64efb65d273590632833508766b2aae6
-model_cache: ../../../models
+model_cache: ../../../../models
 
 host: 127.0.0.1
-# Clef uses 8120, separate from the local model servers' 810x ports.
-# Port inventory: docs/source/components/ai-services.md.
 port: 8120
 device: cuda:0
 dtype: bfloat16

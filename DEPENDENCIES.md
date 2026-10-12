@@ -734,19 +734,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Model server samples
 
-#### `clef-flash-model-server` — [`model-server-samples/clef-flash/`](model-server-samples/clef-flash/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `clef_flash_model` → `main:run`
-
 #### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
 
 - Python: `>=3.11,<3.15`

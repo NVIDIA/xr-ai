@@ -244,6 +244,47 @@ def test_stop_fails_when_any_service_remains(
         _model_servers._stop_models([])
 
 
+@pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+def test_clef_profile_manages_full_stack_and_stops_only_its_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    gpu_profile: str,
+) -> None:
+    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.clef.json"
+    deployment = json.loads(profile.read_text(encoding="utf-8"))["models"]
+
+    assert all(model["deployment"]["ownership"] == "managed" for model in deployment.values())
+    assert deployment["decision"]["deployment"]["service"] == "clef"
+    assert "decision" not in json.loads(
+        (_REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json")
+        .read_text(encoding="utf-8")
+    )["models"]
+
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
+    processes, credentials = _model_servers._build_processes(profile)
+    assert {process.name for process in processes} == {
+        "stt", "tts", "omni", "vlm", "embedding", "clef",
+    }
+    assert credentials == ()
+    assert Path(next(p for p in processes if p.name == "clef").config).parent.name == gpu_profile
+
+    default_profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
+    with _stack_ownership._stack_owner(default_profile, create=True) as foreign_owner:
+        pass
+    with _stack_ownership._stack_owner(profile, create=True) as owner:
+        pass
+    stopped: list[str] = []
+    monkeypatch.setattr(
+        _model_servers,
+        "_stop_stack",
+        lambda token, _timeout: stopped.append(token),
+    )
+
+    _model_servers._stop_models(profile)
+
+    assert stopped == [owner]
+    assert owner != foreign_owner
+
+
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [

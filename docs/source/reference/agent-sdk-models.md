@@ -50,8 +50,8 @@ async with make_decision(config, "triage") as decisions:
 ```
 
 The profile entry uses `category: decision`, `kind: systemone`, a model name,
-and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
-documents the local service and its pinned model release.
+and an endpoint. The {ref}`Clef decision service <clef-decision-service>`
+documents the shared local deployment and its pinned model release.
 
 (profile-contract)=
 A client profile names logical roles and declares adapters and endpoints:
