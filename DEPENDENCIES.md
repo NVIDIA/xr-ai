@@ -71,16 +71,21 @@ and `uv.lock` describe the repository as of the last cutoff change or targeted
 dependency security refresh. Regenerate and commit both files for either event;
 ordinary project changes remain deferred to the next refresh. A release yanked
 from the index changes the next fresh resolution.
-`uv run --script .github/scripts/generate_dependency_manifest.py` generates both inventories
-files and always resolves with the uv version pinned inside the script,
+`uv run --script .github/scripts/generate_dependency_manifest.py` generates the
+inventories and always resolves with the uv version pinned inside the script,
 because lock output varies across uv releases. The manifest's `requires-python`
 is the range of interpreters its included projects accept. vLLM service projects
 resolve in a `vllm` extra, while the other shared projects resolve in a
 `repository` extra. Those extras are mutually exclusive because their
-PyNvVideoCodec and protobuf constraints are incompatible. Speaker ASR has a
-separate Linux-only manifest, resolved with Python 3.12, that preserves its
-Git-pinned NeMo and wheel-pinned Lhotse sources without applying them to other
-services. The inventories preserve each environment's dependency requirements.
+PyNvVideoCodec and protobuf constraints are incompatible. Isolated inventories
+are declared in [`inventories.toml`](dependency-manifest/inventories.toml).
+Each entry selects a project path and a pinned resolver interpreter; the
+generator reads the project name, Python requirement, optional extras, and
+platform support from that project's `pyproject.toml`. Optional package refresh
+and build environment settings keep source metadata reproducible. Speaker ASR's
+entry produces a Linux-only inventory with its Git-pinned NeMo and wheel-pinned
+Lhotse sources. Adding another isolated inventory requires a configuration
+entry. The inventories preserve each environment's dependency requirements.
 The pre-commit hook runs the script when
 `uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
 with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
@@ -872,7 +877,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `vlm-server` → [`vlm-server`](services/vlm-server/) (local, editable)
 - Commands: none
 
-#### `xr-ai-speaker-dependency-manifest` — [`dependency-manifest/speaker-stt/`](dependency-manifest/speaker-stt/)
+#### `xr-ai-speaker-stt-dependency-manifest` — [`dependency-manifest/speaker-stt/`](dependency-manifest/speaker-stt/)
 
 - Python: `>=3.12,<3.14`
 - Build dependencies: none

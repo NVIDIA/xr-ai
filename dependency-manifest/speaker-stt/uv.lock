@@ -2611,17 +2611,6 @@ dependencies = [
 requires-dist = [{ name = "loguru", specifier = ">=0.7" }]
 
 [[package]]
-name = "xr-ai-speaker-dependency-manifest"
-version = "0.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "xr-ai-speaker-stt", marker = "sys_platform == 'linux'" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "xr-ai-speaker-stt", editable = "../../services/speaker-stt" }]
-
-[[package]]
 name = "xr-ai-speaker-stt"
 version = "0.1.0"
 source = { editable = "../../services/speaker-stt" }
@@ -2659,6 +2648,17 @@ requires-dist = [
     { name = "xr-ai-vllm", editable = "../../utils/xr-ai-vllm" },
     { name = "xr-ai-voicegate", editable = "../../utils/xr-ai-voicegate" },
 ]
+
+[[package]]
+name = "xr-ai-speaker-stt-dependency-manifest"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "xr-ai-speaker-stt", marker = "sys_platform == 'linux'" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-speaker-stt", editable = "../../services/speaker-stt" }]
 
 [[package]]
 name = "xr-ai-vllm"

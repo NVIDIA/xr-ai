@@ -6,16 +6,18 @@
 # dependencies = ["packaging>=24"]
 # ///
 
-"""Generate resolved inventories for the repository and isolated speaker service."""
+"""Generate resolved inventories from project metadata and inventory configuration."""
 
 from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import os
 import subprocess
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from generate_dependency_map import MANIFEST_DIRECTORY, Project, discover_projects
@@ -23,9 +25,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 MANIFEST_NAME = "xr-ai-dependency-manifest"
-SPEAKER_PROJECT = "xr-ai-speaker-stt"
-SPEAKER_MANIFEST_DIRECTORY = f"{MANIFEST_DIRECTORY}/speaker-stt"
-SPEAKER_LOCK_PYTHON = "3.12.12"
+INVENTORY_CONFIG = f"{MANIFEST_DIRECTORY}/inventories.toml"
 # vLLM and the remaining repository projects run in separate environments and
 # have incompatible PyNvVideoCodec and protobuf constraints. Mutually exclusive
 # extras let one universal lock inventory both resolved environments without
@@ -59,13 +59,73 @@ _HEADER = """\
 """
 
 
-def manifest_members(projects: Sequence[Project]) -> list[Project]:
-    """Return shared-inventory projects, excluding generated and speaker projects."""
+@dataclass(frozen=True)
+class IsolatedInventory:
+    """One configured project inventory and its reproducible resolver settings."""
 
+    project: Project
+    directory: Path
+    python: str
+    refresh_packages: tuple[str, ...]
+    environment: dict[str, str]
+
+
+def read_isolated_inventories(root: Path, projects: Sequence[Project]) -> tuple[IsolatedInventory, ...]:
+    """Select isolated projects from configuration, using discovered metadata."""
+
+    path = root / INVENTORY_CONFIG
+    if not path.exists():
+        return ()
+    config = tomllib.loads(path.read_text(encoding="utf-8"))
+    isolated = config.get("isolated", {})
+    if not isinstance(isolated, dict) or not all(isinstance(settings, dict) for settings in isolated.values()):
+        raise ValueError("isolated inventories must be configuration tables")
+    by_path = {
+        project.relative_directory: project for project in projects
+        if project.relative_directory.parts[:1] != (MANIFEST_DIRECTORY,)
+    }
+    inventories = []
+    for name, settings in isolated.items():
+        if Path(name).name != name or name in {".", ".."}:
+            raise ValueError(f"invalid inventory directory: {name!r}")
+        if set(settings) - {"project", "python", "refresh-packages", "environment"}:
+            raise ValueError(f"inventory {name}: unknown configuration field")
+        project_path, python = settings.get("project"), settings.get("python")
+        if not isinstance(project_path, str) or not isinstance(python, str):
+            raise ValueError(f"inventory {name}: project and python must be strings")
+        project = by_path.get(Path(project_path))
+        if project is None:
+            raise ValueError(f"inventory {name}: unknown project {project_path!r}")
+        interpreter = Version(python)
+        if len(interpreter.release) != 3:
+            raise ValueError(f"inventory {name}: python must pin a major.minor.patch release")
+        if not SpecifierSet(project.requires_python).contains(interpreter):
+            raise ValueError(f"inventory {name}: Python {python} does not satisfy {project.requires_python}")
+        refresh = settings.get("refresh-packages", [])
+        environment = settings.get("environment", {})
+        if not isinstance(refresh, list) or not all(isinstance(item, str) for item in refresh):
+            raise ValueError(f"inventory {name}: refresh-packages must be a list of strings")
+        if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
+            raise ValueError(f"inventory {name}: environment must contain string values")
+        if any(item.project == project for item in inventories):
+            raise ValueError(f"inventory {name}: project {project_path!r} is already isolated")
+        inventories.append(
+            IsolatedInventory(project, Path(MANIFEST_DIRECTORY) / name, python, tuple(refresh), environment)
+        )
+    return tuple(inventories)
+
+
+def manifest_members(
+    projects: Sequence[Project], inventories: Sequence[IsolatedInventory] = (),
+) -> list[Project]:
+    """Return shared-inventory projects, excluding configured isolated projects."""
+
+    isolated = {inventory.project.relative_directory for inventory in inventories}
     return sorted(
         (
             project for project in projects
-            if project.relative_directory.parts[:1] != (MANIFEST_DIRECTORY,) and project.name != SPEAKER_PROJECT
+            if project.relative_directory.parts[:1] != (MANIFEST_DIRECTORY,)
+            and project.relative_directory not in isolated
         ),
         key=lambda project: project.relative_directory.as_posix(),
     )
@@ -83,10 +143,10 @@ def common_python_range(ranges: Sequence[str]) -> str:
     return f">=3.{minors[0]},<3.{minors[-1] + 1}"
 
 
-def manifest_toml(projects: Sequence[Project]) -> str:
+def manifest_toml(projects: Sequence[Project], inventories: Sequence[IsolatedInventory] = ()) -> str:
     """Return the manifest pyproject.toml aggregating *projects*."""
 
-    members = manifest_members(projects)
+    members = manifest_members(projects, inventories)
     if not members:
         raise ValueError("no projects found to aggregate")
     python_range = common_python_range([project.requires_python for project in members])
@@ -136,76 +196,101 @@ def manifest_toml(projects: Sequence[Project]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def speaker_manifest_toml(project: Project) -> str:
-    """Inventory speaker ASR separately so its NeMo sources stay isolated."""
+def isolated_manifest_toml(inventory: IsolatedInventory) -> str:
+    """Render an isolated inventory using its project's name, extras, and platform support."""
 
+    project = inventory.project
+    metadata = tomllib.loads((project.directory / "pyproject.toml").read_text(encoding="utf-8"))
+    environments = metadata.get("tool", {}).get("uv", {}).get("environments", [])
+    if not isinstance(environments, list) or not all(isinstance(item, str) for item in environments):
+        raise ValueError(f"{project.relative_directory}: tool.uv.environments must be a list of strings")
+    extras = ",".join(sorted(project.optional_dependencies))
+    dependency = f"{project.name}[{extras}]" if extras else project.name
+    source = Path(os.path.relpath(project.relative_directory, inventory.directory)).as_posix()
     return "\n".join([
         _HEADER,
         "[project]",
-        'name = "xr-ai-speaker-dependency-manifest"',
+        f'name = {json.dumps(project.name + "-dependency-manifest")}',
         'version = "0.0.0"',
-        f'requires-python = "{project.requires_python}"',
-        f'dependencies = ["{project.name}"]',
+        f'requires-python = {json.dumps(project.requires_python)}',
+        f'dependencies = [{json.dumps(dependency)}]',
         "",
         "[tool.uv]",
         "package = false",
-        'environments = ["sys_platform == \'linux\'"]',
+        *([f"environments = {json.dumps(environments)}"] if environments else []),
         "",
         "[tool.uv.sources]",
-        f'"{project.name}" = {{ path = "../../{project.relative_directory.as_posix()}", editable = true }}',
+        f'{json.dumps(project.name)} = {{ path = {json.dumps(source)}, editable = true }}',
         "",
     ])
 
 
-def refresh_speaker_manifest(root: Path, project: Project, *, check: bool) -> int:
-    """Regenerate or verify the speaker inventory, restoring checked files."""
+def refresh_manifest(
+    root: Path, directory: Path, expected: str, lock: Callable[[], None], *, check: bool,
+) -> int:
+    """Regenerate or verify an inventory, restoring lockfiles after checks."""
 
-    directory = root / SPEAKER_MANIFEST_DIRECTORY
-    manifest_path = directory / "pyproject.toml"
-    lock_path = directory / "uv.lock"
-    expected = speaker_manifest_toml(project)
-    if check:
-        if not manifest_path.is_file() or manifest_path.read_text(encoding="utf-8") != expected:
-            print(f"{SPEAKER_MANIFEST_DIRECTORY}/pyproject.toml is stale. Regenerate it with:")
-            print(REGENERATE)
-            return 1
-        if not lock_path.is_file():
-            print(f"{SPEAKER_MANIFEST_DIRECTORY}/uv.lock is missing. Regenerate it with:")
-            print(REGENERATE)
-            return 1
-    else:
-        directory.mkdir(parents=True, exist_ok=True)
-        manifest_path.write_text(expected, encoding="utf-8")
+    manifest_path, lock_path = root / directory / "pyproject.toml", root / directory / "uv.lock"
+    current_manifest = manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
     current_lock = lock_path.read_text(encoding="utf-8") if lock_path.is_file() else None
+    if check and current_manifest != expected:
+        print(f"{directory}/pyproject.toml is stale. Regenerate it with:")
+        print(REGENERATE)
+        print("".join(difflib.unified_diff(
+            (current_manifest or "").splitlines(keepends=True), expected.splitlines(keepends=True),
+            fromfile=f"{directory}/pyproject.toml", tofile=f"generated {directory}/pyproject.toml",
+        )), end="")
+        return 1
+    if check and current_lock is None:
+        print(f"{directory}/uv.lock is missing. Regenerate it with:")
+        print(REGENERATE)
+        return 1
+    if not check:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(expected, encoding="utf-8")
+    # A normal uv lock check misses metadata changes in editable projects.
+    # Re-resolve instead, restoring the checked lock even after failure.
     try:
-        subprocess.run(
-            [
-                "uvx", f"uv@{UV_VERSION}", "--config-file", "uv.toml", "lock", "--upgrade",
-                "--python", SPEAKER_LOCK_PYTHON, "--project", SPEAKER_MANIFEST_DIRECTORY,
-                "--refresh-package", "nemo-toolkit",
-            ],
-            cwd=root,
-            check=True,
-            # NeMo's Git suffix depends on checkout size. Its supported switch
-            # keeps metadata stable; the lock still records the full commit SHA.
-            env={**os.environ, "NO_VCS_VERSION": "1"},
-        )
+        lock()
         fresh_lock = lock_path.read_text(encoding="utf-8")
     except (OSError, subprocess.CalledProcessError) as error:
-        print(f"speaker dependency manifest lock failed: {error}")
+        print(f"{directory} lock failed: {error}")
         return 1
     finally:
         if check and current_lock is not None:
             lock_path.write_text(current_lock, encoding="utf-8")
     if check and current_lock != fresh_lock:
-        print(f"{SPEAKER_MANIFEST_DIRECTORY}/uv.lock is stale. Regenerate it with:")
+        print(f"{directory}/uv.lock is stale. Regenerate it with:")
         print(REGENERATE)
         return 1
     if check:
-        print("Speaker dependency manifest and lock are current.")
+        print(f"{directory} inventory and lock are current.")
+    elif current_manifest == expected and current_lock == fresh_lock:
+        print(f"{directory} inventory and lock are already current.")
     else:
-        print("Updated speaker dependency manifest and lock.")
+        print(f"Updated {directory} inventory and lock.")
     return 0
+
+
+def lock_isolated_manifest(root: Path, inventory: IsolatedInventory) -> None:
+    """Resolve a configured project using its declared reproducibility settings."""
+
+    command = [
+        "uvx", f"uv@{UV_VERSION}", "--config-file", "uv.toml", "lock", "--upgrade",
+        "--python", inventory.python, "--project", inventory.directory.as_posix(),
+    ]
+    for package in inventory.refresh_packages:
+        command.extend(("--refresh-package", package))
+    subprocess.run(command, cwd=root, check=True, env={**os.environ, **inventory.environment})
+
+
+def refresh_isolated_manifest(root: Path, inventory: IsolatedInventory, *, check: bool) -> int:
+    """Refresh a configured inventory using the common verification path."""
+
+    return refresh_manifest(
+        root, inventory.directory, isolated_manifest_toml(inventory),
+        lambda: lock_isolated_manifest(root, inventory), check=check,
+    )
 
 
 def lock_manifest(root: Path) -> None:
@@ -242,65 +327,20 @@ def main(argv: Sequence[str] | None = None, *, root: Path | None = None) -> int:
 
     if root is None:
         root = Path(__file__).resolve().parents[2]
-    manifest_path = root / MANIFEST_DIRECTORY / "pyproject.toml"
-    lock_path = root / MANIFEST_DIRECTORY / "uv.lock"
     try:
-        current_manifest = manifest_path.read_text(encoding="utf-8")
-        current_lock = lock_path.read_text(encoding="utf-8")
         projects = discover_projects(root)
-        expected_manifest = manifest_toml(projects)
-        speaker = next((project for project in projects if project.name == SPEAKER_PROJECT), None)
+        inventories = read_isolated_inventories(root, projects)
+        expected = manifest_toml(projects, inventories)
+        if refresh_manifest(root, Path(MANIFEST_DIRECTORY), expected, lambda: lock_manifest(root), check=args.check):
+            return 1
+        for inventory in inventories:
+            if refresh_isolated_manifest(root, inventory, check=args.check):
+                return 1
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"dependency manifest generation failed: {error}")
         return 1
+    return 0
 
-    if not args.check:
-        manifest_path.write_text(expected_manifest, encoding="utf-8")
-        try:
-            lock_manifest(root)
-        except (OSError, subprocess.CalledProcessError) as error:
-            print(f"dependency manifest lock failed: {error}")
-            return 1
-        if current_manifest == expected_manifest and lock_path.read_text(encoding="utf-8") == current_lock:
-            print("Generated dependency manifest and lock are already current.")
-        else:
-            print("Updated dependency-manifest/pyproject.toml and uv.lock.")
-        return refresh_speaker_manifest(root, speaker, check=False) if speaker is not None else 0
-
-    if current_manifest != expected_manifest:
-        print("dependency-manifest/pyproject.toml is stale. Regenerate it with:")
-        print(REGENERATE)
-        print()
-        print(
-            "".join(
-                difflib.unified_diff(
-                    current_manifest.splitlines(keepends=True),
-                    expected_manifest.splitlines(keepends=True),
-                    fromfile="dependency-manifest/pyproject.toml",
-                    tofile="generated dependency-manifest/pyproject.toml",
-                )
-            ),
-            end="",
-        )
-        return 1
-
-    # `uv lock --check` does not notice changed metadata in editable members,
-    # so re-resolve and compare, then put the committed file back.
-    try:
-        lock_manifest(root)
-        fresh_lock = lock_path.read_text(encoding="utf-8")
-    except (OSError, subprocess.CalledProcessError) as error:
-        print(f"dependency manifest lock failed: {error}")
-        return 1
-    finally:
-        lock_path.write_text(current_lock, encoding="utf-8")
-    if current_lock != fresh_lock:
-        print("dependency-manifest/uv.lock is stale. Regenerate it with:")
-        print(REGENERATE)
-        return 1
-
-    print("Generated dependency manifest and lock are current.")
-    return refresh_speaker_manifest(root, speaker, check=True) if speaker is not None else 0
 
 
 if __name__ == "__main__":

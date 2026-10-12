@@ -6,7 +6,7 @@
 # Regenerated for uv.toml qualification changes and targeted security refreshes.
 
 [project]
-name = "xr-ai-speaker-dependency-manifest"
+name = "xr-ai-speaker-stt-dependency-manifest"
 version = "0.0.0"
 requires-python = ">=3.12,<3.14"
 dependencies = ["xr-ai-speaker-stt"]

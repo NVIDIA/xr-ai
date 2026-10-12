@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Table names select output directories under dependency-manifest/. Project
+# names, Python ranges, optional extras, and platform support come from pyproject.toml.
+[isolated.speaker-stt]
+project = "services/speaker-stt"
+python = "3.12.12"
+# Rebuild NeMo metadata without its checkout-dependent abbreviated Git suffix.
+# The generated lock retains the full source commit SHA.
+refresh-packages = ["nemo-toolkit"]
+environment = { NO_VCS_VERSION = "1" }
