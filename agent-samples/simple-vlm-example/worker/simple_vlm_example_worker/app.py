@@ -16,7 +16,7 @@ import nemo_relay
 from loguru import logger
 from PIL import Image
 from xr_ai_logging import setup_logging
-from xr_ai_models import VLMService, load_models_config, make_tts, make_vlm
+from xr_ai_models import VLMService, load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -119,6 +119,8 @@ async def run_app(
     log_file = setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
+
+    llm = make_llm(models, "llm")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
 
@@ -133,9 +135,9 @@ async def run_app(
             silero_threshold=config.silero_threshold,
         ),
         voice_gate=voice_gate,
-        probes={"vlm": lambda: _warm_vlm(vlm)},
+        probes={"llm": llm.health, "vlm": lambda: _warm_vlm(vlm)},
         ready_file=ready_file,
-        closeables=(vlm,),
+        closeables=(llm, vlm),
         text_topic="vlm.response",
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
@@ -164,6 +166,7 @@ async def run_app(
                 ),
             ),
             transport.endpoint.set_status,
+            llm=llm,
         ),
     )
     runtime.register("voice", voice)

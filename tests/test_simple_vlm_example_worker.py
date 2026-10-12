@@ -20,7 +20,7 @@ import pytest
 import yaml
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
-from xr_ai_models import ChatResponse, VLMService
+from xr_ai_models import ChatResponse, ChatStreamEvent, ToolCall, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
 from xr_ai_voice import _runtime as voice_runtime_module
@@ -41,6 +41,7 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from simple_vlm_example_worker.conversation import Conversation, ConversationExchange  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_tools import Tool  # noqa: E402
 from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
 from xr_ai_tools.current_frame import (  # noqa: E402
@@ -83,6 +84,36 @@ class _Service:
 
     async def close(self) -> None:
         self.close_calls += 1
+
+
+class _ConversationService(_Service):
+    def __init__(self, *, visual: bool = True, stream_gate=None, preface: bool = False) -> None:
+        super().__init__()
+        self.visual = visual
+        self.requests = []
+        self.stream_gate = stream_gate
+        self.preface = preface
+
+    def stream_events(self, messages, *, tools=None, **_kwargs):
+        self.requests.append((messages, tools))
+
+        async def events():
+            if self.visual:
+                if self.preface:
+                    yield ChatStreamEvent(kind="text", text="I will inspect it. ")
+                yield ChatStreamEvent(
+                    kind="tool_call",
+                    tool_call=ToolCall("call-1", "current_view", "{}"),
+                )
+                yield ChatStreamEvent(kind="finish", finish_reason="tool_calls")
+                return
+            yield ChatStreamEvent(kind="text", text="Hello ")
+            if self.stream_gate is not None:
+                await self.stream_gate.wait()
+            yield ChatStreamEvent(kind="text", text="there.")
+            yield ChatStreamEvent(kind="finish", finish_reason="stop")
+
+        return events()
 
 
 class _FlakyWarmupService(_Service):
@@ -168,8 +199,105 @@ class _SelectedFrameTool:
         pass
 
 
+class _ConversationFrames:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def execute(self, request):
+        self.requests.append(request)
+        return ImageFrame(
+            image=ImageReference(uri="https://example.com/frame.jpg"),
+            timestamp_us=123,
+            width=2,
+            height=2,
+            sequence=1,
+            participant_id=request.participant_id,
+        )
+
+    def release(self, _participant_id: str) -> None:
+        pass
+
+
 async def _ignore_status(_status: str, _participant_id: str) -> None:
     pass
+
+
+async def test_conversation_delegates_native_current_view_without_speaking_preamble() -> None:
+    llm = _ConversationService()
+    frames = _ConversationFrames()
+    vision = _StreamingImageQueryTool()
+    conversation = Conversation(
+        frames,  # type: ignore[arg-type]
+        vision,  # type: ignore[arg-type]
+        llm,  # type: ignore[arg-type]
+    )
+
+    answer = [
+        chunk
+        async for chunk in conversation.stream(
+            "What color is the square?",
+            "alice",
+            history=(ConversationExchange("What is it?", "A square."),),
+        )
+    ]
+
+    assert answer == ["a ", "blue square"]
+    assert frames.requests[0].participant_id == "alice"
+    assert vision.requests[0].image.uri == "https://example.com/frame.jpg"
+    assert vision.requests[0].query == "What color is the square?"
+    assert len(llm.requests[0][1]) == 1
+    assert llm.requests[0][1][0].name == "current_view"
+    assert "completed_exchanges" in llm.requests[0][0][1].content
+
+
+async def test_conversation_answers_directly_without_selecting_a_frame() -> None:
+    llm = _ConversationService(visual=False)
+    frames = _ConversationFrames()
+    vision = _StreamingImageQueryTool()
+    conversation = Conversation(
+        frames,  # type: ignore[arg-type]
+        vision,  # type: ignore[arg-type]
+        llm,  # type: ignore[arg-type]
+    )
+
+    answer = [chunk async for chunk in conversation.stream("Say hello", "alice")]
+
+    assert answer == ["Hello ", "there."]
+    assert frames.requests == []
+    assert vision.requests == []
+
+
+async def test_conversation_streams_answer_before_model_stream_finishes() -> None:
+    gate = asyncio.Event()
+    llm = _ConversationService(visual=False, stream_gate=gate)
+    conversation = Conversation(
+        _ConversationFrames(),  # type: ignore[arg-type]
+        _StreamingImageQueryTool(),  # type: ignore[arg-type]
+        llm,  # type: ignore[arg-type]
+    )
+    stream = conversation.stream("Say hello", "alice")
+
+    first = await asyncio.wait_for(anext(stream), timeout=1)
+
+    assert first == "Hello "
+    assert not gate.is_set()
+    gate.set()
+    assert await anext(stream) == "there."
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
+
+
+async def test_conversation_keeps_early_text_once_if_tool_call_arrives_later() -> None:
+    llm = _ConversationService(preface=True)
+    conversation = Conversation(
+        _ConversationFrames(),  # type: ignore[arg-type]
+        _StreamingImageQueryTool(),  # type: ignore[arg-type]
+        llm,  # type: ignore[arg-type]
+    )
+
+    answer = [chunk async for chunk in conversation.stream("What color is it?", "alice")]
+
+    assert answer == ["I will inspect it. ", "a ", "blue square"]
 
 
 class _LiveEndpoint:
@@ -269,6 +397,8 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
         "app.py",
         "config.py",
         "prompts/system.txt",
+        "conversation.py",
+        "prompts/conversation.txt",
     } <= {str(path.relative_to(package)) for path in package.rglob("*") if path.is_file()}
     assert not (_WORKER_DIR / "agent.py").exists()
     assert not (_WORKER_DIR / "simple_vlm_example_worker.py").exists()
@@ -410,6 +540,7 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
     agent = SimpleVlmAgent(
         lambda: (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
         _ignore_status,
+        llm=_ConversationService(),  # type: ignore[arg-type]
     )
     with pytest.raises(RuntimeError, match="runtime stopped"):
         await agent._stream(  # noqa: SLF001
@@ -452,6 +583,7 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
     agent = SimpleVlmAgent(
         lambda: (missing_frame_tool, _StreamingImageQueryTool()),  # type: ignore[return-value]
         _ignore_status,
+        llm=_ConversationService(),  # type: ignore[arg-type]
     )
 
     await agent._stream(  # noqa: SLF001
@@ -508,6 +640,7 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     agent = SimpleVlmAgent(
         lambda: factory_calls.append(None) or (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
         _ignore_status,
+        llm=_ConversationService(),  # type: ignore[arg-type]
     )
     assert factory_calls == []
 
@@ -549,6 +682,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     config = load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml")
     ready_file = tmp_path / "ready"
     stt = _Service()
+    llm = _ConversationService()
     vlm = _Service()
     tts = _Service()
     transport = _Transport()
@@ -564,6 +698,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
+    monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
@@ -635,6 +770,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "publish:voice.output" not in {event["name"] for event in relay_events}
     assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 0
+    assert llm.health_calls >= 1
     assert len(vlm.stream_calls) == 1
     warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
     assert len(warmup_images) == 1
@@ -645,7 +781,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert system_prompt == "Answer with one word."
     assert max_tokens == 4
     assert timeout == 120.0
-    assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
+    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
@@ -953,7 +1089,11 @@ async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) ->
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
-        SimpleVlmAgent(lambda: (frames, vision), endpoint.set_status),
+        SimpleVlmAgent(
+            lambda: (frames, vision),
+            endpoint.set_status,
+            llm=_ConversationService(),  # type: ignore[arg-type]
+        ),
     )
     runtime.register(
         "voice",
@@ -1057,6 +1197,7 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
         SimpleVlmAgent(
             lambda: (_SelectedFrameTool(), BlockingVision()),  # type: ignore[return-value]
             _ignore_status,
+            llm=_ConversationService(),  # type: ignore[arg-type]
         ),
     )
 
