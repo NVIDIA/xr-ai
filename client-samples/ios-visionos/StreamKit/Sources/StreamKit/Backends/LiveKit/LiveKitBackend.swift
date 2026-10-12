@@ -68,6 +68,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     private var bufferPublication: LocalTrackPublication?
     private var cameraPublishDefaults = VideoPublishOptions()
     private var cameraPublishTask: (track: LocalVideoTrack, task: Task<LocalTrackPublication, any Error>)?
+    private var cameraCaptureCleanup: LocalVideoTrack?
 
     /// Currently active local camera track (device camera, ARKit, or simulator
     /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
@@ -279,6 +280,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         var options = try videoPublishOptions(encoding)
         do {
             try Task.checkCancellation()
+            cameraCaptureCleanup = track
             if let encoding, options?.simulcast == true, cameraPublishDefaults.simulcastLayers.isEmpty {
                 // The SDK starts capture before computing its default layers.
                 // Resolve the same real metadata, not capture hints or ratios.
@@ -293,14 +295,22 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             let publication = try await room.localParticipant.publish(videoTrack: track, options: options)
             guard self.room === room, connectionGeneration == connection,
                   cameraGeneration == generation else {
+                // Retain the exact artifact if its unpublish fails, so stop
+                // can retry instead of treating a failed task as released.
+                if track === bufferTrack { bufferPublication = publication }
+                else { cameraPublication = publication }
                 try await room.localParticipant.unpublish(publication: publication)
+                if bufferPublication === publication { bufferPublication = nil }
+                if cameraPublication === publication { cameraPublication = nil }
                 throw CancellationError()
             }
+            if cameraCaptureCleanup === track { cameraCaptureCleanup = nil }
             return publication
         } catch {
             // This helper owns capture until a publication is handed back.
             // SDK stop is idempotent when publish already rolled capture back.
             try await track.stop()
+            if cameraCaptureCleanup === track { cameraCaptureCleanup = nil }
             throw error
         }
     }
@@ -373,6 +383,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 if pending.track === bufferTrack { bufferPublication = publication }
                 else { cameraPublication = publication }
             }
+        }
+        if let cleanup = cameraCaptureCleanup {
+            try await cleanup.stop()
+            if cameraCaptureCleanup === cleanup { cameraCaptureCleanup = nil }
         }
         #if targetEnvironment(simulator)
         // Stop the synthetic frame generator first so no more frames are injected.
