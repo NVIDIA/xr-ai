@@ -598,7 +598,7 @@ async def test_required_speaker_without_batch_waits_before_media(tmp_path, monke
 
 
 @pytest.mark.parametrize("enabled, backend", [(False, "auto"), (False, "required"), (True, "auto")])
-async def test_explicit_batch_client_is_required_only_for_ordinary_selection(tmp_path, monkeypatch, enabled, backend):
+async def test_batch_session_selection_and_private_vad_transcription(tmp_path, monkeypatch, enabled, backend):
     from xr_ai_models import load_models_config_from_dict, make_stt
     from xr_ai_runtime import Topic
     from xr_ai_voice import UserQuery, VoiceAgent, _session

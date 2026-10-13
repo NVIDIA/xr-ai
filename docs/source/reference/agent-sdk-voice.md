@@ -14,21 +14,27 @@ and defaults.
 (agent-sdk-voice-usage)=
 ## Voice agent
 
-Applications register one `VoiceAgent` with their runtime:
+Applications construct speech from their loaded model profile and voice-gate
+configuration, then register one `VoiceAgent` with their runtime:
 
 ```python
+from pathlib import Path
+
+from xr_ai_models import load_models_config
 from xr_ai_runtime import Topic
 from xr_ai_voice import UserQuery, VadConfig, VoiceAgent, VoiceInterrupted
-from xr_ai_voicegate import VoiceGateConfig
+from xr_ai_voicegate import load_voice_gate_config
 
+models = load_models_config("yaml/models.json")
+voice_gate = load_voice_gate_config(Path("yaml/voice_gate.yaml"))
 queries = Topic("my-sample.user-query", UserQuery)
 interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
-voice = VoiceAgent(
+voice = VoiceAgent.from_models(
+    models=models,
     query_topic=queries,
-    stt=stt,
     tts=tts,
     vad=VadConfig(),
-    voice_gate=VoiceGateConfig(),
+    voice_gate=voice_gate,
     interrupted_topic=interruptions,
 )
 runtime.register("voice", voice)
@@ -247,7 +253,12 @@ Before announcing readiness, the worker probes the service's HTTP `/health`
 endpoint. A ready compatible service selects diarization. In automatic mode,
 connection absence selects an explicitly supplied ordinary `STTService`, including
 native Riva speech. Automatic mode requires that real batch client; it is not
-the shipped default. Required speaker mode accepts `VoiceAgent(stt=None)` and
+the shipped default. `VoiceAgent.from_models(models=..., voice_gate=..., ...)`
+uses the already-loaded model profile and the same voice-gate settings as its
+sole speech selector. Required speaker mode constructs no batch client;
+disabled or automatic mode constructs the existing `stt` role, including native
+Riva when configured. The low-level constructor remains available for callers
+supplying their own clients. Required speaker mode accepts `VoiceAgent(stt=None)` and
 waits even when the service is absent; disabled or automatic speaker mode needs
 a batch client. Once a listener is observed, an unresponsive
 or interrupted response means not-ready: the worker waits using the existing

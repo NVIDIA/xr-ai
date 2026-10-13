@@ -99,8 +99,8 @@ speaker:
 ```
 
 Model endpoint selection and speaker-backend selection are separate settings.
-Changing the model profile alone does not disable a reachable local speaker
-service. The native deployment profile connects to external Riva endpoints;
+Changing the model profile alone does not disable required speaker selection.
+The native deployment profile connects to external Riva endpoints;
 it does not start, stop, or use the local speaker-ASR service.
 
 ### Embedding inputs
@@ -173,13 +173,14 @@ application latency in the deployment environment.
 
 ## Switch an existing sample
 
-Keep a copy of the sample's active local JSON. Replace its model entries with
+Keep copies of the sample's active local JSON and voice-gate YAML. Replace its model entries with
 the roles required for native deployment in the table below, including the
 explicit `stt` entry for ordinary Riva speech. This example adapts
 simple VLM; run it from the repository root after validation:
 
 ```bash
 cp agent-samples/simple-vlm-example/yaml/models.json /tmp/simple-vlm.models.local.json
+cp agent-samples/simple-vlm-example/yaml/voice_gate.yaml /tmp/simple-vlm.voice-gate.local.yaml
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models python - <<'PYTHON'
 import json
 from pathlib import Path
@@ -190,6 +191,10 @@ active = json.loads(target.read_text())
 active['models'] = {name: source[name] for name in active['models']}
 active['models']['stt'] = source['stt']
 target.write_text(json.dumps(active, indent=2) + '\n')
+gate_path = Path('agent-samples/simple-vlm-example/yaml/voice_gate.yaml')
+gate = yaml.safe_load(gate_path.read_text())
+gate['speaker']['enabled'] = False
+gate_path.write_text(yaml.safe_dump(gate, sort_keys=False))
 PYTHON
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models --extra riva \
   --with 'audioop-lts; python_version >= "3.13"' python deployment/nim/smoke_test.py \
@@ -210,9 +215,18 @@ update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.
 
-To return simple VLM to local development, restore its saved profile, start
-`model_servers`, and restart the sample. Restoring a profile does not stop remote
-NIMs; the deployment operator controls them.
+To return simple VLM to local development, restore both saved configurations,
+start the local stack, and restart the sample:
+
+```bash
+cp /tmp/simple-vlm.models.local.json agent-samples/simple-vlm-example/yaml/models.json
+cp /tmp/simple-vlm.voice-gate.local.yaml agent-samples/simple-vlm-example/yaml/voice_gate.yaml
+uv run --project model-server-samples/model-servers model_servers
+uv run --project agent-samples/simple-vlm-example simple_vlm_example
+```
+
+Restoring the voice-gate YAML reselects required local speaker ASR. Restoring a
+profile does not stop remote NIMs; the deployment operator controls them.
 
 ## Removed managed NIM stack
 

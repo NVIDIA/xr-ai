@@ -12,10 +12,8 @@ visual identification, and event-driven notifications. Refer to the
 architecture reference focuses on reusing the sample's structure for another
 application.
 
-Default speech requires the shared speaker-ASR service on 8102 before worker
-readiness. Batch STT is an explicit alternative, not a fallback when that
-service is absent. Refer to {doc}`/guides/customizing-model-servers` for selecting
-ordinary STT with the existing model profile and voice-gate settings.
+For speech deployment and explicit batch-STT selection, refer to
+{doc}`/guides/customizing-model-servers`.
 
 The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads

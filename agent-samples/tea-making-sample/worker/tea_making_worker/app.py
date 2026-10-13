@@ -13,7 +13,7 @@ from pathlib import Path
 import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, RuntimeContext, subscribe
 from xr_ai_tools.rag import RAGTools
 from xr_ai_tools.vision import ImageQueryTool
@@ -127,17 +127,12 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     llm = make_llm(models, "llm")
     vlm = make_vlm(models, "vlm")
-    speaker = voice_gate._speaker
-    stt = (
-        None if speaker is not None and speaker.backend == "required"
-        else make_stt(models, "stt")
-    )
     tts = make_tts(models, "tts")
     rag = RAGTools(config.rag_endpoint)
     transport = HubVoiceTransport()
-    voice = VoiceAgent(
+    voice = VoiceAgent.from_models(
         query_topic=USER_QUERY_TOPIC,
-        stt=stt,
+        models=models,
         tts=tts,
         vad=VadConfig(
             silence_duration=config.silence_duration,

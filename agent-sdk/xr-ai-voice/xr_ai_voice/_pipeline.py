@@ -65,8 +65,6 @@ def _build_voice_pipeline(
     =True`` at ``IDLE_TIMEOUT_SECS`` — i.e. on by default upstream, which would
     silently drop idle sessions.
     """
-    if not use_speaker_asr and stt is None:
-        raise ValueError("ordinary STT requires a batch STTService")
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
     voice_gate_proc._use_speaker_asr = use_speaker_asr
     # Control phrases and closed-session speech must not reach caption sinks.

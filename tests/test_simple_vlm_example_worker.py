@@ -563,7 +563,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "setup_logging", lambda _name: worker_log)
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
-    monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
+    monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)

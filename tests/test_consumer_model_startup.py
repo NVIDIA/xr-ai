@@ -63,7 +63,7 @@ async def test_sample_does_not_register_model_health_probes(
         options.update(kwargs)
         raise WiringComplete
 
-    monkeypatch.setattr(app, "VoiceAgent", capture_voice)
+    monkeypatch.setattr(app, "VoiceAgent", SimpleNamespace(from_models=capture_voice))
     with pytest.raises(WiringComplete):
         await app.run_app(config)
     probes = options.get("probes", {})
@@ -80,17 +80,19 @@ async def test_sample_does_not_register_model_health_probes(
         rag.health.assert_awaited_once()
 
 
-@pytest.mark.parametrize("sample, package", [
-    ("simple-vlm-example", "simple_vlm_example_worker"),
-    ("lab-instrument-monitoring", "lab_instrument_monitoring_worker"),
-    ("tea-making-sample", "tea_making_worker"),
-    ("xr-render-demo", "xr_render_demo_worker"),
+@pytest.mark.parametrize("sample, package, preset", [
+    ("simple-vlm-example", "simple_vlm_example_worker", "voice_gate.yaml"),
+    ("lab-instrument-monitoring", "lab_instrument_monitoring_worker", "voice_gate.yaml"),
+    ("tea-making-sample", "tea_making_worker", "voice_gate.yaml"),
+    ("tea-making-sample", "tea_making_worker", "voice_gate.always-on.yaml"),
+    ("xr-render-demo", "xr_render_demo_worker", "voice_gate.yaml"),
 ])
 @pytest.mark.parametrize("optional_batch_entry", [False, True])
 async def test_shipped_speaker_mode_never_constructs_batch_client(
-    sample, package, optional_batch_entry, monkeypatch, tmp_path,
+    sample, package, preset, optional_batch_entry, monkeypatch, tmp_path,
 ):
     from xr_ai_models import load_models_config
+    from xr_ai_voice import VoiceAgent, _runtime
 
     root = Path(__file__).resolve().parents[1]
     monkeypatch.syspath_prepend(str(root / "agent-samples" / sample / "worker"))
@@ -103,7 +105,7 @@ async def test_shipped_speaker_mode_never_constructs_batch_client(
         profile.entries["stt"] = load_models_config(root / "deployment/nim/models.yaml").entries["stt"]
     monkeypatch.setattr(app, "load_models_config", lambda *_args: profile)
     monkeypatch.setattr(app, "setup_logging", Mock())
-    monkeypatch.setattr(app, "make_stt", lambda *_args: pytest.fail("unused batch client constructed"))
+    monkeypatch.setattr(_runtime, "make_stt", lambda *_args: pytest.fail("unused batch client constructed"))
     service = SimpleNamespace(chat=AsyncMock(), close=AsyncMock())
     for factory in ("make_llm", "make_vlm", "make_tts"):
         if hasattr(app, factory):
@@ -120,15 +122,16 @@ async def test_shipped_speaker_mode_never_constructs_batch_client(
     class WiringComplete(Exception):
         pass
 
-    def capture(**kwargs):
-        assert kwargs["stt"] is None
-        assert kwargs["voice_gate"]._speaker.backend == "required"
-        raise WiringComplete
+    class CaptureVoice(VoiceAgent):
+        def __init__(self, **kwargs):
+            assert kwargs["stt"] is None
+            assert kwargs["voice_gate"]._speaker.backend == "required"
+            raise WiringComplete
 
-    monkeypatch.setattr(app, "VoiceAgent", capture)
+    monkeypatch.setattr(app, "VoiceAgent", CaptureVoice)
     config = SimpleNamespace(
         models_config=tmp_path / model_file,
-        voice_gate_yaml=root / "agent-samples" / sample / "yaml/voice_gate.yaml",
+        voice_gate_yaml=root / "agent-samples" / sample / "yaml" / preset,
         silence_duration=0.5, min_speech=0.2, silero_threshold=0.5, idle_timeout_secs=None,
         rag_endpoint="unused", scene_endpoint="unused", openxr_endpoint="unused",
         text_memory_dir=tmp_path, video_history_enabled=False,

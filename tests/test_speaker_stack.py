@@ -84,7 +84,19 @@ def test_explicit_batch_deployment_selects_batch_stt_and_disables_speaker(batch_
 def test_invalid_operator_service_declaration_fails_before_launch(tmp_path, declaration):
     profile = tmp_path / "models.invalid.json"
     profile.write_text(json.dumps({"models": {}, "services": declaration}))
-    with pytest.raises(ValueError, match="services"):
+    with pytest.raises(ValueError, match=f"{profile}:.*services"):
+        stack._build_processes(profile, "dual_48G_ada")
+
+
+@pytest.mark.parametrize("ownership", ["managed", "reused", "external"])
+def test_speaker_model_role_cannot_bypass_operator_service_schema(tmp_path, ownership):
+    profile = tmp_path / "models.invalid.json"
+    profile.write_text(json.dumps({"models": {"stt": {
+        "adapter": {"preset": "parakeet_stt"},
+        "endpoint": {"base_url": "http://localhost:8103"},
+        "deployment": {"ownership": ownership, "service": "speaker-stt"},
+    }}}))
+    with pytest.raises(ValueError, match=f"{profile}:.*not models"):
         stack._build_processes(profile, "dual_48G_ada")
 
 
@@ -92,7 +104,6 @@ def test_normal_cli_passes_only_profile_selection(monkeypatch):
     selected = []
     monkeypatch.setattr(stack, "setup_logging", lambda *_a, **_kw: None)
     monkeypatch.setattr(stack, "require_credentials", lambda *_a, **_kw: None)
-    monkeypatch.setattr(stack, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(stack, "run_stack", lambda *_a, **_kw: None)
     monkeypatch.setattr(stack, "_build_processes", lambda *a, **kw: (selected.append((a, kw)) or [], ()))
     monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "models.custom.json"])
@@ -111,7 +122,10 @@ def test_speaker_cleanup_uses_configured_port_not_default(tmp_path, monkeypatch)
     monkeypatch.setattr(stack, "_BASE", tmp_path)
     processes, _ = stack._build_processes(profile, "custom")
     assert processes[0].port == 12345
-    assert stack._known_service_ports() == [("speaker-stt", 12345)]
+    stopped = []
+    monkeypatch.setattr(stack, "stop_persistent_servers", lambda services: stopped.extend(services) or True)
+    stack._stop_models(processes)
+    assert stopped == [("speaker-stt", 12345)]
 
 
 @pytest.mark.parametrize("environment, owned", [

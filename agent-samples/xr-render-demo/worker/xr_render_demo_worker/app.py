@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -61,11 +61,6 @@ async def run_app(
             logger.opt(exception=True).warning("LLM warmup failed; readiness will retry")
             return False
         return True
-    speaker = voice_gate._speaker
-    stt = (
-        None if speaker is not None and speaker.backend == "required"
-        else make_stt(models, "stt")
-    )
     tts = make_tts(models, "tts")
     vlm = make_vlm(models, "vlm")
 
@@ -100,9 +95,9 @@ async def run_app(
             supervisor,
             on_participant_left=_participant_left,
         )
-        voice = VoiceAgent(
+        voice = VoiceAgent.from_models(
             query_topic=USER_QUERY_TOPIC,
-            stt=stt,
+            models=models,
             tts=tts,
             vad=VadConfig(
                 silence_duration=config.silence_duration,

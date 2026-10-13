@@ -123,20 +123,26 @@ def _build_processes(
     profile_path = models or _BASE / "yaml" / "models.default.json"
     deployment = load_deployment_profile(profile_path)
     services = dict(deployment.services)
+    raw = json.loads(profile_path.read_text())
+    if any(model["deployment"].get("service") == "speaker-stt" for model in raw["models"].values()):
+        raise ValueError(
+            f"{profile_path}: speaker-stt must be declared under services, "
+            "not models.*.deployment.service"
+        )
     # Streaming speech has no batch model adapter. Its declaration belongs
     # to this operator profile, outside the shared model-client schema.
-    operator_services = json.loads(profile_path.read_text()).get("services", {})
+    operator_services = raw.get("services", {})
     if not isinstance(operator_services, dict):
-        raise ValueError("model profile services must be an object")
+        raise ValueError(f"{profile_path}: services must be an object")
     for service, spec in operator_services.items():
         if service != "speaker-stt" or spec != {"ownership": "managed"}:
-            raise ValueError("operator services must declare speaker-stt with ownership: managed")
+            raise ValueError(f"{profile_path}: services must declare speaker-stt with ownership: managed")
         if service in services and services[service] != "own":
-            raise ValueError(f"conflicting ownership for service {service!r}")
+            raise ValueError(f"{profile_path}: conflicting ownership for service {service!r}")
         services[service] = "own"
     unknown = services.keys() - _MODEL_SERVICES.keys()
     if unknown:
-        raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
+        raise ValueError(f"{profile_path}: unknown services: {sorted(unknown)}")
 
     profile_name = gpu_profile or detect_gpu_config()
     config_dir = _BASE / "yaml" / profile_name

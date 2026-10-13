@@ -13,9 +13,8 @@ conversation:
   require_wake_phrase: false
   phrase_window_s: 6.0
 
-# Probe once at worker startup. Ordinary STT keeps the same controls when the
-# diarization service is unavailable; use required to demand speaker filtering.
+# Require the shared speaker-ASR service, as in the normal local preset.
 speaker:
   enabled: true
-  backend: auto
+  backend: required
   base_url: http://127.0.0.1:8102

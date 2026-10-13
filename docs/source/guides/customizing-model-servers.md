@@ -89,10 +89,11 @@ speaker:
 ```
 
 Add the same `adapter` and `endpoint` objects under `models.stt` in the worker's
-own model profile; its application uses the existing `make_stt` factory when
-that entry is present. `VoiceAgent(stt=None)` is valid only for enabled, required
-speaker ASR. Ordinary STT and `backend: auto` require a real batch client; they
-are explicit choices, not the shipped default. To serve both paths, retain the speaker declaration and add the
+own model profile. Samples use `VoiceAgent.from_models` to resolve speech from
+the loaded profile and voice-gate settings: disabled or automatic speaker
+selection constructs the `stt` client; required speaker selection does not.
+Refer to {doc}`/reference/agent-sdk-voice` for the constructor contract.
+To serve both paths, retain the speaker declaration and add the
 managed batch-STT entry; this loads both sets of model weights.
 Run `model_servers --stop` before changing deployment JSON or hardware YAML,
 then launch the desired configuration and restart its consumers.

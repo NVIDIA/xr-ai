@@ -23,12 +23,6 @@ _model_servers = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_model_servers)
 
 
-@pytest.fixture(autouse=True)
-def _isolate_speaker_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stack unit tests must never contact an operator's persisted IPC service.
-    monkeypatch.setattr(_model_servers, "_stop_speaker_endpoint", lambda _endpoint: None)
-
-
 _OMNI_PATH = (
     _REPO_ROOT
     / "services/nemotron-omni-llm/nemotron_omni_llm_server/__main__.py"
@@ -67,7 +61,7 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, g
     assert [process.name for process in processes] == [
         "speaker-stt", "tts", "omni", "vlm", "embedding",
     ]
-    assert [process.port for process in processes] == [None, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8102, 8105, 8108, 8100, 8109]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -230,7 +224,7 @@ def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) 
     _model_servers._stop_models(processes)
 
     assert set(stopped) == {
-        ("stt", 8103),
+        ("speaker-stt", 8102),
         ("tts", 8105),
         ("omni", 8108),
         ("vlm", 8100),
@@ -331,7 +325,7 @@ def test_selected_service_config_must_declare_http_port(
     config = tmp_path / "yaml" / "custom" / "pocket_tts_server.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("host: 0.0.0.0\n", encoding="utf-8")
-    (config.parent / "speaker_stt.yaml").write_text("endpoint: ipc:///tmp/test-speaker.sock\n")
+    (config.parent / "speaker_stt.yaml").write_text("host: 127.0.0.1\nport: 8102\n")
     profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
