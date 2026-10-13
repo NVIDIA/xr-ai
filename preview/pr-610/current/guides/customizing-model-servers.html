@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Documentation style" href="documentation-style.html" />
+    <link rel="next" title="Deploying samples with NIM endpoints" href="deploying-with-nim.html" />
     <link rel="prev" title="Contributing and conventions" href="contributing-and-conventions.html" />
 
 
@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
@@ -325,9 +326,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -477,9 +478,9 @@ selects the deployment profile independently.</p>
 <p>The default <code class="docutils literal notranslate"><span class="pre">yaml/models.default.json</span></code> profile starts local Parakeet STT,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> without <code class="docutils literal notranslate"><span class="pre">--models</span></code> to use it.</p>
-<p>NIM launch support belongs to the separate <a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a>
-sample, which provides Magpie TTS and compatible endpoints for existing agents.
-The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> service catalog contains only local server wrappers.</p>
+<p>For NIM deployment, configure independently deployed endpoints with the same
+SDK factories. Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> service
+catalog contains only local server wrappers.</p>
 <p>Copy the default profile to customize it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>model-server-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model-server-samples/model-servers/yaml/models.my-stack.json
@@ -548,8 +549,8 @@ Copy or update the relevant role entries in the sample’s active models JSON,
 omitting their <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects. Keep adapter settings and endpoint
 credentials needed by the client; server-only credentials stay in the shared
 stack’s deployment profile.</p>
-<p>The standard local stack and the separate <code class="docutils literal notranslate"><span class="pre">model-servers-nim</span></code> stack work with
-existing samples’ checked-in models JSON. For custom deployments, change only
+<p>The standard local stack works with samples’ checked-in models JSON.
+For deployment against native NIM endpoints, change only
 the roles whose model adapters or endpoints differ. Preserve the sample’s other
 roles and any required RAG embedding health settings described below.</p>
 <p>Sample launchers declare only their application processes; model endpoints
@@ -602,11 +603,11 @@ can prevent RAG startup even when embedding inference works.</p>
 </section>
 <section id="riva-speech-boundary">
 <h2>Riva speech boundary<a class="headerlink" href="#riva-speech-boundary" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher does not launch Riva NIMs. Refer to
-<a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a> for the NIM stack and its HTTP compatibility
-adapters. Direct Riva gRPC clients require the optional Riva SDK dependency and
-an explicit models configuration change; that is not an endpoint-only
-customization.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher does not launch Riva NIMs. Direct Riva clients
+normalize native speech in the SDK; no HTTP compatibility adapter is required.
+The sample voice workers include the Riva SDK extra. Configure the speech
+adapter and endpoint in the active models profile. Refer to
+<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p>
 </section>
 <section id="validate-and-switch-profiles">
 <h2>Validate and switch profiles<a class="headerlink" href="#validate-and-switch-profiles" title="Link to this heading">#</a></h2>
@@ -619,14 +620,21 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </pre></div>
 </div>
 <p>Model servers persist after the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command reports readiness.
-Starting another profile stops persisted services outside the new selection
-before launching it. After changing an image, checkpoint, or launch setting,
-stop the old stack once so it cannot continue serving stale configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+Starting another profile leaves services outside its selection running. Stop
+the old selection explicitly when it is no longer needed or occupies resources
+required by the new deployment. After changing an image, checkpoint, or launch
+setting, stop the old stack once so it cannot continue serving stale
+configuration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json<span class="w"> </span>--stop
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
 </pre></div>
 </div>
+<p>Use the same hardware-profile selection for start and stop, including
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> when it was explicitly selected. Stop before editing
+service ports or replacing the deployment JSON: cleanup reads the current
+managed launch plan and does not remember its prior contents.</p>
 <p>For adapter fields and model capabilities, refer to
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. For server runtime behavior, persistence,
 and NIM credentials, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
@@ -653,11 +661,11 @@ and NIM credentials, refer to <a class="reference internal" href="../components/
       </div>
     </a>
     <a class="right-next"
-       href="documentation-style.html"
+       href="deploying-with-nim.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Documentation style</p>
+        <p class="prev-next-title">Deploying samples with NIM endpoints</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -1,0 +1,218 @@
+xr_ai_tools.tool_calling
+========================
+
+.. py:module:: xr_ai_tools.tool_calling
+
+.. autoapi-nested-parse::
+
+   Helpers for dispatching model-selected native tool calls.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.ModelCallback
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.ToolLoopError
+   xr_ai_tools.tool_calling.ToolLoopIterationLimitError
+   xr_ai_tools.tool_calling.ToolLoopToolCallLimitError
+   xr_ai_tools.tool_calling.ToolLoopTruncatedResponseError
+   xr_ai_tools.tool_calling.ToolLoopEmptyResponseError
+   xr_ai_tools.tool_calling.ToolLoopDirectReturnError
+   xr_ai_tools.tool_calling.ToolLoopMalformedResponseError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.ToolCallResult
+   xr_ai_tools.tool_calling.ToolCallRecord
+   xr_ai_tools.tool_calling.ToolLoopResult
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_tools.tool_calling.tool_definitions
+   xr_ai_tools.tool_calling.handle_tool_call
+   xr_ai_tools.tool_calling.run_tool_loop
+
+
+Module Contents
+---------------
+
+.. py:class:: ToolCallResult
+
+   One model-ready tool response and its control-flow hint.
+
+
+   .. py:attribute:: message
+      :type:  xr_ai_models.ChatMessage
+
+      Tool-role message to append to the model conversation.
+
+
+
+   .. py:attribute:: return_direct
+      :type:  bool
+
+      Whether the agent should return the tool result immediately.
+
+
+
+.. py:class:: ToolCallRecord
+
+   One model-requested call and the model-visible result it produced.
+
+
+   .. py:attribute:: call
+      :type:  xr_ai_models.ToolCall
+
+      Model-emitted tool call that was executed.
+
+
+
+   .. py:attribute:: message
+      :type:  xr_ai_models.ChatMessage
+
+      Tool-role message produced for the model transcript.
+
+
+
+   .. py:attribute:: return_direct
+      :type:  bool
+
+      Whether this call ended the loop without another model turn.
+
+
+
+.. py:class:: ToolLoopResult
+
+   A completed turn with its full transcript and tool-call audit.
+
+
+   .. py:attribute:: content
+      :type:  str
+
+      Final answer or direct-return tool content.
+
+
+
+   .. py:attribute:: messages
+      :type:  tuple[xr_ai_models.ChatMessage, Ellipsis]
+
+      Complete resumable transcript for the turn.
+
+
+
+   .. py:attribute:: tool_calls
+      :type:  tuple[ToolCallRecord, Ellipsis]
+
+      Executed tool calls in model-emitted order.
+
+
+
+   .. py:attribute:: iterations
+      :type:  int
+
+      Number of model iterations consumed by the turn.
+
+
+
+   .. py:attribute:: return_direct
+      :type:  bool
+
+      Whether the result came directly from a tool.
+
+
+
+.. py:exception:: ToolLoopError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   Base error for a turn that cannot safely produce a final answer.
+
+
+.. py:exception:: ToolLoopIterationLimitError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   The model used every permitted iteration without a final answer.
+
+
+.. py:exception:: ToolLoopToolCallLimitError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   A model batch would exceed the turn's total tool-call budget.
+
+
+.. py:exception:: ToolLoopTruncatedResponseError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   The model reported a truncated response that is unsafe to execute.
+
+
+.. py:exception:: ToolLoopEmptyResponseError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   The model returned neither a tool call nor a non-empty answer.
+
+
+.. py:exception:: ToolLoopDirectReturnError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   A model batch mixed a direct-return tool with other calls.
+
+
+.. py:exception:: ToolLoopMalformedResponseError(message: str, *, messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tool_calls: collections.abc.Sequence[ToolCallRecord], iterations: int, rejected_response: xr_ai_models.ChatResponse | None = None)
+
+
+
+   The model returned tool calls that cannot form a valid transcript.
+
+
+.. py:data:: ModelCallback
+
+   Async model invocation supplied with the transcript and tool definitions.
+
+
+.. py:function:: tool_definitions(tools: collections.abc.Iterable[xr_ai_tools.Tool[Any, Any]] | xr_ai_tools.ToolSet) -> tuple[xr_ai_models.ToolDef, Ellipsis]
+
+   Return model-service definitions for native tools.
+
+
+.. py:function:: handle_tool_call(call: xr_ai_models.ToolCall, tools: xr_ai_tools.ToolSet) -> ToolCallResult
+   :async:
+
+
+   Invoke one model-produced call and return its tool-role message.
+
+
+.. py:function:: run_tool_loop(messages: collections.abc.Sequence[xr_ai_models.ChatMessage], tools: xr_ai_tools.ToolSet, call_model: ModelCallback, *, max_iterations: int = 4, max_tool_calls: int = 16) -> ToolLoopResult
+   :async:
+
+
+   Run one stateless, bounded model turn over native tools.
+
+   The callback owns all model parameters and retry policy. The loop only
+   supplies the current immutable transcript and the current turn's tool
+   definitions. Calls in a model batch execute sequentially in emitted order.
+
+

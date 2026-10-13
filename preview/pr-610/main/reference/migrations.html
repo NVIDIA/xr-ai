@@ -59,8 +59,8 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Shared model servers with NVIDIA NIM" href="model-servers-nim.html" />
-    <link rel="prev" title="Magpie NIM HTTP speech service" href="magpie-nim-tts.html" />
+    <link rel="next" title="NIM model endpoints" href="model-servers-nim.html" />
+    <link rel="prev" title="Magpie NIM speech" href="magpie-nim-tts.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/reference/migrations.html", "../../v0.1.0-beta/index.html", "migrations.html"];
+    var urls = ["../../v0.3.0-beta/reference/migrations.html", "../../v0.2.0-beta.2/reference/migrations.html", "../../v0.1.0-beta/index.html", "migrations.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -349,9 +351,9 @@
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -452,6 +454,51 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="selected-model-server-cleanup">
+<h2>Selected model-server cleanup<a class="headerlink" href="#selected-model-server-cleanup" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> now stops only managed services in the selected launch
+plan. For custom deployments, pass the same <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> and explicit
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at startup. Startup no longer stops omitted services.
+Before updating the checkout, stop the old deployment using the cleanup
+commands supported by that old checkout; older versions do not support
+combining <code class="docutils literal notranslate"><span class="pre">--models</span></code> with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>. Likewise, stop the selected plan before
+editing its ports or replacing its configuration; no launch history is tracked.
+The updated default launch plan
+cannot stop services omitted from its selection. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for the existing service identity guards and
+their configuration-scoped limitations.</p>
+</section>
+<section id="clef-model-cache-configuration">
+<h2>Clef model cache configuration<a class="headerlink" href="#clef-model-cache-configuration" title="Link to this heading">#</a></h2>
+<p>Remove <code class="docutils literal notranslate"><span class="pre">model_path</span></code> from Clef server YAML files. Clef first resolves the
+pinned <code class="docutils literal notranslate"><span class="pre">model_name</span></code> and <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> from the Hugging Face cache under
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>; only a cache miss follows the online download path. Set
+<code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to a Hugging Face cache root, not an extracted snapshot directory:
+a directory created with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span> <span class="pre">--local-dir</span></code> or git-lfs does not have
+the required cache layout. Refer to
+<a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache preparation
+and offline startup. Before restarting, stop a running Clef server from
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
+uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>The configuration identity changed, so a server started by an older version
+cannot be reused by the updated launcher.</p>
+</section>
+<section id="native-nim-endpoint-profiles">
+<h2>Native NIM endpoint profiles<a class="headerlink" href="#native-nim-endpoint-profiles" title="Link to this heading">#</a></h2>
+<p>The managed <code class="docutils literal notranslate"><span class="pre">model_servers_nim</span></code> command and its hardware profiles are removed,
+along with <code class="docutils literal notranslate"><span class="pre">nim_model_adapter</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_riva_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">xr_ai_vllm.serve_nim</span></code>. Deploy model containers with the
+operator’s tooling and configure native endpoint addresses in consumer profiles.
+Use native chat model IDs with <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code>, <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> for speech, and
+embedding <code class="docutils literal notranslate"><span class="pre">default_extras.input_type:</span> <span class="pre">passage</span></code> for prefix-aware asymmetric
+inputs. Local model-server defaults remain unchanged.</p>
+<p>Native Magpie speech does not append the compatibility wrapper’s 300 ms pause.
+Riva client readiness checks channel connectivity; validate inference separately.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for migration and validation commands.</p>
+</section>
 <section id="livekit-sample-credentials">
 <h2>LiveKit sample credentials<a class="headerlink" href="#livekit-sample-credentials" title="Link to this heading">#</a></h2>
 <p>Shipped DeviceIOHub YAML files now leave <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> blank.
@@ -507,9 +554,8 @@ Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
 Named <code class="docutils literal notranslate"><span class="pre">--models</span></code> selections are retired:</p>
 <ul class="simple">
 <li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">default</span></code> with <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>.</p></li>
-<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">vlm_llm_nim</span></code> with the separate
-<a class="reference internal" href="model-servers-nim.html"><span class="doc">NIM sample</span></a>. That stack uses Magpie TTS
-and the original agent endpoints; it is not the former mixed NIM profile.</p></li>
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">vlm_llm_nim</span></code> with an independently deployed
+NIM endpoint profile. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p></li>
 <li><p>Pass custom deployments by JSON path, such as
 <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">./yaml/models.my-stack.json</span></code>, instead of a bare name.
 Custom deployments can no longer select <code class="docutils literal notranslate"><span class="pre">llm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm-nim</span></code>, <code class="docutils literal notranslate"><span class="pre">stt-nim</span></code>, or
@@ -735,7 +781,7 @@ reuse the ignored caches rather than downloading them again.</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Magpie NIM HTTP speech service</p>
+        <p class="prev-next-title">Magpie NIM speech</p>
       </div>
     </a>
     <a class="right-next"
@@ -743,7 +789,7 @@ reuse the ignored caches rather than downloading them again.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Shared model servers with NVIDIA NIM</p>
+        <p class="prev-next-title">NIM model endpoints</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -768,6 +814,9 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>

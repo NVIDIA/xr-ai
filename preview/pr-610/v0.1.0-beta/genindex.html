@@ -274,16 +274,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" selected>v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" selected>v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../v0.2.0-beta.2/index.html", "genindex.html", "../main/index.html"];
+    var urls = ["../v0.3.0-beta/index.html", "../v0.2.0-beta.2/index.html", "genindex.html", "../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -1814,8 +1815,6 @@
         <li><a href="reference/python/xr_ai_tools/rpc/index.html#xr_ai_tools.rpc.RPCServer.serve">(xr_ai_tools.rpc.RPCServer method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.serve_nim">serve_nim() (in module xr_ai_vllm)</a>
-</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DeploymentSpec.service">service (xr_ai_models.DeploymentSpec attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.ModelDeployment.services">services (xr_ai_launcher.ModelDeployment attribute)</a>
@@ -1868,10 +1867,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/types/index.html#xr_ai_tools.types.SpatialFrame">SpatialFrame (class in xr_ai_tools.types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Spec">Spec (in module xr_ai_models)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.start">start() (xr_ai_runtime.AgentRuntime method)</a>
 
       <ul>
@@ -1906,6 +1905,8 @@
         <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.stop">(xr_ai_web_events.WebEventsAgent method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGateConfig.stop_commands_enabled">stop_commands_enabled (xr_ai_voicegate.VoiceGateConfig attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.stop_persistent_servers">stop_persistent_servers() (in module xr_ai_vllm)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VadConfig.stop_probe_after_s">stop_probe_after_s (xr_ai_voice.VadConfig attribute)</a>

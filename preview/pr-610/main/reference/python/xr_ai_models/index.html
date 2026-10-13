@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../../../v0.2.0-beta.2/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
+    var urls = ["../../../../v0.3.0-beta/index.html", "../../../../v0.2.0-beta.2/index.html", "../../../../v0.1.0-beta/index.html", "index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
@@ -349,9 +351,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -2245,6 +2247,12 @@ adapter kind.</p>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_models.EmbeddingService" title="xr_ai_models.EmbeddingService"><span class="pre">xr_ai_models.EmbeddingService</span></a></span></span><a class="headerlink" href="#xr_ai_models.make_embedding" title="Link to this definition">#</a></dt>
 <dd><p>Construct the embedding service for the named configuration entry.</p>
+<p><code class="docutils literal notranslate"><span class="pre">adapter.default_extras</span></code> supplies embedding payload fields. When its
+<code class="docutils literal notranslate"><span class="pre">input_type</span></code> is <code class="docutils literal notranslate"><span class="pre">query</span></code> or <code class="docutils literal notranslate"><span class="pre">passage</span></code>, that value labels unprefixed
+inputs; <code class="docutils literal notranslate"><span class="pre">query:</span> <span class="pre">``</span> <span class="pre">and</span> <span class="pre">``passage:</span> <span class="pre">``</span> <span class="pre">labels</span> <span class="pre">select</span> <span class="pre">their</span> <span class="pre">batch</span> <span class="pre">type</span> <span class="pre">and</span>
+<span class="pre">are</span> <span class="pre">stripped</span> <span class="pre">before</span> <span class="pre">inference.</span> <span class="pre">Mixed</span> <span class="pre">batches</span> <span class="pre">retain</span> <span class="pre">input</span> <span class="pre">order.</span> <span class="pre">Without</span>
+<span class="pre">``input_type</span></code>, text is sent unchanged. <code class="docutils literal notranslate"><span class="pre">model</span></code> and <code class="docutils literal notranslate"><span class="pre">input</span></code> cannot be
+overridden by extras.</p>
 <p>Raises <code class="xref py py-class docutils literal notranslate"><span class="pre">KeyError</span></code> when <em>name</em> is absent, <code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code> when it
 names a different model role, and <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unsupported
 adapter kind.</p>
@@ -2345,6 +2353,8 @@ adapter kind.</p>
 
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#xr_ai_models.RivaSTT.transcribe" title="Link to this definition">#</a></dt>
 <dd><p>Recognize <em>audio</em> (WAV or raw 16-bit PCM) and return the transcript.</p>
+<p>Timeout and cancellation cancel the RPC and join its pending native read
+before returning, so a caller can safely release recognition resources.</p>
 </dd></dl>
 
 <dl class="py method">

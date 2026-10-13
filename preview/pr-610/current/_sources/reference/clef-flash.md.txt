@@ -43,17 +43,12 @@ uv run clef_flash_model
 The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
 Its `yaml/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
-`Cloudflare/clef-flash` model repository and downloads it into the repository's
-ignored `models/` cache on first launch. To use an already extracted copy of
-that snapshot, set `model_path` to its directory in the YAML. The local path
-must contain the release's required model files; its revision is supplied by
-the configuration rather than checked against local artifact metadata.
-
-Without `model_path`, the server resolves the configured revision from the
-cache first and passes the snapshot directory to the native loader. An absent
-snapshot follows the online download path. With `HF_HUB_OFFLINE=1`, a cache
-miss instead fails before model loading with the model, revision, and cache
-directory. Offline startup assumes a previously working cache. Refer to
+`Cloudflare/clef-flash` model repository. The service resolves the configured
+pinned snapshot from the repository's ignored `models/` cache first and passes
+its directory to the native loader. A cache
+miss follows the online download path; with `HF_HUB_OFFLINE=1`, it fails before
+model loading with the model, revision, and cache directory. Offline startup
+assumes a previously working cache. Refer to
 {ref}`starting-model-services-without-network-access` for cache behavior.
 
 With `UV_CONFIG_FILE` still set, use `uv run clef_flash_model --stop` from the

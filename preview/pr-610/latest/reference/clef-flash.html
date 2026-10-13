@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -325,9 +326,9 @@
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -461,16 +462,12 @@ uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model
 <p>The sample starts <code class="docutils literal notranslate"><span class="pre">services/clef-server</span></code> persistently on <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8120</span></code>.
 Its <code class="docutils literal notranslate"><span class="pre">yaml/clef_server.yaml</span></code> pins model revision
 <code class="docutils literal notranslate"><span class="pre">17f0b0ad64efb65d273590632833508766b2aae6</span></code> from the
-<code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository and downloads it into the repository’s
-ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache on first launch. To use an already extracted copy of
-that snapshot, set <code class="docutils literal notranslate"><span class="pre">model_path</span></code> to its directory in the YAML. The local path
-must contain the release’s required model files; its revision is supplied by
-the configuration rather than checked against local artifact metadata.</p>
-<p>Without <code class="docutils literal notranslate"><span class="pre">model_path</span></code>, the server resolves the configured revision from the
-cache first and passes the snapshot directory to the native loader. An absent
-snapshot follows the online download path. With <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>, a cache
-miss instead fails before model loading with the model, revision, and cache
-directory. Offline startup assumes a previously working cache. Refer to
+<code class="docutils literal notranslate"><span class="pre">Cloudflare/clef-flash</span></code> model repository. The service resolves the configured
+pinned snapshot from the repository’s ignored <code class="docutils literal notranslate"><span class="pre">models/</span></code> cache first and passes
+its directory to the native loader. A cache
+miss follows the online download path; with <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>, it fails before
+model loading with the model, revision, and cache directory. Offline startup
+assumes a previously working cache. Refer to
 <a class="reference internal" href="../components/ai-services.html#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a> for cache behavior.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">UV_CONFIG_FILE</span></code> still set, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span> <span class="pre">--stop</span></code> from the
 sample directory to stop only a listener carrying the matching Clef ownership

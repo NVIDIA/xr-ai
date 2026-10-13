@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -325,9 +326,9 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -472,10 +473,15 @@ whenever you want to pre-warm models:</p>
 </div>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
-<p>After updating, stop any existing model servers before starting this stack:</p>
+<p>Before updating the checkout, stop the model servers using the old checkout
+and its selected configuration:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
+<p>For a custom deployment, use the cleanup commands supported by that old
+checkout to stop its services. The updated default launch plan cannot stop
+services omitted from its selection. Once using the selected-plan cleanup,
+pass the same <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> and explicit <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at startup.</p>
 <p>Persisted vLLM processes or containers may otherwise keep serving the previous
 models and images even though the checked-in configuration now selects
 Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.</p>
@@ -498,17 +504,20 @@ Cosmos3 Nano Reasoner (8100), STT (8103), Pocket TTS (8105), and embeddings
 (8109). Use <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> only for a custom local deployment JSON. Starting
 a profile stops persisted servers outside it first and aborts if they cannot
 be stopped, avoiding GPU overcommit.</p>
-<p>For NVIDIA NIM models, use the separate <a class="reference internal" href="../reference/model-servers-nim.html"><span class="doc">Shared model servers with NVIDIA NIM</span></a>
-sample. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher no longer selects NIM deployments.</p>
+<p>For deployment using NVIDIA NIM, configure independently deployed endpoints.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>; no NIM model launcher is required.</p>
 <p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
-<p>To stop all model servers when done:</p>
+<p>To stop the default deployment’s managed model services when done:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> stops every model-server port, so it takes no profile selection.</p>
+<p>For a custom deployment, combine <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>; use the same
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> if you selected one at startup. Cleanup targets only that
+managed launch plan, not every model-server port. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for service guards and configuration changes.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
