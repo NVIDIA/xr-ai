@@ -76,17 +76,19 @@ does not release the inference lock while native inference is still running.
 Health also includes a deterministic fingerprint of the active non-secret
 configuration used for reuse checks.
 
-Compatible existing listeners may be reused without transferring ownership;
-they remain unowned by this deployment and are not stopped with it. An
-incompatible or unrelated listener on the same port is rejected. The default
-profile starts and stops the local model stack, including Clef. From
-`model-server-samples/model-servers/`, run
-`uv run model_servers --stop` to stop resources attributed to the default
-deployment. Clef shutdown waits for the owned process to exit and
-drain native work; on Linux, termination and timeout escalation remain tied to
-the same verified process handle. It does not stop an unrelated listener or
-container. The checked-in configuration uses `cuda:0`, BF16, 4096 tokens, and a
-1 MiB request-body limit. Increase `max_length` only when GPU memory allows it.
+Startup may reuse a compatible existing listener without changing its runtime
+configuration. Cleanup is selected-plan scoped: `--stop` targets managed
+services in the selected deployment, including a matching managed listener on
+a selected port even if another invocation started it. Entries configured as
+`external` or `reused`, and omitted services, are excluded. Incompatible or
+unrelated listeners fail the existing identity checks and are not stopped.
+The default profile includes Clef. From `model-server-samples/model-servers/`,
+run `uv run model_servers --stop` to stop the managed services in that default
+plan. Clef shutdown waits for the verified process to exit and drain native
+work; on Linux, termination and timeout escalation remain tied to the same
+verified process handle. The checked-in configuration uses `cuda:0`, BF16,
+4096 tokens, and a 1 MiB request-body limit. Increase `max_length` only when
+GPU memory allows it.
 
 Local model artifacts land in the service's `model_cache` directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted

@@ -79,7 +79,7 @@ uv run main.py
 The first cold start downloads model weights and can take tens of minutes.
 Later starts can reuse a previously working cache without network access; refer to
 [starting without network access](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#starting-model-services-without-network-access).
-Stop resources attributed to the default deployment with:
+Stop the managed services selected by the default deployment with:
 
 ```bash
 uv run model_servers --stop

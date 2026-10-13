@@ -24,9 +24,13 @@ their configuration-scoped limitations.
 The standalone `clef_flash_model` command is retired. Clef is included in the
 default shared model-server deployment. From
 `model-server-samples/model-servers/`, start and stop it with the default
-deployment commands documented in the sample README. Stop an old standalone
-Clef process with the old checkout's command before updating; the updated
-default deployment cannot identify that old launch.
+deployment commands documented in the sample README. The old standalone and
+shared service use the same managed-process markers, so the selected default
+`--stop` can stop an old listener on port 8120. The configuration identity
+changed when `model_path` was removed, so stop the listener before starting
+the updated default deployment. You can use the old checkout's
+`clef_flash_model --stop` command before updating, or the shared default's
+`model_servers --stop` after updating.
 
 Remove `model_path` from Clef server YAML files. Clef first resolves the
 pinned `model_name` and `model_revision` from the Hugging Face cache under

@@ -228,6 +228,7 @@ def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) 
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("clef", 8120),
     }
 
 
@@ -245,7 +246,7 @@ def test_stop_fails_when_any_service_remains(
 
 
 @pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
-def test_default_profile_manages_clef_and_stops_only_its_receipt(
+def test_default_profile_manages_clef_and_selects_it_for_stop(
     monkeypatch: pytest.MonkeyPatch,
     gpu_profile: str,
 ) -> None:
@@ -263,22 +264,23 @@ def test_default_profile_manages_clef_and_stops_only_its_receipt(
     assert credentials == ()
     assert Path(next(p for p in processes if p.name == "clef").config).parent.name == gpu_profile
 
-    other_profile = _REPO_ROOT / "other-profile.json"
-    with _stack_ownership._stack_owner(other_profile, create=True) as foreign_owner:
-        pass
-    with _stack_ownership._stack_owner(profile, create=True) as owner:
-        pass
-    stopped: list[str] = []
+    stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
-        "_stop_stack",
-        lambda token, _timeout: stopped.append(token),
+        "stop_persistent_servers",
+        lambda services: stopped.extend(services) or True,
     )
 
-    _model_servers._stop_models(profile)
+    _model_servers._stop_models(processes)
 
-    assert stopped == [owner]
-    assert owner != foreign_owner
+    assert set(stopped) == {
+        ("stt", 8103),
+        ("tts", 8105),
+        ("omni", 8108),
+        ("vlm", 8100),
+        ("embedding", 8109),
+        ("clef", 8120),
+    }
 
 
 @pytest.mark.parametrize(
