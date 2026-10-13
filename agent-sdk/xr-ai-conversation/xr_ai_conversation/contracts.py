@@ -9,6 +9,25 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ConversationContextUpdate(BaseModel):
+    """A named topic update supplied as background context to a conversation.
+
+    The topic name identifies the source. Incremental updates are accumulated
+    and may be compacted in the background; summaries replace that source's
+    current background verbatim.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: Literal["incremental", "summary"]
+    """Whether ``text`` adds source material or replaces its background."""
+
+    text: str = Field(min_length=1)
+    """Source-owned text; interpretation remains the publisher's responsibility."""
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationExchange:
@@ -23,7 +42,7 @@ class ConversationExchange:
 
 @dataclass(frozen=True, slots=True)
 class ConversationTurn:
-    """The current user turn and bounded, completed context for a destination."""
+    """The current user turn and complete exchanges selected for this destination."""
 
     participant_id: str
     """Participant whose state and focus apply to this turn."""
@@ -35,7 +54,7 @@ class ConversationTurn:
     """Unmodified current user request."""
 
     history: tuple[ConversationExchange, ...] = ()
-    """Recent completed exchanges supplied to routing and admission."""
+    """Newest whole completed exchanges that fit the front-end byte budget."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +129,7 @@ class ConversationDestination(Protocol):
 __all__ = [
     "Admission",
     "ConversationDestination",
+    "ConversationContextUpdate",
     "ConversationExchange",
     "ConversationTurn",
     "DestinationResult",

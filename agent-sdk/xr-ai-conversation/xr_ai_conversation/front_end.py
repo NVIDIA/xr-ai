@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+import logging
 from collections.abc import Mapping
 from functools import partial
 
@@ -20,6 +20,9 @@ from .contracts import (
     DestinationResult,
     Emit,
 )
+
+_DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
+_logger = logging.getLogger(__name__)
 
 
 class ConversationFrontEnd:
@@ -37,17 +40,21 @@ class ConversationFrontEnd:
         decisions: DecisionService,
         *,
         default_destination: str = "conversation",
+        context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
     ) -> None:
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
         self._destinations = dict(destinations)
+        if context_budget_bytes <= 0:
+            raise ValueError("context_budget_bytes must be positive")
         self._decisions = decisions
+        self._context_budget_bytes = context_budget_bytes
         self._default_destination = default_destination
         self._focus: dict[str, str] = {}
         self._tasks: dict[str, asyncio.Task[DestinationResult]] = {}
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._history: dict[str, deque[ConversationExchange]] = {}
+        self._history: dict[str, list[ConversationExchange]] = {}
         self._destinations_used: dict[str, set[str]] = {}
 
     async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
@@ -62,12 +69,11 @@ class ConversationFrontEnd:
         async with lock:
             await self.interrupt(participant_id)
             history = tuple(self._history.get(participant_id, ())) or turn.history
-            bounded = tuple(ConversationExchange(item.user[:240], item.assistant[:240]) for item in history[-4:])
             current_turn = ConversationTurn(
                 participant_id=turn.participant_id,
                 turn_id=turn.turn_id,
                 query=turn.query,
-                history=bounded,
+                history=_bounded_history(history, self._context_budget_bytes, participant_id),
             )
             generation = object()
             self._generation[participant_id] = generation
@@ -229,7 +235,9 @@ class ConversationFrontEnd:
         errors = []
         for name in used:
             try:
-                await self._destinations[name].release(participant_id)
+                destination = self._destinations[name]
+                on_departure = getattr(destination, "participant_left", destination.release)
+                await on_departure(participant_id)
             except Exception as error:
                 errors.append(error)
             else:
@@ -245,8 +253,8 @@ class ConversationFrontEnd:
                 self._destinations_used.pop(participant_id, None)
 
     def _remember(self, turn: ConversationTurn, answer: str) -> None:
-        history = self._history.setdefault(turn.participant_id, deque(maxlen=4))
-        history.append(ConversationExchange(turn.query[:240], answer[:240]))
+        history = self._history.setdefault(turn.participant_id, [])
+        history.append(ConversationExchange(turn.query, answer))
 
     async def _select(self, turn: ConversationTurn, candidates: list[str]) -> str | None:
         if not candidates:
@@ -275,7 +283,8 @@ class ConversationFrontEnd:
             "participant_id": turn.participant_id,
             "request": turn.query,
             "completed_history": [
-                {"user": item.user[:240], "assistant": item.assistant[:240]} for item in turn.history[-4:]
+                {"user": item.user, "assistant": item.assistant}
+                for item in _bounded_history(turn.history, self._context_budget_bytes, turn.participant_id)
             ],
             "destinations": [
                 {
@@ -310,6 +319,38 @@ class ConversationFrontEnd:
 
 async def _emit_from(emit: Emit, destination: str, _source: str, text: str) -> None:
     await emit(destination, text)
+
+
+def _bounded_history(
+    history: tuple[ConversationExchange, ...],
+    budget_bytes: int,
+    participant_id: str,
+) -> tuple[ConversationExchange, ...]:
+    retained: list[ConversationExchange] = []
+    size = 0
+    for exchange in reversed(history):
+        item_size = len(exchange.user.encode("utf-8")) + len(exchange.assistant.encode("utf-8")) + 2
+        if retained and size + item_size > budget_bytes:
+            _logger.error(
+                "dropping old routing context participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                participant_id,
+                "conversation",
+                item_size,
+                budget_bytes,
+            )
+            break
+        if not retained and item_size > budget_bytes:
+            _logger.error(
+                "dropping oversized routing context participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                participant_id,
+                "conversation",
+                item_size,
+                budget_bytes,
+            )
+            break
+        retained.append(exchange)
+        size += item_size
+    return tuple(reversed(retained))
 
 
 __all__ = ["ConversationFrontEnd"]

@@ -28,6 +28,7 @@ from xr_ai_voice import (
     UserQuery,
     VoiceInterrupted,
     VoiceOutput,
+    VoiceParticipantJoined,
     VoiceParticipantLeft,
 )
 
@@ -37,6 +38,7 @@ PARTICIPANT_LEFT_TOPIC = Topic(
     VoiceParticipantLeft,
 )
 INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
+PARTICIPANT_JOINED_TOPIC = Topic("simple-vlm.participant-joined", VoiceParticipantJoined)
 _CONVERSATION_INSTRUCTIONS = (
     (Path(__file__).parent / "prompts" / "conversation.txt").read_text(encoding="utf-8").strip()
 )
@@ -54,6 +56,7 @@ class SimpleVlmAgent(Agent):
         set_status: Callable[[str, str], Awaitable[None]],
         *,
         llm: LLMService,
+        conversation: Conversation | None = None,
     ) -> None:
         super().__init__()
         self._vision_factory = vision_factory
@@ -61,7 +64,7 @@ class SimpleVlmAgent(Agent):
         self._set_status = set_status
         self._frames: CurrentFrameTool | None = None
         self._vision: StreamingImageQueryTool | None = None
-        self._conversation: Conversation | None = None
+        self._conversation: Conversation | None = conversation
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._history: dict[str, list[ConversationExchange]] = {}
 
@@ -72,6 +75,8 @@ class SimpleVlmAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("simple VLM queries require a participant")
+        if self._conversation is not None:
+            self._conversation.activate_participant(participant_id)
         await self._cancel(participant_id)
         task = asyncio.create_task(
             self._stream(request, ctx),
@@ -96,6 +101,22 @@ class SimpleVlmAgent(Agent):
         if self._frames is not None:
             self._frames.release(participant_id)
         self._history.pop(participant_id, None)
+        if self._conversation is not None:
+            await self._conversation.participant_left(participant_id)
+
+    @subscribe(PARTICIPANT_JOINED_TOPIC)
+    async def participant_joined(
+        self,
+        _event: VoiceParticipantJoined,
+        ctx: RuntimeContext,
+    ) -> None:
+        """Open participant-scoped context when the voice session joins."""
+
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            raise ValueError("participant-joined events require a participant")
+        if self._conversation is not None:
+            self._conversation.activate_participant(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
@@ -143,6 +164,7 @@ class SimpleVlmAgent(Agent):
         try:
             if self._vision is None or self._frames is None:
                 self._frames, self._vision = self._vision_factory()
+            if self._conversation is None:
                 self._conversation = Conversation(
                     self._llm,
                     instructions=_CONVERSATION_INSTRUCTIONS,
@@ -195,7 +217,6 @@ class SimpleVlmAgent(Agent):
                 if answer and not generation_failed:
                     exchanges = self._history.setdefault(participant_id, [])
                     exchanges.append(ConversationExchange(request.text, answer))
-                    del exchanges[:-4]
             finally:
                 close = getattr(stream, "aclose", None)
                 if close is not None:
@@ -232,9 +253,18 @@ class SimpleVlmAgent(Agent):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def stop(self) -> None:
-        """Cancel all image-query turns owned by this agent."""
+        """Cancel turns and release participant history owned by this agent."""
 
         await self._cancel_all()
+        participants = tuple(self._history)
+        self._history.clear()
+        if self._conversation is not None:
+            await asyncio.gather(
+                *(self._conversation.participant_left(participant) for participant in participants)
+            )
+        if self._frames is not None:
+            for participant in participants:
+                self._frames.release(participant)
 
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:

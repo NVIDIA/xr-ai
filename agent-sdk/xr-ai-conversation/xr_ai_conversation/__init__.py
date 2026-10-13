@@ -5,6 +5,7 @@
 
 from .contracts import (
     Admission,
+    ConversationContextUpdate,
     ConversationDestination,
     ConversationExchange,
     ConversationTurn,
@@ -17,6 +18,7 @@ from .front_end import ConversationFrontEnd
 __all__ = [
     "Admission",
     "Conversation",
+    "ConversationContextUpdate",
     "ConversationDestination",
     "ConversationExchange",
     "ConversationFrontEnd",

@@ -30,8 +30,15 @@ from xr_ai_models import (
     VLMService,
     load_models_config,
 )
-from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput
+from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_voice import (
+    UserQuery,
+    VoiceAgent,
+    VoiceInterrupted,
+    VoiceOutput,
+    VoiceParticipantJoined,
+    VoiceParticipantLeft,
+)
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._readiness import wait_for_services
 from xr_ai_voice._session import _VoiceSession as VoiceSession
@@ -47,12 +54,15 @@ from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # p
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     INTERRUPTED_TOPIC,
+    PARTICIPANT_JOINED_TOPIC,
+    PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     Conversation,
+    ConversationContextUpdate,
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,
@@ -278,7 +288,7 @@ async def test_conversation_delegates_native_current_view_without_speaking_pream
     assert len(llm.requests[0][1]) == 1
     assert llm.requests[0][1][0].name == "current_view"
     assert llm.requests[0][1][0].parameters["required"] == ["query"]
-    assert "Turn 1: Which bottle is fullest?" in llm.requests[0][0][1].content
+    assert "Turn 1: user asked: Which bottle is fullest?" in llm.requests[0][0][1].content
 
 
 async def test_conversation_answers_directly_without_selecting_a_frame() -> None:
@@ -609,6 +619,9 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
+    assert config.context_topics == ()
+    assert config.context_budget_bytes == 12_000
+    assert config.compaction_input_budget_bytes == 12_000
     assert "system_prompt_file" not in raw
 
     models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
@@ -868,6 +881,58 @@ async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
 
     assert vlm.health_calls == 0
     assert len(vlm.stream_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_participant_rejoin_reopens_context_before_topic_updates() -> None:
+    llm = _ConversationService()
+    conversation = Conversation(llm)  # type: ignore[arg-type]
+
+    async def set_status(_status: str, _participant_id: str) -> None:
+        return None
+
+    agent = SimpleVlmAgent(
+        lambda: (None, None),
+        set_status,
+        llm=llm,
+        conversation=conversation,
+    )  # type: ignore[arg-type]
+    context_topic = Topic("tea.status", ConversationContextUpdate)
+    runtime = AgentRuntime()
+    runtime.register("conversation-context", conversation.context_subscriber((context_topic,)))
+    runtime.register("simple-vlm", agent)
+
+    async with runtime:
+        await runtime.publish(
+            PARTICIPANT_JOINED_TOPIC,
+            VoiceParticipantJoined(),
+            participant_id="alice",
+        )
+        await runtime.publish(
+            context_topic,
+            {"mode": "summary", "text": "Timer is at 4 minutes."},
+            participant_id="alice",
+        )
+        assert conversation._context.sections("alice") == (("tea.status", "Timer is at 4 minutes."),)
+
+        await runtime.publish(
+            PARTICIPANT_LEFT_TOPIC,
+            VoiceParticipantLeft(),
+            participant_id="alice",
+        )
+        assert conversation._context.sections("alice") == ()
+        await runtime.publish(
+            PARTICIPANT_JOINED_TOPIC,
+            VoiceParticipantJoined(),
+            participant_id="alice",
+        )
+        await runtime.publish(
+            context_topic,
+            {"mode": "summary", "text": "Timer is at 6 minutes."},
+            participant_id="alice",
+        )
+        assert conversation._context.sections("alice") == (("tea.status", "Timer is at 6 minutes."),)
+    await conversation.close()
 
 
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(

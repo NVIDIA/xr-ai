@@ -47,8 +47,15 @@ already streaming do not receive a redundant capture request.
 
 A newer participant turn cancels the superseded vision request and interrupts
 its voice response. Participant departure releases the sample agent's cached
-frames and tasks. This is the reference composition for streamed conversation
-and current-view visual questions.
+frames, conversation history, and source-context tasks. This is the reference
+composition for streamed conversation and current-view visual questions.
+
+The worker can also subscribe to named runtime context topics configured in
+`yaml/simple_vlm_example_worker.yaml`. Publishers use the public
+`ConversationContextUpdate` contract; incremental updates are compacted in the
+background per participant and source, while summary updates replace that
+source section as-is. The context and compaction payload limits are UTF-8 byte
+budgets, not token limits.
 
 ## Source map
 
@@ -86,7 +93,7 @@ layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
-| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, and optional prompt overrides |
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics and byte budgets, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | LLM/VLM/STT/TTS adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |

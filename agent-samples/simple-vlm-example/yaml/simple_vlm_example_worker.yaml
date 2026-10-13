@@ -28,3 +28,10 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
 # after that long idle. Applied by VoiceAgent.
 idle_timeout_secs: 0
+
+# Optional runtime context topics. The topic name becomes a source section;
+# publishers send `mode: incremental|summary` plus `text`. Budgets are UTF-8
+# bytes, not model tokens. Incremental updates compact asynchronously per source.
+context_topics: []
+context_budget_bytes: 12000
+compaction_input_budget_bytes: 12000

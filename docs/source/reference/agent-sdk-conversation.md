@@ -49,6 +49,48 @@ handling policy. `RoutingAid` separately gives the front end a concise name,
 description, and optional tie-breaking priority; it guides route selection and
 does not enforce the application's policy.
 
+## Named context topics and history budgets
+
+Publish `ConversationContextUpdate(mode="incremental", text=...)` or
+`ConversationContextUpdate(mode="summary", text=...)` on a named runtime
+`Topic`. The topic name becomes the source section. Register
+`conversation.context_subscriber(topics)` with the same `AgentRuntime` before
+starting it. Runtime metadata supplies participant identity; unscoped updates
+are dropped. Incremental source updates are compacted asynchronously and
+independently per participant and source. A summary replaces that source's
+active background exactly as published and cancels older compaction work.
+After a participant leaves, updates for that session are dropped. Call
+`conversation.activate_participant(participant_id)` from the participant-joined
+lifecycle event before publishing that participant's context. The simple VLM
+sample wires the existing `VoiceParticipantJoined` topic for this purpose;
+`ConversationFrontEnd.handle()` also reopens a participant when a new turn
+arrives.
+
+`context_budget_bytes` and `compaction_input_budget_bytes` bound UTF-8 payload
+bytes, not model tokens; their 12,000-byte defaults reuse the former harness's
+12,000-character context policy as a conservative byte limit. The front end
+retains complete exchanges, and `Conversation` keeps the current query
+separate from the context it renders. When rendered context exceeds its budget,
+it drops the oldest whole context items, logs the drop, and continues. It never
+clips an exchange or the current request. Call `participant_left()` and `close()` at lifecycle
+boundaries so context tasks cannot outlive their participant or conversation.
+The budgets cover prior context text (including rendered section headings for
+conversation messages), not system/application instructions, tool definitions,
+transport framing, or the current request; they are not a model-window guarantee.
+
+```python
+from xr_ai_conversation import ConversationContextUpdate
+from xr_ai_runtime import Topic
+
+topic = Topic("tea.status", ConversationContextUpdate)
+runtime.register("conversation-context", conversation.context_subscriber((topic,)))
+await runtime.publish(
+    topic,
+    ConversationContextUpdate(mode="summary", text="The timer is at six minutes."),
+    participant_id="participant-1",
+)
+```
+
 ## Multi-destination routing
 
 Each destination declares a `RoutingAid`, checks a `ConversationTurn` with

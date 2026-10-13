@@ -1,0 +1,393 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Private participant memory primitives for lossless transcript retention."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections import defaultdict
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, field
+
+import nemo_relay
+
+
+@dataclass(frozen=True, slots=True)
+class _TranscriptEntry:
+    sequence: int
+    source: str
+    user: str
+    assistant: str
+
+    @property
+    def utf8_size(self) -> int:
+        return len(self.user.encode("utf-8")) + len(self.assistant.encode("utf-8"))
+
+
+@dataclass(frozen=True, slots=True)
+class _BackgroundSection:
+    text: str
+    through_sequence: int
+
+
+@dataclass(slots=True)
+class _ParticipantMemory:
+    transcript: list[_TranscriptEntry] = field(default_factory=list)
+    context_records: dict[str, list[tuple[int, str]]] = field(default_factory=dict)
+    backgrounds: dict[str, _BackgroundSection] = field(default_factory=dict)
+    revisions: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    jobs: dict[str, asyncio.Task[bool]] = field(default_factory=dict)
+    context_jobs: dict[str, asyncio.Task[bool]] = field(default_factory=dict)
+    context_order: list[str] = field(default_factory=list)
+    retired_jobs: set[asyncio.Task[bool]] = field(default_factory=set)
+
+
+_Compactor = Callable[[str, str, Sequence[_TranscriptEntry]], Awaitable[str]]
+_logger = logging.getLogger(__name__)
+
+
+class _ConversationContext:
+    """Retain exact turns and compact old entries independently by source.
+
+    ``payload_budget_bytes`` bounds the prior background and transcript text
+    supplied to one compaction request. It does not include instructions or
+    transport framing and is not a model-token estimate. Callers provide it
+    from their own model/configuration boundary.
+    """
+
+    def __init__(self) -> None:
+        self._participants: dict[str, _ParticipantMemory] = {}
+
+    def append(self, participant: str, source: str, user: str, assistant: str) -> _TranscriptEntry:
+        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        entry = _TranscriptEntry(len(memory.transcript), source, user, assistant)
+        memory.transcript.append(entry)
+        memory.revisions[source] += 1
+        return entry
+
+    def transcript(self, participant: str) -> tuple[_TranscriptEntry, ...]:
+        memory = self._participants.get(participant)
+        return () if memory is None else tuple(memory.transcript)
+
+    def sections(self, participant: str) -> tuple[tuple[str, str], ...]:
+        memory = self._participants.get(participant)
+        if memory is None:
+            return ()
+        sections = dict((source, section.text) for source, section in memory.backgrounds.items())
+        for source, records in memory.context_records.items():
+            if records:
+                sections[source] = "\n".join(filter(None, (sections.get(source, ""), *(text for _, text in records))))
+        order = list(memory.context_order)
+        order.extend(source for source in memory.backgrounds if source not in order)
+        return tuple((source, sections[source]) for source in order if source in sections)
+
+    async def update(
+        self,
+        participant: str,
+        source: str,
+        mode: str,
+        text: str,
+        *,
+        context_budget_bytes: int,
+    ) -> tuple[bool, bool]:
+        """Store an authoritative summary or append a source update.
+
+        The caller rejects a summary that exceeds its budget before calling
+        this method. Incremental records that exceed the budget are dropped as
+        whole records; raw conversation transcript entries remain untouched.
+        """
+
+        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        if mode not in {"summary", "incremental"}:
+            raise ValueError("context mode must be 'incremental' or 'summary'")
+        if mode == "incremental" and len(text.encode("utf-8")) > context_budget_bytes:
+            return False, True
+        if mode == "summary":
+            self._cancel_source_jobs(memory, source)
+            memory.revisions[source] += 1
+            if source not in memory.context_order:
+                memory.context_order.append(source)
+            memory.backgrounds[source] = _BackgroundSection(text, -1)
+            memory.context_records.pop(source, None)
+            return True, False
+        records = memory.context_records.setdefault(source, [])
+        original_count = len(records)
+        if source not in memory.context_order:
+            memory.context_order.append(source)
+        sequence = len(memory.transcript)
+        records.append((sequence, text))
+        # Keep complete updates only, dropping the oldest whole source updates.
+        while records and _source_context_size(memory, source, records) > context_budget_bytes:
+            records.pop(0)
+        dropped = len(records) != original_count + 1
+        if not records:
+            memory.context_records.pop(source, None)
+        return bool(records), dropped
+
+    async def drop_source(self, participant: str, source: str) -> None:
+        memory = self._participants.get(participant)
+        if memory is None:
+            return
+        self._cancel_source_jobs(memory, source)
+        memory.revisions[source] += 1
+        memory.backgrounds.pop(source, None)
+        memory.context_records.pop(source, None)
+        if source in memory.context_order:
+            memory.context_order.remove(source)
+
+    def schedule_context_compaction(
+        self,
+        participant: str,
+        source: str,
+        *,
+        payload_budget_bytes: int,
+        summary_budget_bytes: int | None = None,
+        compact: _Compactor,
+    ) -> asyncio.Task[bool] | None:
+        """Compact one source's incremental updates without blocking delivery."""
+
+        memory = self._participants.get(participant)
+        if memory is None or not memory.context_records.get(source):
+            return None
+        current = memory.context_jobs.get(source)
+        if current is not None and not current.done():
+            return current
+        records = tuple(memory.context_records[source])
+        if summary_budget_bytes is None:
+            summary_budget_bytes = payload_budget_bytes
+        if summary_budget_bytes <= 0:
+            raise ValueError("summary_budget_bytes must be positive")
+        previous = memory.backgrounds.get(source, _BackgroundSection("", -1))
+        payload_size = len(previous.text.encode("utf-8")) + sum(len(text.encode("utf-8")) for _, text in records)
+        if payload_size > payload_budget_bytes:
+            return None
+        revision = memory.revisions[source]
+        entries = tuple(_TranscriptEntry(sequence, source, text, "") for sequence, text in records)
+        task = asyncio.create_task(
+            self._compact_context(
+                participant,
+                source,
+                revision,
+                records,
+                previous,
+                entries,
+                payload_budget_bytes,
+                summary_budget_bytes,
+                compact,
+            ),
+            name=f"conversation-context-compact:{participant}:{source}",
+            context=nemo_relay.fork_asyncio_context(),
+        )
+        memory.context_jobs[source] = task
+        task.add_done_callback(
+            lambda done: self._forget_context_job(
+                participant,
+                source,
+                done,
+                payload_budget_bytes=payload_budget_bytes,
+                summary_budget_bytes=summary_budget_bytes,
+                compact=compact,
+            )
+        )
+        return task
+
+    async def _compact_context(
+        self,
+        participant: str,
+        source: str,
+        revision: int,
+        records: tuple[tuple[int, str], ...],
+        previous: _BackgroundSection,
+        entries: tuple[_TranscriptEntry, ...],
+        payload_budget_bytes: int,
+        summary_budget_bytes: int,
+        compact: _Compactor,
+    ) -> bool:
+        summary = await compact(source, previous.text, entries)
+        memory = self._participants.get(participant)
+        if memory is None or memory.revisions[source] != revision:
+            return False
+        if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:
+            return False
+        current_records = tuple(memory.context_records.get(source, ()))
+        if current_records[: len(records)] != records:
+            return False
+        summary_size = len(summary.encode("utf-8"))
+        if summary_size > summary_budget_bytes:
+            memory.backgrounds.pop(source, None)
+            memory.context_records.pop(source, None)
+            _logger.error(
+                "dropping oversized compacted context participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                participant,
+                source,
+                summary_size,
+                summary_budget_bytes,
+            )
+            return False
+        memory.backgrounds[source] = _BackgroundSection(summary, records[-1][0])
+        tail = current_records[len(records) :]
+        if tail:
+            memory.context_records[source] = list(tail)
+        else:
+            memory.context_records.pop(source, None)
+        return True
+
+    def schedule_compaction(
+        self,
+        participant: str,
+        source: str,
+        *,
+        payload_budget_bytes: int,
+        compact: _Compactor,
+    ) -> asyncio.Task[bool] | None:
+        if payload_budget_bytes <= 0:
+            raise ValueError("payload_budget_bytes must be positive")
+        memory = self._participants.get(participant)
+        if memory is None:
+            return None
+        current = memory.jobs.get(source)
+        if current is not None and not current.done():
+            return current
+        snapshot_revision = memory.revisions[source]
+        previous = memory.backgrounds.get(source, _BackgroundSection("", -1))
+        pending = tuple(
+            entry
+            for entry in memory.transcript
+            if entry.source == source and entry.sequence > previous.through_sequence
+        )
+        if not pending:
+            return None
+        previous_bytes = len(previous.text.encode("utf-8"))
+        if previous_bytes >= payload_budget_bytes:
+            raise ValueError("existing background already exceeds payload budget")
+        remaining_bytes = payload_budget_bytes - previous_bytes
+        batch = _oldest_batch(pending, remaining_bytes)
+        task = asyncio.create_task(
+            self._compact(
+                participant,
+                source,
+                snapshot_revision,
+                previous,
+                batch,
+                compact,
+            ),
+            name=f"conversation-context:{participant}:{source}",
+        )
+        memory.jobs[source] = task
+        task.add_done_callback(lambda done: self._forget_job(participant, source, done))
+        return task
+
+    async def _compact(
+        self,
+        participant: str,
+        source: str,
+        revision: int,
+        previous: _BackgroundSection,
+        batch: tuple[_TranscriptEntry, ...],
+        compact: _Compactor,
+    ) -> bool:
+        summary = await compact(source, previous.text, batch)
+        memory = self._participants.get(participant)
+        if memory is None or memory.revisions[source] != revision:
+            return False
+        if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:
+            return False
+        memory.backgrounds[source] = _BackgroundSection(summary, batch[-1].sequence)
+        return True
+
+    async def clear(self, participant: str) -> None:
+        memory = self._participants.pop(participant, None)
+        if memory is None:
+            return
+        tasks = (
+            tuple(memory.jobs.values())
+            + tuple(memory.context_jobs.values())
+            + tuple(memory.retired_jobs)
+        )
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def close(self) -> None:
+        await asyncio.gather(*(self.clear(participant) for participant in tuple(self._participants)))
+
+    def _forget_job(self, participant: str, source: str, task: asyncio.Task[bool]) -> None:
+        memory = self._participants.get(participant)
+        if memory is not None and memory.jobs.get(source) is task:
+            memory.jobs.pop(source, None)
+        _log_task_error(participant, source, task)
+
+    def _forget_context_job(
+        self,
+        participant: str,
+        source: str,
+        task: asyncio.Task[bool],
+        *,
+        payload_budget_bytes: int,
+        summary_budget_bytes: int,
+        compact: _Compactor,
+    ) -> None:
+        memory = self._participants.get(participant)
+        if memory is not None and memory.context_jobs.get(source) is task:
+            memory.context_jobs.pop(source, None)
+        _log_task_error(participant, source, task)
+        if (
+            memory is not None
+            and not task.cancelled()
+            and task.exception() is None
+            and memory.context_records.get(source)
+        ):
+            self.schedule_context_compaction(
+                participant,
+                source,
+                payload_budget_bytes=payload_budget_bytes,
+                summary_budget_bytes=summary_budget_bytes,
+                compact=compact,
+            )
+
+    @staticmethod
+    def _cancel_source_jobs(memory: _ParticipantMemory, source: str) -> None:
+        for jobs in (memory.jobs, memory.context_jobs):
+            task = jobs.pop(source, None)
+            if task is not None and not task.done():
+                memory.retired_jobs.add(task)
+                task.add_done_callback(memory.retired_jobs.discard)
+                task.cancel()
+
+
+def _log_task_error(participant: str, source: str, task: asyncio.Task[bool]) -> None:
+    if not task.cancelled() and (error := task.exception()) is not None:
+        _logger.error(
+            "conversation context compaction failed participant=%r source=%r",
+            participant,
+            source,
+            exc_info=(type(error), error, error.__traceback__),
+        )
+
+
+def _oldest_batch(entries: tuple[_TranscriptEntry, ...], input_budget_bytes: int) -> tuple[_TranscriptEntry, ...]:
+    batch = []
+    size = 0
+    for entry in entries:
+        if batch and size + entry.utf8_size > input_budget_bytes:
+            break
+        if not batch and entry.utf8_size > input_budget_bytes:
+            raise ValueError("one completed exchange exceeds compaction payload budget")
+        batch.append(entry)
+        size += entry.utf8_size
+        if size >= input_budget_bytes:
+            break
+    return tuple(batch)
+
+
+def _source_context_size(
+    memory: _ParticipantMemory,
+    source: str,
+    records: Sequence[tuple[int, str]],
+) -> int:
+    sections = (memory.backgrounds.get(source, _BackgroundSection("", -1)).text, *(item for _, item in records))
+    return len("\n".join(filter(None, sections)).encode("utf-8"))

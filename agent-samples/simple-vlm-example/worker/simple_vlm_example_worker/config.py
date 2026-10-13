@@ -27,6 +27,9 @@ class WorkerConfig:
     min_speech: float
     silero_threshold: float
     idle_timeout_secs: float | None
+    context_topics: tuple[str, ...]
+    context_budget_bytes: int
+    compaction_input_budget_bytes: int
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -77,4 +80,7 @@ def load_config(path: Path | None) -> WorkerConfig:
         min_speech=float(data.get("min_speech", 0.1)),
         silero_threshold=float(data.get("silero_threshold", 0.5)),
         idle_timeout_secs=float(idle_timeout) if idle_timeout else None,
+        context_topics=tuple(str(name) for name in data.get("context_topics", ())),
+        context_budget_bytes=int(data.get("context_budget_bytes", 12_000)),
+        compaction_input_budget_bytes=int(data.get("compaction_input_budget_bytes", 12_000)),
     )

@@ -15,9 +15,10 @@ from threading import Lock
 import nemo_relay
 from loguru import logger
 from PIL import Image
+from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_logging import setup_logging
 from xr_ai_models import VLMService, load_models_config, make_llm, make_tts, make_vlm
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import StreamingImageQueryTool
@@ -25,7 +26,9 @@ from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agent import (
+    _CONVERSATION_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
+    PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     SimpleVlmAgent,
@@ -137,10 +140,11 @@ async def run_app(
         voice_gate=voice_gate,
         probes={"llm": llm.health, "vlm": lambda: _warm_vlm(vlm)},
         ready_file=ready_file,
-        closeables=(llm, vlm),
+        closeables=(vlm,),
         text_topic="vlm.response",
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
+        participant_joined_topic=PARTICIPANT_JOINED_TOPIC,
         participant_left_topic=PARTICIPANT_LEFT_TOPIC,
         interrupted_topic=INTERRUPTED_TOPIC,
         interrupt_on_supersede=True,
@@ -154,29 +158,43 @@ async def run_app(
         frame_max_age_s=config.frame_max_age_s,
         frame_timeout_s=config.frame_timeout_s,
     )
+    vision = StreamingImageQueryTool(
+        images=images,
+        vlm=vlm,
+        system_prompt=config.system_prompt,
+    )
+    conversation = Conversation(
+        llm,
+        instructions=_CONVERSATION_INSTRUCTIONS,
+        frames=frames,
+        vision=vision,
+        context_budget_bytes=config.context_budget_bytes,
+        compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+    )
+    if config.context_topics:
+        topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
+        runtime.register("conversation-context", conversation.context_subscriber(topics))
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
-            lambda: (
-                frames,
-                StreamingImageQueryTool(
-                    images=images,
-                    vlm=vlm,
-                    system_prompt=config.system_prompt,
-                ),
-            ),
+            lambda: (frames, vision),
             transport.endpoint.set_status,
             llm=llm,
+            conversation=conversation,
         ),
     )
     runtime.register("voice", voice)
 
     logger.info("Relay events → {}", log_file.parent / "relay-events.jsonl")
     logger.info("simple-vlm-example starting")
-    async with _relay_event_log(log_file):
-        async with runtime:
-            try:
-                await voice.run(runtime)
-            finally:
-                await simple_vlm.stop()
+    try:
+        async with _relay_event_log(log_file):
+            async with runtime:
+                try:
+                    await voice.run(runtime)
+                finally:
+                    await simple_vlm.stop()
+    finally:
+        await conversation.close()
+        await llm.close()
     logger.info("simple-vlm-example stopped")
