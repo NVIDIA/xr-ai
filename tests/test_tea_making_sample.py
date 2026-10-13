@@ -2029,7 +2029,7 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     root_cases = [
         case
         for case in cases
-        if case.get("kind") != "observation"
+        if case.get("kind") in (None, "routing")
         and case.get("route", "root") == "root"
     ]
     assert {case["expected_tool"] for case in root_cases} == {
@@ -2040,8 +2040,13 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
         "current_view",
         "rag_lookup",
         "transcript__start",
+        "transcript__stop",
+        "transcript__status",
         "video_log__start",
+        "video_log__stop",
+        "video_log__status",
         "workflow__start",
+        "change_watch__status",
     }
     active_cases = [case for case in cases if case.get("route") == "active"]
     assert {case["expected_tool"] for case in active_cases} == {
@@ -2069,7 +2074,13 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert all(isinstance(case.get("expected_skip"), bool) for case in advance_cases)
     observation_cases = [case for case in cases if case.get("kind") == "observation"]
     assert len(observation_cases) >= 4
-    assert all(case["expected_updates"] == {} for case in observation_cases)
+    assert all(
+        case["expected_tool"] != "workflow__commit"
+        or "expected_updates" in case
+        or "expected_updates_containing" in case
+        for case in observation_cases
+    )
+    assert all(case["expected_updates"] == {} for case in observation_cases[:4])
 
     positive_active_names = {
         case["name"]
@@ -2115,6 +2126,40 @@ def test_foreground_prompt_has_route_eval_cases() -> None:
     assert active_visual["expected_tool"] is None
     assert "expected_response_pattern" in active_visual
     assert "expected_response" not in active_visual
+
+
+def test_eval_measured_llm_keeps_actual_sampling_settings() -> None:
+    spec = importlib.util.spec_from_file_location("tea_eval_runner", _SAMPLE / "eval" / "eval.py")
+    assert spec is not None and spec.loader is not None
+    eval_runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(eval_runner)
+
+    class StubLLM:
+        async def chat(self, messages, **kwargs):
+            return ChatResponse(
+                content="",
+                reasoning=None,
+                tool_calls=None,
+                finish_reason="stop",
+                raw={"model": "stub-model"},
+            )
+
+    measured = eval_runner._MeasuredLLM(StubLLM())
+    asyncio.run(
+        measured.chat(
+            [ChatMessage(role="system", content="Classifier prompt")],
+            max_tokens=384,
+            temperature=0.0,
+            enable_thinking=False,
+        )
+    )
+
+    assert measured.calls[0]["settings"] == {
+        "max_tokens": 384,
+        "temperature": 0.0,
+        "enable_thinking": False,
+        "thinking_budget": None,
+    }
 
 
 def _activate_test_step(guidance: GuidanceAgent, step_id: str) -> None:

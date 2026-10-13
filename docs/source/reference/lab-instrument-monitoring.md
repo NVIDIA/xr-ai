@@ -423,6 +423,10 @@ recent-history, background-control, ordinary conversation, and general
 knowledge requests. `eval/visual_cases.yaml` exercises generated images for
 monitor baselines and changes, adversarial visible instructions, multiple
 readable devices, competing markers, and exact joint label-to-reading output.
+The 50-case foreground corpus includes held-out paraphrases and command-versus-
+mention boundaries. Per-case output records the endpoint model identifier,
+prompt hash, temperature, token limit, thinking setting, and model-call time.
+This routing eval does not measure audio startup or first useful audio.
 
 ### Printable sample markers
 

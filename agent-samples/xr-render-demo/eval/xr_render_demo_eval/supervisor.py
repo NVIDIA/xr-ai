@@ -13,6 +13,8 @@ localises in seconds instead of a full nested rollout.
 
 import argparse
 import asyncio
+import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,7 +24,7 @@ from xr_render_demo_worker.agents.appearance.agent import DESCRIPTION as appeara
 from xr_render_demo_worker.agents.memory.agent import DESCRIPTION as memory_description
 from xr_render_demo_worker.agents.object.agent import DESCRIPTION as object_description
 from xr_render_demo_worker.agents.placement.agent import DESCRIPTION as placement_description
-from xr_render_demo_worker.agents.vision.agent import DESCRIPTION as vision_description
+from xr_render_demo_worker.agents.vision import agent as vision_agent
 from xr_render_demo_worker.models import SceneRequest, SubagentResult, SubagentTask
 from xr_render_demo_worker.supervisor import SceneSupervisor
 
@@ -32,7 +34,11 @@ _DESCRIPTIONS = {
     "placement_agent": placement_description,
     "appearance_agent": appearance_description,
     "object_agent": object_description,
-    "vision_agent": vision_description,
+    "vision_agent": (
+        vision_agent.DESCRIPTION
+        if harness._CONFIG.video_history_enabled
+        else vision_agent._LIVE_ONLY_DESCRIPTION
+    ),
     "memory_agent": memory_description,
 }
 
@@ -52,6 +58,7 @@ class RoutingCase:
     scene: tuple[dict[str, Any], ...] = ()
     history: tuple[tuple[str, str], ...] = ()
     expect_agent: str = ""
+    expect_agents: tuple[str, ...] = ()
     instruction_contains: tuple[str, ...] = ()
     instruction_forbids: tuple[str, ...] = ()
     forbid_agents: tuple[str, ...] = ()
@@ -257,10 +264,206 @@ CASES = (
         expect_agent="placement_agent",
         forbid_agents=("vision_agent",),
     ),
+    RoutingCase(
+        name="physical_color_creation_stays_with_object_agent",
+        request="Create a sphere that matches the color of my sleeve.",
+        expect_agent="object_agent",
+        instruction_contains=("sleeve",),
+        forbid_agents=("vision_agent", "appearance_agent"),
+    ),
+    RoutingCase(
+        name="past_physical_view_routes_to_vision",
+        request="What was I holding ten seconds ago?",
+        expect_agent="vision_agent",
+        forbid_agents=("memory_agent",),
+    ),
+    RoutingCase(
+        name="past_scene_fact_routes_to_memory",
+        request="What color was the first object I created?",
+        scene=(
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "pos": [0.0, 1.6, -1.5],
+                "color": [0, 0.4, 1],
+                "size": 0.1,
+            },
+        ),
+        history=(("Create a red sphere.", "Created sphere-0."),),
+        expect_agent="memory_agent",
+        forbid_agents=("vision_agent",),
+    ),
+    RoutingCase(
+        name="current_scene_fact_is_answered_directly",
+        request="What color is sphere-0 right now?",
+        scene=(
+            {
+                "id": "sphere-0",
+                "type": "sphere",
+                "pos": [0.0, 1.6, -1.5],
+                "color": [0, 0.4, 1],
+                "size": 0.1,
+            },
+        ),
+        forbid_agents=tuple(_DESCRIPTIONS),
+    ),
+    RoutingCase(
+        name="acknowledgement_does_not_repeat_history",
+        request="Okay.",
+        history=(("Create a red sphere.", "Created sphere-0."),),
+        forbid_agents=tuple(_DESCRIPTIONS),
+    ),
+    RoutingCase(
+        name="compound_routes_each_domain_once",
+        request="Move the ring left, recolor the cone orange, and create a blue sphere.",
+        scene=(
+            {
+                "id": "ring-0",
+                "type": "ring",
+                "pos": [-0.5, 1.5, -1.5],
+                "color": [1, 1, 1],
+                "size": 0.1,
+            },
+            {
+                "id": "cone-0",
+                "type": "cone",
+                "pos": [0.5, 1.5, -1.5],
+                "color": [1, 1, 1],
+                "size": 0.1,
+            },
+        ),
+        expect_agents=("placement_agent", "appearance_agent", "object_agent"),
+    ),
+    RoutingCase(
+        name="holdout_spawn_routes_to_object",
+        request="Spawn a turquoise ring.",
+        expect_agent="object_agent",
+    ),
+    RoutingCase(
+        name="holdout_erase_routes_to_object",
+        request="Erase the lavender capsule.",
+        scene=(
+            {"id": "capsule-4", "type": "capsule", "pos": [0.2, 1.4, -1.1], "color": [0.7, 0.5, 0.9], "size": 0.12},
+        ),
+        expect_agent="object_agent",
+        forbid_agents=("placement_agent",),
+    ),
+    RoutingCase(
+        name="holdout_duplicate_routes_to_object",
+        request="Duplicate the teal cone.",
+        scene=({"id": "cone-3", "type": "cone", "pos": [-0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.1},),
+        expect_agent="object_agent",
+    ),
+    RoutingCase(
+        name="holdout_reshape_routes_to_object",
+        request="Turn the white ring into a capsule.",
+        scene=({"id": "ring-2", "type": "ring", "pos": [0.1, 1.3, -1.4], "color": [1, 1, 1], "size": 0.1},),
+        expect_agent="object_agent",
+        forbid_agents=("appearance_agent", "placement_agent"),
+    ),
+    RoutingCase(
+        name="holdout_existing_containment_routes_to_placement",
+        request="Place the cyan ring inside the gray capsule.",
+        scene=(
+            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},
+            {"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},
+        ),
+        expect_agent="placement_agent",
+        forbid_agents=("object_agent",),
+    ),
+    RoutingCase(
+        name="holdout_new_containment_routes_to_object",
+        request="Place a cyan ring inside the gray capsule.",
+        scene=({"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},),
+        expect_agent="object_agent",
+        forbid_agents=("placement_agent",),
+    ),
+    RoutingCase(
+        name="holdout_physical_recolor_routes_to_appearance",
+        request="Match the ring to the color of the mug beside me.",
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},),
+        expect_agent="appearance_agent",
+        instruction_contains=("mug",),
+        forbid_agents=("vision_agent",),
+    ),
+    RoutingCase(
+        name="holdout_physical_create_routes_to_object",
+        request="Build a cone matching what I am wearing.",
+        expect_agent="object_agent",
+        instruction_contains=("wearing",),
+        forbid_agents=("vision_agent", "appearance_agent"),
+    ),
+    RoutingCase(
+        name="holdout_live_physical_view_routes_to_vision",
+        request="Is there an open doorway ahead of me right now?",
+        expect_agent="vision_agent",
+        forbid_agents=("memory_agent",),
+    ),
+    RoutingCase(
+        name="holdout_past_physical_view_routes_to_vision",
+        request="Was the doorway open twenty seconds ago?",
+        expect_agent="vision_agent",
+        forbid_agents=("memory_agent",),
+    ),
+    RoutingCase(
+        name="holdout_original_scene_state_routes_to_memory",
+        request="What shape was ring-5 before I changed it?",
+        scene=({"id": "ring-5", "type": "capsule", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},),
+        history=(("Change the ring into a capsule.", "Changed ring-5 into a capsule."),),
+        expect_agent="memory_agent",
+        forbid_agents=("vision_agent",),
+    ),
+    RoutingCase(
+        name="holdout_current_scene_state_answered_directly",
+        request="Where is ring-5 now?",
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [0, 1, 1], "size": 0.08},),
+        forbid_agents=tuple(_DESCRIPTIONS),
+    ),
+    RoutingCase(
+        name="holdout_capability_question_does_not_mutate",
+        request="Could you create objects if I asked you to?",
+        forbid_agents=tuple(_DESCRIPTIONS),
+    ),
+    RoutingCase(
+        name="holdout_negated_removal_does_not_mutate",
+        request="Do not remove the capsule.",
+        scene=({"id": "capsule-6", "type": "capsule", "pos": [0.4, 1.4, -1.4], "color": [0.5, 0.5, 0.5], "size": 0.2},),
+        forbid_agents=("object_agent", "placement_agent", "appearance_agent"),
+    ),
+    RoutingCase(
+        name="holdout_compound_object_and_appearance",
+        request="Duplicate the teal cone, then make the ring orange.",
+        scene=(
+            {"id": "cone-3", "type": "cone", "pos": [-0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.1},
+            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},
+        ),
+        expect_agents=("object_agent", "appearance_agent"),
+    ),
+    RoutingCase(
+        name="holdout_compound_vision_and_placement",
+        request="Tell me whether the doorway is open, then move the ring left.",
+        scene=({"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.4], "color": [1, 1, 1], "size": 0.08},),
+        expect_agents=("vision_agent", "placement_agent"),
+    ),
+    RoutingCase(
+        name="novel_arrangement_routes_to_placement",
+        request=(
+            "Rearrange the ring and cone into the most compact non-overlapping vertical "
+            "composition, while keeping whichever is currently closer to me on top and "
+            "preserving their left-to-right order as much as possible."
+        ),
+        scene=(
+            {"id": "ring-5", "type": "ring", "pos": [-0.3, 1.4, -1.1], "color": [1, 1, 1], "size": 0.08},
+            {"id": "cone-3", "type": "cone", "pos": [0.4, 1.2, -1.8], "color": [0, 0.8, 0.8], "size": 0.15},
+        ),
+        expect_agent="placement_agent",
+    ),
+
 )
 
 
 async def run_case(case: RoutingCase) -> bool:
+    started = time.perf_counter()
     scene = harness.FakeScene.from_corpus_case(
         {"name": case.name, "scene": list(case.scene), "history": list(case.history), "user": case.request}
     )
@@ -268,7 +471,7 @@ async def run_case(case: RoutingCase) -> bool:
     fake_tools = [
         _make_fake_agent(name, desc, calls) for name, desc in _DESCRIPTIONS.items()
     ]
-    llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
+    llm = harness.MeasuredLLM(make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm"))
     try:
         fake_scene, fake_tracking, fake_text_memory, _, _ = scene.make_tools()
         supervisor = SceneSupervisor(
@@ -299,6 +502,8 @@ async def run_case(case: RoutingCase) -> bool:
         ok, why = False, f"workflow error: {reply.response[:160]}"
     if case.expect_agent and case.expect_agent not in called:
         ok, why = False, f"{case.expect_agent} never called; called={called}"
+    if case.expect_agents and tuple(called) != case.expect_agents:
+        ok, why = False, f"expected agents={list(case.expect_agents)}, called={called}"
     for forbidden in case.forbid_agents:
         if forbidden in called:
             ok, why = False, f"{forbidden} called; called={called}"
@@ -314,7 +519,7 @@ async def run_case(case: RoutingCase) -> bool:
                 ok, why = False, f"instruction missing {needle!r}: {instructions[:160]!r}"
     status = "PASS" if ok else f"FAIL {why}"
     detail = "; ".join(f"{name}({instruction[:80]})" for name, instruction in calls)
-    print(f"{status:32} {case.name}: {detail or reply.response}", flush=True)
+    print(f"{status:32} {case.name}: {detail or reply.response} | {harness.case_metrics(llm, started)}", flush=True)
     return ok
 
 
@@ -323,6 +528,10 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("cases", nargs="*", help="Case names; omit to run all")
     args = parser.parse_args()
+    print(
+        f"RUN sample=xr-render-demo-supervisor {json.dumps(harness.eval_metadata(), sort_keys=True)}; "
+        "per-call sampling settings are listed per case"
+    )
     wanted = set(args.cases)
     selected = [case for case in CASES if not wanted or case.name in wanted]
     if not selected:
