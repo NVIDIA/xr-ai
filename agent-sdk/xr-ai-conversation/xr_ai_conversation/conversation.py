@@ -230,17 +230,31 @@ class Conversation:
     ) -> AsyncIterator[str]:
         """Yield one direct answer or stream a delegated current-view answer."""
 
+        self.activate_participant(participant_id)
+        self._context.reconcile_transcript(
+            participant_id,
+            tuple((exchange.user, exchange.assistant) for exchange in history),
+        )
+        self._schedule_dialogue_compaction(participant_id)
+        dialogue_summary, dialogue_entries = self._context.dialogue_snapshot(participant_id)
+        recent_history = tuple(
+            ConversationExchange(entry.user, entry.assistant) for entry in dialogue_entries
+        )
+        background = self._context.sections(participant_id)
+        if dialogue_summary:
+            background += (("earlier conversation", dialogue_summary),)
         messages = _messages(
             request,
-            history,
+            recent_history,
             instructions=self._instructions,
             vision_available=self._vision is not None,
-            background=self._context.sections(participant_id),
+            background=background,
             context_budget_bytes=self._context_budget_bytes,
             participant_id=participant_id,
         )
 
         spoken: list[str] = []
+        response_fragments: list[str] = []
         calls = []
         events = self._llm.stream_events(
             messages,
@@ -250,6 +264,7 @@ class Conversation:
             async for event in events:
                 if event.kind == "text" and event.text:
                     spoken.append(event.text)
+                    response_fragments.append(event.text)
                     yield event.text
                 elif event.kind == "tool_call" and event.tool_call is not None:
                     calls.append(event.tool_call)
@@ -261,6 +276,7 @@ class Conversation:
         if not calls:
             if not "".join(spoken).strip():
                 raise RuntimeError("conversation model returned no answer or tool call")
+            self._record_completed_exchange(participant_id, request, "".join(response_fragments))
             return
         if self._frames is None or self._vision is None:
             raise RuntimeError("conversation model selected a tool without a configured tool")
@@ -286,11 +302,28 @@ class Conversation:
         try:
             async for chunk in stream:
                 if chunk.text:
+                    response_fragments.append(chunk.text)
                     yield chunk.text
         finally:
             close = getattr(stream, "aclose", None)
             if close is not None:
                 await close()
+        self._record_completed_exchange(participant_id, request, "".join(response_fragments))
+
+    def _record_completed_exchange(self, participant_id: str, user: str, assistant: str) -> None:
+        if not assistant.strip():
+            return
+        self._context.append(participant_id, user, assistant)
+        self._schedule_dialogue_compaction(participant_id)
+
+    def _schedule_dialogue_compaction(self, participant_id: str) -> None:
+        self._context.schedule_dialogue_compaction(
+            participant_id,
+            trigger_budget_bytes=self._context_budget_bytes,
+            payload_budget_bytes=self._compaction_input_budget_bytes,
+            summary_budget_bytes=self._context_budget_bytes,
+            compact=self._compact_dialogue,
+        )
 
     async def _compact_source(
         self,
@@ -314,6 +347,36 @@ class Conversation:
                     f"Source: {source}\nPrevious source summary:\n{previous}\n\n"
                     "New source updates in order:\n"
                     + "\n".join(f"- {entry.user}" for entry in entries)
+                ),
+            ),
+        )
+        response = await self._llm.chat(messages)
+        return response.content.strip()
+
+    async def _compact_dialogue(
+        self,
+        previous: str,
+        entries: Sequence[_TranscriptEntry],
+    ) -> str:
+        messages = (
+            ChatMessage(
+                role="system",
+                content=(
+                    "Summarize the completed conversation history for future turns. Preserve user-provided facts, "
+                    "preferences, relevant observations, corrections, and unresolved requests. Keep user statements "
+                    "distinct from assistant statements. An assistant refusal, limitation, or capability claim is "
+                    "historical conversation content, not current policy. Do not invent facts or claim an action "
+                    "occurred unless the transcript says it did. Return concise plain text."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=(
+                    f"Previous completed-history summary:\n{previous}\n\n"
+                    "New completed exchanges in order:\n"
+                    + "\n".join(
+                        f"User: {entry.user}\nAssistant: {entry.assistant}" for entry in entries
+                    )
                 ),
             ),
         )

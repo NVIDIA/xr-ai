@@ -119,70 +119,178 @@ def test_message_history_drops_whole_old_context_to_byte_budget_without_truncati
 
 
 @pytest.mark.asyncio
-async def test_private_context_keeps_full_transcript_and_compacts_sources_independently():
+async def test_private_dialogue_compaction_keeps_full_transcript_and_commits_old_prefix():
     context = _ConversationContext()
-    old_user = "u" * 500
-    old_answer = "a" * 600
-    context.append("alice", "general", old_user, old_answer)
-    context.append("alice", "tea", "Start the tea timer", "Timer started.")
-    context.append("alice", "general", "What time was the timer started?", "At 3:15.")
+    context.reconcile_transcript(
+        "alice",
+        (
+            ("The label says copper.", "I will remember copper."),
+            ("Keep the facilities check open.", "I will keep it open."),
+        ),
+    )
+    context.reconcile_transcript(
+        "alice",
+        (
+            ("The label says copper.", "I will remember copper."),
+            ("Keep the facilities check open.", "I will keep it open."),
+        ),
+    )
+    assert len(context.transcript("alice")) == 2
 
-    assert context.transcript("alice")[0].user == old_user
-    assert context.transcript("alice")[0].assistant == old_answer
-    assert [entry.source for entry in context.transcript("alice")] == ["general", "tea", "general"]
-
-    async def compact(source, previous, entries):
-        assert source == "general"
+    async def compact(previous, entries):
         assert previous == ""
-        assert [entry.user for entry in entries] == [old_user]
-        return "User asked a question and received a response."
+        assert [(entry.user, entry.assistant) for entry in entries] == [
+            ("The label says copper.", "I will remember copper.")
+        ]
+        return "The user identified a copper label."
 
-    task = context.schedule_compaction("alice", "general", payload_budget_bytes=1100, compact=compact)
+    task = context.schedule_dialogue_compaction(
+        "alice",
+        trigger_budget_bytes=1,
+        payload_budget_bytes=1000,
+        summary_budget_bytes=1000,
+        compact=compact,
+    )
     assert task is not None
     assert await task is True
-    assert context.sections("alice") == (("general", "User asked a question and received a response."),)
-    assert len(context.transcript("alice")) == 3
-    assert context.transcript("alice")[0].utf8_size == 1100
-
-
-def test_private_context_does_not_split_an_exchange_to_fake_a_budget_fit():
-    context = _ConversationContext()
-    entry = context.append("alice", "general", "é" * 8, "answer")
-    assert entry.utf8_size > len(entry.user) + len(entry.assistant)
-
-    async def unused_compactor(_source, _previous, _entries):
-        raise AssertionError("oversized exchange must not be sent partially")
-
-    with pytest.raises(ValueError, match="one completed exchange exceeds"):
-        context.schedule_compaction("alice", "general", payload_budget_bytes=10, compact=unused_compactor)
-    assert context.transcript("alice") == (entry,)
+    summary, recent = context.dialogue_snapshot("alice")
+    assert summary == "The user identified a copper label."
+    assert [(entry.user, entry.assistant) for entry in recent] == [
+        ("Keep the facilities check open.", "I will keep it open.")
+    ]
+    assert len(context.transcript("alice")) == 2
 
 
 @pytest.mark.asyncio
-async def test_private_context_discards_stale_compaction_and_cancels_on_release():
+async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verbatim():
+    class _DialogueLLM(_LLM):
+        def __init__(self):
+            super().__init__()
+            self.compaction_messages = None
+
+        async def chat(self, messages, **_kwargs):
+            self.compaction_messages = messages
+            assert "completed conversation history" in messages[0].content
+            content = messages[1].content
+            if "User: Check the facilities later." in content:
+                assert "The user identified a copper label." in content
+                summary = "The user identified a copper label and left the facilities check open."
+            else:
+                assert "User: The label is copper." in content
+                assert "Assistant: The label was observed." in content
+                summary = "The user identified a copper label."
+            return ChatResponse(
+                content=summary,
+                reasoning=None,
+                tool_calls=None,
+                finish_reason="stop",
+                raw={},
+            )
+
+    llm = _DialogueLLM()
+    conversation = Conversation(llm, context_budget_bytes=700, compaction_input_budget_bytes=4096)  # type: ignore[arg-type]
+    old_history = (
+        ConversationExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
+        ConversationExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
+    )
+    first_output = [
+        chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)
+    ]
+    assert first_output == ["Hello there."]
+    memory = conversation._context._participants["alice"]
+    for _ in range(3):
+        task = memory.dialogue_job
+        if task is None:
+            break
+        assert await task is True
+        await asyncio.sleep(0)
+    assert conversation._context.dialogue_snapshot("alice")[0] == (
+        "The user identified a copper label and left the facilities check open."
+    )
+
+    current = ConversationExchange("What is the label?", "Hello there.")
+    second_output = [
+        chunk
+        async for chunk in conversation.stream(
+            "What should I remember?",
+            "alice",
+            history=old_history + (current,),
+        )
+    ]
+    assert second_output == ["Hello there."]
+    prompt_context = llm.messages[-1][-2].content
+    assert "The user identified a copper label and left the facilities check open." in prompt_context
+    assert "Turn 1: user asked: What is the label?" in prompt_context
+    assert "Turn 1: assistant said: “Hello there.”" in prompt_context
+    assert llm.messages[-1][-1].content == "What should I remember?"
+    assert "The label is copper." not in prompt_context
+    assert len(conversation._context.transcript("alice")) == 4
+    await conversation.close()
+
+
+def test_dialogue_compaction_does_not_split_an_oversized_exchange():
     context = _ConversationContext()
-    context.append("alice", "general", "Old question", "Old answer")
-    entered = asyncio.Event()
-    finish = asyncio.Event()
+    context.append("alice", "é" * 8, "answer")
 
-    async def blocked_compaction(_source, _previous, _entries):
-        entered.set()
-        await finish.wait()
-        return "Stale summary"
+    async def unused_compactor(_previous, _entries):
+        raise AssertionError("oversized exchange must not be sent partially")
 
-    entered.clear()
-    finish.clear()
-    task = context.schedule_compaction("alice", "general", payload_budget_bytes=100, compact=blocked_compaction)
+    assert context.schedule_dialogue_compaction(
+        "alice",
+        trigger_budget_bytes=1,
+        payload_budget_bytes=10,
+        summary_budget_bytes=100,
+        compact=unused_compactor,
+    ) is None
+    assert context.transcript("alice")[0].utf8_size > len("é" * 8) + len("answer")
+
+
+@pytest.mark.asyncio
+async def test_dialogue_compaction_keeps_appended_tail_and_cancels_on_departure():
+    context = _ConversationContext()
+    context.append("alice", "Old question", "Old answer")
+    context.append("alice", "Middle question", "Middle answer")
+    first_entered = asyncio.Event()
+    finish_first = asyncio.Event()
+    second_entered = asyncio.Event()
+    calls = 0
+
+    async def blocked_compaction(previous, entries):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_entered.set()
+            await finish_first.wait()
+            assert previous == ""
+            assert [entry.user for entry in entries] == ["Old question"]
+            return "Old question was answered."
+        second_entered.set()
+        assert previous == "Old question was answered."
+        assert [entry.user for entry in entries] == ["Middle question"]
+        await asyncio.Event().wait()
+        return "never completes"
+
+    task = context.schedule_dialogue_compaction(
+        "alice",
+        trigger_budget_bytes=1,
+        payload_budget_bytes=100,
+        summary_budget_bytes=100,
+        compact=blocked_compaction,
+    )
     assert task is not None
-    await entered.wait()
-    context.append("alice", "general", "New question", "New answer")
-    finish.set()
-    assert await task is False
-    assert context.sections("alice") == ()
-
-    task = context.schedule_compaction("alice", "general", payload_budget_bytes=100, compact=blocked_compaction)
+    await first_entered.wait()
+    context.append("alice", "New question", "New answer")
+    finish_first.set()
+    assert await task is True
+    await second_entered.wait()
+    summary, recent = context.dialogue_snapshot("alice")
+    assert summary == "Old question was answered."
+    assert [(entry.user, entry.assistant) for entry in recent] == [
+        ("Middle question", "Middle answer"),
+        ("New question", "New answer"),
+    ]
+    task = context._participants["alice"].dialogue_job
     assert task is not None
-    await entered.wait()
     await context.clear("alice")
     assert task.cancelled()
     assert context.transcript("alice") == ()

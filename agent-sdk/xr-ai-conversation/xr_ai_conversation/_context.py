@@ -37,14 +37,17 @@ class _ParticipantMemory:
     transcript: list[_TranscriptEntry] = field(default_factory=list)
     context_records: dict[str, list[tuple[int, str]]] = field(default_factory=dict)
     backgrounds: dict[str, _BackgroundSection] = field(default_factory=dict)
+    dialogue_background: _BackgroundSection = field(default_factory=lambda: _BackgroundSection("", -1))
     revisions: dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    jobs: dict[str, asyncio.Task[bool]] = field(default_factory=dict)
+    dialogue_revision: int = 0
+    dialogue_job: asyncio.Task[bool] | None = None
     context_jobs: dict[str, asyncio.Task[bool]] = field(default_factory=dict)
     context_order: list[str] = field(default_factory=list)
     retired_jobs: set[asyncio.Task[bool]] = field(default_factory=set)
 
 
 _Compactor = Callable[[str, str, Sequence[_TranscriptEntry]], Awaitable[str]]
+_DialogueCompactor = Callable[[str, Sequence[_TranscriptEntry]], Awaitable[str]]
 _logger = logging.getLogger(__name__)
 
 
@@ -60,16 +63,141 @@ class _ConversationContext:
     def __init__(self) -> None:
         self._participants: dict[str, _ParticipantMemory] = {}
 
-    def append(self, participant: str, source: str, user: str, assistant: str) -> _TranscriptEntry:
+    def append(self, participant: str, user: str, assistant: str) -> _TranscriptEntry:
         memory = self._participants.setdefault(participant, _ParticipantMemory())
-        entry = _TranscriptEntry(len(memory.transcript), source, user, assistant)
+        entry = _TranscriptEntry(len(memory.transcript), "dialogue", user, assistant)
         memory.transcript.append(entry)
-        memory.revisions[source] += 1
         return entry
+
+    def reconcile_transcript(self, participant: str, exchanges: Sequence[tuple[str, str]]) -> None:
+        """Append only a caller-provided complete-history suffix, never duplicates."""
+
+        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        existing = tuple((entry.user, entry.assistant) for entry in memory.transcript)
+        incoming = tuple(exchanges)
+        if len(existing) <= len(incoming) and existing == incoming[: len(existing)]:
+            for user, assistant in incoming[len(existing) :]:
+                self.append(participant, user, assistant)
+            return
+        if len(incoming) <= len(existing) and incoming == existing[: len(incoming)]:
+            return
+        _logger.warning(
+            "caller history diverged from retained dialogue participant=%r; keeping retained transcript",
+            participant,
+        )
 
     def transcript(self, participant: str) -> tuple[_TranscriptEntry, ...]:
         memory = self._participants.get(participant)
         return () if memory is None else tuple(memory.transcript)
+
+    def dialogue_snapshot(self, participant: str) -> tuple[str, tuple[_TranscriptEntry, ...]]:
+        memory = self._participants.get(participant)
+        if memory is None:
+            return "", ()
+        summary = memory.dialogue_background
+        recent = tuple(entry for entry in memory.transcript if entry.sequence > summary.through_sequence)
+        return summary.text, recent
+
+    def schedule_dialogue_compaction(
+        self,
+        participant: str,
+        *,
+        trigger_budget_bytes: int,
+        payload_budget_bytes: int,
+        summary_budget_bytes: int,
+        compact: _DialogueCompactor,
+    ) -> asyncio.Task[bool] | None:
+        """Compact an old immutable dialogue prefix when unprocessed history is large."""
+
+        memory = self._participants.get(participant)
+        if memory is None:
+            return None
+        current = memory.dialogue_job
+        if current is not None and not current.done():
+            return current
+        previous = memory.dialogue_background
+        pending = tuple(entry for entry in memory.transcript if entry.sequence > previous.through_sequence)
+        pending_bytes = sum(entry.utf8_size for entry in pending)
+        if pending_bytes <= trigger_budget_bytes:
+            return None
+        # The newest complete exchange remains verbatim for the next turn.
+        # Compact only the immutable prefix before it.
+        prefix = pending[:-1]
+        if not prefix:
+            return None
+        available_bytes = payload_budget_bytes - len(previous.text.encode("utf-8"))
+        if available_bytes <= 0:
+            _logger.error(
+                "dialogue compaction deferred participant=%r summary_bytes=%d payload_budget_bytes=%d",
+                participant,
+                len(previous.text.encode("utf-8")),
+                payload_budget_bytes,
+            )
+            return None
+        try:
+            batch = _oldest_batch(prefix, available_bytes)
+        except ValueError:
+            _logger.error(
+                "dialogue exchange exceeds compaction payload budget participant=%r budget_bytes=%d",
+                participant,
+                available_bytes,
+            )
+            return None
+        revision = memory.dialogue_revision
+        task = asyncio.create_task(
+            self._compact_dialogue(
+                participant,
+                revision,
+                previous,
+                batch,
+                summary_budget_bytes,
+                compact,
+            ),
+            name=f"conversation-dialogue-compact:{participant}",
+            context=nemo_relay.fork_asyncio_context(),
+        )
+        memory.dialogue_job = task
+        task.add_done_callback(
+            lambda done: self._forget_dialogue_job(
+                participant,
+                done,
+                trigger_budget_bytes=trigger_budget_bytes,
+                payload_budget_bytes=payload_budget_bytes,
+                summary_budget_bytes=summary_budget_bytes,
+                compact=compact,
+            )
+        )
+        return task
+
+    async def _compact_dialogue(
+        self,
+        participant: str,
+        revision: int,
+        previous: _BackgroundSection,
+        batch: tuple[_TranscriptEntry, ...],
+        summary_budget_bytes: int,
+        compact: _DialogueCompactor,
+    ) -> bool:
+        summary = await compact(previous.text, batch)
+        memory = self._participants.get(participant)
+        if memory is None or memory.dialogue_revision != revision:
+            return False
+        if memory.dialogue_background != previous:
+            return False
+        transcript_prefix = tuple(memory.transcript[entry.sequence] for entry in batch)
+        if transcript_prefix != batch:
+            return False
+        summary_size = len(summary.encode("utf-8"))
+        if summary_size > summary_budget_bytes:
+            _logger.error(
+                "dropping oversized dialogue summary participant=%r size_bytes=%d budget_bytes=%d",
+                participant,
+                summary_size,
+                summary_budget_bytes,
+            )
+            return False
+        memory.dialogue_background = _BackgroundSection(summary, batch[-1].sequence)
+        return True
 
     def sections(self, participant: str) -> tuple[tuple[str, str], ...]:
         memory = self._participants.get(participant)
@@ -234,75 +362,12 @@ class _ConversationContext:
             memory.context_records.pop(source, None)
         return True
 
-    def schedule_compaction(
-        self,
-        participant: str,
-        source: str,
-        *,
-        payload_budget_bytes: int,
-        compact: _Compactor,
-    ) -> asyncio.Task[bool] | None:
-        if payload_budget_bytes <= 0:
-            raise ValueError("payload_budget_bytes must be positive")
-        memory = self._participants.get(participant)
-        if memory is None:
-            return None
-        current = memory.jobs.get(source)
-        if current is not None and not current.done():
-            return current
-        snapshot_revision = memory.revisions[source]
-        previous = memory.backgrounds.get(source, _BackgroundSection("", -1))
-        pending = tuple(
-            entry
-            for entry in memory.transcript
-            if entry.source == source and entry.sequence > previous.through_sequence
-        )
-        if not pending:
-            return None
-        previous_bytes = len(previous.text.encode("utf-8"))
-        if previous_bytes >= payload_budget_bytes:
-            raise ValueError("existing background already exceeds payload budget")
-        remaining_bytes = payload_budget_bytes - previous_bytes
-        batch = _oldest_batch(pending, remaining_bytes)
-        task = asyncio.create_task(
-            self._compact(
-                participant,
-                source,
-                snapshot_revision,
-                previous,
-                batch,
-                compact,
-            ),
-            name=f"conversation-context:{participant}:{source}",
-        )
-        memory.jobs[source] = task
-        task.add_done_callback(lambda done: self._forget_job(participant, source, done))
-        return task
-
-    async def _compact(
-        self,
-        participant: str,
-        source: str,
-        revision: int,
-        previous: _BackgroundSection,
-        batch: tuple[_TranscriptEntry, ...],
-        compact: _Compactor,
-    ) -> bool:
-        summary = await compact(source, previous.text, batch)
-        memory = self._participants.get(participant)
-        if memory is None or memory.revisions[source] != revision:
-            return False
-        if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:
-            return False
-        memory.backgrounds[source] = _BackgroundSection(summary, batch[-1].sequence)
-        return True
-
     async def clear(self, participant: str) -> None:
         memory = self._participants.pop(participant, None)
         if memory is None:
             return
         tasks = (
-            tuple(memory.jobs.values())
+            (() if memory.dialogue_job is None else (memory.dialogue_job,))
             + tuple(memory.context_jobs.values())
             + tuple(memory.retired_jobs)
         )
@@ -315,11 +380,28 @@ class _ConversationContext:
     async def close(self) -> None:
         await asyncio.gather(*(self.clear(participant) for participant in tuple(self._participants)))
 
-    def _forget_job(self, participant: str, source: str, task: asyncio.Task[bool]) -> None:
+    def _forget_dialogue_job(
+        self,
+        participant: str,
+        task: asyncio.Task[bool],
+        *,
+        trigger_budget_bytes: int,
+        payload_budget_bytes: int,
+        summary_budget_bytes: int,
+        compact: _DialogueCompactor,
+    ) -> None:
         memory = self._participants.get(participant)
-        if memory is not None and memory.jobs.get(source) is task:
-            memory.jobs.pop(source, None)
-        _log_task_error(participant, source, task)
+        if memory is not None and memory.dialogue_job is task:
+            memory.dialogue_job = None
+        _log_task_error(participant, "dialogue", task)
+        if memory is not None and not task.cancelled() and task.exception() is None and task.result():
+            self.schedule_dialogue_compaction(
+                participant,
+                trigger_budget_bytes=trigger_budget_bytes,
+                payload_budget_bytes=payload_budget_bytes,
+                summary_budget_bytes=summary_budget_bytes,
+                compact=compact,
+            )
 
     def _forget_context_job(
         self,
@@ -351,12 +433,11 @@ class _ConversationContext:
 
     @staticmethod
     def _cancel_source_jobs(memory: _ParticipantMemory, source: str) -> None:
-        for jobs in (memory.jobs, memory.context_jobs):
-            task = jobs.pop(source, None)
-            if task is not None and not task.done():
-                memory.retired_jobs.add(task)
-                task.add_done_callback(memory.retired_jobs.discard)
-                task.cancel()
+        task = memory.context_jobs.pop(source, None)
+        if task is not None and not task.done():
+            memory.retired_jobs.add(task)
+            task.add_done_callback(memory.retired_jobs.discard)
+            task.cancel()
 
 
 def _log_task_error(participant: str, source: str, task: asyncio.Task[bool]) -> None:

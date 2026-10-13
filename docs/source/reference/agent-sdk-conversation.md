@@ -69,11 +69,19 @@ arrives.
 `context_budget_bytes` and `compaction_input_budget_bytes` bound UTF-8 payload
 bytes, not model tokens; their 12,000-byte defaults reuse the former harness's
 12,000-character context policy as a conservative byte limit. The front end
-retains complete exchanges, and `Conversation` keeps the current query
-separate from the context it renders. When rendered context exceeds its budget,
-it drops the oldest whole context items, logs the drop, and continues. It never
-clips an exchange or the current request. Call `participant_left()` and `close()` at lifecycle
-boundaries so context tasks cannot outlive their participant or conversation.
+and sample retain the complete transcript. When completed dialogue exceeds the
+context budget, `Conversation` starts a background compaction of an older whole
+prefix using a dialogue-specific prompt. It keeps the raw exchanges and sends
+the generated summary with newer complete exchanges after the prefix watermark.
+Until that summary is ready, a request uses the bounded recent transcript and
+may omit older details. Routing and admission continue to receive their existing
+bounded recent-history snapshot; they do not receive this dialogue summary.
+
+`Conversation` keeps the current query separate from the context it renders.
+When rendered context exceeds its budget, it drops the oldest whole context
+items, logs the drop, and continues. It never clips an exchange or the current
+request. Call `participant_left()` and `close()` at lifecycle boundaries so
+context tasks cannot outlive their participant or conversation.
 The budgets cover prior context text (including rendered section headings for
 conversation messages), not system/application instructions, tool definitions,
 transport framing, or the current request; they are not a model-window guarantee.
