@@ -200,6 +200,10 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
     assert '"docs/_build/${latest_source}"' in workflow
     assert workflow.count('- "**/README.md"') == 2
     assert workflow.count('- "CONTRIBUTING.md"') == 2
+    for pattern in ("AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "skills/**"):
+        assert workflow.count(f'- "{pattern}"') == 2
+    assert "--ref main" in workflow
+    assert "--ref '<ref>'" in workflow
     assert not (_ROOT / "docs/source/_static/latest-redirect.html").exists()
     for page in (
         "getting_started/skills.html",
@@ -213,7 +217,7 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
 
 def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> None:
     check_links = runpy.run_path(str(_LATEST_LINK_CHECKER))["check_latest_docs_links"]
-    repository = tmp_path / "repository"
+    repository = tmp_path.resolve() / "repository"
     rendered = tmp_path / "rendered"
     readme = repository / "README.md"
     page = rendered / "guide" / "start.html"
@@ -249,18 +253,37 @@ def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> Non
         "[Missing](https://nvidia.github.io/xr-ai/latest/guide/contributing.html)\n",
         encoding="utf-8",
     )
+    agents = repository / "AGENTS.md"
+    agents.write_text("https://nvidia.github.io/xr-ai/latest/missing-agent.html\n", encoding="utf-8")
+    nested_agents = repository / "nested" / "AGENTS.md"
+    nested_agents.parent.mkdir()
+    nested_agents.write_text("https://nvidia.github.io/xr-ai/latest/missing-nested-agent.html\n", encoding="utf-8")
+    claude = repository / "CLAUDE.md"
+    claude.write_text("[Contract](AGENTS.md)\n", encoding="utf-8")
+    skill = repository / "skills" / "setup-β" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("https://nvidia.github.io/xr-ai/latest/missing-skill.html\n", encoding="utf-8")
+    metadata = skill.parent / "agents" / "openai.yaml"
+    metadata.parent.mkdir()
+    metadata.write_text("https://nvidia.github.io/xr-ai/latest/missing-metadata.html\n", encoding="utf-8")
+    other = repository / "SUBAGENTS.md"
+    other.write_text("https://nvidia.github.io/xr-ai/latest/missing-other.html\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
     subprocess.run(
-        ["git", "add", "README.md", "CONTRIBUTING.md"],
+        ["git", "add", "."],
         cwd=repository,
         check=True,
     )
 
     errors = check_links(repository, rendered)
 
-    assert len(errors) == 1
-    assert "CONTRIBUTING.md" in errors[0]
-    assert "rendered page does not exist" in errors[0]
+    assert len(errors) == 4
+    assert {error.partition(": ")[0] for error in errors} == {
+        str(path) for path in (contributing, agents, nested_agents, skill)
+    }
+    assert all("rendered page does not exist" in error for error in errors)
+    discover = runpy.run_path(str(_LATEST_LINK_CHECKER))["_tracked_entry_points"]
+    assert set(discover(repository)) == {readme, contributing, agents, nested_agents, claude, skill}
 
 
 def test_latest_docs_link_checker_reads_reference_bare_and_html_links(tmp_path) -> None:
@@ -300,9 +323,12 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
         in skill
     )
     assert (
-        "Start `agent-samples/simple-vlm-example/model-servers` and wait for it to report readiness "
+        "For local models, start `agent-samples/simple-vlm-example/model-servers` "
+        "and wait for it to report readiness "
         "before starting `agent-samples/simple-vlm-example`"
     ) in normalized
+    assert "docs/source/guides/deploying-with-nim.md" in skill
+    assert "STT and TTS stay local" not in skill
 
 
 def test_sample_readmes_use_sample_directory_commands() -> None:
@@ -331,28 +357,80 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
             assert "sample configuration guide" in configure_section
 
 
-def test_readme_relative_links_resolve_and_docs_links_are_rendered() -> None:
-    tracked = subprocess.run(
-        ["git", "ls-files", "*README.md"],
-        cwd=_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
+def test_entry_point_relative_links_resolve_and_readme_docs_links_are_rendered() -> None:
+    tracked = runpy.run_path(str(_LATEST_LINK_CHECKER))["_tracked_entry_points"](_ROOT)
+    skills = set(_ROOT.glob("skills/**/SKILL.md"))
+    assert skills
+    assert skills | {_ROOT / "AGENTS.md", _ROOT / "CLAUDE.md"} <= set(tracked)
 
-    for relative in tracked:
-        readme_path = _ROOT / relative
-        source = _visible_markdown(readme_path.read_text(encoding="utf-8"))
+    source_link_entry_points = {"AGENTS.md", "CLAUDE.md", "SKILL.md", "CONTRIBUTING.md"}
+    for entry_point in tracked:
+        relative = entry_point.relative_to(_ROOT)
+        source = _visible_markdown(entry_point.read_text(encoding="utf-8"))
         for target in _MARKDOWN_LINK.findall(source):
-            assert "docs/source/" not in target, (
+            assert entry_point.name in source_link_entry_points or "docs/source/" not in target, (
                 f"{relative}: link to rendered versioned documentation instead"
             )
             path = target.split("#", 1)[0]
             if not path or "://" in path or path.startswith("mailto:"):
                 continue
-            assert (readme_path.parent / path).resolve().exists(), (
+            assert (entry_point.parent / path).resolve().exists(), (
                 f"{relative}: unresolved link {target!r}"
             )
+
+
+def test_skill_and_agent_documentation_pointers_resolve() -> None:
+    tracked = runpy.run_path(str(_LATEST_LINK_CHECKER))["_tracked_entry_points"](_ROOT)
+    files = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=_ROOT, check=True, capture_output=True, text=True,
+    ).stdout.split("\0")
+    top_level_dirs = {Path(path).parts[0] for path in files if "/" in path}
+    visited: set[str] = set()
+    checked: set[str] = set()
+    for path in tracked:
+        if path.name not in {"SKILL.md", "AGENTS.md", "CLAUDE.md"}:
+            continue
+        visited.add(path.name)
+        source = _visible_markdown(path.read_text(encoding="utf-8"))
+        for target in _MARKDOWN_LINK.findall(source) + re.findall(r"`([^`\n]+)`", source):
+            if any(character.isspace() for character in target) or "<" in target or ">" in target:
+                continue
+            target = target.split("#", 1)[0]
+            if not target:
+                continue
+            repo_target = target
+            # Command examples can name repository paths relative to a sample directory.
+            while repo_target.startswith("../"):
+                repo_target = repo_target[3:]
+            if repo_target and Path(repo_target).parts[0] in top_level_dirs:
+                assert any(_ROOT.glob(repo_target)), f"{path}: unresolved pointer {target!r}"
+            elif target.startswith("../"):
+                assert (path.parent / target).exists(), f"{path}: unresolved pointer {target!r}"
+            else:
+                continue
+            checked.add(path.name)
+    assert {"AGENTS.md", "SKILL.md"} <= visited
+    assert {"AGENTS.md", "SKILL.md"} <= checked
+
+
+def test_versioned_documentation_urls_validate_rendered_api_pages(tmp_path) -> None:
+    checker = runpy.run_path(str(_LATEST_LINK_CHECKER))
+    repository = tmp_path / "repository"
+    rendered = tmp_path / "rendered"
+    entry_point = repository / "SKILL.md"
+    page = rendered / "reference/python/example/index.html"
+    repository.mkdir()
+    page.parent.mkdir(parents=True)
+    page.write_text('<section id="public-api"></section>', encoding="utf-8")
+    for ref in ("latest", "main", "<ref>"):
+        url = f"https://nvidia.github.io/xr-ai/{ref}/reference/python/example/index.html#public-api"
+        source = f"[API]({url})\n`{url}`\n{url}.\n"
+        entry_point.write_text(source, encoding="utf-8")
+        assert list(checker["iter_doc_urls"](source, ref)) == [url, url, url]
+        assert checker["check_latest_docs_links"](repository, rendered, (entry_point,), ref=ref) == ()
+        entry_point.write_text(source.replace("#public-api", "#missing"), encoding="utf-8")
+        errors = checker["check_latest_docs_links"](repository, rendered, (entry_point,), ref=ref)
+        assert len(errors) == 1 and "rendered fragment does not exist" in errors[0]
 
 
 def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> None:

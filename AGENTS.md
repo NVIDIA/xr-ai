@@ -12,6 +12,9 @@ links. User-facing docs live only under `docs/source/`.
 Building an application? Read
 [`docs/source/guides/building-your-app.md`](docs/source/guides/building-your-app.md).
 
+Refer to [Skills](docs/source/getting_started/skills.md) for available
+coding-agent skills and installation.
+
 ## Repository map
 
 ```text
@@ -127,6 +130,9 @@ When preparing a repository sample, refer to
 - Sample configuration values and field guidance live in checked-in YAML/JSON
   and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
   beside a direct capability subproject are generated into the config reference.
+- When changing setup, sample startup, or the application-building flow, update
+  the `docs/source/` page that documents it and any `skills/*/SKILL.md` that
+  references the changed path, command, or step in the same PR.
 - After changing a `pyproject.toml` outside `apps/`, run
   `uv run --script .github/scripts/generate_dependency_map.py`; the pre-commit hook
   normally regenerates the Python inventory automatically and CI rejects drift.
