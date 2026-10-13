@@ -44,3 +44,15 @@ cases:
       - [[rectangle, red, 390, 140, 470, 220]]
     previous: {activity: Assembling a bicycle, phase: Attaching a wheel}
     expected: Describe the red square and its movement, not a bicycle, wheel, or successful attachment inferred from labels.
+  - id: provisional_labels
+    images:
+      - [[ellipse, green, 40, 140, 120, 220]]
+      - [[ellipse, green, 390, 140, 470, 220]]
+    previous: {activity: Observing, phase: Initial observation}
+    expected: Current green circle is at right, previously at left. Replace provisional labels with a supported broad grouping and specific repositioning phase. Delta compares both images, not Initial observation. No invented hand or object purpose.
+  - id: phase_changes_within_activity
+    images:
+      - [[rectangle, red, 40, 140, 120, 220], [ellipse, blue, 220, 140, 300, 220]]
+      - [[rectangle, red, 390, 140, 470, 220], [ellipse, blue, 220, 140, 300, 220]]
+    previous: {activity: Arranging shapes, phase: Adding shapes}
+    expected: Keep the broad Arranging shapes activity but revise the stale Adding shapes phase to repositioning. Both objects were already present; only the red square changed position. Current caption must place it at right, and delta must not invent an added object or hand.

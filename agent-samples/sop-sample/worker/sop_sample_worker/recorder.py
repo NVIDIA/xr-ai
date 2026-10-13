@@ -139,13 +139,16 @@ def _markdown(value: str) -> str:
 
 def _caption_query(previous: dict[str, str] | None) -> str:
     query = (
-        "Compare image 1 (earlier) with image 2 (current). Describe the visible action, "
-        "relevant object details, and current state; report only changes supported by the images."
+        "You received exactly TWO images, in chronological order: FIRST=earlier, SECOND=current. "
+        "Describe the SECOND image in caption. In delta use: Earlier: ... Current: ... Change: ... . "
+        "Do not use Initial observation: there are two images. Then identify the broad parent activity "
+        "and the specific current phase from the visual evidence."
         if previous is not None else
-        "Describe this initial image and its visible state. Use Initial observation for delta."
+        "You received exactly ONE image: the current initial view. Describe that image in caption; "
+        "set delta to Initial observation. Identify a supported broad activity and current phase/state."
     )
     if previous is not None:
-        query += "\nPrevious grouping labels (not visual evidence): " + json.dumps({
+        query += "\nPrevious grouping labels (fallible naming hints, not visual evidence): " + json.dumps({
             "activity": previous["activity"], "phase": previous["phase"],
         })
     return query

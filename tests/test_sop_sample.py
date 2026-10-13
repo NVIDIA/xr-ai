@@ -29,7 +29,7 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from sop_sample_worker.config import load_config  # noqa: E402
 from sop_sample_worker.lifecycle import SOP_INPUT_TOPIC, CaptureRecording  # noqa: E402
-from sop_sample_worker.recorder import RecorderAgent  # noqa: E402
+from sop_sample_worker.recorder import RecorderAgent, _caption_query  # noqa: E402
 
 
 def test_config_and_cli(monkeypatch):
@@ -825,13 +825,21 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
             if timestamp == 200:
                 continue  # Sampling is faster than captioning; compare captioned frames.
             await demo.recorder._caption(state)
-        assert vlm.ask_images.await_args_list[-2].args[0] == [paths[0]]
+        initial_call = vlm.ask_images.await_args_list[-2]
+        assert initial_call.args[0] == [paths[0]]
+        assert "exactly ONE image" in initial_call.args[1]
+        assert "set delta to Initial observation" in initial_call.args[1]
+        assert "Previous grouping labels" not in initial_call.args[1]
         call = vlm.ask_images.await_args_list[-1]
         assert call.args[0] == [paths[0], paths[2]]
         assert all(path.is_file() for path in call.args[0])
         assert call.kwargs["system_prompt"] == prompt
         assert "A blue block" not in call.args[1]  # No previous caption text.
         assert "earlier" in call.args[1] and "current" in call.args[1]
+        assert "exactly TWO images" in call.args[1]
+        assert "FIRST=earlier, SECOND=current" in call.args[1]
+        assert "Earlier: ... Current: ... Change: ..." in call.args[1]
+        assert "Do not use Initial observation" in call.args[1]
         # Re-resolve from saved snapshots even after the live registry evicts them.
         demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": 400})
         await demo.recorder._capture(state)
@@ -976,6 +984,23 @@ async def test_invalid_caption_is_error_not_evidence(demo, response):
     assert any(row["kind"] == "caption_error" and "raw response:" in row["message"] for row in errors)
 
 
+def test_caption_query_treats_previous_labels_as_hints_not_visual_evidence():
+    previous = {
+        "activity": "Observing", "phase": "Initial observation",
+        "caption": "Unverified attachment", "delta": "Unverified completion",
+    }
+    query = _caption_query(previous)
+    assert "exactly TWO images" in query
+    assert "Do not use Initial observation" in query
+    prefix, labels = query.split("\nPrevious grouping labels ", 1)
+    assert "broad parent activity" in prefix and "specific current phase" in prefix
+    assert labels.startswith("(fallible naming hints, not visual evidence): ")
+    assert json.loads(labels.split(": ", 1)[1]) == {
+        "activity": "Observing", "phase": "Initial observation",
+    }
+    assert "Unverified" not in query
+
+
 async def test_caption_grouping_uses_labels_only_and_preserves_transitions(manual_caption_demo):
     demo = manual_caption_demo
     await speak(demo, "start recording")
@@ -994,7 +1019,8 @@ async def test_caption_grouping_uses_labels_only_and_preserves_transitions(manua
             assert json.dumps({"activity": groups[index-2][0], "phase": groups[index-2][1]}) in query
         else:
             assert "Previous grouping labels" not in query
-        assert "Observation" not in query and "Change" not in query
+        assert f"Observation {index - 1}" not in query
+        assert f"Change {index - 1}" not in query
     await speak(demo, "stop recording")
     activities = packet(state)["hierarchy"]
     assert [a["name"] for a in activities] == ["Build", "Clean"]
