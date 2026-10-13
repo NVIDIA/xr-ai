@@ -10,14 +10,13 @@ launcher's process group and survives stack restarts.  The vLLM process
 is visible to ss(8) on the host via --network host, so cleanup uses the
 same pid_on_port → SIGTERM path as pip mode.
 
-NGC auth: if the image is from `nvcr.io/` and `NGC_API_KEY` is in the
-environment, this module runs `docker login nvcr.io` once per process so the
-pull can proceed. Existing `~/.docker/config.json` entries take priority and
-are not overwritten.
+NGC auth: for `nvcr.io/` images with `NGC_API_KEY` in the environment, this
+module logs in when Docker's active config lacks nvcr.io credentials.
 """
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -32,18 +31,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from . import _diagnostics, _lifecycle
+from . import _diagnostics, _hf_snapshot, _lifecycle
 
 log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
-_LOGIN_DONE: set[str] = set()
+_LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
-_LAUNCH_CONTRACT_VERSION = 2
+_LAUNCH_CONTRACT_VERSION = 4
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
     "HF_HUB_DISABLE_XET",
     "HF_HUB_ENABLE_HF_TRANSFER",
+    "HF_HUB_OFFLINE",
+    "TRANSFORMERS_OFFLINE",
 )
 _HF_XET_VERSION_SPEC = ">=1.1.2,<2.0.0"
 _HF_XET_REQUIREMENT = f"hf-xet{_HF_XET_VERSION_SPEC}"
@@ -54,14 +55,7 @@ _HF_XET_IMPORT_CHECK = (
     "from packaging.specifiers import SpecifierSet; "
     f"assert SpecifierSet({_HF_XET_VERSION_SPEC!r}).contains(version('hf-xet'))"
 )
-_HF_PREFETCH_CODE = (
-    "import os, sys; "
-    "from huggingface_hub import snapshot_download; "
-    "print(f'Prefetching Hugging Face snapshot {sys.argv[1]} before CUDA startup', "
-    "flush=True); "
-    "snapshot_download(repo_id=sys.argv[1]); "
-    "os.sync()"
-)
+_HF_SNAPSHOT_CODE = inspect.getsource(_hf_snapshot)
 _SPARK_UMA_RETRY_DELAY_S = 10.0
 
 
@@ -109,7 +103,6 @@ def build_run_argv(
     extra_env: dict[str, str] | None,
     extra_pip: list[str] | None,
     vllm_argv: list[str],
-    prefetch_model: str | None = None,
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
 
@@ -118,6 +111,11 @@ def build_run_argv(
     group but remains stoppable via pid_on_port + SIGTERM — the same path
     as pip-mode vLLM.  With --network host the vLLM process is visible to
     ss(8) on the host, so no docker-specific stop logic is needed.
+
+    The container resolves the model (``vllm_argv[2]``) and its
+    ``--revision`` from the mounted cache before CUDA starts, and downloads
+    it only when the cached snapshot is absent. vLLM then
+    serves the snapshot directory, so it makes no Hub metadata request.
     """
     env_vars: dict[str, str] = {
         "HF_HOME": str(model_cache),
@@ -146,8 +144,6 @@ def build_run_argv(
         "extra_pip": extra_pip or [],
         "vllm_argv": vllm_argv,
     }
-    if prefetch_model:
-        payload["prefetch_model"] = prefetch_model
     # The name-only -e resolves the token into the container's creation-time
     # env, so a rotated token must change the contract; the key is omitted
     # entirely when unset to keep tokenless fingerprints stable.
@@ -192,26 +188,48 @@ def build_run_argv(
     xet_install = shlex.join(
         ["python3", "-m", "pip", "install", "-q", _HF_XET_REQUIREMENT]
     )
-    commands: list[str] = []
     xet_disabled = env_vars.get("HF_HUB_DISABLE_XET", "").upper() in {
         "1",
         "ON",
         "YES",
         "TRUE",
     }
+    model = vllm_argv[2]
+    serve_args = vllm_argv[3:]
+    if not any(
+        arg == "--served-model-name" or arg.startswith("--served-model-name=")
+        for arg in serve_args
+    ):
+        # vLLM names a model served from a directory after its path.
+        serve_args = ["--served-model-name", model, *serve_args]
+
+    def snapshot(mode: str) -> str:
+        return shlex.join([
+            "python3", "-c", _HF_SNAPSHOT_CODE,
+            mode, model, _flag_value(serve_args, "--revision") or "",
+        ])
+
+    download: list[str] = []
     if not xet_disabled:
         # Images vary in their Hub/Xet stack. Repair a missing or incompatible
         # hf-xet wheel, then re-check the complete Hub integration so an
         # incapable Hub or install failure stops startup instead of falling
         # back to HTTPS.
-        commands.extend([f"( {xet_check} || {xet_install} )", xet_check])
-    if prefetch_model:
-        # Spark's CPU and GPU share one memory pool. Finish network transfer,
-        # snapshot reconstruction, and writeback before vLLM initializes CUDA
-        # so their transient allocations cannot overlap a driver context.
-        commands.append(
-            shlex.join(["python3", "-c", _HF_PREFETCH_CODE, prefetch_model])
-        )
+        download.extend([f"( {xet_check} || {xet_install} )", xet_check])
+    download.append(f'model_path="$({snapshot("download")})"')
+    # A cache hit skips every Hub request. A miss downloads before vLLM starts
+    # CUDA; any other resolver failure, including a miss under
+    # HF_HUB_OFFLINE, stops startup with the resolver's error.
+    resolve = (
+        f'model_path="$({snapshot("local")})"\n'
+        'status=$?\n'
+        f'if [ "$status" -eq {_hf_snapshot.CACHE_MISS} ]; then\n'
+        f'    {" && ".join(download)} || exit 1\n'
+        'elif [ "$status" -ne 0 ]; then\n'
+        '    exit "$status"\n'
+        'fi'
+    )
+    commands: list[str] = []
     if extra_pip:
         # extra_pip is the seam for models whose architecture needs a wheel
         # the NGC image doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's
@@ -222,9 +240,21 @@ def build_run_argv(
         commands.append(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
-    commands.append(shlex.join(vllm_argv))
-    argv += ["-c", " && ".join(commands)]
+    commands.append(
+        f'{shlex.join(vllm_argv[:2])} "$model_path" {shlex.join(serve_args)}'
+    )
+    argv += ["-c", f"{resolve}\n{' && '.join(commands)}"]
     return argv
+
+
+def _flag_value(args: list[str], flag: str) -> str | None:
+    """Return the value of *flag* in *args* (``--flag v`` or ``--flag=v``)."""
+    for index, arg in enumerate(args):
+        if arg == flag and index + 1 < len(args):
+            return args[index + 1]
+        if arg.startswith(f"{flag}="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 # ── docker container helpers ─────────────────────────────────────────────────
@@ -232,15 +262,30 @@ def build_run_argv(
 
 def _docker_available() -> bool:
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            check=False,
+            capture_output=True,
+            text=True,
+            errors="replace",
         )
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError as exc:
+        log.error(
+            "docker backend requires Docker Engine and the NVIDIA Container "
+            "Toolkit; could not run `docker version`: %s",
+            exc,
+        )
         return False
+    if result.returncode == 0:
+        return True
+    detail = (result.stderr or result.stdout or "no command output").strip()
+    log.error(
+        "docker backend requires Docker Engine and the NVIDIA Container "
+        "Toolkit; `docker version` failed (rc=%d): %s",
+        result.returncode,
+        detail,
+    )
+    return False
 
 
 def container_exists(name: str) -> bool:
@@ -359,7 +404,17 @@ def start_container(name: str) -> bool:
             stderr=subprocess.PIPE,
         )
         return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or b"").decode(errors="replace").strip()
+        log.warning(
+            "`docker start %s` failed (rc=%d): %s",
+            name,
+            exc.returncode,
+            detail or "no command output",
+        )
+        return False
+    except FileNotFoundError as exc:
+        log.warning("could not run `docker start %s`: %s", name, exc)
         return False
 
 
@@ -448,10 +503,15 @@ def _registry_for(image: str) -> str | None:
     return head if "." in head or ":" in head else None
 
 
+def _docker_config_path() -> Path:
+    config_dir = os.environ.get("DOCKER_CONFIG")
+    return Path(config_dir) / "config.json" if config_dir else _DOCKER_CONFIG
+
+
 def _already_logged_in(registry: str) -> bool:
-    """Best-effort: True if ~/.docker/config.json already has credentials for *registry*."""
+    """Best-effort: True if Docker's active config has credentials for *registry*."""
     try:
-        data = json.loads(_DOCKER_CONFIG.read_text())
+        data = json.loads(_docker_config_path().read_text())
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return False
     return registry in data.get("auths", {})
@@ -466,8 +526,9 @@ def _maybe_ngc_login(image: str) -> None:
     registry = _registry_for(image)
     if registry != "nvcr.io":
         return
-    if registry in _LOGIN_DONE or _already_logged_in(registry):
-        _LOGIN_DONE.add(registry)
+    login_key = (_docker_config_path(), registry)
+    if login_key in _LOGIN_DONE or _already_logged_in(registry):
+        _LOGIN_DONE.add(login_key)
         return
     token = os.environ.get("NGC_API_KEY", "").strip()
     if not token:
@@ -480,15 +541,22 @@ def _maybe_ngc_login(image: str) -> None:
             stderr=subprocess.PIPE,
             check=False,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
+        log.warning(
+            "could not run `docker login %s` for image %s: %s",
+            registry,
+            image,
+            exc,
+        )
         return
     if result.returncode == 0:
-        _LOGIN_DONE.add(registry)
+        _LOGIN_DONE.add(login_key)
         log.debug("docker login %s succeeded via NGC_API_KEY", registry)
     else:
         log.warning(
-            "docker login %s failed: %s — pull may fail",
+            "`docker login %s` for image %s failed: %s",
             registry,
+            image,
             (result.stderr or b"").decode(errors="replace").strip(),
         )
 
@@ -715,7 +783,6 @@ def run(
         extra_env=extra_env,
         extra_pip=extra_pip,
         vllm_argv=vllm_argv,
-        prefetch_model=vllm_argv[2] if spark_uma else None,
     )
     run_container(
         argv=argv,
@@ -758,11 +825,6 @@ def run_container(
     post-mortem capture behave identically for both backends.
     """
     if not _docker_available():
-        log.error(
-            "docker backend requires docker on PATH and a running daemon "
-            "(`docker version` failed). Install Docker Engine and the NVIDIA "
-            "Container Toolkit, then retry."
-        )
         sys.exit(2)
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
@@ -819,12 +881,6 @@ def run_container(
     # versa). Evict it by label before any reuse probe: a foreign server can
     # answer the health probe and be silently mistaken for ours.
     holder, checked = container_on_port_checked(port)
-    if not checked:
-        print(
-            f"[{log_prefix}] could not inspect port {port} ownership; if the "
-            f"launch fails to bind, stop whatever holds the port",
-            flush=True,
-        )
     if checked and holder and holder != container_name:
         print(
             f"[{log_prefix}] port {port} is held by container {holder}; "
@@ -926,7 +982,18 @@ def run_container(
         _maybe_ngc_login(image)
         print(f"[{log_prefix}] {launch_banner}", flush=True)
         _state["cleanup_mode"] = "remove"
-        proc = subprocess.Popen(argv, start_new_session=True)
+        try:
+            proc = subprocess.Popen(argv, start_new_session=True)
+        except OSError as exc:
+            log.error(
+                "could not invoke Docker for image %s as container %s: %s",
+                image,
+                container_name,
+                exc,
+            )
+            signal.signal(signal.SIGINT, orig_int)
+            signal.signal(signal.SIGTERM, orig_term)
+            raise
         owns_attempt = True
     _state["proc"] = proc
 
@@ -1028,8 +1095,10 @@ def run_container(
             if diagnosis:
                 log.error("%s", diagnosis)
             log.error(
-                "container %s failed — see %s",
+                "container %s (image %s) failed before readiness at %s; see %s",
                 container_name,
+                image,
+                health_url,
                 streamer.log_path,
             )
             raise
@@ -1056,7 +1125,9 @@ def run_container(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port_checked(port: int) -> tuple[str | None, bool]:
+def container_on_port_checked(
+    port: int, *, warn_on_failure: bool = True,
+) -> tuple[str | None, bool]:
     """Return a labelled container and whether Docker discovery succeeded."""
     try:
         out = subprocess.check_output(
@@ -1064,7 +1135,8 @@ def container_on_port_checked(port: int) -> tuple[str | None, bool]:
              f"--filter=label=xr-ai-vllm.port={port}",
              "--format", "{{.Names}}"],
             text=True,
-            stderr=subprocess.DEVNULL,
+            errors="replace",
+            stderr=subprocess.PIPE,
         ).strip()
         names = out.splitlines()
         return (names[0] if names else None), True
@@ -1072,7 +1144,15 @@ def container_on_port_checked(port: int) -> tuple[str | None, bool]:
         # Without the Docker CLI, a local Docker container cannot be managed;
         # pip-mode ownership is still established from the listener process.
         return None, True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "no command output").strip()
+        report = log.warning if warn_on_failure else log.debug
+        report(
+            "could not inspect Docker ownership for port %d (rc=%d): %s",
+            port,
+            exc.returncode,
+            detail,
+        )
         return None, False
 
 

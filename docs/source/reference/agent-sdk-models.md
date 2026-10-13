@@ -7,7 +7,7 @@
 
 <a id="contract"></a>
 (agent-sdk-models-contract)=
-`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, and OCR protocols and
+`xr-ai-models` defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 {doc}`python/index` for exact classes, methods, fields, and defaults. Refer to
@@ -29,6 +29,29 @@ async with make_llm(config, "agent_llm") as llm:
     )
     print(response.content, response.reasoning)
 ```
+
+Choice-only decision clients use `make_decision` and the SystemOne adapter:
+
+```python
+from xr_ai_models import DecisionQuestion, load_models_config, make_decision
+
+config = load_models_config("yaml/models.json")
+async with make_decision(config, "triage") as decisions:
+    result = await decisions.decide(
+        "The participant asked to start the timer.",
+        {
+            "approval": DecisionQuestion(
+                instructions="Did the participant explicitly approve the action?",
+                criteria={"yes": "An explicit approval", "no": "No explicit approval"},
+            )
+        },
+    )
+    print(result.answers["approval"].choice)
+```
+
+The profile entry uses `category: decision`, `kind: systemone`, a model name,
+and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
+documents the local service and its pinned model release.
 
 (profile-contract)=
 A client profile names logical roles and declares adapters and endpoints:
@@ -135,6 +158,15 @@ succeed without a request; `health_path` selects the HTTP route when probing is
 enabled. Tea making's RAG service requires this configuration for hosted embedding
 endpoints; refer to {ref}`rag-embedding-health`.
 
+## Deployment profiles
+
+Use the same factories and typed interfaces for local development and native
+NIM deployment. The example in `deployment/nim/models.yaml` selects native HTTP
+chat and embedding endpoints and Riva gRPC speech, without compatibility servers.
+The embedding factory honors existing request defaults, including asymmetric
+`input_type` batches. Refer to {doc}`/guides/deploying-with-nim` for deployment
+ownership, sample configuration paths, and validation commands.
+
 (riva-grpc-speech-nim-stt-tts)=
 ## Riva speech over gRPC
 
@@ -154,7 +186,9 @@ STT accepts 16-bit PCM WAV or raw int16 PCM with an explicit sample rate. TTS
 also accepts `voice` and `sample_rate`. A hosted NVCF endpoint uses TLS,
 `api_key_env`, and its `function_id`. If custom code explicitly calls `health()`,
 set `health_check: false` for a hosted endpoint without a channel-ready health
-surface. Existing gRPC request deadlines and error propagation are unchanged.
+surface. Recognition timeout and cancellation cancel the native RPC and join
+its pending client read; synthesis uses the same cleanup rule for streamed
+audio.
 
 ## Tests
 

@@ -7,12 +7,7 @@ model-servers orchestrator — starts one shared AI inference stack and exits.
 All servers are launch_mode="persist" so they keep running after this
 process exits.  Model weights stay hot across stack restarts.
 
-Which servers start is set by a deployment profile (``--models``): every
-entry whose deployment is ``managed`` launches as the named service, so one
-profile can mix local in-process servers, vLLM servers, and self-hosted NIM
-containers. Shipped profiles (yaml/models.<name>.json):
-
-  default
+The default deployment (yaml/models.default.json) starts:
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
     tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
@@ -20,10 +15,8 @@ containers. Shipped profiles (yaml/models.<name>.json):
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
     ocr        — Nemotron OCR v2 multilingual       port 8112  (Hugging Face)
 
-  vlm_llm_nim
-    stt + tts + ocr + embedding local; the LLM and VLM as self-hosted NIM containers
-    (Nemotron-3-Nano-Omni port 8110, Cosmos3-Nano Reasoner port 8100).
-    Requires docker + NGC_API_KEY. Samples may reuse these endpoints.
+Use --models PATH for a custom deployment of these local services.
+For NVIDIA NIM models, configure independently deployed endpoints.
 
 Per-service placement (GPUs, ports, KV budgets) lives in the per-GPU-profile
 YAML directory; a service may ship a profile-specific config variant named
@@ -33,9 +26,8 @@ defaults.
 
 How to run:
     uv run --project model-server-samples/model-servers model_servers
-    uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
 
-To stop all model servers:
+To stop the selected model services:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
@@ -74,16 +66,10 @@ def _gpu_profile_name(value: str) -> str:
     return value
 
 # service → (project, command, config basename). Order is launch
-# order: NIM containers precede local servers (speech NIMs allocate fixed
-# VRAM while LLM/VLM NIMs grab most of their GPU's free VRAM for KV cache);
-# agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
+# order: agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
 # OCR is the smallest checkpoint and starts last, after embeddings.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
-    "stt-nim":   ("../../services/nim-server", "nim_server", "nim_stt_server"),
-    "tts-nim":   ("../../services/nim-server", "nim_server", "nim_tts_server"),
-    "llm-nim":   ("../../services/nim-server", "nim_server", "nim_llm_server"),
-    "vlm-nim":   ("../../services/nim-server", "nim_server", "nim_vlm_server"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "agent-llm": (
@@ -106,10 +92,16 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
 }
 
 
-def _profile_path(selection: str) -> Path:
-    if "/" in selection or selection.endswith(".json"):
-        return Path(selection)
-    return _BASE / "yaml" / f"models.{selection}.json"
+def _models_path(value: str) -> Path:
+    if value == "default":
+        raise argparse.ArgumentTypeError(
+            "--models default is retired; run model_servers without --models"
+        )
+    if value == "vlm_llm_nim":
+        raise argparse.ArgumentTypeError(
+            "--models vlm_llm_nim is retired; configure independently deployed NIM endpoints"
+        )
+    return Path(value)
 
 
 def _read_service_port(path: Path) -> int | None:
@@ -127,9 +119,9 @@ def _read_service_port(path: Path) -> int | None:
 
 
 def _build_processes(
-    selection: str, gpu_profile: str | None = None,
+    models: Path | None = None, gpu_profile: str | None = None,
 ) -> tuple[list[Process], tuple[str, ...]]:
-    profile_path = _profile_path(selection)
+    profile_path = models or _BASE / "yaml" / "models.default.json"
     deployment = load_deployment_profile(profile_path)
     unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
     if unknown:
@@ -158,23 +150,11 @@ def _build_processes(
     return processes, deployment.required_credentials
 
 
-def _known_service_ports() -> list[tuple[str, int]]:
-    """Discover cleanup targets from the YAML files that own their ports."""
-    targets: set[tuple[str, int]] = set()
-    for service, (project, _, config_base) in _MODEL_SERVICES.items():
-        configs = list((_BASE / "yaml").glob(f"*/{config_base}*.yaml"))
-        configs.append((_BASE / project / f"{config_base}.yaml").resolve())
-        for config in configs:
-            if config.is_file() and (port := _read_service_port(config)) is not None:
-                targets.add((service, port))
-    return sorted(targets)
-
-
-def _stop_models() -> None:
+def _stop_models(processes: list[Process]) -> None:
     # Surface docker/ss/lsof failures so operators see why --stop aborted
     # instead of a silent traceback exit.
     try:
-        if not stop_persistent_servers(_known_service_ports()):
+        if not stop_persistent_servers([(process.name, process.port) for process in processes]):
             raise RuntimeError("one or more persistent servers are still running")
     except Exception as exc:
         raise SystemExit(
@@ -182,38 +162,18 @@ def _stop_models() -> None:
         ) from exc
 
 
-def _stop_unselected_services(processes: list[Process]) -> None:
-    """Free capacity held by services outside the selected profile.
-
-    Stops by port, keeping any port the profile uses: a persistent server
-    already holding a selected port is reused (or evicted by the incoming
-    wrapper when a different container owns it).
-    """
-    selected_ports = {process.port for process in processes}
-    unselected = [
-        (service, port)
-        for service, port in _known_service_ports()
-        if port not in selected_ports
-    ]
-    if not stop_persistent_servers(unselected):
-        raise RuntimeError("could not stop persistent servers outside the profile")
-
-
 def run() -> None:
     setup_logging("orchestrator", namespace="model-servers")
 
-    p = argparse.ArgumentParser(add_help=False)
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument(
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
         "--stop", action="store_true",
-        help="Stop every persisted model-server stack and exit.",
+        help="Stop managed services in the selected model deployment and exit.",
     )
-    mode.add_argument(
-        "--models", dest="models", metavar="NAME_OR_PATH",
-        help="Deployment profile to start: a shipped name (default, "
-             "vlm_llm_nim) or a path to a profile JSON.",
+    p.add_argument(
+        "--models", type=_models_path, metavar="PATH",
+        help="Custom local deployment JSON; defaults to yaml/models.default.json.",
     )
-    p.set_defaults(models="default")
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
@@ -222,11 +182,7 @@ def run() -> None:
         help="Use a named YAML GPU profile instead of automatic detection. "
              "Intended for explicitly reviewed custom hardware profiles.",
     )
-    ns, _ = p.parse_known_args()
-
-    if ns.stop:
-        _stop_models()
-        return
+    ns = p.parse_args()
 
     try:
         processes, credentials = _build_processes(ns.models, ns.gpu_profile)
@@ -238,12 +194,15 @@ def run() -> None:
     except ValueError as exc:
         p.error(str(exc))
 
+    if ns.stop:
+        _stop_models(processes)
+        return
+
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
     # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         require_credentials(credential)
-    _stop_unselected_services(processes)
     run_stack(processes, _BASE, exit_after_ready=True)
 
 

@@ -175,6 +175,32 @@ class ChatResponse:
 
 
 @dataclass(frozen=True)
+class ChatStreamEvent:
+    """One normalized event from a streamed chat completion.
+
+    Text and reasoning events carry deltas as they arrive. Tool calls are
+    emitted only after the provider finishes the response and the complete
+    batch has been validated. A finish event carries the provider finish
+    reason.
+    """
+
+    kind: Literal["text", "reasoning", "tool_call", "finish"]
+    """The kind of streamed event."""
+
+    text: str | None = None
+    """A user-visible text delta for ``kind == "text"``."""
+
+    reasoning: str | None = None
+    """A model reasoning delta for ``kind == "reasoning"``."""
+
+    tool_call: ToolCall | None = None
+    """A complete tool call for ``kind == "tool_call"``."""
+
+    finish_reason: str | None = None
+    """The provider finish reason for ``kind == "finish"``."""
+
+
+@dataclass(frozen=True)
 class Capabilities:
     """Features supported by a configured model endpoint."""
 
@@ -192,6 +218,86 @@ class Capabilities:
 
     reasoning: bool = False
     """Whether the endpoint can return model reasoning."""
+
+
+@dataclass(frozen=True)
+class DecisionQuestion:
+    """One choice question for a structured decision model.
+
+    The keys in ``criteria`` are the permitted answer labels. Each value gives
+    the criterion that distinguishes that choice. Define at least two non-empty
+    labels with non-empty descriptions.
+    """
+
+    instructions: str
+    """Question-specific instructions for selecting a criterion."""
+
+    criteria: Mapping[str, str]
+    """Permitted choice labels and their selection criteria."""
+
+
+@dataclass(frozen=True)
+class DecisionAnswer:
+    """One validated choice and its probability trace."""
+
+    choice: str
+    """The selected label from the question's criteria."""
+
+    confidence: float
+    """The selected choice probability."""
+
+    probabilities: Mapping[str, float]
+    """Probability for every permitted choice label."""
+
+
+@dataclass(frozen=True)
+class DecisionResponse:
+    """Validated answers and metadata returned by a decision service."""
+
+    answers: Mapping[str, DecisionAnswer]
+    """Answers keyed by the question identifiers supplied to ``decide``."""
+
+    model: str
+    """Model identifier reported by the service."""
+
+    usage: Mapping[str, Any]
+    """Provider-reported usage metadata."""
+
+    raw: Mapping[str, Any]
+    """Unmodified JSON response from the provider."""
+
+
+@runtime_checkable
+class DecisionService(Protocol):
+    """Structural interface for typed, choice-only decision services."""
+
+    async def decide(
+        self,
+        state: str | Mapping[str, Any],
+        questions: Mapping[str, DecisionQuestion],
+        *,
+        timeout: float | None = None,
+    ) -> DecisionResponse:
+        """Evaluate all questions against text or a JSON-compatible state mapping.
+
+        Return one choice and a complete probability map for each question.
+        No free-form text or reasoning is generated. A per-call timeout must be
+        positive and finite; the SystemOne adapter caps it at the configured
+        endpoint timeout. Transport failures and invalid or incomplete answers
+        raise exceptions without returning partial decisions.
+        """
+
+        pass
+
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
 
 
 @runtime_checkable
@@ -230,6 +336,26 @@ class LLMService(Protocol):
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         """Stream user-visible response text for a sequence of chat messages."""
+
+        pass
+
+    def stream_events(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        tools: Sequence[ToolDef] | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool = False,
+        thinking_budget: int | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        """Stream text, reasoning, complete tool calls, and finish events.
+
+        Tool calls are held until the stream completes successfully, so a
+        truncated or malformed function call is never exposed as executable.
+        """
 
         pass
 

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # /// script
-# requires-python = ">=3.11,<3.13"
+# requires-python = ">=3.11,<3.15"
 # dependencies = [
 #     "opencv-contrib-python-headless>=4.8,<5",
 # ]

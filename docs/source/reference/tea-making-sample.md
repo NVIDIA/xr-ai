@@ -71,6 +71,11 @@ The launcher options are:
 
 Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
+Both presets now require `Hey agent, let's start talking` after connecting,
+then accept speech without a wake phrase until `Hey agent, let's stop talking`.
+Set `conversation.require_wake_phrase: true` in the normal preset to require its
+configured wake phrases. Disable conversation controls in the always-on preset
+to restore immediate speech dispatch. Refer to {ref}`voice-conversation-controls`.
 
 The live event viewer is available at `http://127.0.0.1:8092` on the XR-AI
 host. With `--expose-web-events`, use `http://<xr-host>:8092` from a trusted
@@ -107,9 +112,10 @@ events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
 The worker uses native `xr_ai_runtime` agents and `xr_ai_tools` instances; it
 does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
-Wake-word gating is the sample default; callers can explicitly select
-always-on speech. Every spoken response is also sent to the connection client
-on `agent.response` so the client can render accessible text alongside audio.
+The sample accepts speech without a wake phrase during an active conversation;
+callers can enable its configured wake phrases. Every spoken response is also
+sent to the connection client on `agent.response` so the client can render
+accessible text alongside audio.
 Raw streamed responses are finalized there as soon as their content completes,
 and batched responses are finalized as soon as their rewrite completes. The
 voice aggregator's playback reservation affects only subsequent speech
@@ -164,6 +170,26 @@ Refer to the generated {doc}`configuration <configuration>` and
 {doc}`command-line <command-line>` references for configuration fields and
 command syntax.
 
+## Opt-in session capture
+
+Capture is disabled by default. Run `uv run tea_making_sample --capture`
+from `agent-samples/tea-making-sample/` to start `device_io_capture`
+immediately after DeviceIOHub. It records participant video, device and agent
+audio, and inbound and outbound data in a separate process. The option can be
+combined with `--expose-web-events`.
+
+`yaml/media_capture.yaml` selects the `demo` profile and participant-lifetime
+sessions. Each connection creates a raw bundle under
+`~/.local/share/xr-ai/captures/tea-making-sample/`. When the session closes,
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
+requires an NVIDIA GPU with NVENC support and `ffmpeg` on `PATH`.
+
+Capture uses bounded queues and drops pending capture frames if encoding falls
+behind, so recording does not backpressure the hub or worker. Omit `--capture`
+when the deployment must not retain device media. Refer to
+{doc}`../components/server-runtime` for the capture bundle and renderer contract.
+
 ## Configuration
 
 Run and edit the sample from `agent-samples/tea-making-sample/`. The
@@ -175,7 +201,7 @@ temporary worker configuration with absolute paths. Edit the files under
 |---|---|
 | `yaml/tea_making_worker.yaml` | Selected subordinate configuration files, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
-| `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Wake-word and always-on speech presets |
+| `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
 | `yaml/models.local.json` | Model adapters, shared endpoints, and explicit RAG embedding health settings |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |

@@ -27,6 +27,7 @@ from ._protocols import (
     Capabilities,
     ChatMessage,
     ChatResponse,
+    ChatStreamEvent,
     ContentPart,
     ImageInput,
     ImagePart,
@@ -91,12 +92,12 @@ def _request_headers(
     return result
 
 
-async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
+async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool, api_key: str | None = None) -> bool:
     # Disabling explicit health probes returns success without an HTTP request.
     if not enabled:
         return True
     try:
-        resp = await client.get(url, timeout=3.0)
+        resp = await client.get(url, timeout=3.0, headers=_auth_headers(api_key))
         return resp.is_success
     except httpx.HTTPError:
         return False
@@ -416,6 +417,162 @@ class OpenAICompatLLM:
                 if content:
                     yield content
 
+    async def stream_events(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        tools: Sequence[ToolDef] | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool = False,
+        thinking_budget: int | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        """Stream normalized events, withholding tool calls until completion.
+
+        A provider finish reason followed by ``[DONE]`` is required before any
+        tool call is emitted. This prevents consumers from executing partial
+        calls if the connection ends early or the provider returns invalid
+        tool data.
+        """
+
+        payload = self._build_payload(
+            messages,
+            tools=tools, max_tokens=max_tokens, temperature=temperature,
+            enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+            stream=True,
+        )
+        kwargs: dict[str, Any] = {
+            "json": payload,
+            "headers": _request_headers(self._api_key, headers),
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+
+        # The SDK sends one completion choice. Keep indices scoped to that
+        # choice so unexpected additional choices cannot be combined.
+        tool_fragments: dict[int, dict[str, str]] = {}
+        finish_reason: str | None = None
+        done = False
+        async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
+            if resp.is_error:
+                body = await resp.aread()
+                logger.error("llm {} {}: {}", self._model, resp.status_code, body[:300])
+                resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    done = True
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("LLM stream returned malformed event JSON") from exc
+                if not isinstance(chunk, dict):
+                    raise ValueError("LLM stream event must be a JSON object")
+                if "error" in chunk:
+                    raise RuntimeError(f"LLM stream error: {chunk['error']}")
+                choices = chunk.get("choices")
+                if not isinstance(choices, list):
+                    continue
+                if not choices:
+                    # Usage-only chunks are valid in stream_options mode.
+                    continue
+                for choice in choices:
+                    if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+                        continue
+                    delta = choice.get("delta") or {}
+                    if not isinstance(delta, dict):
+                        raise ValueError("LLM stream choice delta must be an object")
+                    content = delta.get("content")
+                    if isinstance(content, str) and content:
+                        yield ChatStreamEvent(kind="text", text=content)
+                    reasoning = None
+                    fields = (self._reasoning_field,) if self._reasoning_field else ()
+                    for field in (*fields, "reasoning", "reasoning_content"):
+                        value = delta.get(field)
+                        if isinstance(value, str) and value:
+                            reasoning = value
+                            break
+                    if reasoning:
+                        yield ChatStreamEvent(kind="reasoning", reasoning=reasoning)
+                    fragments = delta.get("tool_calls")
+                    if fragments is not None:
+                        if not isinstance(fragments, list):
+                            raise ValueError("LLM stream tool_calls delta must be a list")
+                        for fragment in fragments:
+                            if not isinstance(fragment, dict):
+                                raise ValueError("LLM stream tool call fragment must be an object")
+                            index = fragment.get("index")
+                            if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+                                raise ValueError("LLM stream tool call fragment has an invalid index")
+                            accumulated = tool_fragments.setdefault(
+                                index, {"id": "", "name": "", "arguments": ""},
+                            )
+                            call_id = fragment.get("id")
+                            if call_id is not None:
+                                if not isinstance(call_id, str):
+                                    raise ValueError("LLM stream tool call ID must be a string")
+                                accumulated["id"] += call_id
+                            function = fragment.get("function")
+                            if function is not None:
+                                if not isinstance(function, dict):
+                                    raise ValueError("LLM stream tool function must be an object")
+                                name = function.get("name")
+                                arguments = function.get("arguments")
+                                if name is not None:
+                                    if not isinstance(name, str):
+                                        raise ValueError("LLM stream tool function name must be a string")
+                                    accumulated["name"] += name
+                                if arguments is not None:
+                                    if not isinstance(arguments, str):
+                                        raise ValueError("LLM stream tool arguments must be a string")
+                                    accumulated["arguments"] += arguments
+                    reason = choice.get("finish_reason")
+                    if isinstance(reason, str):
+                        finish_reason = reason
+
+        if not done:
+            raise ValueError("LLM stream ended before [DONE]")
+        if finish_reason is None:
+            raise ValueError("LLM stream ended without a finish_reason")
+
+        calls: list[ToolCall] = []
+        if finish_reason == "tool_calls" and not tool_fragments:
+            raise ValueError("LLM stream finished with tool_calls but no tool call data")
+        if tool_fragments:
+            if finish_reason != "tool_calls":
+                raise ValueError(
+                    f"LLM stream returned tool calls with finish_reason {finish_reason!r}",
+                )
+            # Validate the complete batch before exposing any call, avoiding
+            # partial execution when a later call in the batch is malformed.
+            for index in sorted(tool_fragments):
+                fragment = tool_fragments[index]
+                if not fragment["id"] or not fragment["name"]:
+                    raise ValueError(f"LLM stream returned incomplete tool call at index {index}")
+                try:
+                    arguments = json.loads(fragment["arguments"])
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"LLM stream returned malformed arguments for tool call at index {index}",
+                    ) from exc
+                if not isinstance(arguments, dict):
+                    raise ValueError(
+                        f"LLM stream returned non-object arguments for tool call at index {index}",
+                    )
+                calls.append(ToolCall(
+                    id=fragment["id"],
+                    name=fragment["name"],
+                    arguments=fragment["arguments"],
+                ))
+        for call in calls:
+            yield ChatStreamEvent(kind="tool_call", tool_call=call)
+        yield ChatStreamEvent(kind="finish", finish_reason=finish_reason)
+
     async def health(self) -> bool:
         """Return whether the endpoint health check succeeds.
 
@@ -423,7 +580,7 @@ class OpenAICompatLLM:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -726,7 +883,7 @@ class OpenAICompatSTT:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -798,7 +955,7 @@ class OpenAICompatTTS:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -916,10 +1073,15 @@ class OpenAICompatEmbedding:
         number of vectors raises :class:`ValueError`.
         """
 
+        return await self._embed_payload(texts, {}, timeout=timeout)
+
+    async def _embed_payload(
+        self, texts: Sequence[str], extras: Mapping[str, Any], *, timeout: float | None,
+    ) -> list[list[float]]:
         if not texts:
             return []
         kwargs: dict[str, Any] = {
-            "json": {"model": self._model, "input": list(texts)},
+            "json": {**extras, "model": self._model, "input": list(texts)},
             "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
@@ -940,7 +1102,7 @@ class OpenAICompatEmbedding:
         disabled at construction time.
         """
 
-        return await _http_health(self._client, self.health_url, self._health_check)
+        return await _http_health(self._client, self.health_url, self._health_check, self._api_key)
 
     async def close(self) -> None:
         """Close the internally created HTTP client, if one is owned."""
@@ -953,3 +1115,43 @@ class OpenAICompatEmbedding:
 
     async def __aexit__(self, *exc: Any) -> None:
         await self.close()
+
+
+class _EmbeddingWithExtras(OpenAICompatEmbedding):
+    """Profile-only payload defaults and asymmetric input normalization."""
+
+    def __init__(self, *, default_extras: Mapping[str, Any], **kwargs: Any) -> None:
+        extras = dict(default_extras)
+        if {"model", "input"} & extras.keys():
+            raise ValueError("embedding default_extras cannot replace model or input")
+        if "input_type" in extras and extras["input_type"] not in ("query", "passage"):
+            raise ValueError("embedding input_type must be query or passage")
+        self._extras = extras
+        super().__init__(**kwargs)
+
+    async def embed(
+        self, texts: Sequence[str], *, timeout: float | None = None,
+    ) -> list[list[float]]:
+        if "input_type" not in self._extras:
+            return await self._embed_payload(texts, self._extras, timeout=timeout)
+        groups: dict[str, list[tuple[int, str]]] = {"query": [], "passage": []}
+        for index, text in enumerate(texts):
+            kind = self._extras["input_type"]
+            for candidate in groups:
+                prefix = candidate + ": "
+                if text.startswith(prefix):
+                    kind, text = candidate, text[len(prefix):]
+                    break
+            groups[kind].append((index, text))
+        results: list[list[float]] = [[] for _ in texts]
+        # The wire field applies to the entire batch. Split mixed inputs and
+        # restore original positions; one client owns both requests and cleanup.
+        for kind, group in groups.items():
+            if not group:
+                continue
+            vectors = await self._embed_payload(
+                [text for _, text in group], {**self._extras, "input_type": kind}, timeout=timeout,
+            )
+            for (index, _), vector in zip(group, vectors, strict=True):
+                results[index] = vector
+        return results

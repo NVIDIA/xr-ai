@@ -20,7 +20,7 @@ from loguru import logger
 from xr_ai_hub import AudioChunk, DataMessage, FrameData
 
 from ._frontends import _RawCaptureFrontend
-from ._video import _H264TrackWriter, _join_sources, _safe_name, _video_sources
+from ._video import _H264TrackWriter, _join_sources, _safe_name, _supported_dimensions, _video_sources
 from .config import CaptureConfig
 
 _CAPTURE_MARKER_NAME = ".xr-ai-media-capture"
@@ -177,6 +177,7 @@ class _ParticipantSession:
     observation_count: int = 0
     frame_count: int = 0
     audio_chunk_count: int = 0
+    video_failed: bool = False
     lock: threading.RLock = field(default_factory=threading.RLock)
 
 
@@ -189,6 +190,8 @@ class SessionRecorder:
         except (ImportError, RuntimeError, OSError) as exc:
             raise RuntimeError(f"PyNvVideoCodec is required for media capture: {exc}") from exc
         self._nvc = nvc
+        # Query hardware before accepting sessions, never under recording locks.
+        self._encoder_caps = nvc.GetEncoderCaps(config.gpu_id, "h264")
         self._config = config
         self._raw_frontend = _RawCaptureFrontend()
         self._root = Path(config.out_dir)
@@ -385,19 +388,39 @@ class SessionRecorder:
 
     def record_video(self, frame: FrameData) -> None:
         session = self._session(frame.participant_id, frame.pts_us)
-        with session.lock:
-            writer = session.video.get(frame.track_id)
-            if writer is None:
-                writer = _H264TrackWriter(
-                    nvc=self._nvc,
-                    root=session.root / "video",
-                    track_id=frame.track_id,
-                    stream_name="raw",
-                    config=self._config,
-                    frontend=self._raw_frontend,
-                )
-                session.video[frame.track_id] = writer
-        raw_frame = writer.write(frame, "", ())
+        caps = self._encoder_caps
+        if not _supported_dimensions(frame.width, frame.height, caps):
+            # Filter camera placeholders before pixel conversion or segment
+            # replacement. Audio and subsequent valid video remain recordable.
+            with session.lock:
+                session.dropped_video_frames += 1
+            logger.warning(
+                "media capture dropped unsupported frame pid={!r} track={!r} size={}x{}; "
+                "NVENC requires even dimensions within {}x{}..{}x{}",
+                frame.participant_id, frame.track_id, frame.width, frame.height,
+                caps["width_min"], caps["height_min"], caps["width_max"], caps["height_max"],
+            )
+            return
+        try:
+            with session.lock:
+                writer = session.video.get(frame.track_id)
+                if writer is None:
+                    writer = _H264TrackWriter(
+                        nvc=self._nvc,
+                        encoder_caps=self._encoder_caps,
+                        root=session.root / "video",
+                        track_id=frame.track_id,
+                        stream_name="raw",
+                        config=self._config,
+                        frontend=self._raw_frontend,
+                    )
+                    session.video[frame.track_id] = writer
+            raw_frame = writer.write(frame, "", ())
+        except Exception:
+            with session.lock:
+                session.video_failed = True
+            logger.exception("media capture video failed pid={!r} track={!r}", frame.participant_id, frame.track_id)
+            raise
         if raw_frame is None:
             with session.lock:
                 session.dropped_video_frames += 1
@@ -446,6 +469,9 @@ class SessionRecorder:
             return None
         pts_us = max(session.start_us, pts_us)
         with session.lock:
+            # Fatal video failure takes precedence over a return-drain timeout.
+            if session.video_failed:
+                incomplete_reason = "video_capture_failed"
             complete = incomplete_reason is None
             self._event(
                 session,

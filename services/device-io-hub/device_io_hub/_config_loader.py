@@ -16,12 +16,14 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import os
+import secrets
 from pathlib import Path
 
 import yaml
 from loguru import logger
 
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
+from device_io_hub.video import VideoRecorderConfig
 
 DEFAULT_CONFIG_NAME = "device_io_hub.yaml"
 LIVEKIT_API_KEY_ENV = "LIVEKIT_API_KEY"
@@ -41,15 +43,27 @@ def _resolve_path(value: str, base: Path) -> str:
 
 
 def _apply_env_credentials(data: dict) -> None:
-    if LIVEKIT_API_KEY_ENV in os.environ:
-        data["api_key"] = os.environ[LIVEKIT_API_KEY_ENV]
-    if LIVEKIT_API_SECRET_ENV in os.environ:
-        data["api_secret"] = os.environ[LIVEKIT_API_SECRET_ENV]
+    if LIVEKIT_API_KEY_ENV in os.environ or LIVEKIT_API_SECRET_ENV in os.environ:
+        data["api_key"] = os.environ.get(LIVEKIT_API_KEY_ENV, "").strip()
+        data["api_secret"] = os.environ.get(LIVEKIT_API_SECRET_ENV, "").strip()
+        return
     data.setdefault("api_key", "")
     data.setdefault("api_secret", "")
     for key in ("api_key", "api_secret"):
         if isinstance(data[key], str):
             data[key] = data[key].strip()
+    if data["api_key"] == "" and data["api_secret"] == "":
+        data["api_key"] = "xr-ai-" + secrets.token_hex(16)
+        data["api_secret"] = "xr-ai-" + secrets.token_hex(32)
+
+
+def _warn_unknown_keys(data: dict, valid: set[str], path: Path, section: str) -> None:
+    unknown = [repr(key) for key in data if key not in valid]
+    if unknown:
+        logger.warning(
+            "{}: section {}: ignoring unknown keys: {}; accepted keys: {}",
+            path, section, ", ".join(unknown), ", ".join(sorted(valid)),
+        )
 
 
 def load_config() -> LiveKitConnectorConfig:
@@ -57,8 +71,13 @@ def load_config() -> LiveKitConnectorConfig:
     Parse --config from argv, load the YAML file if it exists, and return
     a fully populated LiveKitConnectorConfig.
 
-    If no --config flag is given and no device_io_hub.yaml exists in CWD,
-    returns non-secret defaults with LiveKit credentials from the environment.
+    If either environment credential is set, require a complete, non-blank
+    environment pair instead of YAML credentials. Otherwise, use the YAML pair
+    or generate a fresh pair when both YAML values are missing or blank.
+    A partial pair remains an error. With no --config flag, a missing
+    device_io_hub.yaml in CWD uses configuration defaults. An empty YAML
+    document also uses defaults. Unknown top-level and video_recording keys
+    are ignored with a warning.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
@@ -69,7 +88,7 @@ def load_config() -> LiveKitConnectorConfig:
     if not config_path.exists():
         if args.config:
             raise FileNotFoundError(f"Config file not found: {config_path}")
-        logger.debug("No {} found — using defaults", DEFAULT_CONFIG_NAME)
+        logger.info("No {} found; using defaults. Supply --config <path> to load a configuration", config_path)
         data: dict = {"enable_web_server": False, "web_client_dir": ""}
         _apply_env_credentials(data)
         return LiveKitConnectorConfig(**data)
@@ -77,8 +96,25 @@ def load_config() -> LiveKitConnectorConfig:
     logger.info("Loading config from {}", config_path)
     base = config_path.parent
 
-    with config_path.open() as f:
-        data: dict = yaml.safe_load(f) or {}
+    try:
+        with config_path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{config_path}: configuration must be UTF-8 encoded") from exc
+    if data is None:
+        logger.info("{} is empty; using defaults", config_path)
+        data = {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{config_path}: top-level configuration must be a YAML mapping")
+
+    valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
+    _warn_unknown_keys(data, valid, config_path, "top-level")
+    recording = data.get("video_recording")
+    if recording is not None:
+        if not isinstance(recording, dict):
+            raise ValueError(f"{config_path}: video_recording must be a YAML mapping")
+        recording_keys = {f.name for f in dataclasses.fields(VideoRecorderConfig)} | {"enabled"}
+        _warn_unknown_keys(recording, recording_keys, config_path, "video_recording")
     _apply_env_credentials(data)
 
     if _web_client_disabled():
@@ -99,8 +135,6 @@ def load_config() -> LiveKitConnectorConfig:
             logger.warning("web_server_extra_sans must be a list of strings; ignoring {!r}", sans)
             data["web_server_extra_sans"] = []
 
-    # Filter to only fields that exist on the dataclass.
-    valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
     filtered = {k: v for k, v in data.items() if k in valid}
 
     return LiveKitConnectorConfig(**filtered)

@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "xr-render-scene"
 version = "0.1.0"
 description = "Sample-local scene and LOVR capability for XR render demo."
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",

@@ -189,19 +189,19 @@ struct ContentView: View {
         let isConnected = model.connectionState == .connected
 
         // Mic Mode picker is always visible (matches web). Disabled until
-        // connected, or while the mic is live (mode can't change mid-stream).
+        // connected, or while capture is active, starting, or awaiting cleanup.
         Picker("Mic Mode", selection: $m.audioMode) {
             Text("Voice Processing").tag(AudioConfig.MicrophoneMode.voiceProcessing)
             Text("Software (AEC on)").tag(AudioConfig.MicrophoneMode.softwareProcessing)
             Text("Raw (no DSP)").tag(AudioConfig.MicrophoneMode.raw)
         }
-        .disabled(!isConnected || model.isAudioActive || model.isAudioStarting)
+        .disabled(!isConnected || model.isAudioActive || model.isAudioStarting || model.micCleanupRequired)
 
         LabeledContent("Microphone") {
             HStack {
                 Text(micStatusLabel)
                     .foregroundStyle(model.isAudioActive ? .green : .secondary)
-                if model.isAudioActive {
+                if model.isAudioActive || model.micCleanupRequired {
                     Button("Stop", role: .destructive) {
                         Task { await model.disableMic() }
                     }
@@ -218,6 +218,7 @@ struct ContentView: View {
     }
 
     private var micStatusLabel: String {
+        if model.micCleanupRequired { return "Cleanup required" }
         if model.isAudioActive { return "Live" }
         if model.isAudioStarting { return "Starting…" }
         return model.connectionState == .connected ? "Idle" : "Not connected"

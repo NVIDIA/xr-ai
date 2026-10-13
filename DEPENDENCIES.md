@@ -21,14 +21,18 @@ derived from project metadata.
 
 ## Python version
 
-Repository Python projects conventionally require Python 3.11 or 3.12. A project
-may declare a different range when its dependencies require it. The generated
-inventory records each declaration, while `.github/workflows/lock-check.yml`
-runs `uv lock` on every project to prove its complete declared range resolves.
+Most repository Python projects require Python 3.11 through 3.14. CloudXR
+runtime, OpenXR service, and Magpie TTS stop at Python 3.13 because their
+native dependencies do not publish Python 3.14 wheels. The generated inventory
+records each declaration, while `.github/workflows/lock-check.yml` runs
+`uv lock` on every project to check constraint resolution across its complete
+declared range. Lock resolution does not prove that installable artifacts exist
+for every interpreter and platform.
 
-The pytest matrix in `.github/workflows/tests.yml` covers Python 3.11 and 3.12.
-Loosening the repository-wide upper bound requires a coordinated qualification
-change, even when an individual dependency publishes newer Python wheels.
+The non-GPU pytest matrix in `.github/workflows/tests.yml` covers Python 3.11
+through 3.14. GPU qualification remains on Python 3.12. Loosening a project's
+upper bound requires coordinated qualification, even when an individual
+dependency publishes newer Python wheels.
 
 ## Dependency qualification
 
@@ -107,7 +111,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-hub-client` — [`agent-sdk/xr-ai-hub/`](agent-sdk/xr-ai-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -118,7 +122,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-models` — [`agent-sdk/xr-ai-models/`](agent-sdk/xr-ai-models/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -128,11 +132,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups:
   - `riva`:
     - `nvidia-riva-client>=2.17`
+    - `urllib3>=2.8.0`
+  - `speaker`:
+    - `websockets>=15.0`
 - Commands: none
 
 #### `xr-ai-agent-runtime` — [`agent-sdk/xr-ai-runtime/`](agent-sdk/xr-ai-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -144,7 +151,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-tools` — [`agent-sdk/xr-ai-tools/`](agent-sdk/xr-ai-tools/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -176,7 +183,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-voice` — [`agent-sdk/xr-ai-voice/`](agent-sdk/xr-ai-voice/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -185,7 +192,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `pipecat-ai>=1.6`
@@ -197,7 +204,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-web-events` — [`agent-sdk/xr-ai-web-events/`](agent-sdk/xr-ai-web-events/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -210,7 +217,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -219,7 +226,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-logging` — [`utils/xr-ai-logging/`](utils/xr-ai-logging/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -229,7 +236,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-vad` — [`utils/xr-ai-vad/`](utils/xr-ai-vad/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -242,7 +249,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-vllm` — [`utils/xr-ai-vllm/`](utils/xr-ai-vllm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
@@ -251,7 +258,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-voicegate` — [`utils/xr-ai-voicegate/`](utils/xr-ai-voicegate/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -262,9 +269,31 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Services
 
+#### `clef-server` — [`services/clef-server/`](services/clef-server/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `accelerate>=1.2.0`
+  - `fastapi>=0.115.0`
+  - `huggingface-hub>=0.32.0`
+  - `pillow>=10.0.0`
+  - `pyyaml>=6.0`
+  - `safetensors>=0.4.5`
+  - `torch>=2.11.0`
+  - `torchvision>=0.28.0`
+  - `transformers>=5.17.0`
+  - `uvicorn[standard]>=0.34.0`
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `clef_server` → `clef_server.__main__:run`
+
 #### `cloudxr-runtime` — [`services/cloudxr-runtime/`](services/cloudxr-runtime/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -278,10 +307,12 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `device-io-hub` — [`services/device-io-hub/`](services/device-io-hub/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `pyjwt>=2.15.1`
+  - `urllib3>=2.8.0`
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `pyzmq>=27.0`
@@ -303,12 +334,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `embedding-server` — [`services/embedding-server/`](services/embedding-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -320,12 +353,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `llama-nemotron-llm-server` — [`services/llama-nemotron-llm/`](services/llama-nemotron-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -335,30 +370,13 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `llama_nemotron_llm_server` → `llama_nemotron_llm_server.__main__:run`
 
-#### `magpie-nim-tts` — [`services/magpie-nim-tts/`](services/magpie-nim-tts/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `fastapi>=0.115`
-  - `uvicorn>=0.30`
-  - `pyyaml>=6.0`
-  - `httpx>=0.27`
-  - `grpcio>=1.67`
-- Optional dependency groups: none
-- Commands:
-  - `magpie_nim_tts` → `magpie_nim_tts.__main__:run`
-
 #### `magpie-tts-server` — [`services/magpie-tts/`](services/magpie-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
@@ -376,12 +394,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nemotron-omni-llm-server` — [`services/nemotron-omni-llm/`](services/nemotron-omni-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -393,12 +413,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `nemotron3-nano-llm-server` — [`services/nemotron3-nano-llm/`](services/nemotron3-nano-llm/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -407,19 +429,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups: none
 - Commands:
   - `nemotron3_nano_llm_server` → `nemotron3_nano_llm_server.__main__:run`
-
-#### `nim-server` — [`services/nim-server/`](services/nim-server/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `pyyaml>=6.0`
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `nim_server` → `nim_server.__main__:run`
 
 #### `ocr-server` — [`services/ocr-server/`](services/ocr-server/)
 
@@ -436,7 +445,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-openxr-service` — [`services/openxr-service/`](services/openxr-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -451,10 +460,11 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `pocket-tts-server` — [`services/pocket-tts/`](services/pocket-tts/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `anyio>=4.0`
   - `pocket-tts==3.0.2`
   - `torch>=2.5.0`
@@ -470,7 +480,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-rag-service` — [`services/rag-service/`](services/rag-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -483,12 +493,34 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `rag_service` → `rag_service.__main__:run`
 
-#### `stt-server` — [`services/stt-server/`](services/stt-server/)
+#### `xr-ai-speaker-stt` — [`services/speaker-stt/`](services/speaker-stt/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.12,<3.14`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `fastapi>=0.115.0`
+  - `uvicorn[standard]>=0.34.0`
+  - `anyio>=4.8.0`
+  - `numpy>=1.24`
+  - `pyyaml>=6.0`
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
+  - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
+  - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
+- Optional dependency groups: none
+- Commands:
+  - `speaker_stt` → `speaker_stt.__main__:_run`
+
+#### `stt-server` — [`services/stt-server/`](services/stt-server/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
@@ -505,7 +537,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-video-memory-service` — [`services/video-memory-service/`](services/video-memory-service/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -521,12 +553,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `vlm-server` — [`services/vlm-server/`](services/vlm-server/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `urllib3>=2.8.0`
+  - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
-  - `vllm>=0.27.0`
+  - `vllm>=0.30.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -540,7 +574,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `lab-instrument-monitoring` — [`agent-samples/lab-instrument-monitoring/`](agent-samples/lab-instrument-monitoring/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -552,7 +586,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `lab-instrument-monitoring-worker` — [`agent-samples/lab-instrument-monitoring/worker/`](agent-samples/lab-instrument-monitoring/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -561,7 +595,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,marker-tracking,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
@@ -575,7 +609,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -587,7 +621,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `simple-vlm-example-worker` — [`agent-samples/simple-vlm-example/worker/`](agent-samples/simple-vlm-example/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -595,7 +629,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -607,7 +641,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `tea-making-sample` — [`agent-samples/tea-making-sample/`](agent-samples/tea-making-sample/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -619,7 +653,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `tea-making-worker` — [`agent-samples/tea-making-sample/worker/`](agent-samples/tea-making-sample/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -627,7 +661,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
@@ -641,7 +675,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo` — [`agent-samples/xr-render-demo/`](agent-samples/xr-render-demo/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -654,7 +688,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo-eval` — [`agent-samples/xr-render-demo/eval/`](agent-samples/xr-render-demo/eval/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -677,7 +711,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-scene` — [`agent-samples/xr-render-demo/scene/`](agent-samples/xr-render-demo/scene/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -693,13 +727,13 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-render-demo-worker` — [`agent-samples/xr-render-demo/worker/`](agent-samples/xr-render-demo/worker/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
-  - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-tools[frames,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -713,9 +747,22 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Model server samples
 
+#### `clef-flash-model-server` — [`model-server-samples/clef-flash/`](model-server-samples/clef-flash/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `clef_flash_model` → `main:run`
+
 #### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -726,55 +773,11 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `model_servers` → `main:run`
 
-#### `model-servers-nim` — [`model-server-samples/model-servers-nim/`](model-server-samples/model-servers-nim/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `model_servers_nim` → `main:run`
-
-#### `nim-model-adapter` — [`model-server-samples/model-servers-nim/compatibility-adapter/`](model-server-samples/model-servers-nim/compatibility-adapter/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-  - `fastapi>=0.115`
-  - `uvicorn>=0.30`
-  - `pyyaml>=6.0`
-  - `httpx>=0.27`
-  - `grpcio>=1.67`
-  - `python-multipart>=0.0.18`
-- Optional dependency groups: none
-- Commands:
-  - `nim_model_adapter` → `nim_model_adapter.__main__:run`
-
-#### `nim-riva-server` — [`model-server-samples/model-servers-nim/riva-server/`](model-server-samples/model-servers-nim/riva-server/)
-
-- Python: `>=3.11,<3.13`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `nim_riva_server` → `nim_riva_server.__main__:run`
-
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
@@ -785,9 +788,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-  - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
-  - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
-  - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
@@ -801,6 +801,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
   - `numpy>=1.24`
+  - `audioop-lts; python_version >= '3.13'`
+  - `huggingface-hub>=0.32.0`
   - `Pillow>=10.0`
   - `python-multipart>=0.0.9`
   - `pyyaml>=6.0`
@@ -811,7 +813,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 #### `xr-ai-dependency-manifest` — [`dependency-manifest/`](dependency-manifest/)
 
-- Python: `>=3.11,<3.13`
+- Python: `>=3.11,<3.14`
 - Build dependencies: none
 - Runtime dependencies: none
 - Optional dependency groups:
@@ -833,14 +835,14 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
-    - `model-servers-nim` → [`model-servers-nim`](model-server-samples/model-servers-nim/) (local, editable)
-    - `nim-model-adapter` → [`nim-model-adapter`](model-server-samples/model-servers-nim/compatibility-adapter/) (local, editable)
-    - `nim-riva-server` → [`nim-riva-server`](model-server-samples/model-servers-nim/riva-server/) (local, editable)
+    - `model-servers-nim`
+    - `nim-model-adapter`
+    - `nim-riva-server`
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-    - `magpie-nim-tts` → [`magpie-nim-tts`](services/magpie-nim-tts/) (local, editable)
+    - `magpie-nim-tts`
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-    - `nim-server` → [`nim-server`](services/nim-server/) (local, editable)
+    - `nim-server`
     - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
     - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
     - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
@@ -870,6 +872,7 @@ Python dependency metadata, so they remain curated here.
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
 | `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
+| `services/speaker-stt/` | `xr-ai-speaker-stt` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/pocket-tts/` | `pocket-tts-server` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
@@ -936,7 +939,8 @@ Keep non-obvious fan-out in the same change:
   `pyyaml`. In-tree backends use typed OpenAI-compatible HTTP rather than vendor
   SDKs, with one scoped exception: the optional `riva` extra adds
   `nvidia-riva-client` for gRPC-only Riva speech NIMs (see AGENTS.md); the
-  base install is unchanged.
+  base install is unchanged. The `speaker` extra adds `websockets` for the
+  private ordered speaker-ASR stream used by `xr-ai-voice`.
 - `agent-sdk/xr-ai-tools/` keeps capability-specific dependencies optional;
   spatial math remains CPU-only.
 - Agent workers use public SDK packages and task-specific libraries. They never

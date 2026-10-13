@@ -18,7 +18,8 @@ Building an application? Read
 client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
-model-server-samples/  Shared model-server launch samples
+model-server-samples/  Local model-server launch samples
+deployment/      External model endpoint profiles and validation
 apps/            Application workspaces outside repository sample tooling
 services/        Hub, model servers, and typed capability services
 utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities
@@ -41,7 +42,7 @@ skills/          Skill bank that sets coding agents up
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`.
 - All model HTTP goes through the typed services and factories in
   `xr_ai_models`. Do not add vendor SDKs or hand-written model HTTP clients to
-  workers or services. One scoped exception: Riva speech NIMs expose only
+  workers or services. One scoped exception: The supported Riva speech NIM integration uses
   gRPC, so the optional `riva` extra adds `nvidia-riva-client` behind
   `kind: riva_grpc`, with the import deferred into `make_stt`/`make_tts`;
   the base install stays httpx-only.

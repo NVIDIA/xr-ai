@@ -49,9 +49,11 @@ from pathlib import Path
 from typing import Sequence, Union
 
 from ._credentials import load_credentials
+from ._failure import FailureContext, emit_failure_summary, failure_exit_status
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+_OUTPUT_DRAIN_TIMEOUT = 1.0
 _PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 
@@ -115,8 +117,11 @@ class Parallel:
 
     The launcher spawns every member at once and waits for *all* of them to
     signal readiness before advancing to the next item in the stack sequence.
-    If any member exits before signaling ready the launcher shuts everything
-    down, just as it would for a serial process.
+    A member that signals readiness remains monitored until the whole group is
+    ready. An unexpected exit during that interval shuts everything down. A
+    successful ``persist`` process may exit after readiness only when
+    ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
+    outlive the launcher.
 
     Example::
 
@@ -207,6 +212,8 @@ def _spawn(
     ready_file: Path,
     *,
     ready_process_may_exit: bool = False,
+    failure_contexts: dict[str, FailureContext] | None = None,
+    output_readers: dict[str, tuple[threading.Thread, ...]] | None = None,
 ) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
@@ -216,9 +223,16 @@ def _spawn(
     else:
         cmd = [sys.executable, "-m", proc.command]
 
-    if proc.config is not None:
-        cmd += ["--config", str((base / proc.config).resolve())]
+    config_path = (base / proc.config).resolve() if proc.config is not None else None
+    if config_path is not None:
+        cmd += ["--config", str(config_path)]
     cmd += ["--ready-file", str(ready_file)]
+    failure_context = FailureContext(
+        service=proc.name,
+        command=tuple(cmd),
+        project_path=project,
+        config_path=config_path,
+    )
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     # The child can record this launcher's dedicated session without creating
@@ -252,22 +266,68 @@ def _spawn(
     # start_new_session=True puts uv + its children (e.g. device_io_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
     # processes don't survive as orphans when uv exits without forwarding signals.
-    p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         start_new_session=True)
+    try:
+        p = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        _emit_failure_summary(failure_context, "spawn", error=exc)
+        raise
+    if failure_contexts is not None:
+        failure_contexts[proc.name] = failure_context
     prefix = f"[{proc.name}]"
+    readers: list[threading.Thread] = []
     for stream in (p.stdout, p.stderr):
-        threading.Thread(
+        reader = threading.Thread(
             target=_forward,
             args=(stream, prefix),
             kwargs={"quiet_native": proc.quiet_native_output},
             daemon=True,
-        ).start()
+        )
+        reader.start()
+        readers.append(reader)
+    if output_readers is not None:
+        output_readers[proc.name] = tuple(readers)
     return p
+
+
+def _drain_output_readers(
+    readers: Sequence[threading.Thread],
+    timeout: float = _OUTPUT_DRAIN_TIMEOUT,
+) -> None:
+    """Give a terminated child's output readers one shared deadline to finish."""
+    deadline = time.monotonic() + timeout
+    for reader in readers:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            reader.join(remaining)
+        except (Exception, KeyboardInterrupt):
+            try:
+                log.debug("Output reader drain failed", exc_info=True)
+            except (Exception, KeyboardInterrupt):
+                pass
 
 
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
-def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
+class _ReadinessFailure(SystemExit):
+    def __init__(self, name: str, returncode: int) -> None:
+        super().__init__(failure_exit_status(returncode))
+        self.name = name
+        self.returncode = returncode
+
+
+def _wait_ready(
+    name: str,
+    ready_file: Path,
+    proc: subprocess.Popen,
+) -> None:
     """Block until *ready_file* exists. Print a progress line every 5 s."""
     t0          = time.monotonic()
     last_report = -_READY_INTERVAL  # force first line immediately
@@ -282,7 +342,7 @@ def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
         rc = proc.poll()
         if rc is not None:
             log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
-            raise SystemExit(1)
+            raise _ReadinessFailure(name, rc)
 
         if elapsed - last_report >= _READY_INTERVAL:
             log.debug("[%s] waiting... (%.0fs)", name, elapsed)
@@ -293,35 +353,52 @@ def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
 
 _ReadyEntry = tuple[str, Path, subprocess.Popen]
 
-def _wait_ready_parallel(group: list[_ReadyEntry]) -> None:
-    """Wait for all processes in *group* concurrently; raise if any fails."""
-    failed: list[SystemExit] = []
-    lock = threading.Lock()
 
-    def _one(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
-        try:
-            _wait_ready(name, ready_file, proc)
-        except SystemExit as exc:
-            with lock:
-                failed.append(exc)
+def _wait_ready_parallel(
+    group: list[_ReadyEntry],
+    ready_processes_may_exit: set[str] | None = None,
+) -> None:
+    """Wait for the whole group while monitoring members that are already ready."""
+    allowed_exits = ready_processes_may_exit or set()
+    ready: set[str] = set()
+    t0 = time.monotonic()
+    last_report = {name: -_READY_INTERVAL for name, _, _ in group}
 
-    threads = [
-        threading.Thread(target=_one, args=entry, daemon=True)
-        for entry in group
-    ]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    while len(ready) < len(group):
+        elapsed = time.monotonic() - t0
+        for name, ready_file, proc in group:
+            if name not in ready and ready_file.exists():
+                ready.add(name)
+                log.info("[%s] ready (%.0fs)", name, elapsed)
 
-    if failed:
-        raise failed[0]
+            rc = proc.poll()
+            if rc is not None:
+                if name in ready and name in allowed_exits and rc == 0:
+                    continue
+                if name in ready:
+                    log.error(
+                        "[%s] exited (rc=%s) before its parallel group was ready",
+                        name,
+                        rc,
+                    )
+                else:
+                    log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
+                raise _ReadinessFailure(name, rc)
+
+            if name not in ready and elapsed - last_report[name] >= _READY_INTERVAL:
+                log.debug("[%s] waiting... (%.0fs)", name, elapsed)
+                last_report[name] = elapsed
+
+        if len(ready) < len(group):
+            time.sleep(0.5)
 
 
 # ── monitor + shutdown ─────────────────────────────────────────────────────────
 
-def _monitor(procs: dict[str, subprocess.Popen]) -> None:
-    """Block until any process exits or SIGINT / SIGTERM is received."""
+def _monitor(
+    procs: dict[str, subprocess.Popen],
+) -> tuple[str, subprocess.Popen] | None:
+    """Return the first exited process, or ``None`` after SIGINT / SIGTERM."""
     stop = threading.Event()
 
     orig_int  = signal.getsignal(signal.SIGINT)
@@ -337,8 +414,10 @@ def _monitor(procs: dict[str, subprocess.Popen]) -> None:
         while not stop.is_set():
             for name, p in procs.items():
                 if p.poll() is not None:
+                    if stop.is_set():
+                        return None
                     log.warning("[%s] exited (rc=%s)", name, p.returncode)
-                    return
+                    return name, p
             time.sleep(1.0)
     finally:
         signal.signal(signal.SIGINT,  orig_int)
@@ -351,6 +430,30 @@ def _killpg(p: subprocess.Popen, sig: int) -> None:
         os.killpg(os.getpgid(p.pid), sig)
     except (ProcessLookupError, OSError):
         pass
+
+
+def _emit_failure_summary(
+    context: FailureContext,
+    phase: str,
+    *,
+    returncode: int | None = None,
+    error: BaseException | None = None,
+) -> None:
+    """Keep summary failures and interruptions from replacing the child failure."""
+    try:
+        emit_failure_summary(
+            context,
+            phase,
+            returncode=returncode,
+            error=error,
+        )
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        try:
+            log.debug("Failure summary generation failed", exc_info=True)
+        except (Exception, KeyboardInterrupt):
+            pass
 
 
 def _shutdown(
@@ -437,7 +540,12 @@ def run_stack(
     remains visible.
 
     After all processes are ready the launcher monitors them: if any exits,
-    all others are terminated and the launcher exits.  Pass
+    the remaining foreground processes are terminated. The launcher preserves
+    a positive child status, maps a signal to ``128 + signal``, and maps an
+    unexpected zero exit to 1.
+    Spawn errors, readiness failures, and unexpected monitored exits print a
+    concise summary with the constructed command and an existing configured
+    run-log directory when available. Pass
     ``exit_after_ready=True`` to return immediately once everything is ready
     instead — useful for launchers whose processes are all ``launch_mode="persist"``
     and should outlive the orchestrator (e.g. ``model-servers``).
@@ -473,6 +581,8 @@ def run_stack(
     }
 
     launched: dict[str, subprocess.Popen] = {}
+    failure_contexts: dict[str, FailureContext] = {}
+    output_readers: dict[str, tuple[threading.Thread, ...]] = {}
 
     # Tracks whether startup got interrupted before/at the "All processes ready"
     # milestone. On abort we must tear down EVERYTHING — including persist
@@ -480,6 +590,7 @@ def run_stack(
     # vLLM docker wrapper) its self-stop signal handler kills the half-started
     # container. Keeping persist alive is correct only on a clean ready-exit.
     aborted = False
+    failure_status: int | None = None
 
     with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
         tmpdir = Path(_tmpdir)
@@ -499,11 +610,20 @@ def run_stack(
                             ready_process_may_exit=(
                                 exit_after_ready and proc.launch_mode == "persist"
                             ),
+                            failure_contexts=failure_contexts,
+                            output_readers=output_readers,
                         )
                         group.append((proc.name, ready_file, launched[proc.name]))
                     print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
                           flush=True)
-                    _wait_ready_parallel(group)
+                    _wait_ready_parallel(
+                        group,
+                        {
+                            proc.name
+                            for proc in to_spawn
+                            if exit_after_ready and proc.launch_mode == "persist"
+                        },
+                    )
                 else:
                     if item.launch_mode == "reuse":
                         continue
@@ -515,6 +635,8 @@ def run_stack(
                         ready_process_may_exit=(
                             exit_after_ready and item.launch_mode == "persist"
                         ),
+                        failure_contexts=failure_contexts,
+                        output_readers=output_readers,
                     )
                     _wait_ready(item.name, ready_file, launched[item.name])
 
@@ -522,22 +644,47 @@ def run_stack(
             _print_ready_banner(list(launched.keys()))
             if exit_after_ready:
                 return
-            _monitor(launched)
+            exited = _monitor(launched)
+            if exited is not None:
+                name, proc = exited
+                failure_status = failure_exit_status(proc.returncode)
+                _drain_output_readers(output_readers[name])
+                _emit_failure_summary(
+                    failure_contexts[name],
+                    "runtime",
+                    returncode=proc.returncode,
+                )
 
-        except (SystemExit, KeyboardInterrupt):
-            # Ctrl-C (or a _wait_ready SystemExit) during startup: abort and
-            # tear everything down. Swallow it here as before so orchestrators
-            # don't each need their own handler; the non-zero exit happens
-            # below, after the finally has run shutdown.
+        except _ReadinessFailure as exc:
             aborted = True
+            failure_status = failure_exit_status(exc.returncode)
+            _drain_output_readers(output_readers[exc.name])
+            _emit_failure_summary(
+                failure_contexts[exc.name],
+                "readiness",
+                returncode=exc.returncode,
+            )
+            print(
+                "\nAborting — stopping launched processes and containers…",
+                flush=True,
+            )
+        except KeyboardInterrupt:
+            aborted = True
+            failure_status = 130
+            print(
+                "\nAborting — stopping launched processes and containers…",
+                flush=True,
+            )
+        except SystemExit as exc:
+            aborted = True
+            failure_status = exc.code if isinstance(exc.code, int) and exc.code else 1
             print(
                 "\nAborting — stopping launched processes and containers…",
                 flush=True,
             )
         except Exception:
-            # A spawn/wait failure before ready is also an abort: kill
-            # everything, but re-raise so the real traceback isn't lost (only
-            # the KI/SystemExit path is the user-driven Ctrl-C case).
+            # A spawn/wait failure before ready is an abort. Kill everything,
+            # then re-raise so the original traceback remains visible.
             aborted = True
             print(
                 "\nAborting — stopping launched processes and containers…",
@@ -550,6 +697,5 @@ def run_stack(
             # passes no_kill=set() so persist processes are killed too.
             _shutdown(launched, no_kill=(set() if aborted else _no_kill))
 
-    if aborted:
-        # Tempdir is now cleaned up; exit non-zero so callers/CI see the abort.
-        sys.exit(130)
+    if failure_status is not None:
+        sys.exit(failure_status)

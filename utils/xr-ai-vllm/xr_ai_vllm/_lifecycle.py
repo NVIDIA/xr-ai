@@ -11,12 +11,9 @@ wrappers.
 """
 from __future__ import annotations
 
-import logging
 import signal
 import time
 import urllib.request
-
-log = logging.getLogger(__name__)
 
 
 def health_url(host: str, port: int) -> str:
@@ -52,7 +49,6 @@ def wait_until_healthy(
     """
     while True:
         if not is_alive():
-            log.error("server exited before its health endpoint became reachable")
             raise SystemExit(1)
         if health_ok(url, timeout=2.0):
             return

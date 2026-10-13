@@ -6,10 +6,13 @@ for the voice gate."""
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields, replace
 from typing import Protocol
 
 import yaml
+
+from ._conversation import _ConversationConfig
+from ._speaker import _SpeakerConfig
 
 _TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
 _FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
@@ -38,7 +41,8 @@ class VoiceGateConfig:
     """Sentence-boundary opt-in phrases.
 
     A match is valid at transcript start or after ``.``, ``?``, or ``!``.
-    An empty tuple dispatches every non-STOP STT transcript.
+    An empty tuple dispatches every non-STOP STT transcript, or every transcript
+    when ``stop_commands_enabled`` is false.
     """
 
     followup_grace_s: float           = 5.0
@@ -55,12 +59,31 @@ class VoiceGateConfig:
     set ``listening_chime: false`` to disable it.
     """
 
+    stop_commands_enabled: bool = True
+    """Whether STOP recognition interrupts speech or invokes the stop handler.
+
+    Applies to early probes, streaming partials, and final transcripts,
+    including conversations without a wake phrase. Disable for passive
+    narration: STOP words then follow normal transcript and query gating
+    without a STOP interruption or acknowledgement. Probes may remain enabled
+    for wake acknowledgements.
+    This does not disable other conversation controls or speech-start events.
+    Scoped application commands such as "stop recording" remain queries.
+    """
+
+    _speaker: _SpeakerConfig | None = field(default=None, init=False, repr=False)
+    _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
+
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
-    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
+    ``stop_commands_enabled`` (bool, default true).
+    Optional ``conversation`` and ``speaker`` mappings configure session
+    controls and speech-backend selection for the unified voice pipeline.
+    Their settings remain private to that path.
     Missing file or empty file → returns the dataclass defaults (gate
     disabled / always-on). ``magic_phrases: null`` and trailing whitespace
     in phrases are normalized the same way the inline-block parser did.
@@ -76,13 +99,29 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
         phrases_raw = [phrases_raw]
     phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
 
-    return VoiceGateConfig(
+    cfg = VoiceGateConfig(
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
         listening_chime  = _parse_config_bool(
             raw.get("listening_chime", True), "listening_chime"
         ),
+        stop_commands_enabled = _parse_config_bool(
+            raw.get("stop_commands_enabled", True), "stop_commands_enabled"
+        ),
     )
+    speaker = _SpeakerConfig._from_yaml(raw.get("speaker"))
+    conversation = _ConversationConfig._from_yaml(raw.get("conversation"))
+    if "conversation" not in raw and speaker is not None:
+        # Preserve existing speaker-only YAML while separating the two concerns
+        # for newly configured workers.
+        conversation = _ConversationConfig(**{f.name: getattr(speaker, f.name) for f in fields(_ConversationConfig)})
+    if conversation is None:
+        speaker = None
+    elif speaker is not None:
+        speaker = replace(speaker, **{f.name: getattr(conversation, f.name) for f in fields(_ConversationConfig)})
+    object.__setattr__(cfg, "_speaker", speaker)
+    object.__setattr__(cfg, "_conversation", conversation)
+    return cfg
 
 
 class AudioSink(Protocol):

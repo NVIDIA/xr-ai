@@ -36,7 +36,9 @@ def run(
     # A profile switch can leave an xr-ai container (vLLM docker or NIM) on
     # this port; it can answer the health probe and be silently mistaken for
     # a reusable pip server. Evict it before the reuse check.
-    holder, checked = _docker.container_on_port_checked(port)
+    holder, checked = _docker.container_on_port_checked(
+        port, warn_on_failure=False,
+    )
     if checked and holder:
         print(
             f"[{log_prefix}] port {port} is held by container {holder}; "
@@ -70,12 +72,31 @@ def run(
         "XR_AI_VLLM_MANAGED": "1",
         "XR_AI_VLLM_PORT": str(port),
     }
-    proc = subprocess.Popen(vllm_argv, env=env, start_new_session=persistent)
+    executable = vllm_argv[0]
+    try:
+        proc = subprocess.Popen(vllm_argv, env=env, start_new_session=persistent)
+    except OSError as exc:
+        log.error(
+            "could not start pip vLLM executable %s for %s: %s",
+            executable,
+            health_url,
+            exc,
+        )
+        raise
 
-    _lifecycle.wait_until_healthy(
-        health_url,
-        is_alive=lambda: proc.poll() is None,
-    )
+    try:
+        _lifecycle.wait_until_healthy(
+            health_url,
+            is_alive=lambda: proc.poll() is None,
+        )
+    except SystemExit:
+        log.error(
+            "pip vLLM executable %s exited before readiness at %s (rc=%s)",
+            executable,
+            health_url,
+            proc.poll(),
+        )
+        raise
 
     log.info("Ready  →  http://localhost:%d/v1", port)
     if ready_file:

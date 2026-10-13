@@ -17,9 +17,17 @@ uv run --project services/device-io-hub device_io_hub \
   --config services/device-io-hub/device_io_hub.yaml
 ```
 
-Configuration comes from a `device_io_hub.yaml` file. When none is found,
-non-secret defaults are used, but LiveKit credentials must still come from
-`LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+Configuration comes from `device_io_hub.yaml` in the working directory;
+pass `--config <path>` to select another file. A missing default file or an
+empty YAML document uses defaults and logs the fallback. An explicitly
+supplied missing file fails. Unknown top-level and `video_recording` keys
+are ignored with warnings naming the source file, section, unknown keys,
+and accepted keys. The top-level configuration and a non-null
+`video_recording` section must be YAML mappings.
+
+The loader generates a fresh LiveKit key and secret when both are missing or
+blank. `LIVEKIT_API_KEY` and
+`LIVEKIT_API_SECRET` override YAML values when a fixed pair is needed.
 `services/device-io-hub/device_io_hub.yaml` is the reference copy documenting
 every field; each sample ships its own copy under its `yaml/` directory.
 Relative paths inside the YAML (such as `web_client_dir`) resolve against the
@@ -270,7 +278,10 @@ and timestamps. `transcript.jsonl` contains final STT and spoken TTS text, and
 timestamp. `events.jsonl` remains the complete directional data timeline, and
 `manifest.json` is the machine-readable entry point. Its `complete` and
 `incomplete_reason` fields distinguish a normally drained session from a
-bounded recovery when the return-traffic departure marker is lost.
+bounded recovery when the return-traffic departure marker is lost
+(`return_traffic_drain_timeout`) or a fatal video capture failure
+(`video_capture_failed`). Video failure takes precedence if both occur; exception
+details remain in the capture log. Both causes set `complete` to `false`.
 
 In a captioned rendering, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
@@ -286,7 +297,14 @@ forwarded to the client data channel.
 
 Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
 dedicated threads in the capture process. Recorder overload therefore drops
-capture frames without delaying the hub's publish path. PyNvVideoCodec receives
+capture frames without delaying the hub's publish path. The manifest's
+`dropped_video_frames` also counts sampled-out frames and source frames with odd
+dimensions or dimensions outside the selected GPU's encoder limits. Unsupported
+source frames are skipped before conversion without stopping audio or subsequent
+video. Encoder capabilities are queried at recorder and renderer construction,
+not under recording locks. An oversized composed rendering fails with its
+dimensions and encoder limits rather than silently dropping rendered frames.
+PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
 sets and no B-frames. At session finalization, each raw stream's chunks are
 joined in timestamp order. When requested, the renderer reconstructs captions

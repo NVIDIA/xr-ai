@@ -189,12 +189,26 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     assert cfg.idle_timeout_secs == 300.0
 
 
+@pytest.mark.parametrize(
+    ("yaml_content", "expected"),
+    [
+        ("", True),
+        ("video_history_enabled: true\n", True),
+        ("video_history_enabled: false\n", False),
+    ],
+)
+def test_worker_config_video_history_default_and_overrides(
+    tmp_path: Path, yaml_content: str, expected: bool,
+) -> None:
+    worker_yaml = tmp_path / "w.yaml"
+    worker_yaml.write_text(yaml_content, encoding="utf-8")
+    assert load_config(worker_yaml).video_history_enabled is expected
+
+
 def test_worker_config_video_history_requires_yaml_boolean(tmp_path) -> None:
     from xr_render_demo_worker.config import load_config
 
     y = tmp_path / "w.yaml"
-    y.write_text("video_history_enabled: true\n")
-    assert load_config(y).video_history_enabled is True
     y.write_text('video_history_enabled: "false"\n')
     with pytest.raises(ValueError, match="video_history_enabled"):
         load_config(y)

@@ -21,7 +21,7 @@ Model configuration has two layers:
 
 | What to change | Where |
 |---|---|
-| Which services and endpoints belong to the stack | `yaml/models.<name>.json` |
+| Which services and endpoints belong to the stack | `yaml/models.default.json` or a custom JSON path |
 | Model, port, GPU placement, memory budget, cache, and runtime options | `yaml/<gpu-profile>/*.yaml` |
 
 The launcher detects the GPU profile and reads its YAML automatically. To tune
@@ -34,7 +34,7 @@ for that server:
 max_images_per_prompt: 2
 ```
 
-Use `--models NAME` to select a deployment JSON and
+Use `--models PATH` to select a custom local deployment JSON and
 `--gpu-profile NAME` only to select a reviewed hardware YAML directory.
 
 Because model processes persist, stop and restart the stack after changing a
@@ -65,15 +65,14 @@ uv run main.py
 ```
 
 The first cold start downloads model weights and can take tens of minutes.
+Later starts can reuse a previously working cache without network access; refer to
+[starting without network access](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#starting-model-services-without-network-access).
 Refer to the
 [credentials reference](https://nvidia.github.io/xr-ai/latest/getting_started/credentials.html) and
 configure the required credentials before starting the stack.
 
-To use the self-hosted NIM profile instead of the default profile:
-
-```bash
-uv run model_servers --models vlm_llm_nim
-```
+For deployment using NVIDIA NIM endpoints, refer to
+[Deploying samples with NIM endpoints](https://nvidia.github.io/xr-ai/latest/guides/deploying-with-nim.html).
 
 The services persist across agent-sample restarts. Stop them explicitly when
 they are no longer needed:

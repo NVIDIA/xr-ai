@@ -52,11 +52,10 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
-from ._nim import serve_nim
 
 log = logging.getLogger(__name__)
 
-DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.08-py3"
+DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.09-py3"
 """Default NGC vLLM image used when a service does not override ``vllm_image``.
 
 Individual services may pin a newer image when required by their model.
@@ -106,14 +105,18 @@ def serve(
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
     helper can find it.
 
-    Docker mode verifies a Xet-capable Hub inside the container and repairs a
-    missing or incompatible ``hf-xet`` wheel. *extra_pip* is an additional
+    Docker mode resolves *model* from the mounted *model_cache* inside the
+    container and serves the cached snapshot directory under
+    ``--served-model-name`` without contacting the Hub. Only when the snapshot
+    is absent does it verify a Xet-capable Hub, repairing a
+    missing or incompatible ``hf-xet`` wheel, and download the snapshot before
+    CUDA starts. With ``HF_HUB_OFFLINE=1`` a missing snapshot fails startup
+    instead. *extra_pip* is an additional
     docker-only list of pip-installable package specs for model architectures
     whose wheels the image doesn't bundle. Silently ignored in pip mode (deps
     belong in the wrapper's pyproject.toml there).
 
-    *spark_uma* enables the DGX Spark cold-start safeguards in docker mode:
-    prefetching and syncing the Hugging Face snapshot before CUDA starts, and
+    *spark_uma* enables the DGX Spark cold-start safeguard in docker mode:
     one bounded restart of a container attempt launched by this wrapper after
     a non-container-OOM CUDA driver-allocation failure. Pip mode ignores this
     Docker lifecycle option, preserving the one-field backend switch used by
@@ -299,7 +302,6 @@ def stop_persistent_servers(
 
 __all__ = [
     "serve",
-    "serve_nim",
     "stop_persistent_servers",
     "DEFAULT_IMAGE",
     "resolve_model_cache",

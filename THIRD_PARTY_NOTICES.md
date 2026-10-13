@@ -5,10 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Third-Party Notices
 
-This file lists the third-party open-source software distributed with or
+This file lists the third-party software distributed with or
 required by `xr-ai`. Each entry gives the upstream project, version, SPDX
 license identifier, and a link to the upstream source repository. Complete
-license and attribution texts for reciprocal-license dependencies are bundled
+license and attribution texts for the components noted below are bundled
 under [`third_party_licenses/`](third_party_licenses/).
 
 `xr-ai` itself is licensed under Apache-2.0 — see [`LICENSE`](LICENSE).
@@ -36,7 +36,7 @@ qualified lock; the reciprocal-license table records exact resolved versions.
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nemo-relay`   | >=0.7.2,<0.8 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
-| `pipecat-ai`   | >=1.3    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
+| `pipecat-ai`   | >=1.6    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pocket-tts`   | 3.0.2    | MIT           | https://github.com/kyutai-labs/pocket-tts |
 | `num2words`    | 0.5.14   | LGPL-2.1-or-later | https://github.com/savoirfairelinux/num2words |
 | `pycountry`    | 26.2.16  | LGPL-2.1-only | https://github.com/pycountry/pycountry |
@@ -61,6 +61,53 @@ The source package compiles its CUDA extension locally. Its PyTorch,
 torchvision, Pillow, NumPy, Shapely, and Hugging Face Hub dependencies are
 installed only in the OCR container; the host launcher does not import them.
 The alternative OCR NIM image carries NVIDIA's container and model terms.
+
+### Qualified HTTP and JWT security releases
+
+The release security refresh resolves `urllib3` 2.8.0 and `PyJWT` 2.15.1,
+both under the MIT license. Unmodified upstream license texts are bundled in
+[`urllib3-2.8.0`](third_party_licenses/urllib3-2.8.0/) and
+[`pyjwt-2.15.1`](third_party_licenses/pyjwt-2.15.1/), including PyJWT's author
+attributions. Each directory records the SHA-256-verified artifact URL and
+copied-file hashes.
+
+### Qualified pip vLLM security refresh
+
+The release security refresh resolves the following versions. The linked
+license texts were copied without modification from SHA-256-verified upstream
+artifacts; each directory records the artifact URL and hashes.
+
+| Component | Resolved version | License and notices |
+|---|---|---|
+| `vllm` | 0.30.0 | Apache-2.0; [upstream license](third_party_licenses/vllm-0.30.0/) |
+| `huggingface-hub` | 1.32.0 | Apache-2.0; [upstream license](third_party_licenses/huggingface-hub-1.32.0/) |
+| `flashinfer-python` | 0.6.18.post1 | Apache-2.0; [upstream license](third_party_licenses/flashinfer-python-0.6.18.post1/) |
+| `instanttensor` | 0.2.0 | Apache-2.0; [upstream license](third_party_licenses/instanttensor-0.2.0/) |
+| `quack-kernels` | 0.6.5 | Apache-2.0; [upstream license](third_party_licenses/quack-kernels-0.6.5/) |
+| `protobuf` | 7.36.0 | BSD-3-Clause; [upstream license](third_party_licenses/protobuf-7.36.0/) |
+| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA Software License Agreement; [upstream EULA](third_party_licenses/nvidia-cutlass-dsl-4.7.1/) |
+
+`instanttensor` is a new transitive dependency of vLLM. CUTLASS DSL is
+proprietary software downloaded by users, rather than part of XR AI's source
+release. Its `libs-base`, `libs-core`, `libs-cu12`, and `libs-cu13` dependencies
+also resolve to 4.7.1; their upstream package metadata identifies the NVIDIA
+proprietary license. The BSD license of CUTLASS C++ does not replace the DSL
+EULA. The lock also retains protobuf 6.33.5 for a separate dependency branch.
+
+### Speaker enrollment runtime and models
+
+The optional `services/speaker-stt` inference environment uses NVIDIA NeMo
+Speech at commit `1688cc3d6a9ade854f544987810c53f605dc86fc` under Apache-2.0,
+and its required Lhotse `2.0.0a6` release under Apache-2.0. The Lhotse wheel
+SHA-256 is `15145bd072a3d6c5f6b52b07e40f0425f7189ec3a409fedd416c04331422cac3`.
+No upstream implementation source or model weights are redistributed in XR AI.
+
+The inference process downloads
+[`nvidia/Nemotron-3-Diarization`](https://huggingface.co/nvidia/Nemotron-3-Diarization)
+under OpenMDW-1.1 and
+[`nvidia/multitalker-parakeet-streaming-0.6b-v1`](https://huggingface.co/nvidia/multitalker-parakeet-streaming-0.6b-v1)
+under the NVIDIA Open Model License. Refer to the corresponding model
+repositories for their license texts and download terms.
 
 ### Pocket TTS model and voice
 
@@ -115,7 +162,7 @@ this repository.
 | Component | How it is used | License and notices | Corresponding source |
 |---|---|---|---|
 | `num2words` 0.5.14 | Python dependency of `pipecat-ai` | LGPL-2.1-or-later; [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) | [0.5.14 source distribution](https://pypi.org/project/num2words/0.5.14/#files) |
-| `pycountry` 26.2.16 | Python dependency of `pydantic-extra-types` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
+| `pycountry` 26.2.16 | Transitive dependency through `vllm` → `mistral-common` → `pydantic-extra-types[pycountry]` | LGPL-2.1-only; [`LICENSE.txt` and data attributions](third_party_licenses/pycountry-26.2.16/) | [26.2.16 source distribution](https://pypi.org/project/pycountry/26.2.16/#files) |
 | `tqdm` 4.70.0 | Progress reporting used by AI dependencies | MPL-2.0 AND MIT; [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) | [4.70.0 source distribution](https://pypi.org/project/tqdm/4.70.0/#files) |
 | `soxr` 1.0.0 / libsoxr 0.1.3 / PFFFT | Python extension used through `pipecat-ai` and `librosa`; its wheel includes PFFFT and Python-SoXR's modified libsoxr fork | LGPL-2.1-or-later for libsoxr and permissive PFFFT terms; [`license files`](third_party_licenses/soxr-1.0.0/) | [`soxr` 1.0.0 source distribution](https://pypi.org/project/soxr/1.0.0/#files); its `libsoxr/` directory is the applicable fork source |
 | `soundfile` 0.14.0 / libsndfile 1.2.2 | Platform wheels include libsndfile, which statically includes libmp3lame 3.100 and libmpg123 | LGPL-2.1-or-later for libsndfile, LGPL-2.0-or-later for libmp3lame, and LGPL-2.1 for libmpg123; [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING), [wrapper license and native-library source notes](third_party_licenses/soundfile-0.14.0/) | [libsndfile 1.2.2 source](https://github.com/libsndfile/libsndfile/releases/tag/1.2.2) and [SoundFile 0.14.0 source distribution](https://pypi.org/project/soundfile/0.14.0/#files) |
@@ -136,6 +183,50 @@ applicable modified source under that component's license. The source links
 above identify the unmodified versions resolved for this release; artifact
 URLs and SHA-256 hashes are pinned in
 [`dependency-manifest/uv.lock`](dependency-manifest/uv.lock).
+
+### Additional transitive package notices
+
+The qualified lock also resolves the following packages. XR AI uses them as
+unmodified dependencies installed by users; their implementation is not copied
+into XR AI source. Each notice directory includes the exact inspected upstream
+artifact and SHA-256 hashes for the copied texts.
+
+| Package | Version | License and notices | Dependency path |
+|---|---|---|---|
+| `llvmlite` | 0.47.0 | BSD-2-Clause AND Apache-2.0 WITH LLVM-exception; [license texts](third_party_licenses/llvmlite-0.47.0/) | AI and audio dependencies → `numba` → `llvmlite` |
+| `nvtx` | 0.2.15 | Apache-2.0 WITH LLVM-exception; [license text](third_party_licenses/nvtx-0.2.15/) | Model services → `vllm` → `nvtx` |
+| `matplotlib` | 3.11.1 | Matplotlib License 1.3+ and additional font/library terms; [license texts](third_party_licenses/matplotlib-3.11.1/) | Magpie TTS → `nemo-toolkit[tts]` → `matplotlib` |
+| `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python; [license text](third_party_licenses/regex-2026.7.19/) | Voice SDK → `nltk`; model dependencies → `transformers` / `nemo-text-processing` |
+| `supervisor` | 4.3.0 | BSD-derived Repoze license, including its modification notice clause; [license text](third_party_licenses/supervisor-4.3.0/) | Model services → `vllm` → `model-hosting-container-standards` → `supervisor` |
+| `humming-kernels` | 0.1.12 | Apache-2.0; [license text](third_party_licenses/humming-kernels-0.1.12/) | Model services → `vllm` → `humming-kernels` |
+| `quack-kernels` | 0.6.5 | Apache-2.0; [license text](third_party_licenses/quack-kernels-0.6.5/) | Model services → `vllm` → `quack-kernels` |
+| `torchcodec` | 0.16.0 | BSD-3-Clause and platform-specific bundled-library terms, including NVIDIA CUDA EULA for Linux nvJPEG; [license texts and platform scope](third_party_licenses/torchcodec-0.16.0/) | Model services → `vllm` → `torchcodec` |
+
+`AND` license expressions retain all listed terms; they are not alternative
+license elections. XR AI elects the permissive FreeType License (FTL) option
+for Matplotlib's FreeType dependency. Portions of this software are copyright
+© The FreeType Project (https://www.freetype.org/). All rights reserved.
+The complete upstream FreeType license notice, including its alternatives,
+is preserved in the Matplotlib notice directory.
+
+### NVIDIA CUTLASS DSL packages
+
+The following packages are covered by the NVIDIA CUTLASS DSL EULA. They are
+separate from the BSD-licensed CUTLASS C++ project. Users download these
+packages during installation; XR AI does not redistribute their binaries.
+
+| Package | Version | Terms |
+|---|---|---|
+| `nvidia-cutlass-dsl` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-base` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-core` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu12` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+| `nvidia-cutlass-dsl-libs-cu13` | 4.7.1 | NVIDIA proprietary CUTLASS DSL EULA |
+
+The [upstream license page](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/license.html)
+and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-dsl-4.7.1/)
+record the applicable terms. The permissive license elections elsewhere in
+this file do not apply to these proprietary packages.
 
 ### `text-unidecode` license election
 
@@ -159,6 +250,21 @@ Used by `client-samples/ios-visionos/`. Resolved via Swift Package Manager.
 | `swift-protobuf` (`apple/swift-protobuf`)               | 1.37.0       | Apache-2.0   | https://github.com/apple/swift-protobuf |
 
 ## Android build toolchain (`client-samples/android/`)
+
+The bundled Gradle wrapper files are generated by
+[Gradle](https://github.com/gradle/gradle):
+[`gradlew`](client-samples/android/gradlew),
+[`gradlew.bat`](client-samples/android/gradlew.bat),
+[`gradle-wrapper.jar`](client-samples/android/gradle/wrapper/gradle-wrapper.jar),
+and [`gradle-wrapper.properties`](client-samples/android/gradle/wrapper/gradle-wrapper.properties).
+The properties file selects Gradle 8.9 through its `distributionUrl`.
+The scripts retain their upstream copyright notices:
+"Copyright © 2015-2021 the original authors" in `gradlew` and
+"Copyright 2015 the original author or authors" in `gradlew.bat`.
+The wrapper files are licensed under
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0).
+The JAR contains compiled Gradle Wrapper classes and its own license text in
+`META-INF/LICENSE`; the Apache-2.0 text is also bundled in [`LICENSE`](LICENSE).
 
 Building the Android sample with the Android Gradle Plugin (declared in
 `client-samples/android/gradle/libs.versions.toml`) places dual-licensed
@@ -201,6 +307,81 @@ available at:
 
 Each upstream project repository linked above includes its own canonical
 license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).
+
+## Bundled license file index
+
+The following index links all preserved license files under
+`third_party_licenses/`, including licenses for bundled native libraries, fonts,
+and other upstream components. The upstream texts are preserved unchanged;
+refer to the component disclosures above for applicable license elections.
+
+| Component | Preserved license file |
+|---|---|
+| `certifi-2026.7.22` | [`LICENSE`](third_party_licenses/certifi-2026.7.22/LICENSE) |
+| `flashinfer-python-0.6.18.post1` | [`LICENSE`](third_party_licenses/flashinfer-python-0.6.18.post1/LICENSE) |
+| `huggingface-hub-1.32.0` | [`LICENSE`](third_party_licenses/huggingface-hub-1.32.0/LICENSE) |
+| `humming-kernels-0.1.12` | [`LICENSE`](third_party_licenses/humming-kernels-0.1.12/LICENSE) |
+| `instanttensor-0.2.0` | [`LICENSE`](third_party_licenses/instanttensor-0.2.0/LICENSE) |
+| `libsndfile-1.2.2` | [`COPYING`](third_party_licenses/libsndfile-1.2.2/COPYING) |
+| `llvmlite-0.47.0` | [`LICENSE`](third_party_licenses/llvmlite-0.47.0/LICENSE) |
+| `llvmlite-0.47.0` | [`LICENSE.thirdparty`](third_party_licenses/llvmlite-0.47.0/LICENSE.thirdparty) |
+| `matplotlib-3.11.1` | [`FTL.TXT`](third_party_licenses/matplotlib-3.11.1/FTL.TXT) |
+| `matplotlib-3.11.1` | [`LICENSE`](third_party_licenses/matplotlib-3.11.1/LICENSE) |
+| `matplotlib-3.11.1` | [`LICENSE_AMSFONTS`](third_party_licenses/matplotlib-3.11.1/LICENSE_AMSFONTS) |
+| `matplotlib-3.11.1` | [`LICENSE_BAKOMA`](third_party_licenses/matplotlib-3.11.1/LICENSE_BAKOMA) |
+| `matplotlib-3.11.1` | [`LICENSE_COLORBREWER`](third_party_licenses/matplotlib-3.11.1/LICENSE_COLORBREWER) |
+| `matplotlib-3.11.1` | [`LICENSE_COURIERTEN`](third_party_licenses/matplotlib-3.11.1/LICENSE_COURIERTEN) |
+| `matplotlib-3.11.1` | [`LICENSE_DEJAVU`](third_party_licenses/matplotlib-3.11.1/LICENSE_DEJAVU) |
+| `matplotlib-3.11.1` | [`LICENSE_FONT_AWESOME`](third_party_licenses/matplotlib-3.11.1/LICENSE_FONT_AWESOME) |
+| `matplotlib-3.11.1` | [`LICENSE_FREETYPE`](third_party_licenses/matplotlib-3.11.1/LICENSE_FREETYPE) |
+| `matplotlib-3.11.1` | [`LICENSE_HARFBUZZ`](third_party_licenses/matplotlib-3.11.1/LICENSE_HARFBUZZ) |
+| `matplotlib-3.11.1` | [`LICENSE_JSXTOOLS_RESIZE_OBSERVER`](third_party_licenses/matplotlib-3.11.1/LICENSE_JSXTOOLS_RESIZE_OBSERVER) |
+| `matplotlib-3.11.1` | [`LICENSE_LAST_RESORT_FONT`](third_party_licenses/matplotlib-3.11.1/LICENSE_LAST_RESORT_FONT) |
+| `matplotlib-3.11.1` | [`LICENSE_LIBRAQM`](third_party_licenses/matplotlib-3.11.1/LICENSE_LIBRAQM) |
+| `matplotlib-3.11.1` | [`LICENSE_QT4_EDITOR`](third_party_licenses/matplotlib-3.11.1/LICENSE_QT4_EDITOR) |
+| `matplotlib-3.11.1` | [`LICENSE_SHEENBIDI`](third_party_licenses/matplotlib-3.11.1/LICENSE_SHEENBIDI) |
+| `matplotlib-3.11.1` | [`LICENSE_SOLARIZED`](third_party_licenses/matplotlib-3.11.1/LICENSE_SOLARIZED) |
+| `matplotlib-3.11.1` | [`LICENSE_STIX`](third_party_licenses/matplotlib-3.11.1/LICENSE_STIX) |
+| `matplotlib-3.11.1` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.1/LICENSE_YORICK) |
+| `matplotlib-3.11.1` | [`copying`](third_party_licenses/matplotlib-3.11.1/copying) |
+| `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
+| `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
+| `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
+| `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
+| `opencv-python-headless-5.0.0.93` | [`LICENSE.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE.txt) |
+| `protobuf-7.36.0` | [`LICENSE`](third_party_licenses/protobuf-7.36.0/LICENSE) |
+| `pycountry-26.2.16` | [`LICENSE.txt`](third_party_licenses/pycountry-26.2.16/LICENSE.txt) |
+| `pyjwt-2.15.1` | [`LICENSE`](third_party_licenses/pyjwt-2.15.1/LICENSE) |
+| `pyzmq-27.2.0` | [`LICENSE`](third_party_licenses/pyzmq-27.2.0/LICENSE) |
+| `pyzmq-27.2.0` | [`LICENSE.libsodium`](third_party_licenses/pyzmq-27.2.0/LICENSE.libsodium) |
+| `pyzmq-27.2.0` | [`LICENSE.tornado`](third_party_licenses/pyzmq-27.2.0/LICENSE.tornado) |
+| `pyzmq-27.2.0` | [`LICENSE.zeromq`](third_party_licenses/pyzmq-27.2.0/LICENSE.zeromq) |
+| `quack-kernels-0.6.5` | [`LICENSE`](third_party_licenses/quack-kernels-0.6.5/LICENSE) |
+| `regex-2026.7.19` | [`LICENSE.txt`](third_party_licenses/regex-2026.7.19/LICENSE.txt) |
+| `soundfile-0.14.0` | [`LICENSE`](third_party_licenses/soundfile-0.14.0/LICENSE) |
+| `soxr-1.0.0` | [`COPYING.LGPL`](third_party_licenses/soxr-1.0.0/COPYING.LGPL) |
+| `soxr-1.0.0` | [`LICENSE`](third_party_licenses/soxr-1.0.0/LICENSE) |
+| `soxr-1.0.0` | [`LICENSE-PFFFT`](third_party_licenses/soxr-1.0.0/LICENSE-PFFFT) |
+| `soxr-1.0.0` | [`LICENSE-libsoxr`](third_party_licenses/soxr-1.0.0/LICENSE-libsoxr) |
+| `supervisor-4.3.0` | [`LICENSES.txt`](third_party_licenses/supervisor-4.3.0/LICENSES.txt) |
+| `text-unidecode-1.3` | [`LICENSE`](third_party_licenses/text-unidecode-1.3/LICENSE) |
+| `torchcodec-0.16.0` | [`COPYING.dav1d`](third_party_licenses/torchcodec-0.16.0/COPYING.dav1d) |
+| `torchcodec-0.16.0` | [`LICENSE`](third_party_licenses/torchcodec-0.16.0/LICENSE) |
+| `torchcodec-0.16.0` | [`LICENSE.libavif`](third_party_licenses/torchcodec-0.16.0/LICENSE.libavif) |
+| `torchcodec-0.16.0` | [`LICENSE.libjpeg-turbo`](third_party_licenses/torchcodec-0.16.0/LICENSE.libjpeg-turbo) |
+| `torchcodec-0.16.0` | [`LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt`](third_party_licenses/torchcodec-0.16.0/LICENSE.libnvjpeg-NVIDIA-CUDA-EULA.txt) |
+| `torchcodec-0.16.0` | [`LICENSE.libpng`](third_party_licenses/torchcodec-0.16.0/LICENSE.libpng) |
+| `torchcodec-0.16.0` | [`LICENSE.libwebp`](third_party_licenses/torchcodec-0.16.0/LICENSE.libwebp) |
+| `torchcodec-0.16.0` | [`LICENSE.libyuv`](third_party_licenses/torchcodec-0.16.0/LICENSE.libyuv) |
+| `torchcodec-0.16.0` | [`LICENSE.zlib`](third_party_licenses/torchcodec-0.16.0/LICENSE.zlib) |
+| `tqdm-4.70.0` | [`LICENCE`](third_party_licenses/tqdm-4.70.0/LICENCE) |
+| `urllib3-2.8.0` | [`LICENSE.txt`](third_party_licenses/urllib3-2.8.0/LICENSE.txt) |
+| `vllm-0.30.0` | [`LICENSE`](third_party_licenses/vllm-0.30.0/LICENSE) |
+
+Additional attribution and native-library notices are preserved in
+[`pycountry COPYRIGHT.txt`](third_party_licenses/pycountry-26.2.16/COPYRIGHT.txt),
+[`PyJWT AUTHORS.rst`](third_party_licenses/pyjwt-2.15.1/AUTHORS.rst), and
+[`SoundFile license notes`](third_party_licenses/soundfile-0.14.0/license_notes.md).
 
 ## Updating this file
 

@@ -95,27 +95,19 @@ def test_reject_wrong_adapter_category(kind, category):
         load_models_config_from_dict({"bad": {"category": category, "kind": kind, "base_url": "http://localhost"}})
 
 
-@pytest.mark.parametrize("hardware,arch,gpu", [
-    ("96G_blackwell", "12.0", "0"), ("dual_48G_ada", "8.9", "1"), ("spark", "12.1", "0"),
+@pytest.mark.parametrize("hardware,arch", [
+    ("96G_blackwell", "12.0"), ("dual_48G_ada", "8.9"), ("spark", "12.1"),
 ])
-async def test_hardware_profiles(hardware, arch, gpu):
+async def test_local_hardware_profiles(hardware, arch):
     local = ROOT / "model-server-samples/model-servers/yaml"
-    nim = ROOT / "model-server-samples/model-servers-nim/yaml" / hardware
     hf = yaml.safe_load((local / hardware / "ocr_server.yaml").read_text())
     assert hf["cuda_arch"] == arch
     assert hf["cuda_visible_devices"] == "0"
     assert hf["infer_length"] == 1024
-    cfg = yaml.safe_load((nim / "nim_ocr_server.yaml").read_text())
-    assert cfg["cuda_visible_devices"] == gpu
-    assert cfg["http_port"] == hf["port"] == 8112
-    assert "@sha256:" in cfg["image"]
-    assert cfg["env"]["NIM_ENGINE_MODEL_VARIANT"] == "multilingual"
-    assert cfg["env"]["NIM_ENGINE_COUNT"] == cfg["env"]["NIM_PIPELINE_MAX_BATCH_SIZE"] == "1"
-    assert cfg["env"]["NIM_ENGINE_MODEL_PATH"].startswith("/opt/nim/.cache/")
-    for path in [local / "models.default.json", local / "models.vlm_llm_nim.json", nim / "models.json"]:
-        models = load_models_config(path)
-        assert isinstance(models.ocr("ocr"), OCRSpec)
-        await make_ocr(models, "ocr").close()
+    assert hf["port"] == 8112
+    models = load_models_config(local / "models.default.json")
+    assert isinstance(models.ocr("ocr"), OCRSpec)
+    await make_ocr(models, "ocr").close()
 
 
 @pytest.mark.parametrize("url", [

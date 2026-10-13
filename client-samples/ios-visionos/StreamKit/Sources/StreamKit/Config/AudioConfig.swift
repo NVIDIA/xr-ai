@@ -17,11 +17,12 @@ public struct AudioConfig: Sendable, Equatable {
     // MARK: - Mode
 
     public enum MicrophoneMode: Sendable, Equatable {
-        /// Apple's native Voice-Processing I/O (AUVoiceIO): echo cancel, AGC, noise suppression.
-        /// Default on physical devices.
+        /// Requests Apple's native Voice-Processing I/O (AUVoiceIO): echo cancel, AGC, noise suppression.
+        /// Default on physical devices; uses software processing in the simulator.
+        /// Unsupported platform processing is rejected rather than silently using software.
         case voiceProcessing
 
-        /// WebRTC software DSP: echo cancellation, AGC, noise suppression via the WebRTC stack.
+        /// Explicitly requests WebRTC software echo cancellation, AGC, and noise suppression.
         /// Useful in simulator or when bypassing Apple's voice processing is needed.
         case softwareProcessing
 

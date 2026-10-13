@@ -22,21 +22,21 @@ recorded video, and document retrieval.
 |---|---|---|---|---|
 | `services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `services/speaker-stt/` | `speaker_stt` | 8102 | Nemotron 3 Diarization + Multitalker Parakeet | NeMo streaming ASR |
 | `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `services/magpie-nim-tts/` | `magpie_nim_tts` | 8105 | Magpie speech NIM | HTTP adapter over Riva gRPC |
 | `services/pocket-tts/` | `pocket_tts_server` | 8105 | kyutai/pocket-tts | Pocket TTS in-process |
 | `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `services/ocr-server/` | `ocr_server` | 8112 | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
-| `services/nim-server/` | `nim_server` | configured per YAML | selected NVIDIA NIM | persistent Docker container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
 Local model artifacts land in the service's `model_cache` directory, set per
-YAML and resolved relative to the YAML file. Self-hosted NIM containers use
-`nim_cache` for their optimized engines and weights; hosted endpoints keep no
+YAML and resolved relative to the YAML file. Operators configure self-hosted
+NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
@@ -45,25 +45,23 @@ the exact layout per launch style is below.
 
 ## OCR serving
 
-Both shared model-server samples provide multilingual Nemotron OCR v2 on port
-`8112`. The regular sample downloads NVIDIA's pinned Hugging Face source and
-`v2_multilingual` weights and runs inference locally. Its launcher builds a
-Python 3.12, PyTorch 2.9.1, CUDA 13 image because the upstream implementation
-requires a compiled CUDA extension. Docker, NVIDIA Container Toolkit,
-and a CUDA 13-compatible NVIDIA driver are required; a host CUDA toolkit is
-not. The first build takes several minutes.
-The model remains loaded across requests. Refer to the
+The local `model-servers` sample provides multilingual Nemotron OCR v2 on
+port `8112`. The launcher builds an isolated Python 3.12, PyTorch 2.9.1,
+CUDA 13 container, downloads NVIDIA's pinned Hugging Face source and
+`v2_multilingual` weights, and keeps the model loaded across requests.
+Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
+are required; a host CUDA toolkit is not. The first build takes several minutes.
+Refer to the
 [upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
 
-The NIM sample instead runs the pinned OCR NIM 2.0.1 image, explicitly selecting
-the multilingual variant, one engine, and batch size one. It uses the existing
-NIM launcher and `NGC_API_KEY`; no HTTP compatibility adapter is needed.
-Both implementations expose `POST /v1/ocr` and readiness at
-`GET /v1/health/ready`. Refer to the
-[NVIDIA NIM deployment documentation](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/getting-started.html).
-This is self-hosted inference, not a call to the hosted NVIDIA Build endpoint.
+For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
+consumer profile. The operator selects the multilingual variant and owns GPU
+placement, model downloads, caches, and container lifecycle. XR AI does not
+start an OCR NIM container or require a local HTTP proxy. Refer to
+{doc}`/guides/deploying-with-nim` for the endpoint example and validation.
 
-Use the `nemotron_ocr` preset and the typed SDK factory in consumers:
+Both backends expose `POST /v1/ocr` and readiness at
+`GET /v1/health/ready`. Use the `nemotron_ocr` preset and typed SDK factory:
 
 ```python
 from pathlib import Path
@@ -76,13 +74,11 @@ async with make_ocr(config, "ocr") as ocr:
         print(span.text, span.confidence, span.polygon)
 ```
 
-Copy the deployment profile's `ocr` entry into the consumer profile, omitting
-`deployment`. Applications reuse the service; an OCR tool does not load its
-own GPU model. The same client works with either backend. The client sends one
-inline PNG or JPEG and returns text, confidence, and normalized polygons.
-Remote image URLs are intentionally unsupported by this shared contract.
-Word, sentence, and paragraph grouping are available; backend recognition results
-need not be identical.
+Applications reuse the endpoint; an OCR tool does not load its own GPU model.
+The client sends one inline PNG or JPEG and returns text, confidence, and
+normalized polygons. Remote image URLs are intentionally unsupported.
+Word, sentence, and paragraph grouping are available; recognition results
+need not be identical across backends.
 
 The Hugging Face server accepts one image per request, at most 10 MiB encoded
 image bytes and 20 million pixels after full-resolution square padding:
@@ -92,43 +88,122 @@ image on CUDA before resizing; lowering `infer_length` does not reduce that
 allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
 this is not a bound on total inference memory. Oversized inputs receive HTTP
 413; callers must downsample or tile them first.
-The server serializes inference and rejects
-overlapping requests with HTTP 503 rather than growing a GPU request queue.
+The server serializes inference and rejects overlapping requests with HTTP 503.
 Its detector length is configured server-wide in `ocr_server.yaml` (640 or
-1024). NIM does not expose this Hugging Face detector setting.
-Neither service performs the experimental text-dense cropping or sharpening
-pipeline; preprocessing remains caller-owned.
+1024). NIM request limits and engine settings belong to the deployed version,
+not this local server configuration. Neither integration adds experimental
+text-dense cropping or sharpening; preprocessing remains caller-owned.
 
-Both shared model-server samples load OCR last, after all other selected models,
-including embeddings. The existing non-OCR startup order is preserved.
-The regular stack places OCR on GPU 0 for all profiles. NIM places it on GPU 1
-on dual Ada and GPU 0 on Blackwell and Spark. Existing model allocations are
-unchanged. NVIDIA reports approximately 3 GiB startup memory for multilingual
-NIM on comparable discrete GPUs; input-dependent runtime allocations can grow.
-Dual Ada has limited remaining headroom and requires target-machine concurrent
-load testing. Spark uses unified memory. Configuration coverage and image
-architecture support are not complete-stack hardware qualification.
-Refer to [NIM memory measurements](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/performance.html)
-and {doc}`/reference/model-servers-nim`.
+The local stack loads OCR last, after embeddings, on GPU 0 for all three
+profiles. Existing model allocations are unchanged. The profiles are not a
+complete-stack hardware qualification: test concurrent GPU memory use and
+application latency on the target machine. Externally deployed NIMs have no
+repository-prescribed GPU layout.
 
 Local weights and the torchvision backbone are cached beneath the OCR YAML's
-`model_cache`; the CUDA extension stays in the Docker image. NIM weights and
-compiled artifacts use its existing per-container `nim_cache` mount.
-Stop the current stack before switching backends because both use port 8112.
-Changing the local YAML or service source rebuilds as needed and invalidates
-container reuse. Stop and restart through the sample's normal lifecycle.
+`model_cache`; the compiled CUDA extension stays in the Docker image.
+Changes to the local YAML or service source invalidate container reuse as
+needed. Stop and restart the local server through the sample's normal
+lifecycle. Closing a client never stops an externally deployed NIM.
 
-Both OCR backends passed individual startup, synthetic equipment-text
-transcription at all three merge levels, backend switching, and cached reuse
-on an RTX PRO 6000 Blackwell workstation. These checks do not qualify the
-combined model stack under concurrent load or execution on Ada or Spark.
-To repeat the transcription smoke test against a running server, run from
-the repository root:
+To test transcription against a running endpoint, run from the repository root:
 
 ```bash
 XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project tests \
   pytest tests/test_ocr_server.py -m gpu
 ```
+
+## Speaker-conditioned STT
+
+`services/speaker-stt` is a private local inference process. It shares
+Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
+while keeping each session's diarization history, enrollment and ASR caches
+separate. A session enrolls one speaker with the configured start phrase and
+releases that identity with the stop phrase. Background voices do not reach
+the transcript as separate speakers after enrollment: the decoder receives the
+mixed audio with owner and interference masks and is conditioned on the owner.
+Before enrollment, each detected speaker has independent conditioned decoding
+and phrase-matching state. Someone already talking does not reserve ownership:
+another speaker can say the start phrase over that conversation and enroll when
+their own utterance completes. Non-speech background noise does not impose a
+silence gate. Each speaker's existing inactivity interval ends their utterance;
+there is no requirement that every speaker become quiet together.
+
+All complete start phrases finalized in one accepted audio step are considered
+before ownership changes. One match enrolls its speaker; multiple matches in
+that step enroll nobody and require a fresh attempt. A phrase finalized later
+cannot take over an existing owner. This is a streaming decision boundary, not
+a guarantee of distinguishing all acoustically simultaneous requests. Speaker
+labels are session-local identities; actual attribution and interference
+suppression require qualification on the intended microphones.
+
+The process follows the model-service HTTP pattern and exposes health and model
+identity endpoints. A private WebSocket carries mono signed 16-bit PCM
+at 16 kHz and returns enrollment and transcription events. It serializes
+inference because model conditioning is mutable.
+Opening a session establishes the capture timestamp of its first sample.
+Subsequent audio requests form one ordered, contiguous PCM stream; the service
+derives all later timestamps from the number of samples it has accepted. The
+caller must close and reopen the session if its capture or transport layer drops
+audio, because that layer owns the information needed to detect the loss.
+Utterances forced to end at the configured duration limit cannot enroll or
+release a speaker; an enrolled owner's forced segment is still transcribed.
+Start and stop phrases can span utterances within the conversation phrase
+window, retaining separate enrollment fragments for each speaker. A truncated
+candidate cannot enroll from the tail of the same continuing speech episode;
+that speaker must end its episode before making another attempt.
+
+The private protocol makes that ownership explicit: the opening JSON message
+supplies `audio_origin_us` once, and subsequent binary WebSocket messages
+supply only PCM bytes. Each connection owns one session, and the caller waits
+for the event response before sending the next audio message. Audio must be
+serialized in capture order. The service neither reorders audio nor guesses
+whether samples are missing from wall-clock arrival times.
+Binary messages retain the existing limit of one second of audio (16,000
+complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
+or incomplete PCM samples are protocol errors. The server's standard transport
+message-size and heartbeat defaults are retained; JSON controls do not inherit
+an unrelated audio-duration limit.
+
+Configure model IDs, device, precision, host, port and session capacity
+in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
+`http://127.0.0.1:8102`. Keep the unauthenticated private streaming endpoint on
+a loopback or trusted interface. Hardware profiles or `CUDA_VISIBLE_DEVICES`
+select a GPU; the generic configuration uses the first visible GPU. From the
+repository root, start it with:
+
+```bash
+uv --config-file uv.toml run --project services/speaker-stt speaker_stt
+```
+
+The service warms both streaming and final decoding before signaling ready.
+Reuse verifies the local listener's managed-process ownership and resolved
+configuration before launching a child; a changed configuration requires
+stopping that process first. A matching listener still warming its models
+refuses another launch rather than allocating a duplicate GPU copy. Persistent
+reuse exits after signaling readiness; monitored reuse keeps its readiness
+proxy alive.
+
+Each session owns one diarization cache and at most eight temporary ASR caches
+before enrollment, bounded by the model's speaker-label capacity. Features and
+model weights are shared. After enrollment only the owner's ASR cache is needed
+unless the dependent diagnostics layer requests other transcripts. With the
+default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
+GPU memory and latency at that bound have not been qualified. Candidate-decoding
+failure revokes the session because dropping a candidate could conceal a phrase
+tie. All cache allocation, inference, and release use one serialization boundary.
+A connected session may pause without losing enrollment. Disconnect, transport
+liveness failure, or inference failure releases it; `max_sessions` bounds
+retained sessions. Cancelled model work finishes before its cache and
+serialization ownership are released, including repeated cancellation.
+The model environment is isolated from workers and the existing batch STT
+service. Model weights are downloaded on first use and then reused from the
+configured cache. As with the sibling NeMo services, existing `HF_HOME` and
+`NEMO_CACHE_DIR` values take precedence over cache defaults.
+
+The WebSocket session is not a public model API. It is reserved for the private
+typed voice integration; applications continue to use the public voice and
+model interfaces rather than connecting to this route directly.
 
 ## Two HuggingFace cache roots
 
@@ -161,6 +236,52 @@ HF_HOME=models hf download nvidia/Cosmos3-Nano
 # NeMo STT server launched from its standalone YAML:
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
+
+(starting-model-services-without-network-access)=
+
+## Starting without network access
+
+The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:
+
+| Service | Cached artifact | Loaded through |
+|---|---|---|
+| Docker-mode vLLM servers | Snapshot of `model` at its `--revision` (default `main`) | `vllm serve <snapshot directory>`, keeping the configured served model name |
+| STT and Magpie TTS | `<model-name>.nemo`; Magpie uses `model_revision` when set | NeMo `restore_from` |
+| Pocket TTS | Weights, tokenizer, and voice state named by the selected `language` | A cache-local copy of that language configuration |
+| Clef | Snapshot at `model_revision` | Native release loader with the snapshot directory |
+
+The listed services use cached artifacts without refreshing them from the Hub.
+Only a cache miss follows the online download path. Pocket TTS accepts its
+ungated weights when the gated voice-cloning weights are not cached. Pip-mode
+vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.
+
+Offline startup supports a previously working cache. A local snapshot lookup
+does not establish completeness or integrity. Interrupted or damaged caches
+may require an online re-download; automatic partial-cache repair is not
+provided. The underlying loader may fail or apply defaults for missing files.
+To recover, re-download the affected model and revision with `hf download
+<model-id> --revision <revision> --force-download`, using the same `HF_HOME`
+or `--cache-dir` as the service, then start the service again while online.
+
+A cache hit is never refreshed. A model without a pinned revision keeps the
+`main` commit it was downloaded at; update it with `hf download`, as shown
+above.
+
+After a successful online start, the listed services can reuse their working
+model cache without network access. This assumes their runtime dependencies
+and Docker images are already installed. To forbid downloads, set
+`HF_HUB_OFFLINE=1`. The host services inherit it, and the vLLM wrapper forwards
+it into its containers:
+
+```bash
+HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers
+```
+
+In this mode, a service whose model is not cached fails at startup with an
+error that names the model, its revision, and the cache directory. Like the
+other forwarded Hub settings, changing `HF_HUB_OFFLINE` recreates persistent
+vLLM containers.
 
 (migrating-model-caches-from-ai-services)=
 
@@ -210,7 +331,8 @@ readiness, refer to {ref}`consumer-model-readiness`.
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, `make_embedding`, and
+`make_decision`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.
@@ -251,131 +373,35 @@ table, and the profile contract are in
 
 ## Hosting models on NVIDIA NIM
 
-The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
-local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
-API, so this is a model-profile change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
-Self-hosted speech NIMs are covered below.
+Develop with the local shared model servers and deploy the same workers against
+independently operated NIM endpoints. The model profile selects a protocol
+adapter and an endpoint; samples continue to use the typed `xr_ai_models`
+interfaces. There is no XR AI NIM container launcher or local HTTP proxy.
 
-A hosted consumer entry uses an environment-variable reference for its
-credential and omits deployment and health polling metadata:
+Chat and vision use `openai_compat` with native model IDs. Speech uses
+`riva_grpc`, which normalizes Riva audio inside the SDK. Asymmetric embedding
+endpoints use the existing `adapter.default_extras.input_type` field; the SDK
+translates query and passage labels without changing the RAG service.
 
-```json
-{
-  "models": {
-    "vlm": {
-      "category": "vlm",
-      "adapter": {
-        "kind": "openai_compat",
-        "model_name": "nvidia/cosmos3-nano-reasoner",
-        "capabilities": {"vision": true, "streaming": true}
-      },
-      "endpoint": {
-        "base_url": "https://integrate.api.nvidia.com",
-        "api_key_env": "NGC_API_KEY"
-      }
-    }
-  }
-}
-```
+(self-hosted-nim-containers-models-vlm-llm-nim-json)=
+### Self-hosted NIM endpoints
 
-- **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
-  token. The key is a
-  managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to {doc}`/getting_started/credentials`); or export it.
-- **Omitted `deployment`** defaults to an externally operated endpoint; no
-  model process is started or stopped by the profile.
-- **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
-
-To adapt a sample, copy its active model profile, replace the local model entry
-with the hosted entry, and point `models_config` in the worker YAML at the new
-file. The worker reads the endpoint credential named in `api_key_env`; export
-it or configure the credential store. Consumer sample launchers do not inspect
-model profiles to choose model processes.
-
-### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
-
-Compatible models can be pulled from NGC and served as **optimized NIM
-containers on your own GPUs**: same APIs as hosted NIM and no network hop.
-
-The NIM containers are owned by the shared model-servers stack, exactly
-like the local vLLM servers. Its deployment profiles pick the mix: every
-`managed` entry launches as a `nim_server` process (`services/nim-server`, a
-generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
-image and ports) or as a local server:
-
-```bash
-uv run --project model-server-samples/model-servers model_servers --models vlm_llm_nim
-```
-
-- `vlm_llm_nim`: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-  containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
-  these endpoints; they never launch or stop the containers.
-
-To configure a sample with these endpoints, refer to
-{doc}`/guides/customizing-model-servers`.
-
-The container `image:` is the model, so swapping models is a
-`nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
-per entry, not per profile: each model role independently picks a local
-server, a self-hosted NIM container, or a hosted endpoint through its own
-`adapter` and `endpoint` sections. The model-server launcher also requires
-`deployment` metadata; consumer profiles omit it. The shipped profiles are
-presets, not a closed set; a mixed setup is a copy of a shipped profile
-with the relevant entries changed, saved under any name and selected with
-`--models` (model-servers) or `models_config` (workers). When mixing, mind
-port overlaps: give a NIM container a free port or drop the overlapping
-local server from the profile.
-
-A custom model-server profile can still launch self-hosted Riva speech NIMs.
-Workers reach them through the optional `riva_grpc` model kind:
-
-```yaml
-stt:
-  kind:      riva_grpc
-  category:  stt
-  base_url:  localhost:50051   # the container's gRPC port
-  language:  en-US
-```
-
-TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
-(default 44100). An explicit `health()` call with `health_check: true` (the
-default) runs a gRPC channel-ready probe; consumer startup does not call it.
-The standalone {doc}`/reference/magpie-nim-tts` service exposes a Magpie Riva
-NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
-the optional SDK dependency; HTTP consumers do not.
-
-Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
-`nvcr.io` image pull *and* by the container itself to download the
-GPU-matched optimized engine from NGC on first start; multi-GB, cached
-under `models/nim/` for later runs), and GPU capacity for every container.
-`cuda_visible_devices` placement lives in the per-GPU-profile
-`nim_*_server.yaml` files. Their adjacent comments record profile-specific
-validation status and hardware cautions; verify startup and capacity on the
-target host. Readiness gates on each container's `/v1/health/ready`.
-
-A NIM container serving something the samples don't ship is the same
-mechanism by hand: point an `openai_compat` entry's `base_url` at its port
-or a `riva_grpc` entry at its gRPC port. Consumer workers do not require a
-health route. Operators can still check the container's `/v1/health/ready`
-endpoint directly.
-With `ownership: external` (you run the container yourself) that is the
-whole change. For an orchestrator to launch or expect it, the entry's
-`deployment.service` must name a process row in that orchestrator's service
-table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
-a service name with no row fails fast at startup, and adding one row plus
-its config YAML is the only orchestrator edit the profile system ever
-needs.
+Operators own container lifecycle, GPU placement, optimized-engine caching,
+health exposure, and endpoint authorization. Consumer profiles use external
+ownership. The local `model-servers` launcher remains a development convenience.
+Refer to {doc}`/guides/deploying-with-nim` for a complete profile, sample
+configuration paths, smoke checks, and deployment qualification.
 
 ## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-and self-hosted NIM containers (`nim_server`)
 **survive stack restarts by design**, including when a deployment profile
 marks them `managed`: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. `model_servers --stop` is the
-teardown. Switching profiles needs no manual teardown: at startup a wrapper
+serving so the next start reuses hot weights. Use `model_servers --stop`
+for the selected local deployment. Startup does not sweep services omitted
+from its configuration. Independently deployed NIMs follow their operator's
+lifecycle. At startup a wrapper
 that finds a *different* persistent xr-ai container holding its port (found
 by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -441,7 +467,26 @@ failed inspection abort cleanup without sending a signal, and
 `model_servers --stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
 
-The target ports and container names match the defaults in the per-profile YAML files.
+Stop targets are the managed services in the same launch plan used for
+startup, with ports read from the selected hardware YAMLs. Entries explicitly
+marked `external` or `reused`, and services omitted from the deployment, are
+not stop targets. For a custom deployment, use the same selection as at launch:
+
+```bash
+uv run --project model-server-samples/model-servers model_servers \
+  --models /path/to/models.custom.json --gpu-profile dual_48G_ada --stop
+```
+
+Automatic GPU detection remains the default; use the same `--gpu-profile` when
+it was explicitly selected at launch or detection is unavailable. Stop does
+not require model-download credentials. Stop the old selection before changing
+its JSON, hardware profile, or service ports; no previous configuration is
+recorded or rediscovered.
+
+This is configuration-scoped cleanup, not exclusive launch-instance ownership.
+A matching managed-service listener on a selected port can be stopped even if
+it was started independently. Existing identity checks reject unknown listeners;
+they do not identify which deployment originally started a recognized service.
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
@@ -462,12 +507,12 @@ flags. Docker-only lifecycle settings such as `vllm_image`, `extra_pip`, and
 ```yaml
 # vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.08-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.09-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.08-py3` for all wrappers.
-This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
-Nemotron model configurations. Nemotron Omni uses the image's native Mamba and
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.09-py3` for all wrappers.
+This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
 causal-convolution implementations, so the shipped configuration does not
 compile or install `mamba-ssm` or `causal-conv1d`. Override the image to pin
 another tag, an internal mirror, or a custom build.
@@ -478,13 +523,13 @@ starting it with the new image:
 
 ```bash
 uv run --project model-server-samples/model-servers model_servers --stop
-docker pull nvcr.io/nvidia/vllm:26.08-py3
+docker pull nvcr.io/nvidia/vllm:26.09-py3
 ```
 
 The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with `docker image rm <old-vllm-image>`. Keep the shared model cache;
-the 26.08 stack reuses compatible weights and downloads any missing artifacts.
+the 26.09 stack reuses compatible weights and downloads any missing artifacts.
 ::::
 
 ### docker mode — prerequisites
@@ -516,11 +561,15 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
-- Before `vllm serve` starts, the wrapper verifies that the image's Hub exposes
-  its Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
+- Before `vllm serve` starts, the container resolves the model snapshot from
+  the mounted cache, as described in
+  {ref}`starting-model-services-without-network-access`. Only when the snapshot
+  must be downloaded does the wrapper verify that the image's Hub exposes its
+  Xet download path and has `hf-xet>=1.1.2,<2.0.0`. It repairs a missing or
   incompatible `hf-xet` wheel and checks the complete integration again; an
   unavailable accelerator therefore fails startup instead of silently falling
-  back to plain HTTPS.
+  back to plain HTTPS. The download completes and is synced to disk before
+  vLLM initializes CUDA.
 - `HF_XET_HIGH_PERFORMANCE=1` is the default in pip and docker modes. Setting
   it to `0` disables high-performance tuning, not Xet itself. Set
   `HF_HUB_DISABLE_XET=1` to disable Xet. To use legacy `hf_transfer` with a
@@ -530,11 +579,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   forwarded, and included in the container fingerprint, so changing one
   recreates a persistent container.
 
-The shipped image pin was qualified with this in-container vLLM version:
+The selected image reports this in-container vLLM version:
 
 | Image | vLLM |
 |---|---:|
-| `nvcr.io/nvidia/vllm:26.08-py3` | 0.27.1 |
+| `nvcr.io/nvidia/vllm:26.09-py3` | 0.29.0+5013de39 |
 
 - Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
   `xr-ai-vllm-llama-nemotron-llm-server`,
@@ -547,11 +596,11 @@ The shipped image pin was qualified with this in-container vLLM version:
 
 ### Cleanup
 
-`model_servers --stop` works for both modes. Cleanup locates labelled
-Docker containers before inspecting ports, then stops them with `docker stop`
-(escalating to `docker kill` after 20 s). Pip-mode processes carry an
-`xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
-cleanup without sending a signal.
+`model_servers --stop` works for both modes within the selected managed launch
+plan. Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with `docker stop` (escalating to `docker kill` after 20 s).
+Pip-mode processes carry an `xr-ai-vllm` ownership marker; unknown listeners
+and failed inspection abort cleanup without sending a signal.
 
 Pip-mode vLLM processes started before the ownership markers were introduced
 cannot be identified safely. After upgrading, stop each unmarked process
@@ -672,7 +721,3 @@ cleanup.
   hardware-specific YAML under
   `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
   resulting endpoints through their models JSON.
-- The generic NIM wrapper has no service-local YAML. Use a hardware profile
-  under `model-server-samples/model-servers/yaml/<gpu-profile>/`; its
-  `nim_<role>_server.yaml` files use `nim_cache`, normally
-  `../../../../models/nim` from that location.

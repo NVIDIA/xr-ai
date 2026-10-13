@@ -37,7 +37,7 @@ import LiveKit
 /// // 4. Stop media / disconnect
 /// try await session.stopAudio()
 /// try await session.stopCamera()
-/// await session.disconnect()
+/// try await session.disconnect()
 /// ```
 @MainActor
 public final class StreamSession: ObservableObject {
@@ -106,12 +106,17 @@ public final class StreamSession: ObservableObject {
         try await backend.connect(config: config)
     }
 
-    /// Disconnects and releases all resources.
-    public func disconnect() async {
+    /// Disconnects the transport and attempts to release all resources.
+    /// Throws the first cleanup error after closing the transport; capture may
+    /// still be running. Retain this session and retry `disconnect()` or
+    /// `stopAudio()` until cleanup succeeds before discarding it.
+    public func disconnect() async throws {
         cancelImageCaptures()
-        await backend.disconnect()
-        agentStatus = nil
-        networkMetrics = nil
+        defer {
+            agentStatus = nil
+            networkMetrics = nil
+        }
+        try await backend.disconnect()
     }
 
     // MARK: - Audio
@@ -119,11 +124,18 @@ public final class StreamSession: ObservableObject {
     /// Starts microphone capture and publishes an audio track.
     ///
     /// Throws if the audio device is unavailable. Never drops the connection.
+    /// The `.disabled` preset stops capture instead. If rollback fails, throws
+    /// ``StreamError/microphoneCleanupFailed(startup:cleanup:)``; capture may
+    /// still be running until a subsequent `stopAudio()` succeeds.
     public func startAudio(config: AudioConfig = .default) async throws {
         try await backend.startAudio(config: config)
     }
 
     /// Stops microphone capture.
+    /// Throws the first cleanup error after attempting to unpublish every
+    /// microphone and release engine input. Capture may still be running on failure.
+    /// Retrying a partial teardown is not guaranteed to succeed. If cleanup keeps
+    /// failing, use `disconnect()` to close the transport and retain unresolved resources.
     public func stopAudio() async throws {
         try await backend.stopAudio()
     }

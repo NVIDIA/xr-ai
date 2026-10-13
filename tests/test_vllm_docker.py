@@ -64,6 +64,10 @@ class TestRegistryFor:
 
 
 class TestAlreadyLoggedIn:
+    @pytest.fixture(autouse=True)
+    def default_docker_config(self, monkeypatch):
+        monkeypatch.delenv("DOCKER_CONFIG", raising=False)
+
     def test_no_docker_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", tmp_path / "config.json")
         assert not _already_logged_in("nvcr.io")
@@ -85,6 +89,51 @@ class TestAlreadyLoggedIn:
         cfg.write_text("not json{{{")
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert not _already_logged_in("nvcr.io")
+
+    def test_isolated_config_logs_in_despite_global_auth(self, tmp_path, monkeypatch):
+        global_config = tmp_path / "global" / "config.json"
+        global_config.parent.mkdir()
+        global_config.write_text(json.dumps({"auths": {"nvcr.io": {}}}))
+        monkeypatch.setattr(_docker, "_DOCKER_CONFIG", global_config)
+        isolated_config = tmp_path / "isolated"
+        isolated_config.mkdir()
+        monkeypatch.setenv("DOCKER_CONFIG", str(isolated_config))
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+
+        with patch("xr_ai_vllm._docker.subprocess.run") as login:
+            login.return_value.returncode = 0
+            _docker._maybe_ngc_login("nvcr.io/nim/meta/llama-3.1-8b-instruct:2.0.10")
+
+        login.assert_called_once_with(
+            ["docker", "login", "nvcr.io", "-u", "$oauthtoken", "--password-stdin"],
+            input=b"nvapi-test",
+            stdout=_docker.subprocess.DEVNULL,
+            stderr=_docker.subprocess.PIPE,
+            check=False,
+        )
+
+    def test_login_cache_is_scoped_to_docker_config(self, tmp_path, monkeypatch):
+        config_a = tmp_path / "config-a"
+        config_b = tmp_path / "config-b"
+        config_a.mkdir()
+        config_b.mkdir()
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+        image = "nvcr.io/nim/meta/llama-3.1-8b-instruct:2.0.10"
+
+        with patch("xr_ai_vllm._docker.subprocess.run") as login:
+            login.return_value.returncode = 0
+            monkeypatch.setenv("DOCKER_CONFIG", str(config_a))
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 1
+
+            monkeypatch.setenv("DOCKER_CONFIG", str(config_b))
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 2
+
+            _docker._maybe_ngc_login(image)
+            assert login.call_count == 2
 
 
 class TestBuildRunArgv:
@@ -295,7 +344,16 @@ class TestBuildRunArgv:
         assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
         assert argv[image_index + 1] == "-c"
 
-    def test_bootstraps_xet_stack_before_starting_vllm(self, tmp_path):
+    def test_resolves_cached_snapshot_before_any_hub_bootstrap(self, tmp_path):
+        bash_cmd = build_run_argv(**self._base_kwargs(tmp_path))[-1]
+        local = bash_cmd.index(" local my-model")
+        assert local < bash_cmd.index("import hf_xet") < bash_cmd.index(" download my-model")
+        assert bash_cmd.endswith(
+            'vllm serve "$model_path" --served-model-name my-model '
+            "--host 0.0.0.0 --port 8100"
+        )
+
+    def test_bootstraps_xet_stack_before_download(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         bash_cmd = argv[-1]
         assert bash_cmd.count("import hf_xet") == 2
@@ -303,27 +361,7 @@ class TestBuildRunArgv:
         assert "python3 -m pip install -q" in bash_cmd
         assert _docker._HF_XET_REQUIREMENT in bash_cmd
         assert "huggingface-hub>=" not in bash_cmd
-        assert bash_cmd.endswith("vllm serve my-model --host 0.0.0.0 --port 8100")
-
-    def test_prefetches_and_syncs_snapshot_before_vllm(self, tmp_path):
-        kwargs = self._base_kwargs(tmp_path)
-        kwargs["prefetch_model"] = "org/cold-model"
-
-        argv = build_run_argv(**kwargs)
-        bash_cmd = argv[-1]
-
-        assert "snapshot_download" in bash_cmd
-        assert "org/cold-model" in bash_cmd
-        assert "os.sync()" in bash_cmd
-        assert bash_cmd.index("snapshot_download") < bash_cmd.index("vllm serve")
-
-    def test_prefetch_changes_configuration_fingerprint(self, tmp_path):
-        kwargs = self._base_kwargs(tmp_path)
-        without_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
-        kwargs["prefetch_model"] = "org/cold-model"
-        with_prefetch = _fingerprint_from_argv(build_run_argv(**kwargs))
-
-        assert with_prefetch != without_prefetch
+        assert bash_cmd.index("import hf_xet") < bash_cmd.index(" download my-model")
 
     def test_skips_xet_bootstrap_when_disabled_in_extra_env(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
@@ -334,7 +372,26 @@ class TestBuildRunArgv:
         assert "HF_HUB_DISABLE_XET=1" in env_flags
         assert "import hf_xet" not in bash_cmd
         assert _docker._HF_XET_REQUIREMENT not in bash_cmd
-        assert bash_cmd == "vllm serve my-model --host 0.0.0.0 --port 8100"
+        assert " download my-model" in bash_cmd
+
+    def test_forwards_explicit_offline_mode(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+        monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        env_flags = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-e"]
+
+        assert "HF_HUB_OFFLINE=1" in env_flags
+        assert "TRANSFORMERS_OFFLINE=1" in env_flags
+
+    def test_keeps_explicit_served_model_name(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["vllm_argv"] = [*kwargs["vllm_argv"], "--served-model-name=alias"]
+
+        bash_cmd = build_run_argv(**kwargs)[-1]
+
+        assert bash_cmd.count("--served-model-name") == 1
+        assert bash_cmd.endswith("--served-model-name=alias")
 
     def test_extra_pip_uses_no_build_isolation(self, tmp_path):
         # mamba-ssm and causal-conv1d both `import torch` from setup.py at
@@ -525,6 +582,119 @@ def test_post_mortem_is_scoped_to_current_attempt(tmp_path):
 
 
 class TestContainerHelpers:
+    def test_docker_availability_reports_daemon_error_from_single_probe(
+        self, monkeypatch, caplog,
+    ):
+        calls: list[tuple[list[str], dict]] = []
+
+        def _run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return _docker.subprocess.CompletedProcess(
+                argv,
+                1,
+                stdout="",
+                stderr="permission denied while connecting to docker.sock\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        assert not _docker._docker_available()
+        assert len(calls) == 1
+        assert calls[0][0] == [
+            "docker", "version", "--format", "{{.Server.Version}}",
+        ]
+        assert "permission denied while connecting to docker.sock" in caplog.text
+        assert "NVIDIA Container Toolkit" in caplog.text
+
+    def test_failed_container_start_keeps_captured_runtime_error(
+        self, monkeypatch, caplog,
+    ):
+        calls = 0
+
+        def _run(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise _docker.subprocess.CalledProcessError(
+                125,
+                ["docker", "start", "some-name"],
+                stderr=b"unknown or invalid runtime name: nvidia\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        assert not _docker.start_container("some-name")
+        assert calls == 1
+        assert "unknown or invalid runtime name: nvidia" in caplog.text
+        assert "docker start some-name" in caplog.text
+
+    def test_failed_ngc_login_reports_image_and_existing_stderr_once(
+        self, monkeypatch, caplog,
+    ):
+        monkeypatch.setattr(_docker, "_LOGIN_DONE", set())
+        monkeypatch.setattr(_docker, "_already_logged_in", lambda _registry: False)
+        monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+        calls = 0
+
+        def _run(argv, **kwargs):
+            nonlocal calls
+            calls += 1
+            return _docker.subprocess.CompletedProcess(
+                argv,
+                1,
+                stderr=b"unauthorized: authentication required\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "run", _run)
+
+        image = "nvcr.io/nvidia/vllm:26.09-py3"
+        _docker._maybe_ngc_login(image)
+
+        assert calls == 1
+        assert image in caplog.text
+        assert "unauthorized: authentication required" in caplog.text
+        assert "docker login nvcr.io" in caplog.text
+
+    def test_port_ownership_failure_keeps_docker_stderr_without_retry(
+        self, monkeypatch, caplog,
+    ):
+        calls = 0
+
+        def _check_output(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise _docker.subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "check_output", _check_output)
+
+        assert _docker.container_on_port_checked(8100) == (None, False)
+        assert calls == 1
+        assert "Cannot connect to the Docker daemon" in caplog.text
+        assert "Docker ownership for port 8100" in caplog.text
+
+    def test_port_ownership_failure_is_debug_only_when_requested(
+        self, monkeypatch, caplog,
+    ):
+        def _check_output(*_args, **_kwargs):
+            raise _docker.subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon\n",
+            )
+
+        monkeypatch.setattr(_docker.subprocess, "check_output", _check_output)
+
+        with caplog.at_level("DEBUG", logger=_docker.__name__):
+            assert _docker.container_on_port_checked(
+                8100, warn_on_failure=False,
+            ) == (None, False)
+
+        assert "Cannot connect to the Docker daemon" in caplog.text
+        assert all(record.levelname == "DEBUG" for record in caplog.records)
+
     def test_container_exists_false_when_docker_missing(self):
         with patch(
             "xr_ai_vllm._docker.subprocess.check_output",
@@ -632,7 +802,7 @@ class TestRun:
         assert "--gpu-memory-utilization" not in captured["argv"]
         assert captured["diagnostic_argv"] == kwargs["vllm_argv"]
 
-    def test_spark_uma_enables_prefetch_and_retry(self, tmp_path, monkeypatch):
+    def test_spark_uma_enables_retry(self, tmp_path, monkeypatch):
         kwargs = _run_kwargs(tmp_path)
         kwargs["spark_uma"] = True
         captured_build: dict = {}
@@ -650,7 +820,7 @@ class TestRun:
 
         run(**kwargs)
 
-        assert captured_build["prefetch_model"] == "model"
+        assert captured_build["vllm_argv"][2] == "model"
         assert captured_run["spark_uma"] is True
 
     def test_spark_uma_is_harmless_in_pip_mode(self, tmp_path, monkeypatch):
@@ -1255,7 +1425,7 @@ class TestRunContainer:
 
     @pytest.mark.parametrize("with_vllm_context", [False, True])
     def test_failure_diagnostics_are_vllm_only(
-        self, monkeypatch, tmp_path, with_vllm_context,
+        self, monkeypatch, tmp_path, caplog, with_vllm_context,
     ):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
@@ -1303,6 +1473,10 @@ class TestRunContainer:
             _docker.run_container(**kwargs)
 
         assert captured == ([diagnostic_argv] if with_vllm_context else [])
+        assert "xr-ai-test-ctr" in caplog.text
+        assert "some-image" in caplog.text
+        assert "http://127.0.0.1:1/health" in caplog.text
+        assert str(tmp_path / "container.log") in caplog.text
 
     def test_spark_retries_driver_allocation_failure_once(
         self, monkeypatch, tmp_path,
@@ -1613,13 +1787,86 @@ class TestEvictLocalListener:
 
 
 class TestPipEviction:
+    def test_pip_startup_exit_reports_endpoint_rc_and_command_once(
+        self, monkeypatch, caplog,
+    ):
+        from xr_ai_vllm import _pip
+
+        ownership_checks: list[int] = []
+        monkeypatch.setattr(
+            _pip._docker,
+            "container_on_port_checked",
+            lambda port, **_kwargs: ownership_checks.append(port) or (None, True),
+        )
+
+        class _FailedProc:
+            def poll(self):
+                return 127
+
+        launches: list[list[str]] = []
+        monkeypatch.setattr(
+            _pip.subprocess,
+            "Popen",
+            lambda argv, **_kwargs: launches.append(argv) or _FailedProc(),
+        )
+        argv = [
+            "vllm", "serve", "org/model", "--port", "8100",
+            "--api-key", "super-secret",
+        ]
+
+        with pytest.raises(SystemExit, match="^1$"):
+            _pip.run(
+                persistent=False,
+                log_prefix="test",
+                vllm_argv=argv,
+                host="0.0.0.0",
+                port=8100,
+                ready_file=None,
+            )
+
+        assert ownership_checks == [8100]
+        assert launches == [argv]
+        assert "http://127.0.0.1:8100/health" in caplog.text
+        assert "rc=127" in caplog.text
+        assert "vLLM executable vllm" in caplog.text
+        assert "super-secret" not in caplog.text
+
+    def test_pip_launch_preserves_original_os_error(self, monkeypatch, caplog):
+        from xr_ai_vllm import _pip
+
+        monkeypatch.setattr(
+            _pip._docker,
+            "container_on_port_checked",
+            lambda _port, **_kwargs: (None, True),
+        )
+        error = FileNotFoundError("vllm executable not found")
+        monkeypatch.setattr(
+            _pip.subprocess,
+            "Popen",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+        with pytest.raises(FileNotFoundError) as raised:
+            _pip.run(
+                persistent=False,
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "org/model"],
+                host="0.0.0.0",
+                port=8100,
+                ready_file=None,
+            )
+
+        assert raised.value is error
+        assert "vllm executable not found" in caplog.text
+        assert "http://127.0.0.1:8100/health" in caplog.text
+
     def test_pip_run_evicts_container_holding_its_port(self, monkeypatch):
         from xr_ai_vllm import _pip
 
         evicted: list[tuple[str, str]] = []
         monkeypatch.setattr(
             _pip._docker, "container_on_port_checked",
-            lambda port: ("xr-ai-nim-cosmos3-reasoner", True),
+            lambda port, **_kwargs: ("xr-ai-nim-cosmos3-reasoner", True),
         )
         monkeypatch.setattr(
             _pip._docker, "stop_container",

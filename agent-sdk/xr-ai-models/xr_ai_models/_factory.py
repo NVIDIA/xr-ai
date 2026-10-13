@@ -4,7 +4,7 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
+from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, KIND_SYSTEMONE, ModelsConfig
 from ._ocr import NemotronOCR
 from ._openai_compat import (
     OpenAICompatEmbedding,
@@ -12,9 +12,20 @@ from ._openai_compat import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    _EmbeddingWithExtras,
     _PocketTTS,
 )
-from ._protocols import Capabilities, EmbeddingService, LLMService, OCRService, STTService, TTSService, VLMService
+from ._protocols import (
+    Capabilities,
+    DecisionService,
+    EmbeddingService,
+    LLMService,
+    OCRService,
+    STTService,
+    TTSService,
+    VLMService,
+)
+from ._systemone import _SystemOneDecision
 
 
 def make_ocr(config: ModelsConfig, name: str) -> OCRService:
@@ -25,8 +36,36 @@ def make_ocr(config: ModelsConfig, name: str) -> OCRService:
     return NemotronOCR(spec)
 
 
+def make_decision(config: ModelsConfig, name: str) -> DecisionService:
+    """Construct the typed decision service for the named configuration entry.
+
+    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
+    names a different model role, and :class:`ValueError` for an unsupported
+    adapter kind.
+    """
+
+    spec = config.decision(name)
+    if spec.kind == KIND_SYSTEMONE:
+        return _SystemOneDecision(
+            base_url=spec.base_url,
+            model_name=spec.model_name,
+            api_key_env=spec.api_key_env,
+            timeout=spec.timeout,
+            health_check=spec.health_check,
+            health_path=spec.health_path,
+        )
+    raise ValueError(f"unsupported decision kind: {spec.kind!r}")
+
+
 def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
     """Construct the embedding service for the named configuration entry.
+
+    ``adapter.default_extras`` supplies embedding payload fields. When its
+    ``input_type`` is ``query`` or ``passage``, that value labels unprefixed
+    inputs; ``query: `` and ``passage: `` labels select their batch type and
+    are stripped before inference. Mixed batches retain input order. Without
+    ``input_type``, text is sent unchanged. ``model`` and ``input`` cannot be
+    overridden by extras.
 
     Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
     names a different model role, and :class:`ValueError` for an unsupported
@@ -35,7 +74,10 @@ def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
 
     spec = config.embedding(name)
     if spec.kind == KIND_OPENAI_COMPAT:
-        return OpenAICompatEmbedding(
+        client_type = _EmbeddingWithExtras if spec.default_extras else OpenAICompatEmbedding
+        extras = {"default_extras": spec.default_extras} if spec.default_extras else {}
+        return client_type(
+            **extras,
             base_url=spec.base_url,
             model_name=spec.model_name,
             api_key_env=spec.api_key_env,

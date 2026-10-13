@@ -20,15 +20,22 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert set(commands) == {
+        "clef_flash_model",
         "lab_instrument_monitoring",
         "model_servers",
-        "model_servers_nim",
         "simple_vlm_example",
         "tea_making_sample",
         "xr_render_demo",
     }
+    assert [argument.flags for argument in commands["clef_flash_model"].arguments] == [
+        ("--stop",),
+    ]
+    assert commands["clef_flash_model"].project_dir == Path(
+        "model-server-samples/clef-flash"
+    )
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
         ("--expose-web-events",),
+        ("--capture",),
     ]
     assert [argument.flags for argument in commands["model_servers"].arguments] == [
         ("--stop",),
@@ -37,16 +44,12 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--gpu-profile",),
     ]
     assert commands["model_servers"].project_dir == Path("model-server-samples/model-servers")
-    assert [argument.flags for argument in commands["model_servers_nim"].arguments] == [
-        ("--stop",), ("--dry-run",), ("--export-models",), ("--gpu-profile",),
-        ("--models",), ("--allow-anonymous",),
-    ]
-    assert commands["model_servers_nim"].project_dir == Path("model-server-samples/model-servers-nim")
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--capture",),
     ]
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
+        ("--capture",),
     ]
     assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
         ("--capture",),
@@ -57,7 +60,7 @@ def test_catalog_builds_sample_directory_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
     assert commands["model_servers"].invocation == (
-        "uv run model_servers [--stop] [--models NAME_OR_PATH] "
+        "uv run model_servers [--stop] [--models PATH] "
         "[--allow-anonymous] [--gpu-profile NAME]"
     )
 

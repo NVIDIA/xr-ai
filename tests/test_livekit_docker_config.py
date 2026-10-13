@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import socket
 import stat
 from pathlib import Path
 
@@ -20,9 +21,50 @@ from device_io_hub.transport.livekit._docker import (
 )
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 
+import _helpers_subprocess
+
 
 def _render_config(cfg: LiveKitConnectorConfig) -> dict:
     return yaml.safe_load(_render_livekit_config(cfg))
+
+
+def test_udp_port_selection_uses_udp_and_all_ipv4_interfaces(monkeypatch):
+    real_socket = socket.socket
+    bindings = []
+
+    class Probe:
+        def __init__(self, family, kind):
+            assert family == socket.AF_INET
+            assert kind == socket.SOCK_DGRAM
+            self.socket = real_socket(family, kind)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.socket.close()
+
+        def bind(self, address):
+            bindings.append(address)
+            self.socket.bind(address)
+
+        def getsockname(self):
+            return self.socket.getsockname()
+
+    # TCP and UDP have independent bind namespaces: the previous TCP probe
+    # accepts the same number even while a UDP listener owns it.
+    with real_socket(socket.AF_INET, socket.SOCK_DGRAM) as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied_port = occupied.getsockname()[1]
+        assert _helpers_subprocess.pick_free_port(occupied_port) == occupied_port
+        monkeypatch.setattr(_helpers_subprocess.socket, "socket", Probe)
+        selected = _helpers_subprocess.pick_free_udp_port()
+        assert selected != occupied_port
+        with real_socket(socket.AF_INET, socket.SOCK_DGRAM) as available:
+            available.bind(("0.0.0.0", selected))
+        cfg = LiveKitConnectorConfig(api_key="test", api_secret="test", lk_port_udp=selected)
+        assert _render_config(cfg)["rtc"]["udp_port"] == selected
+    assert bindings == [("0.0.0.0", 0)]
 
 
 def test_livekit_nat_options_are_disabled_by_default() -> None:

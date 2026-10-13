@@ -25,7 +25,7 @@ files before starting the sample:
 | File | Common changes |
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, or prompt override |
-| `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
+| `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in capture output, NVENC, audio, captions, and retention |
@@ -75,8 +75,10 @@ uv run simple_vlm_example --capture
 ```
 
 Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
-and camera access, and connect. Speak or type a question after the agent reports
-ready. With `--capture`, each connection is recorded under
+and camera access, and connect. After the agent reports ready, say
+“Hey agent, let's start talking,” then speak questions without a wake phrase.
+Say “Hey agent, let's stop talking” to close the conversation. Typed questions
+remain available without opening a voice conversation. With `--capture`, each connection is recorded under
 `~/.local/share/xr-ai/captures/simple-vlm-example/` and finalized when the
 participant disconnects or the stack stops. The normal command writes no
 capture.

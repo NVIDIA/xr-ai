@@ -60,7 +60,7 @@ class NemotronOCR:
     async def health(self) -> bool:
         """Probe configured readiness; disabled probes return True."""
         return await _http_health(
-            self._client, self._base + self._spec.health_path, self._spec.health_check,
+            self._client, self._base + self._spec.health_path, self._spec.health_check, self._key,
         )
 
     async def close(self) -> None:

@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "xr-ai-agent-runtime"
 version = "0.1.0"
 description = "Typed pub/sub runtime for XR AI agents."
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "nemo-relay>=0.7.2,<0.8",
     "pydantic>=2.10",

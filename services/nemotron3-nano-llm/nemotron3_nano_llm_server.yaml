@@ -69,7 +69,7 @@ vllm_backend: docker
 
 # Container image used when vllm_backend: docker.  Override to pin a different
 # tag, an internal mirror, or a custom build.
-vllm_image: nvcr.io/nvidia/vllm:26.08-py3
+vllm_image: nvcr.io/nvidia/vllm:26.09-py3
 
 # DGX Spark is detected automatically to cap max_num_seqs at 4 and enable the
 # unified-memory cold-start safeguards. Set spark_uma explicitly to override.

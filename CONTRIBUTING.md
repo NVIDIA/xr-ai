@@ -43,7 +43,7 @@ skipped when one is unavailable.
 
 Language-specific toolchains are pinned in each client project:
 
-- Python supports 3.11 and 3.12, uses type annotations, and is formatted and
+- Python supports 3.11 through 3.14, uses type annotations, and is formatted and
   linted with Ruff.
 - Swift uses the `swift-tools-version` pinned by each `Package.swift` and
   Xcode's default formatting.
@@ -84,9 +84,6 @@ Developer Certificate of Origin
 Version 1.1
 
 Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
-1 Letterman Drive
-Suite D4700
-San Francisco, CA, 94129
 
 Everyone is permitted to copy and distribute verbatim copies of this license
 document, but changing it is not allowed.
