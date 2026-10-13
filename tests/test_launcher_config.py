@@ -190,7 +190,7 @@ def test_launcher_rejects_worker_only_flat_json_profile(tmp_path) -> None:
 def test_bundled_simple_vlm_config_supports_worker_accessors() -> None:
     models = load_models_config(_SIMPLE_VLM_YAML / "models.json")
 
-    models.stt("stt")
+    assert "stt" not in models.entries
     models.vlm("vlm")
     models.tts("tts")
 
@@ -200,7 +200,7 @@ def test_bundled_render_config_supports_worker_accessors() -> None:
 
     models.llm("llm")
     models.llm("agent_llm")
-    models.stt("stt")
+    assert "stt" not in models.entries
     models.vlm("vlm")
     models.tts("tts")
 

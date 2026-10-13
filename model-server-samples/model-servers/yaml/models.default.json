@@ -1,18 +1,10 @@
 {
+  "services": {
+    "speaker-stt": {
+      "ownership": "managed"
+    }
+  },
   "models": {
-    "stt": {
-      "adapter": {
-        "preset": "parakeet_stt"
-      },
-      "endpoint": {
-        "base_url": "http://localhost:8103",
-        "readiness": "health"
-      },
-      "deployment": {
-        "ownership": "managed",
-        "service": "stt"
-      }
-    },
     "tts": {
       "adapter": {
         "preset": "pocket_tts"

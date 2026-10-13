@@ -19,10 +19,6 @@
       },
       "endpoint": {"base_url": "http://localhost:8108"}
     },
-    "stt": {
-      "adapter": {"preset": "parakeet_stt"},
-      "endpoint": {"base_url": "http://localhost:8103"}
-    },
     "embedding": {
       "adapter": {"preset": "nemotron_embedding"},
       "endpoint": {"base_url": "http://localhost:8109"}

@@ -8,7 +8,7 @@ All servers are launch_mode="persist" so they keep running after this
 process exits.  Model weights stay hot across stack restarts.
 
 The default deployment (yaml/models.default.json) starts:
-    stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
+    speaker-stt — Nemotron 3 Diarization + Multitalker Parakeet port 8102
     tts        — Pocket TTS, bill_boerst voice       port 8105  (GPU)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
@@ -30,6 +30,7 @@ To stop the selected model services:
     uv run --project model-server-samples/model-servers model_servers --stop
 """
 import argparse
+import json
 from pathlib import Path
 
 from xr_ai_launcher import (
@@ -65,9 +66,10 @@ def _gpu_profile_name(value: str) -> str:
     return value
 
 # service → (project, command, config basename). Order is launch
-# order: agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
-# the full GPU free on single-GPU profiles.
+# order: agent-llm precedes the VLM for FlashInfer MoE JIT compilation.
+# Speaker ASR and TTS may already occupy the GPU on single-GPU profiles.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
+    "speaker-stt": ("../../services/speaker-stt", "speaker_stt", "speaker_stt"),
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "agent-llm": (
@@ -120,16 +122,34 @@ def _build_processes(
 ) -> tuple[list[Process], tuple[str, ...]]:
     profile_path = models or _BASE / "yaml" / "models.default.json"
     deployment = load_deployment_profile(profile_path)
-    unknown = deployment.services.keys() - _MODEL_SERVICES.keys()
+    services = dict(deployment.services)
+    raw = json.loads(profile_path.read_text())
+    if any(model["deployment"].get("service") == "speaker-stt" for model in raw["models"].values()):
+        raise ValueError(
+            f"{profile_path}: speaker-stt must be declared under services, "
+            "not models.*.deployment.service"
+        )
+    # Streaming speech has no batch model adapter. Its declaration belongs
+    # to this operator profile, outside the shared model-client schema.
+    operator_services = raw.get("services", {})
+    if not isinstance(operator_services, dict):
+        raise ValueError(f"{profile_path}: services must be an object")
+    for service, spec in operator_services.items():
+        if service != "speaker-stt" or spec != {"ownership": "managed"}:
+            raise ValueError(f"{profile_path}: services must declare speaker-stt with ownership: managed")
+        if service in services and services[service] != "own":
+            raise ValueError(f"{profile_path}: conflicting ownership for service {service!r}")
+        services[service] = "own"
+    unknown = services.keys() - _MODEL_SERVICES.keys()
     if unknown:
-        raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
+        raise ValueError(f"{profile_path}: unknown services: {sorted(unknown)}")
 
     profile_name = gpu_profile or detect_gpu_config()
     config_dir = _BASE / "yaml" / profile_name
     profile_key = profile_path.stem.removeprefix("models.")
     processes: list[Process] = []
     for service, (project, command, config_base) in _MODEL_SERVICES.items():
-        if deployment.launch_mode(service) != "own":
+        if services.get(service) != "own":
             continue
         config = _resolve_config_variant(config_dir, config_base, profile_key)
         if not config.is_file():

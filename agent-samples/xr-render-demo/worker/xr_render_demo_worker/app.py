@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, ToolDef, load_models_config, make_llm, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -39,6 +39,7 @@ async def run_app(
     """Run the render sample until the runtime exits."""
     setup_logging("worker")
     models = load_models_config(config.models_config)
+    voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     llm = make_llm(models, "agent_llm")
 
     async def warmed_llm_probe() -> bool:
@@ -60,7 +61,6 @@ async def run_app(
             logger.opt(exception=True).warning("LLM warmup failed; readiness will retry")
             return False
         return True
-    stt = make_stt(models, "stt")
     tts = make_tts(models, "tts")
     vlm = make_vlm(models, "vlm")
 
@@ -95,16 +95,16 @@ async def run_app(
             supervisor,
             on_participant_left=_participant_left,
         )
-        voice = VoiceAgent(
+        voice = VoiceAgent.from_models(
             query_topic=USER_QUERY_TOPIC,
-            stt=stt,
+            models=models,
             tts=tts,
             vad=VadConfig(
                 silence_duration=config.silence_duration,
                 min_speech=config.min_speech,
                 silero_threshold=config.silero_threshold,
             ),
-            voice_gate=load_voice_gate_config(config.voice_gate_yaml),
+            voice_gate=voice_gate,
             probes={"agent-llm": warmed_llm_probe},
             ready_file=ready_file,
             closeables=(llm, vlm),

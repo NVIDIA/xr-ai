@@ -32,7 +32,7 @@ from ._transport import HubVoiceTransport
 def _build_voice_pipeline(
     *,
     transport: HubVoiceTransport,
-    stt: STTService,
+    stt: STTService | None,
     tts: TTSService,
     io_processor: _VoiceIOProcessor,
     vad_cfg: VadConfig,

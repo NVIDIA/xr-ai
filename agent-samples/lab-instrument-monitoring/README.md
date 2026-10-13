@@ -12,7 +12,7 @@ durable participant-scoped output.
 
 Nemotron-3 Nano Omni handles foreground tool routing, while Cosmos3 Nano
 Reasoner handles image inference. The sample launches its hub, worker, and
-application-specific processes, but reuses STT, TTS, LLM, and VLM endpoints
+application-specific processes, but reuses speaker ASR, TTS, LLM, and VLM endpoints
 from the shared model stack.
 
 ## Configure

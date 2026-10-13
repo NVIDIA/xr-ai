@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
-from xr_ai_models import STTService, TTSService
+from xr_ai_models import ModelsConfig, STTService, TTSService, make_stt
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -203,17 +203,29 @@ class _ResponseStream(AsyncIterator[str]):
 class VoiceAgent(Agent):
     """Own voice media lifecycle and bridge runtime input and output topics.
 
-    Startup waits only for explicitly supplied ``probes``, such as an inference
-    warmup or an application capability dependency. STT and TTS health are not
-    polled automatically. Readiness reports initialized application transport
-    after those explicit probes, not availability of every model endpoint.
+    Startup waits for explicitly supplied ``probes``, such as an inference
+    warmup or an application capability dependency, and required speaker ASR.
+    Batch STT and TTS health are not polled automatically. Readiness reports
+    initialized application transport after those startup requirements, not
+    availability of every model endpoint.
+
+    ``voice_gate`` selects speech through its speaker settings. ``stt=None``
+    is accepted only with enabled, required speaker ASR; startup then waits
+    for that service. Ordinary STT and automatic speaker selection require a
+    batch ``STTService``. Missing that dependency raises :class:`ValueError`
+    before VoiceAgent allocates media. An injected transport is already allocated
+    by its caller, who retains cleanup responsibility if construction fails.
+
+    :meth:`from_models` resolves that dependency from an already-loaded model
+    profile and the same voice-gate configuration, without application-side
+    backend inspection. The normal constructor accepts explicitly owned clients.
     """
 
     def __init__(
         self,
         *,
         query_topic: Topic[UserQuery],
-        stt: STTService,
+        stt: STTService | None,
         tts: TTSService,
         vad: VadConfig,
         voice_gate: VoiceGateConfig,
@@ -264,6 +276,72 @@ class VoiceAgent(Agent):
             tuple[str, VoiceTranscript]
         ] | None = None
         self._transcript_task: asyncio.Task[None] | None = None
+
+    @classmethod
+    def from_models(
+        cls,
+        *,
+        models: ModelsConfig,
+        query_topic: Topic[UserQuery],
+        tts: TTSService,
+        vad: VadConfig,
+        voice_gate: VoiceGateConfig,
+        probes: Mapping[str, Callable[[], Awaitable[bool]]] | None = None,
+        ready_file: Path | None = None,
+        closeables: Iterable[Any] = (),
+        text_topic: str = "agent.response",
+        idle_timeout_secs: float | None = None,
+        transport: HubVoiceTransport | None = None,
+        response_capacity: int = 32,
+        text_input: bool = True,
+        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
+        participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
+        interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        interrupt_on_supersede: bool = False,
+    ) -> VoiceAgent:
+        """Construct voice input from loaded models and voice-gate settings.
+
+        Enabled, required speaker ASR uses the configured streaming endpoint
+        without constructing a batch client. Disabled or automatic speaker
+        selection constructs the existing ``stt`` model role. Automatic
+        selection retains that real batch client for its startup fallback.
+        Other arguments and resource ownership match the normal constructor.
+
+        Raises :class:`KeyError` when the selected batch ``stt`` role is absent,
+        :class:`TypeError` when it names another model role, and
+        :class:`ValueError` for an unsupported adapter or non-positive response
+        capacity. Caller-created clients and transports remain caller-owned
+        when construction fails.
+        """
+
+        # Reject capacity before allocating the factory-owned batch client.
+        if response_capacity <= 0:
+            raise ValueError("voice response capacity must be positive")
+        speaker = voice_gate._speaker
+        stt = (
+            None
+            if speaker is not None and speaker.backend == "required"
+            else make_stt(models, "stt")
+        )
+        return cls(
+            query_topic=query_topic,
+            stt=stt,
+            tts=tts,
+            vad=vad,
+            voice_gate=voice_gate,
+            probes=probes,
+            ready_file=ready_file,
+            closeables=closeables,
+            text_topic=text_topic,
+            idle_timeout_secs=idle_timeout_secs,
+            transport=transport,
+            response_capacity=response_capacity,
+            text_input=text_input,
+            participant_joined_topic=participant_joined_topic,
+            participant_left_topic=participant_left_topic,
+            interrupted_topic=interrupted_topic,
+            interrupt_on_supersede=interrupt_on_supersede,
+        )
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""

@@ -16,7 +16,7 @@ import nemo_relay
 from loguru import logger
 from PIL import Image
 from xr_ai_logging import setup_logging
-from xr_ai_models import VLMService, load_models_config, make_stt, make_tts, make_vlm
+from xr_ai_models import VLMService, load_models_config, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -119,14 +119,13 @@ async def run_app(
     log_file = setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
-    stt = make_stt(models, "stt")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
 
     transport = HubVoiceTransport()
-    voice = VoiceAgent(
+    voice = VoiceAgent.from_models(
         query_topic=USER_QUERY_TOPIC,
-        stt=stt,
+        models=models,
         tts=tts,
         vad=VadConfig(
             silence_duration=config.silence_duration,

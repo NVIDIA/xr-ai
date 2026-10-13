@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import fields
 
+from loguru import logger
 from xr_ai_models._speaker_stream import _make_speaker_stream, _speaker_available, _SpeakerStream
 from xr_ai_voicegate._conversation import _ConversationConfig
 from xr_ai_voicegate._speaker import _SpeakerConfig
@@ -20,6 +21,7 @@ async def _select_speaker_asr(cfg: _SpeakerConfig | None) -> bool:
         return False
     client = _SpeakerClient(cfg)
     available = await client._available()
+    logger.debug("speaker ASR endpoint={} initial readiness={}", cfg.base_url, available)
     if available is False and cfg.backend == "auto":
         return False
     if available is not True:

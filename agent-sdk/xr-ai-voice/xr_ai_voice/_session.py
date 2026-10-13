@@ -44,7 +44,7 @@ class _VoiceSession:
     def __init__(
         self,
         *,
-        stt: STTService,
+        stt: STTService | None,
         tts: TTSService,
         vad: VadConfig,
         voice_gate: VoiceGateConfig,
@@ -55,6 +55,10 @@ class _VoiceSession:
         idle_timeout_secs: float | None = None,
         transport: HubVoiceTransport | None = None,
     ) -> None:
+        if stt is None:
+            speaker = voice_gate._speaker
+            if speaker is None or speaker.backend != "required":
+                raise ValueError("stt is required unless speaker ASR is enabled with backend: required")
         self.stt = stt
         self.tts = tts
         self.vad = vad

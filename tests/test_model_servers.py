@@ -22,6 +22,7 @@ assert _SPEC and _SPEC.loader
 _model_servers = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_model_servers)
 
+
 _OMNI_PATH = (
     _REPO_ROOT
     / "services/nemotron-omni-llm/nemotron_omni_llm_server/__main__.py"
@@ -58,9 +59,9 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, g
     processes, credentials = _model_servers._build_processes()
 
     assert [process.name for process in processes] == [
-        "stt", "tts", "omni", "vlm", "embedding",
+        "speaker-stt", "tts", "omni", "vlm", "embedding",
     ]
-    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8102, 8105, 8108, 8100, 8109]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -118,7 +119,7 @@ def test_read_service_port_rejects_invalid_values(
     ("service", "config_name", "gpu"),
     [
         ("embedding", "embedding_server.yaml", "0"),
-        ("stt", "stt_server.yaml", "1"),
+        ("speaker-stt", "speaker_stt.yaml", "1"),
     ],
 )
 def test_dual_ada_configs_follow_profile_gpu_layout(
@@ -223,7 +224,7 @@ def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) 
     _model_servers._stop_models(processes)
 
     assert set(stopped) == {
-        ("stt", 8103),
+        ("speaker-stt", 8102),
         ("tts", 8105),
         ("omni", 8108),
         ("vlm", 8100),
@@ -314,22 +315,23 @@ def test_custom_gpu_profile_must_contain_every_selected_service_config(
     profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
-    with pytest.raises(ValueError, match="profile 'custom' is incomplete.*stt_server"):
+    with pytest.raises(ValueError, match="profile 'custom' is incomplete.*speaker_stt"):
         _model_servers._build_processes(profile, "custom")
 
 
 def test_selected_service_config_must_declare_http_port(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = tmp_path / "yaml" / "custom" / "stt_server.yaml"
+    config = tmp_path / "yaml" / "custom" / "pocket_tts_server.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("host: 0.0.0.0\n", encoding="utf-8")
+    (config.parent / "speaker_stt.yaml").write_text("host: 127.0.0.1\nport: 8102\n")
     profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
     monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
 
     with pytest.raises(
         ValueError,
-        match=r"stt_server\.yaml: service config must declare port or http_port",
+        match=r"pocket_tts_server\.yaml: service config must declare port or http_port",
     ):
         _model_servers._build_processes(profile, "custom")
 

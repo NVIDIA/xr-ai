@@ -275,7 +275,7 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
         },
         "speaker": {
             "enabled": True,
-            "backend": "auto",
+            "backend": "required",
             "base_url": "http://127.0.0.1:8102",
         },
     }
