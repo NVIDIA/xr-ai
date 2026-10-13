@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Internal helpers for repository sample model-server launchers."""
+"""Public convenience API for sample-local inference stacks."""
 
-__all__: list[str] = []
+from ._stack import run_model_stack
+
+__all__ = ["run_model_stack"]

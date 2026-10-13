@@ -83,7 +83,44 @@ def _processes(configs: dict[str, dict], directory: Path, root: Path) -> list[Pr
     return processes
 
 
-def _run(base: Path, services: tuple[str, ...], *, stop: bool, gpu_profile: str | None) -> None:
+def run_model_stack(
+    base: Path,
+    services: tuple[str, ...],
+    *,
+    stop: bool = False,
+    gpu_profile: str | None = None,
+) -> None:
+    """Start or stop the configured local inference stack for a developer sample.
+
+    ``base`` is the sample's model-server project directory, conventionally
+    ``<repository>/agent-samples/<sample>/model-servers`` or
+    ``<repository>/apps/<application>/model-servers``. Relative paths are
+    resolved against the current working directory. Service projects are
+    resolved under that repository's ``services/`` directory.
+
+    ``services`` selects from ``stt``, ``tts``, ``omni``, ``vlm``, and
+    ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
+    exactly those server mappings. Each mapping overrides the corresponding
+    shared server YAML. Launch order is STT, TTS, Omni, VLM, then embedding,
+    omitting unselected services.
+
+    ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
+    detects the hardware automatically. ``stop=False`` requires ``HF_TOKEN``,
+    waits for every server to become ready, and returns with servers running.
+    ``stop=True`` needs no download credentials and stops only recognized
+    servers on the selected configuration's ports. It can stop servers used
+    by another sample sharing those ports; no launch history is recorded.
+
+    Stop the current stack before switching samples, editing its server
+    settings, or updating the checkout. This convenience API does not read
+    consumer endpoint profiles or launch independently deployed NIM endpoints.
+
+    Raises:
+        ValueError: The selected profile or server configuration is invalid.
+        RuntimeError: GPU inventory or configured server cleanup fails.
+        SystemExit: Required credentials are absent or stack startup aborts.
+    """
+    base = base.resolve()
     setup_logging("orchestrator", namespace=f"{base.parent.name}-models")
     configs = _configs(base, services, gpu_profile or detect_gpu_config())
     if stop:

@@ -80,6 +80,14 @@ launch plans or migration machinery for old running servers. Existing service
 ownership checks still refuse to stop unknown listeners. Refer to
 {doc}`/components/ai-services` for runtime persistence and cleanup details.
 
+## Developer sample API
+
+Model-server samples call the public
+{py:func}`xr_ai_model_server_stack.run_model_stack` entry point. Their code
+owns argument parsing, the base directory, and the list of required local
+servers. Configuration composition and process management remain inside the
+utility; sample code imports only public XR AI APIs.
+
 ## Configuration layers
 
 | Layer | Location | Responsibility |

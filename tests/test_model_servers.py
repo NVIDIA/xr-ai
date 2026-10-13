@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 from _helpers_model_servers import profile_config
-from xr_ai_model_server_stack import _stack
+from xr_ai_model_server_stack import _stack, run_model_stack
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -304,7 +304,7 @@ def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path,
     monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop must not require credentials"))
     monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_k: pytest.fail("stop must not launch"))
     monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("explicit profile must bypass detection"))
-    _stack._run(base, services, stop=True, gpu_profile=profile)
+    run_model_stack(base, services, stop=True, gpu_profile=profile)
     assert stopped == [(name, configs[name]["port"]) for name in services]
 
 
@@ -323,7 +323,7 @@ def test_start_materializes_configs_through_readiness_and_does_not_stop(monkeypa
             assert Path(process.config).is_file()
             launched.append(Path(process.config))
     monkeypatch.setattr(_stack, "run_stack", launch)
-    _stack._run(base, _SAMPLES["simple-vlm-example"], stop=False, gpu_profile=None)
+    run_model_stack(base, _SAMPLES["simple-vlm-example"])
     assert credentials == ["HF_TOKEN"]
     assert launched and not any(path.exists() for path in launched)
 
@@ -332,7 +332,7 @@ def test_stop_failure_is_reported(monkeypatch):
     base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: False)
     with pytest.raises(RuntimeError, match="could not be stopped"):
-        _stack._run(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="spark")
+        run_model_stack(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="spark")
 
 
 def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):
@@ -342,7 +342,7 @@ def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):
     assert config["model_cache"] == str(tmp_path / "cache")
     stopped = []
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
-    _stack._run(tmp_path, ("stt",), stop=True, gpu_profile="custom")
+    run_model_stack(tmp_path, ("stt",), stop=True, gpu_profile="custom")
     assert stopped == [("stt", 9213)]
 
 
@@ -371,7 +371,7 @@ def test_cli_help_and_removed_options_do_not_touch_servers(monkeypatch, sample, 
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, "_run", lambda *_a, **_k: pytest.fail("must not touch services"))
+    monkeypatch.setattr(module, "run_model_stack", lambda *_a, **_k: pytest.fail("must not touch services"))
     monkeypatch.setattr(sys, "argv", ["models", *argv])
     with pytest.raises(SystemExit) as error:
         module.run()

@@ -5,8 +5,11 @@
 
 # Sample model-server stack helpers
 
-Internal configuration composition for sample-local convenience launchers. Shared
+Public convenience API for sample-local model-server launchers. Import
+`run_model_stack` from `xr_ai_model_server_stack`; configuration composition and
+process-building helpers remain private. Shared
 server YAML lives in `yaml/`; sample-specific GPU profiles live beside each
-launcher in `agent-samples/<sample>/model-servers/yaml/`. This utility has no
-public Python API or standalone command. Refer to the
+launcher in `agent-samples/<sample>/model-servers/yaml/`. Refer to the
+[Python API reference](https://nvidia.github.io/xr-ai/latest/reference/python/xr_ai_model_server_stack/index.html)
+and the
 [model-server workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html).

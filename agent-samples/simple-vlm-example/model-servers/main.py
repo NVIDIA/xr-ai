@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from xr_ai_model_server_stack._stack import _run
+from xr_ai_model_server_stack import run_model_stack
 
 _BASE = Path(__file__).resolve().parent
 _SERVICES = ('stt', 'tts', 'vlm')
@@ -25,7 +25,7 @@ def run() -> None:
     )
     args = parser.parse_args()
     try:
-        _run(_BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile)
+        run_model_stack(_BASE, _SERVICES, stop=args.stop, gpu_profile=args.gpu_profile)
     except (ValueError, RuntimeError) as exc:
         parser.error(str(exc))
 

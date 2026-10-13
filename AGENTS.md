@@ -95,6 +95,8 @@ and test discovery exclude that top-level directory.
   switching samples, or updating the checkout; these launchers need no launch
   history or cross-version reconciliation. Refer to
   [Model-server workflow](docs/source/guides/customizing-model-servers.md).
+- Developer samples import public XR AI package APIs. Keep private module and
+  symbol imports inside their owning packages or implementation tests.
 - Orchestrators depend on `xr-ai-launcher`, declare `PROCESSES`, and call
   `run_stack`.
 - Stack items start in declaration order; members of a `Parallel` item start

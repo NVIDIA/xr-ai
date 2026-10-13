@@ -623,3 +623,21 @@ def test_manifests_and_ci_have_no_legacy_service_roots() -> None:
         )
 
     assert not stale, f"legacy service roots remain in manifests or CI: {stale}"
+
+
+def test_developer_samples_import_public_xr_ai_apis() -> None:
+    for path in _tracked_paths():
+        if path.parts[0] != "agent-samples" or path.suffix != ".py":
+            continue
+        for node in ast.walk(ast.parse((_ROOT / path).read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+                if node.module.startswith("xr_ai_"):
+                    assert not any(alias.name.startswith("_") for alias in node.names), path
+            elif isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            else:
+                continue
+            for module in modules:
+                if module.startswith("xr_ai_"):
+                    assert not any(part.startswith("_") for part in module.split(".")), (path, module)
