@@ -130,6 +130,45 @@ def _decode_h264_shapes(
 # ── tests ─────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("initial", [False, True])
+async def test_capture_survives_tiny_camera_frame(tmp_path, initial):
+    """A camera placeholder must not end capture or replace the valid encoder."""
+    _make_recorder(str(tmp_path / "preflight"))  # Skip only for unavailable NVENC.
+    recorder = SessionRecorder(CaptureConfig(
+        out_dir=str(tmp_path / str(initial)), profile="raw", max_total_bytes=0,
+    ))
+    recorder.begin_session("test_pid", 1_000_000)
+    dimensions = [(8, 8), (9, 9), (181, 240), (180, 241), (180, 240), (480, 640)]
+    if not initial:
+        dimensions.insert(0, (180, 240))
+    try:
+        for index, (width, height) in enumerate(dimensions):
+            timestamp = 1_000_000 + index * 100_000
+            recorder.record_video(FrameData(
+                seq=index, pts_us=timestamp, width=width, height=height,
+                fmt=PixelFormat.NV12,
+                data=_nv12_gradient(width, height, index),
+                participant_id="test_pid", track_id="camera",
+            ))
+            recorder.record_audio("device", AudioChunk(
+                pts_us=timestamp, sample_rate=48_000, channels=1, samples=480,
+                data=np.zeros(480, dtype=np.float32).tobytes(),
+                participant_id="test_pid", track_id="mic",
+            ))
+    finally:
+        [root] = recorder.close()
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert manifest["complete"] is True
+    assert manifest["dropped_video_frames"] == 4
+    assert manifest["counts"]["video_frames"] == len(dimensions) - 4
+    assert manifest["counts"]["audio_chunks"] == len(dimensions)
+    [video] = manifest["video_tracks"]["camera"]
+    assert video["encoded_dimensions"] == [
+        {"width": 180, "height": 240}, {"width": 480, "height": 640},
+    ]
+    assert (root / video["path"]).stat().st_size > 0
+
+
 async def test_record_synthetic_frames():
     """Feed 30 NV12 frames → expect at least one .h264 chunk + matching .json."""
     width, height = 640, 480
