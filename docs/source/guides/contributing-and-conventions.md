@@ -66,9 +66,9 @@ dependencies, advance the cutoff in a dedicated change, resolve every project
 with `uv --config-file uv.toml lock --upgrade --project <directory>`, and run
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
-locks under `dependency-manifest/`; the pre-commit hook regenerates the Python
-inventory for `uv.toml` and project metadata changes. Commit regenerated inventory
-files with project changes so CI can enforce project enrollment. The generator
+locks under `dependency-manifest/`; the pre-commit hook does the Python one when
+`uv.toml` is staged. Ordinary dependency or project changes remain deferred to
+the next qualification or targeted security refresh. The generator
 explicitly excludes Speaker STT because its NeMo Speech sources conflict with
 the other ASR services; validate its local lock separately.
 

@@ -4,16 +4,15 @@
 name: dependency-manifest
 
 # dependency-manifest/ holds the committed, fully resolved dependency set as of
-# the last uv.toml cutoff change or targeted security refresh. The
-# checks also run on project metadata changes to enforce enrollment. Each
-# job regenerates one lock the way DEPENDENCIES.md describes and fails on drift.
+# the last uv.toml cutoff change or targeted security refresh. Ordinary project
+# changes remain deferred to the next refresh. Each job regenerates one lock the
+# way DEPENDENCIES.md describes and fails on drift.
 
 on:
   push:
     branches: [main]
     paths:
       - 'uv.toml'
-      - '**/pyproject.toml'
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'
@@ -22,7 +21,6 @@ on:
   pull_request:
     paths:
       - 'uv.toml'
-      - '**/pyproject.toml'
       - 'dependency-manifest/**'
       - '.github/scripts/generate_dependency_map.py'
       - '.github/scripts/generate_dependency_manifest.py'

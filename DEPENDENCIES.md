@@ -69,8 +69,9 @@ with the other ASR services' sources; validate its local lock separately. The
 committed lock records the resolved runtime dependency set at the qualification
 cutoff for dependency analysis tooling. Build-system requirements such as
 `hatchling` are not part of a uv lock. Regenerate and commit the manifest and lock
-for a cutoff change, targeted security refresh, or project metadata change.
-A release yanked from the index changes the next fresh resolution.
+for a cutoff change or targeted security refresh; ordinary dependency or project
+changes remain deferred to the next refresh. A release yanked from the index
+changes the next fresh resolution.
 
 `uv run --script .github/scripts/generate_dependency_manifest.py` generates both
 files with the uv version pinned inside the script because lock output varies
@@ -79,10 +80,11 @@ every included project accepts, so a narrower declaration narrows the manifest.
 vLLM service projects resolve in a `vllm` extra; all other included projects
 resolve in a `repository` extra. These extras are mutually exclusive because
 their PyNvVideoCodec and protobuf constraints are incompatible. The universal
-lock inventories both environments without overriding either one. Pre-commit
-regenerates the inventory on changes to project metadata, `uv.toml`, the manifest,
-or its generator scripts. The `dependency-manifest` workflow verifies both files
-with `--check` on those changes. Nothing installs from the directory.
+lock inventories both environments without overriding either one. The pre-commit
+hook runs the script when `uv.toml` is staged, and the `dependency-manifest`
+workflow verifies both files with `--check` on changes that touch `uv.toml`,
+`dependency-manifest/`, or the generator scripts. Nothing installs from the
+directory.
 
 The same directory holds the client lockfiles. Refresh an affected client lock
 with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
@@ -276,7 +278,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `multidict>=6.9.1`
   - `accelerate>=1.2.0`
   - `fastapi>=0.115.0`
   - `huggingface-hub>=0.32.0`

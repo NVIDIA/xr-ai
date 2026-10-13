@@ -32,7 +32,7 @@ repos:
         language: system
         pass_filenames: false
         files: >-
-          (^|/)pyproject\.toml$|^uv\.toml$|^dependency-manifest/|^\.github/scripts/generate_dependency_(map|manifest)\.py$
+          ^uv\.toml$|^dependency-manifest/|^\.github/scripts/generate_dependency_(map|manifest)\.py$
 
       - id: generate-dependency-map
         name: generate dependency map
