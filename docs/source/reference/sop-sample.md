@@ -139,7 +139,12 @@ Keep the repository root as your working directory for reads, writes, and valida
 Read the schema and applicable examples linked relative to the skill directory.
 Write the demonstrated procedure as guide YAML directly, plus evidence
 review notes, under agent-samples/sop-sample/guides/. Reuse captions and narration;
-inspect selected saved images when needed. For each step, combine its instructions
+inspect selected saved images when needed. Trace a delta to its pipeline-recorded
+delta_reference_frame_id when present, not the preceding sampled image; keep the
+comparison pair in review notes, never as executable guide timestamps. Missing
+reference metadata in older packets is unspecified provenance. No visible change
+and an uncertain comparison are different, but neither proves interval inactivity.
+For each step, combine its instructions
 and chronological captions to extract the action, object, target, and required
 count, orientation, order, or duration. Distinguish in-progress states from the
 completed result. Merge repeated views of one action without losing distinct

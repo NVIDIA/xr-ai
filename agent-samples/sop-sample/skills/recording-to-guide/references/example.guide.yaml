@@ -20,6 +20,12 @@
 # orientation=tabs outward; distinguish one attached or held nearby from both
 # attached. Keep positioning as a distinct action. Map real source IDs in the
 # review notes; this illustrative sequence supplies no recorded visual proof.
+# For a real caption at frame 23 with delta_reference_frame_id: 7, compare
+# frames 7 and 23, not frames 22 and 23. Record that pair in the review notes;
+# the executable YAML below does not need source frame IDs or timestamps.
+# A description of no visible change or an uncertain comparison is not proof
+# that no attachment happened between those images. Inspect the interval when
+# narration describes an action that the endpoints do not establish.
 # These checks verify the resulting arrangement, not the history of each motion.
 # For an unresolved required identity, use review-blocked.guide.yaml instead of
 # inventing the identity or refusing to draft the demonstrated action.

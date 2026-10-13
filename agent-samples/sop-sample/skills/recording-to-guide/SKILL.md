@@ -44,6 +44,13 @@ Inspect before and after the relevant source time, including uncaptained frames;
 file names and image metadata are not visual inspection. Record corrections with
 frame IDs without editing source records. Report unavailable images honestly.
 
+When relying on a delta, use its `delta_reference_frame_id` to locate the actual
+earlier image, not the preceding sampled image. Keep both evidence IDs in review
+notes, never as executable guide timestamps. A missing reference in an older
+packet is unspecified provenance, not proof that no earlier image existed.
+Neither a no-change description nor an uncertain comparison proves that nothing
+happened between snapshots; preserve supported actions and inspect their intervals.
+
 ## Account for the actions
 
 For each proposed step, combine its narration or instructions with the

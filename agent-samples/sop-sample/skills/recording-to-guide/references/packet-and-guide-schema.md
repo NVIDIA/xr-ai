@@ -23,6 +23,17 @@ narration; inspect the contents, not only its status.
 Source timestamps are Unix microseconds. Caption `generated_at_us` measures
 inference completion, not event time. STT timestamps are alignment hints, not
 precise action boundaries. Inspect nearby frames if timing is uncertain.
+Newer captions also contain pipeline-generated `delta_reference_frame_id` and
+`delta_reference_timestamp_us`: the earlier image actually supplied to the VLM.
+Both are `null` for an initial single-image observation. Resolve the reference
+through the frame index. Sampling can outpace captioning, and failed captions
+do not advance the comparison image, so do not subtract one from `frame_id`.
+Older packets may omit these fields; do not invent an exact comparison pair.
+Reference metadata identifies inputs, not the truth of the model's delta.
+Keep comparison IDs and source times in review notes, not executable guide state.
+No meaningful visible change differs from an indeterminate comparison: neither
+establishes inactivity throughout the interval. Uncertain labels are not actions
+and must not erase actions supported by narration or inspected images.
 SOP snapshots, captions, and narration cover the spoken start/stop recording
 boundary. Optional `--capture` media covers the whole participant connection;
 it is not required for guide generation and may span multiple SOP packets.
