@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -321,12 +322,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -492,7 +494,12 @@ Agent, start recording the transcript.
 </table>
 </div>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
-behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.</p>
+behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
+Both presets now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
+then accept speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
+Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the normal preset to require its
+configured wake phrases. Disable conversation controls in the always-on preset
+to restore immediate speech dispatch. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
 host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
 development network and restrict TCP port 8092 accordingly. Durable JSONL
@@ -527,9 +534,10 @@ events. The runtime fans typed events out to peer agents. Agents call peer
 tools directly, and each background agent owns its participant tasks.
 The worker uses native <code class="docutils literal notranslate"><span class="pre">xr_ai_runtime</span></code> agents and <code class="docutils literal notranslate"><span class="pre">xr_ai_tools</span></code> instances; it
 does not use NVIDIA Agent Toolkit, PydanticAI, MCP clients, or MCP servers.
-Wake-word gating is the sample default; callers can explicitly select
-always-on speech. Every spoken response is also sent to the connection client
-on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render accessible text alongside audio.
+The sample accepts speech without a wake phrase during an active conversation;
+callers can enable its configured wake phrases. Every spoken response is also
+sent to the connection client on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> so the client can render
+accessible text alongside audio.
 Raw streamed responses are finalized there as soon as their content completes,
 and batched responses are finalized as soon as their rewrite completes. The
 voice aggregator’s playback reservation affects only subsequent speech
@@ -690,6 +698,24 @@ locks, and participant cleanup.</p>
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
 command syntax.</p>
 </section>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">tea_making_sample</span> <span class="pre">--capture</span></code>
+from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code> to start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code>
+immediately after DeviceIOHub. It records participant video, device and agent
+audio, and inbound and outbound data in a separate process. The option can be
+combined with <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects the <code class="docutils literal notranslate"><span class="pre">demo</span></code> profile and participant-lifetime
+sessions. Each connection creates a raw bundle under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/tea-making-sample/</span></code>. When the session closes,
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
+requires an NVIDIA GPU with NVENC support and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+<p>Capture uses bounded queues and drops pending capture frames if encoding falls
+behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code>
+when the deployment must not retain device media. Refer to
+<a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
+</section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
 <p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The
@@ -710,7 +736,7 @@ temporary worker configuration with absolute paths. Edit the files under
 <td><p>Typed state, steps, triggers, evidence, tool access, transitions, and user messages</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.always-on.yaml</span></code></p></td>
-<td><p>Wake-word and always-on speech presets</p></td>
+<td><p>Conversation controls and optional wake phrases</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/rag_service.yaml</span></code></p></td>
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>
@@ -1061,6 +1087,7 @@ until another concrete application requires the same contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deterministic-foreground-routing">Deterministic foreground routing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-contract">Workflow contract</a></li>

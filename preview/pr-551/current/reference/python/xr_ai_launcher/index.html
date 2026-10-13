@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
@@ -321,12 +322,13 @@
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -714,8 +716,11 @@ otherwise the child inherits the parent’s.</p>
 <dd><p>A group of processes that start simultaneously.</p>
 <p>The launcher spawns every member at once and waits for <em>all</em> of them to
 signal readiness before advancing to the next item in the stack sequence.
-If any member exits before signaling ready the launcher shuts everything
-down, just as it would for a serial process.</p>
+A member that signals readiness remains monitored until the whole group is
+ready. An unexpected exit during that interval shuts everything down. A
+successful <code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
+<code class="docutils literal notranslate"><span class="pre">run_stack(...,</span> <span class="pre">exit_after_ready=True)</span></code> permits bootstrap wrappers to
+outlive the launcher.</p>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Parallel</span><span class="p">([</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">"stt"</span><span class="p">,</span> <span class="s2">"../../services/stt-server"</span><span class="p">,</span> <span class="s2">"stt_server"</span><span class="p">),</span>
@@ -815,7 +820,12 @@ it must <code class="docutils literal notranslate"><span class="pre">Path(ready_
 is printed every five seconds so model-loading or CloudXR start-up
 remains visible.</p>
 <p>After all processes are ready the launcher monitors them: if any exits,
-all others are terminated and the launcher exits.  Pass
+the remaining foreground processes are terminated. The launcher preserves
+a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an
+unexpected zero exit to 1.
+Spawn errors, readiness failures, and unexpected monitored exits print a
+concise summary with the constructed command and an existing configured
+run-log directory when available. Pass
 <code class="docutils literal notranslate"><span class="pre">exit_after_ready=True</span></code> to return immediately once everything is ready
 instead — useful for launchers whose processes are all <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;persist&quot;</span></code>
 and should outlive the orchestrator (e.g. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>).</p>

@@ -308,6 +308,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -321,12 +322,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -428,7 +430,7 @@
 <section id="xr-ai-models">
 <h1>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h1>
 <p><a id="contract"></a></p>
-<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, and OCR protocols and
+<p id="agent-sdk-models-contract"><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> defines typed LLM, VLM, STT, TTS, embedding, decision, and OCR protocols and
 constructs concrete clients from deployment profiles. Workers depend on those
 protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <a class="reference internal" href="python/index.html"><span class="doc">API Reference</span></a> for exact classes, methods, fields, and defaults. Refer to
@@ -448,6 +450,26 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>Choice-only decision clients use <code class="docutils literal notranslate"><span class="pre">make_decision</span></code> and the SystemOne adapter:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">DecisionQuestion</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_decision</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_decision</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"triage"</span><span class="p">)</span> <span class="k">as</span> <span class="n">decisions</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">decisions</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span>
+        <span class="s2">"The participant asked to start the timer."</span><span class="p">,</span>
+        <span class="p">{</span>
+            <span class="s2">"approval"</span><span class="p">:</span> <span class="n">DecisionQuestion</span><span class="p">(</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">"Did the participant explicitly approve the action?"</span><span class="p">,</span>
+                <span class="n">criteria</span><span class="o">=</span><span class="p">{</span><span class="s2">"yes"</span><span class="p">:</span> <span class="s2">"An explicit approval"</span><span class="p">,</span> <span class="s2">"no"</span><span class="p">:</span> <span class="s2">"No explicit approval"</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">answers</span><span class="p">[</span><span class="s2">"approval"</span><span class="p">]</span><span class="o">.</span><span class="n">choice</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The profile entry uses <code class="docutils literal notranslate"><span class="pre">category:</span> <span class="pre">decision</span></code>, <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">systemone</span></code>, a model name,
+and an endpoint. The standalone <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash guide</span></a>
+documents the local service and its pinned model release.</p>
 <p id="profile-contract">A client profile names logical roles and declares adapters and endpoints:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -581,6 +603,15 @@ succeed without a request; <code class="docutils literal notranslate"><span clas
 enabled. Tea making’s RAG service requires this configuration for hosted embedding
 endpoints; refer to <a class="reference internal" href="../guides/customizing-model-servers.html#rag-embedding-health"><span class="std std-ref">RAG embedding health</span></a>.</p>
 </section>
+<section id="id1">
+<h2>Deployment profiles<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
+<p>Use the same factories and typed interfaces for local development and native
+NIM deployment. The example in <code class="docutils literal notranslate"><span class="pre">deployment/nim/models.yaml</span></code> selects native HTTP
+chat and embedding endpoints and Riva gRPC speech, without compatibility servers.
+The embedding factory honors existing request defaults, including asymmetric
+<code class="docutils literal notranslate"><span class="pre">input_type</span></code> batches. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for deployment
+ownership, sample configuration paths, and validation commands.</p>
+</section>
 <section id="riva-speech-over-grpc">
 <span id="riva-grpc-speech-nim-stt-tts"></span><h2>Riva speech over gRPC<a class="headerlink" href="#riva-speech-over-grpc" title="Link to this heading">#</a></h2>
 <p>Riva speech NIMs use <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">riva_grpc</span></code>, not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>. Install the
@@ -597,7 +628,9 @@ endpoints; refer to <a class="reference internal" href="../guides/customizing-mo
 also accepts <code class="docutils literal notranslate"><span class="pre">voice</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>. A hosted NVCF endpoint uses TLS,
 <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, and its <code class="docutils literal notranslate"><span class="pre">function_id</span></code>. If custom code explicitly calls <code class="docutils literal notranslate"><span class="pre">health()</span></code>,
 set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code> for a hosted endpoint without a channel-ready health
-surface. Existing gRPC request deadlines and error propagation are unchanged.</p>
+surface. Recognition timeout and cancellation cancel the native RPC and join
+its pending client read; synthesis uses the same cleanup rule for streamed
+audio.</p>
 </section>
 <section id="tests">
 <h2>Tests<a class="headerlink" href="#tests" title="Link to this heading">#</a></h2>
@@ -663,6 +696,7 @@ repository root:</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Deployment profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-over-grpc">Riva speech over gRPC</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>

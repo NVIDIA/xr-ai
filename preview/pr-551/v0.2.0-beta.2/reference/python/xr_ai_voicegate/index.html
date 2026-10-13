@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" selected>v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" >main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" selected>v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["index.html", "../../../../v0.1.0-beta/index.html", "../../../../main/index.html"];
+    var urls = ["../../../../v0.3.0-beta/index.html", "index.html", "../../../../v0.1.0-beta/index.html", "../../../../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -511,7 +512,8 @@
 <span class="sig-name descname"><span class="pre">magic_phrases</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">()</span></em><a class="headerlink" href="#xr_ai_voicegate.VoiceGateConfig.magic_phrases" title="Link to this definition">#</a></dt>
 <dd><p>Sentence-boundary opt-in phrases.</p>
 <p>A match is valid at transcript start or after <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code>.
-An empty tuple dispatches every non-STOP STT transcript.</p>
+An empty tuple dispatches every non-STOP STT transcript, or every transcript
+when <code class="docutils literal notranslate"><span class="pre">stop_commands_enabled</span></code> is false.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -530,6 +532,19 @@ when the consumer calls <code class="docutils literal notranslate"><span class="
 set <code class="docutils literal notranslate"><span class="pre">listening_chime:</span> <span class="pre">false</span></code> to disable it.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_voicegate.VoiceGateConfig.stop_commands_enabled">
+<span class="sig-name descname"><span class="pre">stop_commands_enabled</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#xr_ai_voicegate.VoiceGateConfig.stop_commands_enabled" title="Link to this definition">#</a></dt>
+<dd><p>Whether STOP recognition interrupts speech or invokes the stop handler.</p>
+<p>Applies to early probes, streaming partials, and final transcripts,
+including conversations without a wake phrase. Disable for passive
+narration: STOP words then follow normal transcript and query gating
+without a STOP interruption or acknowledgement. Probes may remain enabled
+for wake acknowledgements.
+This does not disable other conversation controls or speech-start events.
+Scoped application commands such as “stop recording” remain queries.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py function">
@@ -537,7 +552,11 @@ set <code class="docutils literal notranslate"><span class="pre">listening_chime
 <span class="sig-prename descclassname"><span class="pre">xr_ai_voicegate.</span></span><span class="sig-name descname"><span class="pre">load_voice_gate_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><span class="pre">VoiceGateConfig</span></a></span></span><a class="headerlink" href="#xr_ai_voicegate.load_voice_gate_config" title="Link to this definition">#</a></dt>
 <dd><p>Load + parse a voice_gate YAML file into a <a class="reference internal" href="#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code></a>.</p>
 <p>Schema: a top-level mapping with keys <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> (list[str] or
-bare str), <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code> (bool), <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> (float).
+bare str), <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code> (bool), <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> (float),
+<code class="docutils literal notranslate"><span class="pre">stop_commands_enabled</span></code> (bool, default true).
+Optional <code class="docutils literal notranslate"><span class="pre">conversation</span></code> and <code class="docutils literal notranslate"><span class="pre">speaker</span></code> mappings configure session
+controls and speech-backend selection for the unified voice pipeline.
+Their settings remain private to that path.
 Missing file or empty file → returns the dataclass defaults (gate
 disabled / always-on). <code class="docutils literal notranslate"><span class="pre">magic_phrases:</span> <span class="pre">null</span></code> and trailing whitespace
 in phrases are normalized the same way the inline-block parser did.</p>
@@ -559,7 +578,7 @@ in phrases are normalized the same way the inline-block parser did.</p>
 <p>Event ladder in <code class="docutils literal notranslate"><span class="pre">feed</span></code> — exactly one event fires per call, in this
 deterministic priority order:</p>
 <ol class="arabic simple">
-<li><p>STOP detected on raw text OR on the magic-phrase-stripped tail
+<li><p>STOP enabled and detected on either raw text or the magic-phrase-stripped tail
 → <code class="docutils literal notranslate"><span class="pre">on_stop(pid)</span></code>; closes the follow-up window.</p></li>
 <li><p>Magic phrase matched AND query non-empty
 → <code class="docutils literal notranslate"><span class="pre">on_query(pid,</span> <span class="pre">query,</span> <span class="pre">fresh_match=True)</span></code>; closes the follow-up
@@ -575,7 +594,7 @@ from case 2 so consumers can suppress one-shot side effects
 defensively.</p></li>
 </ol>
 <p>When <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> is empty the gate is in always-on mode: STOP
-still wins (interrupts must work without a phrase) and every other
+takes priority when enabled, and every other
 utterance dispatches straight to <code class="docutils literal notranslate"><span class="pre">on_query</span></code> with
 <code class="docutils literal notranslate"><span class="pre">fresh_match=True</span></code>. The follow-up / phrase-only / drop branches
 are inert in this mode — they only make sense once a phrase exists
@@ -586,6 +605,9 @@ bounded set of conversational prefixes and punctuation. Negations,
 questions, reported speech, unconfigured arbitrary prefixes, and scoped or
 multi-action commands such as <code class="docutils literal notranslate"><span class="pre">stop</span> <span class="pre">monitoring</span></code> are ordinary queries,
 not global stops.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">stop_commands_enabled=False</span></code> for passive transcription. In that
+mode neither partial nor final transcripts trigger STOP; their words
+instead follow the ordinary query-gating rules.</p>
 <p>Handler exceptions are logged and swallowed so one bad handler does
 not kill the gate.</p>
 <dl class="py method">
@@ -791,6 +813,7 @@ consumer doesn’t keep paying for failed builds.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voicegate.VoiceGateConfig.magic_phrases"><code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voicegate.VoiceGateConfig.followup_grace_s"><code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voicegate.VoiceGateConfig.listening_chime"><code class="docutils literal notranslate"><span class="pre">listening_chime</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voicegate.VoiceGateConfig.stop_commands_enabled"><code class="docutils literal notranslate"><span class="pre">stop_commands_enabled</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voicegate.load_voice_gate_config"><code class="docutils literal notranslate"><span class="pre">load_voice_gate_config()</span></code></a></li>

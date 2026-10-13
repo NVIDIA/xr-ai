@@ -59,7 +59,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Magpie NIM HTTP speech service" href="magpie-nim-tts.html" />
+    <link rel="next" title="Magpie NIM speech" href="magpie-nim-tts.html" />
     <link rel="prev" title="Sample configuration reference" href="configuration.html" />
 
 
@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/reference/lab-instrument-monitoring.html", "../../v0.1.0-beta/index.html", "lab-instrument-monitoring.html"];
+    var urls = ["../../v0.3.0-beta/reference/lab-instrument-monitoring.html", "../../v0.2.0-beta.2/reference/lab-instrument-monitoring.html", "../../v0.1.0-beta/index.html", "lab-instrument-monitoring.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -345,12 +347,13 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -638,6 +641,24 @@ client’s <code class="docutils literal notranslate"><span class="pre">agent.re
 <a class="reference internal" href="command-line.html"><span class="doc">command-line</span></a> references for configuration fields and
 command syntax.</p>
 </section>
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">lab_instrument_monitoring</span> <span class="pre">--capture</span></code>
+from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code> to start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code>
+immediately after DeviceIOHub. It records participant video, device and agent
+audio, and inbound and outbound data in a separate process. The option can be
+combined with <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects the <code class="docutils literal notranslate"><span class="pre">demo</span></code> profile and participant-lifetime
+sessions. Each connection creates a raw bundle under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/lab-instrument-monitoring/</span></code>. When the session closes,
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
+requires an NVIDIA GPU with NVENC support and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
+<p>Capture uses bounded queues and drops pending capture frames if encoding falls
+behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code>
+when the deployment must not retain device media. Refer to
+<a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
+</section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
 <p>Run and edit the sample from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>. The
@@ -658,7 +679,7 @@ temporary copy named in the logs.</p>
 <td><p>QR payloads and ArUco IDs mapped to instrument names</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
-<td><p>Wake phrases, listening chime, and follow-up window</p></td>
+<td><p>Conversation controls, optional wake phrases, and follow-up window</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Model adapters and shared endpoints</p></td>
@@ -820,14 +841,17 @@ proxy in front of it.</p>
 <section id="file-outputs-and-persistence">
 <h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
 <p>Each non-empty final STT result delivered on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> is written to
-<code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> before voice gating, including ambient speech rejected by a
-configured wake phrase. Transcript-topic delivery is bounded and best effort;
-overflow drops the oldest pending transcript, and shutdown discards pending
-items. Wake-word gating controls dispatch to the foreground, not storage:
-delivered rejected speech is still persisted. The default gate accepts <code class="docutils literal notranslate"><span class="pre">agent</span></code>
-and <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>, plays a listening chime, and allows one follow-up utterance for
-five seconds. Accepted speech reaches the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed
-text reaches the foreground but is not an STT transcript.</p>
+<code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> during an active conversation, before optional wake gating.
+Conversation controls and closed-conversation speech are withheld. Transcript
+delivery is bounded and best effort; overflow drops the oldest pending
+transcript, and shutdown discards pending items. Speech rejected by a wake
+phrase during an active conversation is still persisted.</p>
+<p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
+wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Set
+<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">agent</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>,
+with the optional chime and five-second follow-up window. Accepted speech reaches
+the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed text reaches the foreground but is not an
+STT transcript. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>Each connection writes to a new participant-scoped directory:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>artifacts/
 ├── relay-events.jsonl
@@ -996,7 +1020,7 @@ another concrete application needs exactly the same behavior.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Magpie NIM HTTP speech service</p>
+        <p class="prev-next-title">Magpie NIM speech</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1025,6 +1049,7 @@ another concrete application needs exactly the same behavior.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture">Architecture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-responsibilities">Agent responsibilities</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-map">Source map</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#foreground-tool-loop">Foreground tool loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-identification-and-reading">Visual identification and reading</a></li>

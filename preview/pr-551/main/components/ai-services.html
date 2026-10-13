@@ -281,16 +281,17 @@
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
   <select id="version-select" class="version-switcher__select">
-    <option value="0" >v0.2.0-beta.2</option>
-    <option value="1" >v0.1.0-beta</option>
-    <option value="2" selected>main (development)</option>
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
   </select>
 </div>
 <script>
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.2.0-beta.2/components/ai-services.html", "../../v0.1.0-beta/components/ai-services.html", "ai-services.html"];
+    var urls = ["../../v0.3.0-beta/components/ai-services.html", "../../v0.2.0-beta.2/components/ai-services.html", "../../v0.1.0-beta/components/ai-services.html", "ai-services.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -332,6 +333,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
@@ -345,12 +347,13 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/clef-flash.html">Clef-Flash local decision server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/command-line.html">Command-line reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM HTTP speech service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">Shared model servers with NVIDIA NIM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -484,17 +487,17 @@ recorded video, and document retrieval.</p>
 <td><p>parakeet-tdt-0.6b-v3</p></td>
 <td><p>NeMo ASR in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-tts/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">speaker_stt</span></code></p></td>
+<td><p>8102</p></td>
+<td><p>Nemotron 3 Diarization + Multitalker Parakeet</p></td>
+<td><p>NeMo streaming ASR</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts_server</span></code></p></td>
 <td><p>8104</p></td>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-nim-tts/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code></p></td>
-<td><p>8105</p></td>
-<td><p>Magpie speech NIM</p></td>
-<td><p>HTTP adapter over Riva gRPC</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/pocket-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pocket_tts_server</span></code></p></td>
@@ -520,17 +523,17 @@ recorded video, and document retrieval.</p>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code> via <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code></p></td>
+<td><p>8120</p></td>
+<td><p>Cloudflare Clef-Flash 9B</p></td>
+<td><p>Native SystemOne choice decisions</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nim-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nim_server</span></code></p></td>
-<td><p>configured per YAML</p></td>
-<td><p>selected NVIDIA NIM</p></td>
-<td><p>persistent Docker container</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
@@ -548,11 +551,95 @@ recorded video, and document retrieval.</p>
 </table>
 </div>
 <p>Local model artifacts land in the service’s <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> directory, set per
-YAML and resolved relative to the YAML file. Self-hosted NIM containers use
-<code class="docutils literal notranslate"><span class="pre">nim_cache</span></code> for their optimized engines and weights; hosted endpoints keep no
+YAML and resolved relative to the YAML file. Operators configure self-hosted
+NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every <code class="docutils literal notranslate"><span class="pre">models/</span></code> tree is excluded from version
 control. The model-servers profiles share <code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root;
 the exact layout per launch style is below.</p>
+<section id="speaker-conditioned-stt">
+<h2>Speaker-conditioned STT<a class="headerlink" href="#speaker-conditioned-stt" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt</span></code> is a private local inference process. It shares
+Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
+while keeping each session’s diarization history, enrollment and ASR caches
+separate. A session enrolls one speaker with the configured start phrase and
+releases that identity with the stop phrase. Background voices do not reach
+the transcript as separate speakers after enrollment: the decoder receives the
+mixed audio with owner and interference masks and is conditioned on the owner.
+Before enrollment, each detected speaker has independent conditioned decoding
+and phrase-matching state. Someone already talking does not reserve ownership:
+another speaker can say the start phrase over that conversation and enroll when
+their own utterance completes. Non-speech background noise does not impose a
+silence gate. Each speaker’s existing inactivity interval ends their utterance;
+there is no requirement that every speaker become quiet together.</p>
+<p>All complete start phrases finalized in one accepted audio step are considered
+before ownership changes. One match enrolls its speaker; multiple matches in
+that step enroll nobody and require a fresh attempt. A phrase finalized later
+cannot take over an existing owner. This is a streaming decision boundary, not
+a guarantee of distinguishing all acoustically simultaneous requests. Speaker
+labels are session-local identities; actual attribution and interference
+suppression require qualification on the intended microphones.</p>
+<p>The process follows the model-service HTTP pattern and exposes health and model
+identity endpoints. A private WebSocket carries mono signed 16-bit PCM
+at 16 kHz and returns enrollment and transcription events. It serializes
+inference because model conditioning is mutable.
+Opening a session establishes the capture timestamp of its first sample.
+Subsequent audio requests form one ordered, contiguous PCM stream; the service
+derives all later timestamps from the number of samples it has accepted. The
+caller must close and reopen the session if its capture or transport layer drops
+audio, because that layer owns the information needed to detect the loss.
+Utterances forced to end at the configured duration limit cannot enroll or
+release a speaker; an enrolled owner’s forced segment is still transcribed.
+Start and stop phrases can span utterances within the conversation phrase
+window, retaining separate enrollment fragments for each speaker. A truncated
+candidate cannot enroll from the tail of the same continuing speech episode;
+that speaker must end its episode before making another attempt.</p>
+<p>The private protocol makes that ownership explicit: the opening JSON message
+supplies <code class="docutils literal notranslate"><span class="pre">audio_origin_us</span></code> once, and subsequent binary WebSocket messages
+supply only PCM bytes. Each connection owns one session, and the caller waits
+for the event response before sending the next audio message. Audio must be
+serialized in capture order. The service neither reorders audio nor guesses
+whether samples are missing from wall-clock arrival times.
+Binary messages retain the existing limit of one second of audio (16,000
+complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
+or incomplete PCM samples are protocol errors. The server’s standard transport
+message-size and heartbeat defaults are retained; JSON controls do not inherit
+an unrelated audio-duration limit.</p>
+<p>Configure model IDs, device, precision, host, port and session capacity
+in <code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code>. The default HTTP base URL is
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8102</span></code>. Keep the unauthenticated private streaming endpoint on
+a loopback or trusted interface. Hardware profiles or <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code>
+select a GPU; the generic configuration uses the first visible GPU. From the
+repository root, start it with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/speaker-stt<span class="w"> </span>speaker_stt
+</pre></div>
+</div>
+<p>The service warms both streaming and final decoding before signaling ready.
+Reuse verifies the local listener’s managed-process ownership and resolved
+configuration before launching a child; a changed configuration requires
+stopping that process first. A matching listener still warming its models
+refuses another launch rather than allocating a duplicate GPU copy. Persistent
+reuse exits after signaling readiness; monitored reuse keeps its readiness
+proxy alive.</p>
+<p>Each session owns one diarization cache and at most eight temporary ASR caches
+before enrollment, bounded by the model’s speaker-label capacity. Features and
+model weights are shared. After enrollment only the owner’s ASR cache is needed
+unless the dependent diagnostics layer requests other transcripts. With the
+default <code class="docutils literal notranslate"><span class="pre">max_sessions:</span> <span class="pre">16</span></code>, up to 128 enrollment decoder caches can coexist;
+GPU memory and latency at that bound have not been qualified. Candidate-decoding
+failure revokes the session because dropping a candidate could conceal a phrase
+tie. All cache allocation, inference, and release use one serialization boundary.
+A connected session may pause without losing enrollment. Disconnect, transport
+liveness failure, or inference failure releases it; <code class="docutils literal notranslate"><span class="pre">max_sessions</span></code> bounds
+retained sessions. Cancelled model work finishes before its cache and
+serialization ownership are released, including repeated cancellation.
+The model environment is isolated from workers and the existing batch STT
+service. Model weights are downloaded on first use and then reused from the
+configured cache. As with the sibling NeMo services, existing <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and
+<code class="docutils literal notranslate"><span class="pre">NEMO_CACHE_DIR</span></code> values take precedence over cache defaults.</p>
+<p>The WebSocket session is not a public model API. It is reserved for the private
+typed voice integration; applications continue to use the public voice and
+model interfaces rather than connecting to this route directly.</p>
+</section>
 <section id="two-huggingface-cache-roots">
 <h2>Two HuggingFace cache roots<a class="headerlink" href="#two-huggingface-cache-roots" title="Link to this heading">#</a></h2>
 <p>The servers use two different <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> values, so HuggingFace weights live in
@@ -596,6 +683,63 @@ match the consumer:</p>
 </pre></div>
 </div>
 </section>
+<section id="starting-without-network-access">
+<span id="starting-model-services-without-network-access"></span><h2>Starting without network access<a class="headerlink" href="#starting-without-network-access" title="Link to this heading">#</a></h2>
+<p>The following model services look up their models in the Hugging Face cache
+before contacting the Hub, and load cached models from their local paths:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Service</p></th>
+<th class="head"><p>Cached artifact</p></th>
+<th class="head"><p>Loaded through</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Docker-mode vLLM servers</p></td>
+<td><p>Snapshot of <code class="docutils literal notranslate"><span class="pre">model</span></code> at its <code class="docutils literal notranslate"><span class="pre">--revision</span></code> (default <code class="docutils literal notranslate"><span class="pre">main</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span> <span class="pre">&lt;snapshot</span> <span class="pre">directory&gt;</span></code>, keeping the configured served model name</p></td>
+</tr>
+<tr class="row-odd"><td><p>STT and Magpie TTS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&lt;model-name&gt;.nemo</span></code>; Magpie uses <code class="docutils literal notranslate"><span class="pre">model_revision</span></code> when set</p></td>
+<td><p>NeMo <code class="docutils literal notranslate"><span class="pre">restore_from</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Pocket TTS</p></td>
+<td><p>Weights, tokenizer, and voice state named by the selected <code class="docutils literal notranslate"><span class="pre">language</span></code></p></td>
+<td><p>A cache-local copy of that language configuration</p></td>
+</tr>
+<tr class="row-odd"><td><p>Clef</p></td>
+<td><p>Snapshot at <code class="docutils literal notranslate"><span class="pre">model_revision</span></code></p></td>
+<td><p>Native release loader with the snapshot directory</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The listed services use cached artifacts without refreshing them from the Hub.
+Only a cache miss follows the online download path. Pocket TTS accepts its
+ungated weights when the gated voice-cloning weights are not cached. Pip-mode
+vLLM passes the model ID to vLLM unchanged, so it can still contact the Hub.</p>
+<p>Offline startup supports a previously working cache. A local snapshot lookup
+does not establish completeness or integrity. Interrupted or damaged caches
+may require an online re-download; automatic partial-cache repair is not
+provided. The underlying loader may fail or apply defaults for missing files.
+To recover, re-download the affected model and revision with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span> <span class="pre">&lt;model-id&gt;</span> <span class="pre">--revision</span> <span class="pre">&lt;revision&gt;</span> <span class="pre">--force-download</span></code>, using the same <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>
+or <code class="docutils literal notranslate"><span class="pre">--cache-dir</span></code> as the service, then start the service again while online.</p>
+<p>A cache hit is never refreshed. A model without a pinned revision keeps the
+<code class="docutils literal notranslate"><span class="pre">main</span></code> commit it was downloaded at; update it with <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, as shown
+above.</p>
+<p>After a successful online start, the listed services can reuse their working
+model cache without network access. This assumes their runtime dependencies
+and Docker images are already installed. To forbid downloads, set
+<code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>. The host services inherit it, and the vLLM wrapper forwards
+it into its containers:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">HF_HUB_OFFLINE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
+</pre></div>
+</div>
+<p>In this mode, a service whose model is not cached fails at startup with an
+error that names the model, its revision, and the cache directory. Like the
+other forwarded Hub settings, changing <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE</span></code> recreates persistent
+vLLM containers.</p>
+</section>
 <section id="migrating-model-caches-from-ai-services">
 <span id="id1"></span><h2>Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code><a class="headerlink" href="#migrating-model-caches-from-ai-services" title="Link to this heading">#</a></h2>
 <p>The service-directory rename does not move ignored model weights. Existing
@@ -636,7 +780,8 @@ readiness, refer to <a class="reference internal" href="../reference/migrations.
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
 depend on <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
 load a per-sample model profile, and construct service clients via
-<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
+<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">make_decision</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings) so callers
 never branch on backend.</p>
@@ -673,121 +818,33 @@ table, and the profile contract are in
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
-<p>The LLM and VLM can run on <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a> instead of
-local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>
-API, so this is a model-profile change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.
-Self-hosted speech NIMs are covered below.</p>
-<p>A hosted consumer entry uses an environment-variable reference for its
-credential and omits deployment and health polling metadata:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"openai_compat"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"model_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvidia/cosmos3-nano-reasoner"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"vision"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"streaming"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
-token. The key is a
-managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
-<li><p><strong>Omitted <code class="docutils literal notranslate"><span class="pre">deployment</span></code></strong> defaults to an externally operated endpoint; no
-model process is started or stopped by the profile.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
-</ul>
-<p>To adapt a sample, copy its active model profile, replace the local model entry
-with the hosted entry, and point <code class="docutils literal notranslate"><span class="pre">models_config</span></code> in the worker YAML at the new
-file. The worker reads the endpoint credential named in <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>; export
-it or configure the credential store. Consumer sample launchers do not inspect
-model profiles to choose model processes.</p>
-<section id="self-hosted-nim-containers-models-vlm-llm-nim-json">
-<h3>Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)<a class="headerlink" href="#self-hosted-nim-containers-models-vlm-llm-nim-json" title="Link to this heading">#</a></h3>
-<p>Compatible models can be pulled from NGC and served as <strong>optimized NIM
-containers on your own GPUs</strong>: same APIs as hosted NIM and no network hop.</p>
-<p>The NIM containers are owned by the shared model-servers stack, exactly
-like the local vLLM servers. Its deployment profiles pick the mix: every
-<code class="docutils literal notranslate"><span class="pre">managed</span></code> entry launches as a <code class="docutils literal notranslate"><span class="pre">nim_server</span></code> process (<code class="docutils literal notranslate"><span class="pre">services/nim-server</span></code>, a
-generic wrapper; the per-GPU-profile <code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> picks the
-image and ports) or as a local server:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--models<span class="w"> </span>vlm_llm_nim
-</pre></div>
-</div>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">vlm_llm_nim</span></code>: Nemotron-3 Nano Omni and Cosmos3-Nano Reasoner as NIM
-containers, with STT, Pocket TTS, and embedding served locally. Samples reuse
-these endpoints; they never launch or stop the containers.</p></li>
-</ul>
-<p>To configure a sample with these endpoints, refer to
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
-<p>The container <code class="docutils literal notranslate"><span class="pre">image:</span></code> is the model, so swapping models is a
-<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> edit plus the matching profile entry. Selection is
-per entry, not per profile: each model role independently picks a local
-server, a self-hosted NIM container, or a hosted endpoint through its own
-<code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> sections. The model-server launcher also requires
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata; consumer profiles omit it. The shipped profiles are
-presets, not a closed set; a mixed setup is a copy of a shipped profile
-with the relevant entries changed, saved under any name and selected with
-<code class="docutils literal notranslate"><span class="pre">--models</span></code> (model-servers) or <code class="docutils literal notranslate"><span class="pre">models_config</span></code> (workers). When mixing, mind
-port overlaps: give a NIM container a free port or drop the overlapping
-local server from the profile.</p>
-<p>A custom model-server profile can still launch self-hosted Riva speech NIMs.
-Workers reach them through the optional <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> model kind:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">riva_grpc</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">localhost:50051</span><span class="w">   </span><span class="c1"># the container's gRPC port</span>
-<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">en-US</span>
-</pre></div>
-</div>
-<p>TTS additionally takes <code class="docutils literal notranslate"><span class="pre">voice:</span></code> (a Riva voice name) and <code class="docutils literal notranslate"><span class="pre">sample_rate:</span></code>
-(default 44100). An explicit <code class="docutils literal notranslate"><span class="pre">health()</span></code> call with <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> (the
-default) runs a gRPC channel-ready probe; consumer startup does not call it.
-The standalone <a class="reference internal" href="../reference/magpie-nim-tts.html"><span class="doc">Magpie NIM HTTP speech service</span></a> service exposes a Magpie Riva
-NIM through the Pocket-compatible HTTP endpoint. Direct Riva clients require
-the optional SDK dependency; HTTP consumers do not.</p>
-<p>Requirements: docker + NVIDIA Container Toolkit, <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> (used for the
-<code class="docutils literal notranslate"><span class="pre">nvcr.io</span></code> image pull <em>and</em> by the container itself to download the
-GPU-matched optimized engine from NGC on first start; multi-GB, cached
-under <code class="docutils literal notranslate"><span class="pre">models/nim/</span></code> for later runs), and GPU capacity for every container.
-<code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> placement lives in the per-GPU-profile
-<code class="docutils literal notranslate"><span class="pre">nim_*_server.yaml</span></code> files. Their adjacent comments record profile-specific
-validation status and hardware cautions; verify startup and capacity on the
-target host. Readiness gates on each container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>.</p>
-<p>A NIM container serving something the samples don’t ship is the same
-mechanism by hand: point an <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at its port
-or a <code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code> entry at its gRPC port. Consumer workers do not require a
-health route. Operators can still check the container’s <code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>
-endpoint directly.
-With <code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code> (you run the container yourself) that is the
-whole change. For an orchestrator to launch or expect it, the entry’s
-<code class="docutils literal notranslate"><span class="pre">deployment.service</span></code> must name a process row in that orchestrator’s service
-table (<code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in model-servers, <code class="docutils literal notranslate"><span class="pre">_MODEL_PROCESSES</span></code> in a sample);
-a service name with no row fails fast at startup, and adding one row plus
-its config YAML is the only orchestrator edit the profile system ever
-needs.</p>
+<p>Develop with the local shared model servers and deploy the same workers against
+independently operated NIM endpoints. The model profile selects a protocol
+adapter and an endpoint; samples continue to use the typed <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>
+interfaces. There is no XR AI NIM container launcher or local HTTP proxy.</p>
+<p>Chat and vision use <code class="docutils literal notranslate"><span class="pre">openai_compat</span></code> with native model IDs. Speech uses
+<code class="docutils literal notranslate"><span class="pre">riva_grpc</span></code>, which normalizes Riva audio inside the SDK. Asymmetric embedding
+endpoints use the existing <code class="docutils literal notranslate"><span class="pre">adapter.default_extras.input_type</span></code> field; the SDK
+translates query and passage labels without changing the RAG service.</p>
+<section id="self-hosted-nim-endpoints">
+<span id="self-hosted-nim-containers-models-vlm-llm-nim-json"></span><h3>Self-hosted NIM endpoints<a class="headerlink" href="#self-hosted-nim-endpoints" title="Link to this heading">#</a></h3>
+<p>Operators own container lifecycle, GPU placement, optimized-engine caching,
+health exposure, and endpoint authorization. Consumer profiles use external
+ownership. The local <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher remains a development convenience.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for a complete profile, sample
+configuration paths, smoke checks, and deployment qualification.</p>
 </section>
 </section>
 <section id="model-server-persistence">
 <h2>Model-server persistence<a class="headerlink" href="#model-server-persistence" title="Link to this heading">#</a></h2>
 <p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
-and self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">nim_server</span></code>)
 <strong>survive stack restarts by design</strong>, including when a deployment profile
 marks them <code class="docutils literal notranslate"><span class="pre">managed</span></code>: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> is the
-teardown. Switching profiles needs no manual teardown: at startup a wrapper
+serving so the next start reuses hot weights. Use <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
+for the selected local deployment. Startup does not sweep services omitted
+from its configuration. Independently deployed NIMs follow their operator’s
+lifecycle. At startup a wrapper
 that finds a <em>different</em> persistent xr-ai container holding its port (found
 by the <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port=&lt;port&gt;</span></code> label) stops and removes it before launching
 its own. Each persistent wrapper script checks its
@@ -846,7 +903,23 @@ other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.</p>
-<p>The target ports and container names match the defaults in the per-profile YAML files.</p>
+<p>Stop targets are the managed services in the same launch plan used for
+startup, with ports read from the selected hardware YAMLs. Entries explicitly
+marked <code class="docutils literal notranslate"><span class="pre">external</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code>, and services omitted from the deployment, are
+not stop targets. For a custom deployment, use the same selection as at launch:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--models<span class="w"> </span>/path/to/models.custom.json<span class="w"> </span>--gpu-profile<span class="w"> </span>dual_48G_ada<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Automatic GPU detection remains the default; use the same <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code> when
+it was explicitly selected at launch or detection is unavailable. Stop does
+not require model-download credentials. Stop the old selection before changing
+its JSON, hardware profile, or service ports; no previous configuration is
+recorded or rediscovered.</p>
+<p>This is configuration-scoped cleanup, not exclusive launch-instance ownership.
+A matching managed-service listener on a selected port can be stopped even if
+it was started independently. Existing identity checks reject unknown listeners;
+they do not identify which deployment originally started a recognized service.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
 <h2>Choosing the vLLM runtime (pip vs Docker)<a class="headerlink" href="#choosing-the-vllm-runtime-pip-vs-docker" title="Link to this heading">#</a></h2>
@@ -884,12 +957,12 @@ flags. Docker-only lifecycle settings such as <code class="docutils literal notr
 <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.08-py3</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.08-py3</span></code> for all wrappers.
-This image includes vLLM 0.27.1 and supports the checked-in Cosmos3 and
-Nemotron model configurations. Nemotron Omni uses the image’s native Mamba and
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.09-py3</span></code> for all wrappers.
+This image includes NVIDIA-patched vLLM 0.29.0. The checked-in Cosmos3 and
+Nemotron model configurations select this image. Nemotron Omni uses its native Mamba and
 causal-convolution implementations, so the shipped configuration does not
 compile or install <code class="docutils literal notranslate"><span class="pre">mamba-ssm</span></code> or <code class="docutils literal notranslate"><span class="pre">causal-conv1d</span></code>. Override the image to pin
 another tag, an internal mirror, or a custom build.</p>
@@ -898,13 +971,13 @@ another tag, an internal mirror, or a custom build.</p>
 <p>When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
-docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.08-py3
+docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.09-py3
 </pre></div>
 </div>
 <p>The next launch recreates stale managed containers when their image or command
 fingerprint differs. After the new stack starts successfully, reclaim disk from
 an old image with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">rm</span> <span class="pre">&lt;old-vllm-image&gt;</span></code>. Keep the shared model cache;
-the 26.08 stack reuses compatible weights and downloads any missing artifacts.</p>
+the 26.09 stack reuses compatible weights and downloads any missing artifacts.</p>
 </div>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
@@ -937,11 +1010,15 @@ recorded entrypoint or command.</p></li>
 <li><p>The host <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> is bind-mounted at the same path inside the
 container and <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> is set to it, so weights cached by pip mode are
 reused by docker mode and vice versa.</p></li>
-<li><p>Before <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> starts, the wrapper verifies that the image’s Hub exposes
-its Xet download path and has <code class="docutils literal notranslate"><span class="pre">hf-xet&gt;=1.1.2,&lt;2.0.0</span></code>. It repairs a missing or
+<li><p>Before <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> starts, the container resolves the model snapshot from
+the mounted cache, as described in
+<a class="reference internal" href="#starting-model-services-without-network-access"><span class="std std-ref">Starting without network access</span></a>. Only when the snapshot
+must be downloaded does the wrapper verify that the image’s Hub exposes its
+Xet download path and has <code class="docutils literal notranslate"><span class="pre">hf-xet&gt;=1.1.2,&lt;2.0.0</span></code>. It repairs a missing or
 incompatible <code class="docutils literal notranslate"><span class="pre">hf-xet</span></code> wheel and checks the complete integration again; an
 unavailable accelerator therefore fails startup instead of silently falling
-back to plain HTTPS.</p></li>
+back to plain HTTPS. The download completes and is synced to disk before
+vLLM initializes CUDA.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">HF_XET_HIGH_PERFORMANCE=1</span></code> is the default in pip and docker modes. Setting
 it to <code class="docutils literal notranslate"><span class="pre">0</span></code> disables high-performance tuning, not Xet itself. Set
 <code class="docutils literal notranslate"><span class="pre">HF_HUB_DISABLE_XET=1</span></code> to disable Xet. To use legacy <code class="docutils literal notranslate"><span class="pre">hf_transfer</span></code> with a
@@ -951,7 +1028,7 @@ continue to use Xet when it remains enabled. These values are preserved,
 forwarded, and included in the container fingerprint, so changing one
 recreates a persistent container.</p></li>
 </ul>
-<p>The shipped image pin was qualified with this in-container vLLM version:</p>
+<p>The selected image reports this in-container vLLM version:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Image</p></th>
@@ -959,8 +1036,8 @@ recreates a persistent container.</p></li>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.08-py3</span></code></p></td>
-<td class="text-right"><p>0.27.1</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.09-py3</span></code></p></td>
+<td class="text-right"><p>0.29.0+5013de39</p></td>
 </tr>
 </tbody>
 </table>
@@ -978,11 +1055,11 @@ their pip-mode <code class="docutils literal notranslate"><span class="pre">star
 </section>
 <section id="cleanup">
 <h3>Cleanup<a class="headerlink" href="#cleanup" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> works for both modes. Cleanup locates labelled
-Docker containers before inspecting ports, then stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code>
-(escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Pip-mode processes carry an
-<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code> ownership marker; unknown listeners and failed inspection abort
-cleanup without sending a signal.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> works for both modes within the selected managed launch
+plan. Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
+Pip-mode processes carry an <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code> ownership marker; unknown listeners
+and failed inspection abort cleanup without sending a signal.</p>
 <p>Pip-mode vLLM processes started before the ownership markers were introduced
 cannot be identified safely. After upgrading, stop each unmarked process
 manually once; subsequent launches include the markers and support managed
@@ -1104,10 +1181,6 @@ launches; they are not sample configuration. Shared deployments use the
 hardware-specific YAML under
 <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
 resulting endpoints through their models JSON.</p></li>
-<li><p>The generic NIM wrapper has no service-local YAML. Use a hardware profile
-under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>; its
-<code class="docutils literal notranslate"><span class="pre">nim_&lt;role&gt;_server.yaml</span></code> files use <code class="docutils literal notranslate"><span class="pre">nim_cache</span></code>, normally
-<code class="docutils literal notranslate"><span class="pre">../../../../models/nim</span></code> from that location.</p></li>
 </ul>
 </section>
 </section>
@@ -1161,12 +1234,14 @@ under <code class="docutils literal notranslate"><span class="pre">model-server-
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speaker-conditioned-stt">Speaker-conditioned STT</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-without-network-access">Starting without network access</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connecting-a-sample-to-shared-model-services">Connecting a sample to shared model services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-containers-models-vlm-llm-nim-json">Self-hosted NIM containers (<code class="docutils literal notranslate"><span class="pre">models.vlm_llm_nim.json</span></code>)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-hosted-nim-endpoints">Self-hosted NIM endpoints</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-server-persistence">Model-server persistence</a></li>

@@ -5,6 +5,127 @@
 
 # Release migration
 
+## Selected model-server cleanup
+
+`model_servers --stop` now stops only managed services in the selected launch
+plan. For custom deployments, pass the same `--models PATH` and explicit
+`--gpu-profile NAME` used at startup. Startup no longer stops omitted services.
+Before updating the checkout, stop the old deployment using the cleanup
+commands supported by that old checkout; older versions do not support
+combining `--models` with `--stop`. Likewise, stop the selected plan before
+editing its ports or replacing its configuration; no launch history is tracked.
+The updated default launch plan
+cannot stop services omitted from its selection. Refer to
+{doc}`/components/ai-services` for the existing service identity guards and
+their configuration-scoped limitations.
+
+## Clef model cache configuration
+
+Remove `model_path` from Clef server YAML files. Clef first resolves the
+pinned `model_name` and `model_revision` from the Hugging Face cache under
+`model_cache`; only a cache miss follows the online download path. Set
+`model_cache` to a Hugging Face cache root, not an extracted snapshot directory:
+a directory created with `hf download --local-dir` or git-lfs does not have
+the required cache layout. Refer to
+{ref}`starting-model-services-without-network-access` for cache preparation
+and offline startup. Before restarting, stop a running Clef server from
+`model-server-samples/clef-flash/`:
+
+```bash
+export UV_CONFIG_FILE=../../uv.toml
+uv run clef_flash_model --stop
+```
+
+The configuration identity changed, so a server started by an older version
+cannot be reused by the updated launcher.
+
+## Native NIM endpoint profiles
+
+The managed `model_servers_nim` command and its hardware profiles are removed,
+along with `nim_model_adapter`, `nim_riva_server`, `nim_server`,
+`magpie_nim_tts`, and `xr_ai_vllm.serve_nim`. Deploy model containers with the
+operator's tooling and configure native endpoint addresses in consumer profiles.
+Use native chat model IDs with `openai_compat`, `riva_grpc` for speech, and
+embedding `default_extras.input_type: passage` for prefix-aware asymmetric
+inputs. Local model-server defaults remain unchanged.
+
+Native Magpie speech does not append the compatibility wrapper's 300 ms pause.
+Riva client readiness checks channel connectivity; validate inference separately.
+Refer to {doc}`/guides/deploying-with-nim` for migration and validation commands.
+
+## LiveKit sample credentials
+
+Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to {doc}`/getting_started/credentials` for fixed-pair configuration.
+
+## Swift microphone cleanup errors
+
+`StreamSession.disconnect()` and `StreamingBackend.disconnect()` now throw
+cleanup errors after closing the transport. Update callers to use `try await`
+and handle failures: capture may still be running even though the connection
+has closed. Retain the same session and retry `disconnect()` or `stopAudio()`
+until cleanup succeeds before discarding it. Connecting that same LiveKit
+backend also retries its pending cleanup before opening another connection.
+A custom backend must close its transport even when cleanup fails. Existing nonthrowing backend implementations can still
+satisfy the throwing protocol requirement.
+
+## Launcher failure exit statuses
+
+Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.
+
+The launcher preserves positive child exit codes, maps signal termination to
+`128 + signal number`, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+{doc}`../components/launcher-and-process-model` for failure diagnostics and
+shutdown behavior.
+
+## Voice sample conversation defaults
+
+The shipped voice samples now require `Hey agent, let's start talking` after
+connecting, then accept speech without a wake phrase until
+`Hey agent, let's stop talking`. Exact phrase fragments can span utterances
+within the configured window. The existing STT adapters and NIM model stack
+remain unchanged.
+
+Set `conversation.require_wake_phrase: true` in the sample's voice-gate YAML to
+keep wake phrases during an active conversation. Set
+`conversation.enabled: false` to restore the original wake-only behavior, or
+always-on dispatch when `magic_phrases` is empty. Restart workers after editing
+these settings. Refer to {ref}`voice-conversation-controls`.
+
+Only final transcripts during an active conversation reach
+`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Applications
+that need all final transcripts retain that behavior by disabling conversation
+controls.
+
+## Local model-server CLI
+
+The `model-servers` sample launches only local server wrappers. Its default
+Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+Named `--models` selections are retired:
+
+- Replace `model_servers --models default` with `model_servers`.
+- Replace `model_servers --models vlm_llm_nim` with an independently deployed
+  NIM endpoint profile. Refer to {doc}`/guides/deploying-with-nim`.
+- Pass custom deployments by JSON path, such as
+  `model_servers --models ./yaml/models.my-stack.json`, instead of a bare name.
+  Custom deployments can no longer select `llm-nim`, `vlm-nim`, `stt-nim`, or
+  `tts-nim` through the local launcher.
+
+Before updating a checkout that ran the former NIM profile, stop it with the
+old checkout's `uv run model_servers --stop`. The updated local launcher no
+longer discovers the removed NIM-only ports. Stop the old stack before starting
+the separate NIM sample because they share client ports. Caches are not removed.
+
+`--help` now displays usage and exits. Unknown options are rejected instead of
+being silently ignored; `--dry-run` remains unsupported by `model-servers`.
+
 ## StreamKit image-capture dependencies
 
 Request-driven image capture uses LiveKit byte streams. Builds that previously
@@ -58,6 +179,9 @@ that require the former behavior can explicitly pass
 
 ## Operator-visible runtime changes
 
+- When `video_history_enabled` is omitted from the xr-render-demo worker YAML,
+  recorded-video perception is now enabled. Set it to `false` to opt out. See
+  {ref}`xr-render-recording-prerequisites` for the required recording settings.
 - `Subscribe.ALL` is deprecated because it names the pre-file-transfer set of
   data, audio, and video subscriptions rather than every available category.
   Use `Subscribe.REALTIME` for the same behavior. Files remain opt-in through
@@ -75,8 +199,9 @@ that require the former behavior can explicitly pass
   timeouts fail startup. Check the registration error in the hub logs rather
   than treating a running process as ready.
 - DeviceIOHub no longer falls back to embedded LiveKit development credentials.
-  Set `api_key` and `api_secret` in `device_io_hub.yaml`, or inject
-  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` through the environment.
+  The YAML loader generates a fresh pair when both values are missing or blank.
+  Set both `api_key` and `api_secret` in a private `device_io_hub.yaml`, or inject
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, to use a fixed pair.
 - Boolean service settings now require YAML booleans or the strings `true`,
   `false`, `yes`, `no`, `on`, `off`, `1`, or `0` (case-insensitive). Numeric
   `1`/`0`, null values, and arbitrary strings now fail at startup instead of

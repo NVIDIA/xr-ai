@@ -240,8 +240,11 @@ Package Contents
 
    The launcher spawns every member at once and waits for *all* of them to
    signal readiness before advancing to the next item in the stack sequence.
-   If any member exits before signaling ready the launcher shuts everything
-   down, just as it would for a serial process.
+   A member that signals readiness remains monitored until the whole group is
+   ready. An unexpected exit during that interval shuts everything down. A
+   successful ``persist`` process may exit after readiness only when
+   ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
+   outlive the launcher.
 
    Example::
 
@@ -356,7 +359,12 @@ Package Contents
    remains visible.
 
    After all processes are ready the launcher monitors them: if any exits,
-   all others are terminated and the launcher exits.  Pass
+   the remaining foreground processes are terminated. The launcher preserves
+   a positive child status, maps a signal to ``128 + signal``, and maps an
+   unexpected zero exit to 1.
+   Spawn errors, readiness failures, and unexpected monitored exits print a
+   concise summary with the constructed command and an existing configured
+   run-log directory when available. Pass
    ``exit_after_ready=True`` to return immediately once everything is ready
    instead — useful for launchers whose processes are all ``launch_mode="persist"``
    and should outlive the orchestrator (e.g. ``model-servers``).
