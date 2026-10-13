@@ -463,9 +463,15 @@ return path, and the same-origin <code class="docutils literal notranslate"><spa
   <span class="o">--</span><span class="n">config</span> <span class="n">services</span><span class="o">/</span><span class="n">device</span><span class="o">-</span><span class="n">io</span><span class="o">-</span><span class="n">hub</span><span class="o">/</span><span class="n">device_io_hub</span><span class="o">.</span><span class="n">yaml</span>
 </pre></div>
 </div>
-<p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> file. When none is found,
-configuration defaults are used. The loader generates a fresh LiveKit key and
-secret when both are missing or blank. <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and
+<p>Configuration comes from <code class="docutils literal notranslate"><span class="pre">device_io_hub.yaml</span></code> in the working directory;
+pass <code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">&lt;path&gt;</span></code> to select another file. A missing default file or an
+empty YAML document uses defaults and logs the fallback. An explicitly
+supplied missing file fails. Unknown top-level and <code class="docutils literal notranslate"><span class="pre">video_recording</span></code> keys
+are ignored with warnings naming the source file, section, unknown keys,
+and accepted keys. The top-level configuration and a non-null
+<code class="docutils literal notranslate"><span class="pre">video_recording</span></code> section must be YAML mappings.</p>
+<p>The loader generates a fresh LiveKit key and secret when both are missing or
+blank. <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_KEY</span></code> and
 <code class="docutils literal notranslate"><span class="pre">LIVEKIT_API_SECRET</span></code> override YAML values when a fixed pair is needed.
 <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/device_io_hub.yaml</span></code> is the reference copy documenting
 every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory.
