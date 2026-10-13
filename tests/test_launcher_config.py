@@ -265,11 +265,9 @@ def test_invalid_deployment_credentials_rejected(
         load_model_deployment(config)
 
 
-_MODEL_SERVERS_YAML = _ROOT / "model-server-samples" / "model-servers" / "yaml"
-
-
-def test_bundled_model_servers_profile_has_launcher_sdk_parity() -> None:
-    profile = _MODEL_SERVERS_YAML / "models.default.json"
+def test_model_deployment_has_launcher_sdk_parity(tmp_path) -> None:
+    profile = tmp_path / "models.json"
+    _write_profile(profile)
     deployment = load_deployment_profile(profile)
     models = load_models_config(profile)
     assert set(models.entries) == {"llm", "tts", "vlm", "embedding"}

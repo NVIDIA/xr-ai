@@ -16,7 +16,7 @@ walking you through the choices below. Refer to {doc}`skills` for how it works.
 
 The remainder of this quickstart is the manual path.
 
-Every sample follows the same pattern: **start the shared model stack, wait for
+Every sample follows the same pattern: **start the sample's model stack, wait for
 its launcher to report readiness and return, start the sample from the same
 terminal, then connect a client.** Once the sample is ready, any supported
 client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
@@ -31,81 +31,30 @@ with “Hey Agent”; one follow-up utterance within five seconds can omit the w
 phrase. Typed requests bypass the voice gate. Treat the reply as a
 conversational introduction rather than an exhaustive capability reference.
 
-## Model servers (shared AI services)
+(model-servers-shared-ai-services)=
+## Model servers for each sample
 
-Before the first launch, complete {ref}`docker-host-setup`, including on DGX
-Spark. Docker must be accessible without `sudo` from the launch session, and
-the `nvidia` runtime must be registered.
+Complete {ref}`docker-host-setup` before the first local launch, including on
+DGX Spark. Configure `HF_TOKEN` using {doc}`credentials`.
 
-`model-servers` starts the shared inference services used across demos and exits
-immediately — the services keep running in the background with weights hot.
-Start this once before running `simple-vlm-example`,
-`lab-instrument-monitoring`, `tea-making-sample`, or `xr-render-demo`, or
-whenever you want to pre-warm models:
+Each sample has a `model-servers/` convenience launcher for just the inference
+services it needs. The commands below start that stack, wait for healthy
+servers, and return to the same terminal. Models stay warm across agent
+restarts. Compatible independently deployed endpoints can also serve the
+sample; refer to {doc}`/guides/deploying-with-nim`.
 
-From the repository root, enter the model-server sample directory:
+GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). Use
+`--gpu-profile NAME` to select an explicitly tuned sample profile. Unsupported
+hardware or failed GPU inventory stops startup; refer to
+{doc}`requirements` for custom profiles. First launch downloads missing weights
+and can take tens of minutes.
 
-```bash
-cd model-server-samples/model-servers
-```
-
-:::{important}
-Before updating the checkout, stop the model servers using the old checkout
-and its selected configuration:
-
-```bash
-uv run model_servers --stop
-```
-
-For a custom deployment, use the cleanup commands supported by that old
-checkout to stop its services. The updated default launch plan cannot stop
-services omitted from its selection. Once using the selected-plan cleanup,
-pass the same `--models PATH` and explicit `--gpu-profile NAME` used at startup.
-
-Persisted vLLM processes or containers may otherwise keep serving the previous
-models and images even though the checked-in configuration now selects
-Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.
-:::
-
-```bash
-uv sync
-uv run model_servers
-```
-
-GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). The
-profiles are presets for common configurations; to run on a different GPU,
-refer to {doc}`Running on other GPUs </getting_started/requirements>`.
-Detection inventories every visible device. If `nvidia-smi` fails, returns
-malformed data, or reports a topology without an existing model-server
-configuration, startup stops with the detected per-GPU capacity instead of
-assuming a fallback.
-On first run each model downloads from Hugging Face (tens of GB; can take
-tens of minutes). On subsequent runs the containers restart in under a minute.
-
-The default starts Nemotron-3 Nano Omni (8108),
-Cosmos3 Nano Reasoner (8100), speaker ASR (8102), Pocket TTS (8105), and embeddings
-(8109). Use `--models PATH` only for a custom local deployment JSON. Starting
-a profile stops persisted servers outside it first and aborts if they cannot
-be stopped, avoiding GPU overcommit.
-
-For deployment using NVIDIA NIM, configure independently deployed endpoints.
-Refer to {doc}`/guides/deploying-with-nim`; no NIM model launcher is required.
-
-`HF_TOKEN` is required by default: without it the large first-run download
-can stall indefinitely. Refer to the
-{doc}`credentials guide </getting_started/credentials>` for how to set it, or
-pass `--allow-anonymous` to run without one.
-
-To stop the default deployment's managed model services when done:
-
-```bash
-uv run model_servers --stop
-```
-
-For a custom deployment, combine `--models PATH` with `--stop`; use the same
-`--gpu-profile NAME` if you selected one at startup. Cleanup targets only that
-managed launch plan, not every model-server port. Refer to
-{doc}`/components/ai-services` for service guards and configuration changes.
+Before switching samples, updating the checkout, or editing server settings,
+stop the current agent and its model stack with that sample's model command
+and `--stop`. Use the same explicit GPU profile, then start the destination
+stack and agent. This releases unused models and applies the current settings
+without keeping track of previous launches. Refer to
+{doc}`/guides/customizing-model-servers` for configuration and the full flow.
 
 ## Simple VLM example (vision Q&A over voice + text)
 
@@ -117,13 +66,13 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Its
-fixed `yaml/models.json` selects Cosmos3-Nano on port 8100 and Pocket TTS on
-port 8105; `voice_gate.yaml` requires speaker ASR on port 8102. From the sample directory, start the
+fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
+port 8100, and Pocket TTS on port 8105. From the sample directory, start the
 repository defaults first:
 
 ```bash
 cd agent-samples/simple-vlm-example
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers simple_vlm_example_model_servers
 ```
 
 The command may download model weights on its first run. Refer to the
@@ -215,11 +164,11 @@ final pre-gate transcript, foreground-turn, and Relay JSONL files under `artifac
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.
 
-Start the shared `model-servers` stack, which includes Pocket TTS:
+Start the sample's `model-servers/` stack, which includes Pocket TTS:
 
 ```bash
 cd agent-samples/lab-instrument-monitoring
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers lab_instrument_monitoring_model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then start the
@@ -263,11 +212,11 @@ and visual inference. Records are written as JSON Lines under the sample's
 `artifacts/` directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.
 
-Start the shared model services, including Pocket TTS:
+Start the sample model services, including Pocket TTS:
 
 ```bash
 cd agent-samples/tea-making-sample
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers tea_making_sample_model_servers
 ```
 
 Wait for the model launcher to report readiness and return, then launch the
@@ -321,9 +270,10 @@ dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
-worker calls those processes through Relay-managed native tools. The render
-agent runs a Nemotron-3-Nano-Omni-30B-A3B-Reasoning tool-calling loop over
-scene, tracking, spatial math, vision, and video-memory tools. Refer to the
+worker calls those processes through Relay-managed native tools. The voice
+runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
+tool-calling loop over scene, tracking, spatial math, vision, and video-memory
+tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
 map, agentic-loop details, and XR session lifecycle.
 
@@ -334,7 +284,7 @@ own model services.
 
 ```bash
 cd agent-samples/xr-render-demo
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers xr_render_demo_model_servers
 ```
 
 This exits immediately once all configured services are ready. Weights stay
@@ -413,10 +363,10 @@ The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 To stop the model servers when done:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers --stop
+uv run --project model-servers xr_render_demo_model_servers --stop
 ```
 
-XR Render uses the configured shared endpoints in `yaml/models.json`; it does
+XR Render uses the configured configured endpoints in `yaml/models.json`; it does
 not select or own model deployment profiles.
 
 ## Hub only (standalone)

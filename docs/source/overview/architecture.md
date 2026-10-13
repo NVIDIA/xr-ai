@@ -140,8 +140,10 @@ Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 
 - adapter behavior and model-specific wire details;
 - endpoint location, credentials, and health behavior;
-- optional deployment metadata for the shared model-server launcher. Consumer
-  profiles omit it and leave endpoint lifecycle to the operator.
+- optional deployment metadata. Consumer profiles omit it and leave endpoint
+  lifecycle to the operator. Sample-local model-server convenience launchers
+  declare their server selection separately and share runtime defaults under
+  `utils/xr-ai-model-server-stack/`.
 
 Tools are ordinary in-process `Tool` or `AsyncTool` objects. A tool can perform
 local work or call a typed service, but application agents retain ownership of

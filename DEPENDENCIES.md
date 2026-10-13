@@ -237,6 +237,19 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups: none
 - Commands: none
 
+#### `xr-ai-model-server-stack` — [`utils/xr-ai-model-server-stack/`](utils/xr-ai-model-server-stack/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `pyyaml>=6.0`
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+- Optional dependency groups: none
+- Commands: none
+
 #### `xr-ai-vad` — [`utils/xr-ai-vad/`](utils/xr-ai-vad/)
 
 - Python: `>=3.11,<3.15`
@@ -589,6 +602,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `lab_instrument_monitoring` → `main:run`
 
+#### `lab-instrument-monitoring-model-servers` — [`agent-samples/lab-instrument-monitoring/model-servers/`](agent-samples/lab-instrument-monitoring/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `lab_instrument_monitoring_model_servers` → `main:run`
+
 #### `lab-instrument-monitoring-worker` — [`agent-samples/lab-instrument-monitoring/worker/`](agent-samples/lab-instrument-monitoring/worker/)
 
 - Python: `>=3.11,<3.15`
@@ -624,6 +648,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `simple_vlm_example` → `main:run`
 
+#### `simple-vlm-example-model-servers` — [`agent-samples/simple-vlm-example/model-servers/`](agent-samples/simple-vlm-example/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `simple_vlm_example_model_servers` → `main:run`
+
 #### `simple-vlm-example-worker` — [`agent-samples/simple-vlm-example/worker/`](agent-samples/simple-vlm-example/worker/)
 
 - Python: `>=3.11,<3.15`
@@ -655,6 +690,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups: none
 - Commands:
   - `tea_making_sample` → `main:run`
+
+#### `tea-making-sample-model-servers` — [`agent-samples/tea-making-sample/model-servers/`](agent-samples/tea-making-sample/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `tea_making_sample_model_servers` → `main:run`
 
 #### `tea-making-worker` — [`agent-samples/tea-making-sample/worker/`](agent-samples/tea-making-sample/worker/)
 
@@ -714,6 +760,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr_render_demo_live_pose_matrix` → `xr_render_demo_eval.live_pose_matrix:run`
   - `xr_render_demo_live_smoke` → `xr_render_demo_eval.live_smoke:run`
 
+#### `xr-render-demo-model-servers` — [`agent-samples/xr-render-demo/model-servers/`](agent-samples/xr-render-demo/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `xr_render_demo_model_servers` → `main:run`
+
 #### `xr-render-scene` — [`agent-samples/xr-render-demo/scene/`](agent-samples/xr-render-demo/scene/)
 
 - Python: `>=3.11,<3.15`
@@ -765,19 +822,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `clef_flash_model` → `main:run`
 
-#### `model-servers` — [`model-server-samples/model-servers/`](model-server-samples/model-servers/)
-
-- Python: `>=3.11,<3.15`
-- Build dependencies:
-  - `hatchling`
-- Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
-  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
-- Optional dependency groups: none
-- Commands:
-  - `model_servers` → `main:run`
-
 ### Tests
 
 #### `xr-ai-tests` — [`tests/`](tests/)
@@ -794,6 +838,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
@@ -840,7 +885,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
-    - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
+    - `model-servers`
     - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)

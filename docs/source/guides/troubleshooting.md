@@ -24,7 +24,7 @@ exit codes, and process ownership.
 (dgx-spark-docker-socket-permission-denied-during-model-server-cleanup)=
 ### Docker socket permission denied during model-server cleanup
 
-**Symptom:** stopping `model_servers` prints a line like this for a selected port
+**Symptom:** stopping the sample's model-server command prints a line like this for a selected port
 whose ownership cannot be inspected:
 
 ```text
@@ -34,7 +34,7 @@ whose ownership cannot be inspected:
 It can then print `No persistent servers found running` before ending with:
 
 ```text
-model-servers: failed to stop persistent servers: one or more persistent servers are still running
+simple_vlm_example_model_servers: error: one or more configured model servers could not be stopped
 ```
 
 **Cause:** the login session lacks Docker socket access. This can affect DGX
@@ -67,11 +67,11 @@ headers.
 sudo apt install python3-dev
 ```
 
-This applies to the `model-server-samples/model-servers/yaml/spark/` profile.
+This applies to the `agent-samples/<sample>/model-servers/yaml/spark.yaml` profile.
 
 ### DGX Spark — CUDA allocation fails during a vLLM cold start
 
-**Symptom:** `model_servers` aborts while starting a vLLM service, often the
+**Symptom:** the sample's model-server command aborts while starting a vLLM service, often the
 embedding server after the larger services have started. The traceback reaches
 `MemorySnapshot.measure()`, then ends in `torch.cuda.mem_get_info()` or
 `cudaMemGetInfo` with a CUDA out-of-memory error. Another form ends in
@@ -231,7 +231,7 @@ NVIDIA runtime if needed, and check GPU access from a container. Retain the
 vLLM image pinned by the reviewed hardware profile.
 
 This applies to the
-`model-server-samples/model-servers/yaml/96G_blackwell/` profile.
+`agent-samples/<sample>/model-servers/yaml/96G_blackwell.yaml` profile.
 
 ### GPU service aborts with `cuDNN version incompatibility`
 
@@ -249,7 +249,7 @@ LD_LIBRARY_PATH contains incompatible version of cudnn.
 venv — the exact version that venv's PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.
 
-**Fix:** the launcher handles this automatically — `model_servers` or
+**Fix:** the launcher handles this automatically — the sample's model-server command or
 `xr_render_demo` strip any `libcudnn`-bearing directory from each child's
 `LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service **directly**
@@ -574,14 +574,13 @@ persistence*.
 
 ```bash
 cd xr-ai
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
 ```
 
-For a custom deployment, add the same `--models PATH` and any explicit
-`--gpu-profile NAME` used at launch. This stops the selected managed services,
-not every model server on the host. Stop before changing the old configuration
-so its service ports can still be resolved. A recognized matching service on
-a selected port can be stopped even if another invocation started it.
+Use the current sample's own model command with `--stop` and the same explicit
+`--gpu-profile NAME` used at launch. Stop before switching samples, updating the
+checkout, or changing the old configuration. Refer to
+{doc}`/guides/customizing-model-servers` for the flow.
 
 For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
 group, waits up to 20 s, then sends `SIGKILL`. Pocket TTS remains in that group
@@ -594,7 +593,7 @@ success if server ownership cannot be verified or any target remains running.
 
 ### First run downloads models silently
 
-**Symptom:** `uv run --project model-server-samples/model-servers model_servers`
+**Symptom:** `uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers`
 appears to hang at startup the first time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at
@@ -602,6 +601,6 @@ the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 
 **Fix:** wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
-downloads (model-server runs started with `--allow-anonymous`) are rate-limited and can
+downloads are rate-limited and can
 stall indefinitely; set `HF_TOKEN` and restart. Refer to
 {doc}`Credentials </getting_started/credentials>`.

@@ -17,8 +17,8 @@ sample's design and operational details.
 The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and shared endpoints for
-Cosmos3 Nano and Pocket TTS. Its voice-gate YAML requires speaker ASR on 8102.
-Start those services together with the shared model-server stack.
+Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+the sample's model-server stack.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -60,8 +60,8 @@ Before announcing readiness, the worker performs a streaming VLM request with
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. Required speaker ASR also gates worker readiness;
-TTS health is not polled automatically. Start the shared stack before the sample.
+call a health endpoint first. STT and TTS do not gate worker startup; start the
+sample's model-server stack before the sample so speech requests can succeed.
 
 ## Configuration
 
@@ -91,7 +91,7 @@ from the shell's current directory.
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
 For a checkpoint, port, GPU, or model-runtime change, refer to
-{doc}`/guides/customizing-model-servers`, update the shared stack, stop that
+{doc}`/guides/customizing-model-servers`, update the sample model stack, stop that
 persistent stack, and start it again before restarting this sample.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
@@ -99,8 +99,7 @@ fields, checked-in values, and adjacent YAML comments.
 
 After connecting, say `Hey agent, let's start talking`, then ask questions
 without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
-controls work with required speaker ASR by default, or explicitly configured
-ordinary STT, including native NIM speech. Refer to
+controls work with the sample's existing STT endpoint, including NIM. Refer to
 {ref}`voice-conversation-controls` for paused phrases and the legacy wake mode.
 
 ## Opt-in session capture

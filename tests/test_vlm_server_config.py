@@ -10,17 +10,17 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers_model_servers import profile_config
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SERVER_MAIN = _REPO_ROOT / "services" / "vlm-server" / "vlm_server" / "__main__.py"
 _SERVER_YAML = _REPO_ROOT / "services" / "vlm-server" / "vlm_server.yaml"
 _SAMPLES = _REPO_ROOT / "agent-samples"
-_MODEL_PROFILES = _REPO_ROOT / "model-server-samples" / "model-servers" / "yaml"
 _LOCAL_VLM_CONFIGS = (
     _SERVER_YAML,
-    _MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml",
-    _MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml",
-    _MODEL_PROFILES / "spark" / "vlm_server.yaml",
+    profile_config("vlm_server", "96G_blackwell"),
+    profile_config("vlm_server", "dual_48G_ada"),
+    profile_config("vlm_server", "spark"),
 )
 
 
@@ -86,15 +86,15 @@ def test_hardware_profiles_forward_admission_and_explicit_kv_cache(
     expected_spark_uma: bool,
 ) -> None:
     server = _load_server_module()
-    profile_config = _MODEL_PROFILES / profile / "vlm_server.yaml"
-    cfg = yaml.safe_load(profile_config.read_text())
+    config_path = profile_config("vlm_server", profile)
+    cfg = yaml.safe_load(config_path.read_text())
     captured = {}
 
     monkeypatch.setattr(server, "setup_logging", lambda _name: None)
     monkeypatch.setattr(
         server,
         "load_config",
-        lambda: (cfg, profile_config.parent, None),
+        lambda: (cfg, config_path.parent, None),
     )
     monkeypatch.setattr(
         server,
@@ -128,13 +128,13 @@ def test_all_local_profiles_select_cosmos3_reasoner_runtime() -> None:
 
 def test_hardware_profiles_pin_reasoner_cache_with_admission_limits() -> None:
     blackwell = yaml.safe_load(
-        (_MODEL_PROFILES / "96G_blackwell" / "vlm_server.yaml").read_text()
+        (profile_config("vlm_server", "96G_blackwell")).read_text()
     )
     dual_ada = yaml.safe_load(
-        (_MODEL_PROFILES / "dual_48G_ada" / "vlm_server.yaml").read_text()
+        (profile_config("vlm_server", "dual_48G_ada")).read_text()
     )
     spark = yaml.safe_load(
-        (_MODEL_PROFILES / "spark" / "vlm_server.yaml").read_text()
+        (profile_config("vlm_server", "spark")).read_text()
     )
 
     for config, expected_utilization in (

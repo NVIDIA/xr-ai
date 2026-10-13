@@ -14,8 +14,8 @@ The workflow keeps state transitions deterministic: the VLM describes the
 current view, the observation LLM judges whether that description satisfies the
 current step, and guarded commits count any required confirmations. Only an
 explicit user command advances the procedure. The sample launches its
-application services and reuses speaker ASR, Pocket TTS, Nemotron-3 Nano Omni, and
-embedding endpoints from the shared model stack.
+application services and reuses STT, Pocket TTS, Nemotron-3 Nano Omni, and
+embedding endpoints from the sample's local model stack.
 
 ## Configure
 
@@ -48,11 +48,11 @@ every checked-in field and example value.
 
 ## Run
 
-Run all commands from `agent-samples/tea-making-sample/`. Start the shared
+Run all commands from `agent-samples/tea-making-sample/`. Start the sample’s local
 models first:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers tea_making_sample_model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -92,8 +92,8 @@ talking” to close the conversation. The optional event viewer is available at
 `http://127.0.0.1:8092` by default, and durable output is written below
 `artifacts/`.
 
-The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
+The local models remain running after the sample stops. From this directory,
+stop them with `uv run --project model-servers tea_making_sample_model_servers --stop`.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="run-it"></a><a id="foreground-behavior"></a>

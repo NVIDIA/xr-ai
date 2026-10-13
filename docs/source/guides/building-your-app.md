@@ -192,19 +192,15 @@ uv --config-file ../../uv.toml sync
 uv --config-file ../../uv.toml sync --project worker
 ```
 
-The shared model launcher requires `HF_TOKEN` by default. Configure it through
-one of the sources in {doc}`/getting_started/credentials` before starting the
-copied VLM application. If the weights are already cached or unauthenticated
-rate limits are acceptable, append `--allow-anonymous` to the `model_servers`
-command below.
-
-The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
+The model launcher requires `HF_TOKEN`. Configure it through one of the
+sources in {doc}`/getting_started/credentials` before starting the application.
+The copied application reuses STT, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:
 
 ```bash
 uv --config-file ../../uv.toml run \
-  --project ../../model-server-samples/model-servers model_servers
+  --project ../../agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
 ```
 
 Then start the application from the same directory:

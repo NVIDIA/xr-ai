@@ -12,6 +12,31 @@ For custom XR Render, NIM consumer, or shared model profiles, move any settings
 from `agent_llm` you need into `llm`, then remove the old entry. The NIM smoke
 check rejects the old entry.
 
+## Sample-local model-server launchers
+
+The common `model-server-samples/model-servers` project is replaced by a
+`model-servers/` project inside each agent sample. For Simple VLM, run from
+`agent-samples/simple-vlm-example/`:
+
+```bash
+uv run --project model-servers simple_vlm_example_model_servers
+uv run --project model-servers simple_vlm_example_model_servers --stop
+```
+
+Other samples have corresponding `<sample>_model_servers` commands. Keep
+`--gpu-profile NAME` for explicit hardware selection. `--models` and
+`--allow-anonymous` are removed: the sample launcher declares its servers,
+and local stacks require `HF_TOKEN`.
+
+Shared defaults move to `utils/xr-ai-model-server-stack/yaml/`; sample-specific
+GPU overrides live under `agent-samples/<sample>/model-servers/yaml/`.
+Stop the old stack with its old checkout's command before updating. Then start
+the desired sample's stack. Refer to {doc}`/guides/customizing-model-servers`.
+
+The remaining entries describe earlier release transitions and their commands.
+For the current model-server workflow, follow the sample-local launcher migration
+above.
+
 ## Selected model-server cleanup
 
 `model_servers --stop` now stops only managed services in the selected launch

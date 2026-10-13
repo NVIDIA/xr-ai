@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Shared GPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.
+# Shared defaults for sample convenience stacks. Standalone defaults live in services/.
 voice: bill_boerst
 language: english
-device: cuda
-cuda_visible_devices: "0"
 port: 8105
 startup_timeout_s: 600
-model_cache: ../../../../models
+model_cache: ../../../models
+device: cuda

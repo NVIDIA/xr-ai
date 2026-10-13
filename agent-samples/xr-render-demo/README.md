@@ -11,8 +11,8 @@ and modify scene objects, tracking, spatial state, and recorded visual context
 through native `xr-ai-tools` functions.
 
 The sample launches DeviceIOHub, the CloudXR runtime, the scene and capability
-services, and its worker. It reuses speaker ASR, Pocket TTS, Nemotron-3 Nano Omni, and
-Cosmos3 Nano Reasoner from the shared model stack. The default client is the
+services, and its worker. It reuses STT, Pocket TTS, Nemotron-3 Nano Omni, and
+Cosmos3 Nano Reasoner from the sample's local model stack. The default client is the
 browser-based Web-XR experience.
 
 ## Prerequisites
@@ -58,11 +58,11 @@ every checked-in field and example value.
 
 ## Run
 
-Run all commands from `agent-samples/xr-render-demo/`. Start the shared models
+Run all commands from `agent-samples/xr-render-demo/`. Start the local models
 first:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers xr_render_demo_model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -92,8 +92,8 @@ With `--capture`, each connection is recorded under
 `~/.local/share/xr-ai/captures/xr-render-demo/`. The normal command writes no
 capture.
 
-The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
+The local models remain running after the sample stops. From this directory,
+stop them with `uv run --project model-servers xr_render_demo_model_servers --stop`.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="file-map"></a><a id="composition-chain"></a><a id="how-to-extend"></a>

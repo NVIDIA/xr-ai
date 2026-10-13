@@ -1,27 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the shared, profile-driven model-server stack."""
+"""Sample model-server composition, scoped lifecycle, and service runtime tests."""
 from __future__ import annotations
 
 import importlib.util
-import json
 import os.path
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
-from xr_ai_vllm import _docker
+from _helpers_model_servers import profile_config
+from xr_ai_model_server_stack import _stack
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_MAIN_PATH = _REPO_ROOT / "model-server-samples/model-servers/main.py"
-_SPEC = importlib.util.spec_from_file_location("model_servers_main", _MAIN_PATH)
-assert _SPEC and _SPEC.loader
-_model_servers = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_model_servers)
-
 
 _OMNI_PATH = (
     _REPO_ROOT
@@ -50,381 +43,6 @@ _EMBEDDING_SPEC = importlib.util.spec_from_file_location(
 assert _EMBEDDING_SPEC and _EMBEDDING_SPEC.loader
 _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
-
-
-@pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
-def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, gpu_profile) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: gpu_profile)
-
-    processes, credentials = _model_servers._build_processes()
-
-    assert [process.name for process in processes] == [
-        "speaker-stt", "tts", "omni", "vlm", "embedding",
-    ]
-    assert [process.port for process in processes] == [8102, 8105, 8108, 8100, 8109]
-    tts = next(process for process in processes if process.name == "tts")
-    assert tts.project == "../../services/pocket-tts"
-    assert tts.command == "pocket_tts_server"
-    assert Path(tts.config).name == "pocket_tts_server.yaml"
-    assert tts.launch_mode == "persist"
-    assert credentials == ()
-
-
-def test_explicit_gpu_profile_bypasses_detection(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_detection() -> str:
-        raise AssertionError("automatic detection must not run for an explicit profile")
-
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", fail_detection)
-
-    processes, _ = _model_servers._build_processes(gpu_profile="spark")
-
-    expected_dir = _REPO_ROOT / "model-server-samples/model-servers/yaml/spark"
-    assert all(Path(process.config).parent == expected_dir for process in processes)
-
-
-def test_service_catalog_does_not_duplicate_yaml_ports() -> None:
-    assert all(len(service) == 3 for service in _model_servers._MODEL_SERVICES.values())
-
-
-@pytest.mark.parametrize(
-    ("body", "expected"),
-    [
-        ("port: 8100\n", 8100),
-        ("http_port: 9010\n", 9010),
-        ("port: '8109' # API\n", 8109),
-        ("host: 0.0.0.0\n", None),
-    ],
-)
-def test_read_service_port_uses_top_level_yaml(
-    tmp_path: Path, body: str, expected: int | None,
-) -> None:
-    config = tmp_path / "service.yaml"
-    config.write_text(body, encoding="utf-8")
-
-    assert _model_servers._read_service_port(config) == expected
-
-
-@pytest.mark.parametrize("value", ["not-a-port", "0", "65536"])
-def test_read_service_port_rejects_invalid_values(
-    tmp_path: Path, value: str,
-) -> None:
-    config = tmp_path / "service.yaml"
-    config.write_text(f"port: {value}\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="port"):
-        _model_servers._read_service_port(config)
-
-
-@pytest.mark.parametrize(
-    ("service", "config_name", "gpu"),
-    [
-        ("embedding", "embedding_server.yaml", "0"),
-        ("speaker-stt", "speaker_stt.yaml", "1"),
-    ],
-)
-def test_dual_ada_configs_follow_profile_gpu_layout(
-    monkeypatch: pytest.MonkeyPatch,
-    service: str,
-    config_name: str,
-    gpu: str,
-) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-
-    processes, _ = _model_servers._build_processes()
-    process = next(p for p in processes if p.name == service)
-    config_path = _REPO_ROOT / "model-server-samples/model-servers" / str(process.config)
-
-    assert config_path.name == config_name
-    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
-
-
-@pytest.mark.parametrize(
-    "profile_path",
-    sorted(
-        (_REPO_ROOT / "model-server-samples/model-servers/yaml").glob(
-            "*/nemotron_omni_llm_server*.yaml"
-        )
-    ),
-)
-def test_omni_profiles_select_supported_vllm_configuration(profile_path: Path) -> None:
-    config = yaml.safe_load(profile_path.read_text())
-    expected_utilization = {
-        "96G_blackwell": 0.35,
-        "dual_48G_ada": 0.78,
-        "spark": 0.25,
-    }
-
-    assert config["vllm_backend"] == "docker"
-    assert config["vllm_image"] == "nvcr.io/nvidia/vllm:26.09-py3"
-    assert "extra_pip" not in config
-    assert config["gpu_memory_utilization"] == expected_utilization[
-        profile_path.parent.name
-    ]
-    assert config["kv_cache_memory_bytes"] == 2147483648
-    assert config["max_model_len"] == 32768
-    if profile_path.parent.name == "spark":
-        assert config["max_num_seqs"] == 4
-        assert "moe_backend" not in config
-        assert config["spark_uma"] is True
-    elif profile_path.parent.name == "dual_48G_ada":
-        assert "moe_backend" not in config
-        assert "spark_uma" not in config
-    elif profile_path.parent.name == "96G_blackwell":
-        assert "moe_backend" not in config
-        assert "spark_uma" not in config
-    else:
-        assert "moe_backend" not in config
-        assert "spark_uma" not in config
-
-
-def _repository_yaml_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    for path in root.rglob("*.yaml"):
-        relative_parts = path.relative_to(root).parts
-        if relative_parts[:1] == ("apps",) or ".venv" in relative_parts:
-            continue
-        paths.append(path)
-    return sorted(paths)
-
-
-def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
-    configured_images: dict[Path, str] = {}
-    for path in _repository_yaml_paths(_REPO_ROOT):
-        config = yaml.safe_load(path.read_text())
-        if isinstance(config, dict) and "vllm_image" in config:
-            configured_images[path] = config["vllm_image"]
-
-    assert configured_images
-    assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
-
-
-def test_repository_yaml_paths_exclude_apps_and_virtual_environments(
-    tmp_path: Path,
-) -> None:
-    included = tmp_path / "services" / "server.yaml"
-    nested_apps = tmp_path / "services" / "apps" / "helper.yaml"
-    app = tmp_path / "apps" / "private-app" / "config.yaml"
-    virtualenv = tmp_path / "services" / "worker" / ".venv" / "config.yaml"
-    for path in (included, nested_apps, app, virtualenv):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("enabled: true\n")
-
-    assert _repository_yaml_paths(tmp_path) == sorted((included, nested_apps))
-
-
-def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) -> None:
-    stopped: list[tuple[str, int]] = []
-    monkeypatch.setattr(
-        _model_servers,
-        "stop_persistent_servers",
-        lambda services: stopped.extend(services) or True,
-    )
-
-    processes, _ = _model_servers._build_processes(gpu_profile="dual_48G_ada")
-    _model_servers._stop_models(processes)
-
-    assert set(stopped) == {
-        ("speaker-stt", 8102),
-        ("tts", 8105),
-        ("omni", 8108),
-        ("vlm", 8100),
-        ("embedding", 8109),
-    }
-
-
-def test_stop_fails_when_any_service_remains(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        _model_servers,
-        "stop_persistent_servers",
-        lambda _services: False,
-    )
-
-    with pytest.raises(SystemExit, match="one or more persistent servers"):
-        _model_servers._stop_models([])
-
-
-@pytest.mark.parametrize(
-    ("argv", "expected"),
-    [
-        ([], None),
-        (["--models", "./models.custom.json"], Path("models.custom.json")),
-    ],
-)
-def test_cli_selects_requested_profile(
-    monkeypatch: pytest.MonkeyPatch,
-    argv: list[str],
-    expected: Path | None,
-) -> None:
-    selected: list[Path | None] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        _model_servers, "_build_processes",
-        lambda selection, _gpu_profile=None: (selected.append(selection) or [], ()),
-    )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
-
-    _model_servers.run()
-
-    assert selected == [expected]
-
-
-def test_cli_passes_explicit_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    selected: list[tuple[Path | None, str | None]] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        _model_servers,
-        "_build_processes",
-        lambda selection, gpu_profile=None: (
-            selected.append((selection, gpu_profile)) or [], ()
-        ),
-    )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        sys, "argv", ["model_servers", "--gpu-profile", "dual_48G_ada"],
-    )
-
-    _model_servers.run()
-
-    assert selected == [(None, "dual_48G_ada")]
-
-
-def test_invalid_gpu_profile_name_is_rejected() -> None:
-    with pytest.raises(
-        _model_servers.argparse.ArgumentTypeError, match="unknown GPU profile",
-    ):
-        _model_servers._gpu_profile_name("does-not-exist")
-
-
-def test_gpu_profile_discovery_tolerates_missing_yaml_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
-
-    assert _model_servers._gpu_profile_names() == ()
-
-
-def test_custom_gpu_profile_must_contain_every_selected_service_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    (tmp_path / "yaml" / "custom").mkdir(parents=True)
-    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
-    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
-
-    with pytest.raises(ValueError, match="profile 'custom' is incomplete.*speaker_stt"):
-        _model_servers._build_processes(profile, "custom")
-
-
-def test_selected_service_config_must_declare_http_port(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = tmp_path / "yaml" / "custom" / "pocket_tts_server.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("host: 0.0.0.0\n", encoding="utf-8")
-    (config.parent / "speaker_stt.yaml").write_text("host: 127.0.0.1\nport: 8102\n")
-    profile = _REPO_ROOT / "model-server-samples/model-servers/yaml/models.default.json"
-    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
-
-    with pytest.raises(
-        ValueError,
-        match=r"pocket_tts_server\.yaml: service config must declare port or http_port",
-    ):
-        _model_servers._build_processes(profile, "custom")
-
-
-def test_cli_reports_gpu_inventory_error_without_traceback(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
-) -> None:
-    def fail_inventory(*_args, **_kwargs):
-        raise _model_servers.GPUInventoryError("GPU memory telemetry unavailable")
-
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_build_processes", fail_inventory)
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
-
-    with pytest.raises(SystemExit) as error:
-        _model_servers.run()
-
-    assert error.value.code == 2
-    stderr = capsys.readouterr().err
-    assert "model_servers: error: GPU memory telemetry unavailable" in stderr
-    assert "--gpu-profile NAME" in stderr
-    assert "Traceback" not in stderr
-
-
-@pytest.mark.parametrize("service", ["no-such-service", "llm-nim", "vlm-nim", "stt-nim", "tts-nim"])
-def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch, service) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-    profile = tmp_path / "models.custom.json"
-    profile.write_text(json.dumps({"models": {"vision": {
-        "adapter": {"preset": "cosmos_vlm"},
-        "endpoint": {"base_url": "http://localhost:8100"},
-        "deployment": {"ownership": "managed", "service": service},
-    }}}), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="unknown services"):
-        _model_servers._build_processes(profile)
-
-
-def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
-    profile = tmp_path / "models.custom.json"
-    profile.write_text(json.dumps({"models": {"vision": {
-        "adapter": {"preset": "cosmos_vlm"},
-        "endpoint": {"base_url": "http://localhost:8100"},
-        "deployment": {"ownership": "managed", "service": "vlm"},
-    }}}), encoding="utf-8")
-
-    processes, _ = _model_servers._build_processes(profile)
-
-    assert [process.name for process in processes] == ["vlm"]
-    # Config variants key off the profile filename stem; a custom name has
-    # no variants and falls back to the service defaults.
-    assert Path(processes[0].config) == (
-        _REPO_ROOT
-        / "model-server-samples/model-servers/yaml/dual_48G_ada/vlm_server.yaml"
-    )
-
-
-def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    required: list[str] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        _model_servers, "require_credentials",
-        lambda name, **kw: required.append(name),
-    )
-    monkeypatch.setattr(
-        _model_servers, "_build_processes",
-        lambda _selection, _gpu_profile=None: ([], ("CUSTOM_API_KEY",)),
-    )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "custom.json"])
-
-    _model_servers.run()
-
-    assert required == ["HF_TOKEN", "CUSTOM_API_KEY"]
-
-
-def test_cli_start_does_not_stop_unselected_services(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    started: list[bool] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
-    monkeypatch.setattr(
-        _model_servers, "_build_processes",
-        lambda _selection, _gpu_profile=None: ([], ()),
-    )
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
-
-    _model_servers.run()
-    assert started == [True]
 
 
 @pytest.mark.parametrize("moe_backend", ["cutlass", None])
@@ -549,14 +167,7 @@ def test_omni_profiles_forward_admission_and_explicit_kv_cache(
     expected_spark_uma: bool,
 ) -> None:
     captured: dict[str, object] = {}
-    config_path = (
-        _REPO_ROOT
-        / "model-server-samples"
-        / "model-servers"
-        / "yaml"
-        / profile
-        / "nemotron_omni_llm_server.yaml"
-    )
+    config_path = profile_config("nemotron_omni_llm_server", profile)
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_omni, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(
@@ -625,9 +236,7 @@ def test_spark_embedding_enables_uma_cold_start_safeguards(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
-    config_path = (
-        _REPO_ROOT / "model-server-samples/model-servers/yaml/spark/embedding_server.yaml"
-    )
+    config_path = profile_config("embedding_server", "spark")
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(
@@ -650,116 +259,155 @@ def test_spark_embedding_enables_uma_cold_start_safeguards(
 
 def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
     for profile in ("96G_blackwell", "dual_48G_ada"):
-        config_path = (
-            _REPO_ROOT
-            / "model-server-samples/model-servers/yaml"
-            / profile
-            / "embedding_server.yaml"
-        )
+        config_path = profile_config("embedding_server", profile)
         config = yaml.safe_load(config_path.read_text())
         assert "spark_uma" not in config
 
 
 def test_embedding_profiles_retain_fractional_memory_budget() -> None:
     for profile in ("spark", "96G_blackwell", "dual_48G_ada"):
-        config_path = (
-            _REPO_ROOT
-            / "model-server-samples"
-            / "model-servers"
-            / "yaml"
-            / profile
-            / "embedding_server.yaml"
-        )
+        config_path = profile_config("embedding_server", profile)
         config = yaml.safe_load(config_path.read_text())
         assert config["gpu_memory_utilization"] == 0.08
         assert "kv_cache_memory_bytes" not in config
 
 
-def test_stop_uses_same_selection_without_start_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_build_processes", lambda models, gpu: (calls.append((models, gpu)) or [], ()))
-    monkeypatch.setattr(_model_servers, "_stop_models", lambda processes: calls.append(processes))
-    monkeypatch.setattr(_model_servers, "require_credentials",
-                        lambda *_a, **_k: pytest.fail("stop needs no credentials"))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "custom.json",
-                                      "--gpu-profile", "spark", "--stop"])
-
-    _model_servers.run()
-
-    assert calls == [(Path("custom.json"), "spark"), []]
 
 
-@pytest.mark.parametrize("service", ["stt", "agent-llm", "vlm"])
-def test_custom_stop_uses_only_selected_managed_yaml_port(tmp_path, monkeypatch, service):
-    configs = tmp_path / "yaml" / "custom"
-    configs.mkdir(parents=True)
-    config_base = _model_servers._MODEL_SERVICES[service][2]
-    (configs / f"{config_base}.yaml").write_text("port: 19001\n", encoding="utf-8")
-    (configs / "embedding_server.yaml").write_text("port: 19002\n", encoding="utf-8")
-    (configs / "pocket_tts_server.yaml").write_text("port: 19004\n", encoding="utf-8")
-    other = tmp_path / "yaml" / "other"
-    other.mkdir()
-    (other / "vlm_server.yaml").write_text("port: 19003\n", encoding="utf-8")
-    profile = tmp_path / "models.selected.json"
-    profile.write_text(json.dumps({"models": {
-        "selected": {"adapter": {}, "endpoint": {},
-                     "deployment": {"ownership": "managed", "service": service}},
-        "external": {"adapter": {}, "endpoint": {"base_url": "http://localhost:8103"},
-                     "deployment": {"ownership": "external", "service": "embedding"}},
-        "reused": {"adapter": {}, "endpoint": {},
-                   "deployment": {"ownership": "reused", "service": "tts"}},
-    }}), encoding="utf-8")
-    # Excluded services and another hardware profile have real configs;
-    # the selected plan must not collect any of their ports.
-    monkeypatch.setattr(_model_servers, "_BASE", tmp_path)
-    targets = []
-    monkeypatch.setattr(_model_servers, "stop_persistent_servers",
-                        lambda selected: targets.extend(selected) or True)
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials",
-                        lambda *_a, **_k: pytest.fail("stop needs no credentials"))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", str(profile),
-                                      "--gpu-profile", "custom", "--stop"])
-    _model_servers.run()
-    assert targets == [(service, 19001)]
+_SAMPLES = {
+    "simple-vlm-example": ("stt", "tts", "vlm"),
+    "lab-instrument-monitoring": ("stt", "tts", "omni", "vlm"),
+    "tea-making-sample": ("stt", "tts", "omni", "embedding"),
+    "xr-render-demo": ("stt", "tts", "omni", "vlm"),
+}
 
 
-def test_stop_preserves_existing_unknown_listener_guard(monkeypatch):
-    child = subprocess.Popen([sys.executable, "-u", "-c",
-                              "import signal; print('ready',flush=True); signal.pause()"],
-                             stdout=subprocess.PIPE, text=True)
-    try:
-        assert child.stdout.readline().strip() == "ready"
-        monkeypatch.setattr(_docker, "container_on_port_checked", lambda port: (None, True))
-        monkeypatch.setattr(_docker, "pid_on_port_checked", lambda port: (child.pid, True, True))
-        selected = [_model_servers.Process("vlm", ".", "vlm_server", port=19001)]
-        with pytest.raises(SystemExit, match="one or more persistent servers"):
-            _model_servers._stop_models(selected)
-        assert child.poll() is None
-    finally:
-        if child.poll() is None:
-            child.kill()
-        child.wait(timeout=10)
+@pytest.mark.parametrize("sample,services", _SAMPLES.items())
+@pytest.mark.parametrize("profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path, sample, services, profile):
+    base = _REPO_ROOT / "agent-samples" / sample / "model-servers"
+    spec = importlib.util.spec_from_file_location("sample_models", base / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._SERVICES == services
+    configs = _stack._configs(base, module._SERVICES, profile)
+    processes = _stack._processes(configs, tmp_path, _REPO_ROOT)
+    assert tuple(process.name for process in processes) == services
+    for process in processes:
+        assert (Path(process.project) / "pyproject.toml").is_file()
+        assert process.launch_mode == "persist"
+        config = yaml.safe_load(Path(process.config).read_text())
+        assert config["model_cache"] == str((_REPO_ROOT / "models").resolve())
+        assert process.port == config["port"]
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop must not require credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_k: pytest.fail("stop must not launch"))
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("explicit profile must bypass detection"))
+    _stack._run(base, services, stop=True, gpu_profile=profile)
+    assert stopped == [(name, configs[name]["port"]) for name in services]
 
 
-@pytest.mark.parametrize(("argv", "message", "code"), [
-    (["--models", "default"], "run model_servers without --models", 2),
-    (["--models", "vlm_llm_nim"], "configure independently deployed NIM endpoints", 2),
-    (["--dry-run"], "unrecognized arguments", 2),
-    (["--unknown"], "unrecognized arguments", 2),
-    (["--help"], "Custom local deployment JSON", 0),
+def test_start_materializes_configs_through_readiness_and_does_not_stop(monkeypatch):
+    base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: "spark")
+    credentials = []
+    monkeypatch.setattr(_stack, "require_credentials", lambda name: credentials.append(name))
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: pytest.fail("start must not sweep servers"))
+    launched = []
+    def launch(processes, root, *, exit_after_ready):
+        assert root == base
+        assert exit_after_ready is True
+        assert [p.name for p in processes] == ["stt", "tts", "vlm"]
+        for process in processes:
+            assert Path(process.config).is_file()
+            launched.append(Path(process.config))
+    monkeypatch.setattr(_stack, "run_stack", launch)
+    _stack._run(base, _SAMPLES["simple-vlm-example"], stop=False, gpu_profile=None)
+    assert credentials == ["HF_TOKEN"]
+    assert launched and not any(path.exists() for path in launched)
+
+
+def test_stop_failure_is_reported(monkeypatch):
+    base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: False)
+    with pytest.raises(RuntimeError, match="could not be stopped"):
+        _stack._run(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="spark")
+
+
+def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text('stt:\n  port: 9213\n  model_cache: ../cache\n')
+    config = _stack._configs(tmp_path, ("stt",), "custom")["stt"]
+    assert config["model_cache"] == str(tmp_path / "cache")
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    _stack._run(tmp_path, ("stt",), stop=True, gpu_profile="custom")
+    assert stopped == [("stt", 9213)]
+
+
+@pytest.mark.parametrize("body", [
+    "{}", "stt: []", "stt: {port: 0}", "stt: {port: true}",
+    "stt: {port: 65536}", "stt: [", "stt: {model_cache: null}",
 ])
-def test_cli_help_and_invalid_options_do_not_touch_servers(monkeypatch, capsys, argv, message, code):
-    def unexpected(*args, **kwargs):
-        pytest.fail("argument handling must not inspect GPUs, credentials, or servers")
+def test_invalid_profile_fails_before_any_lifecycle_action(tmp_path, body):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text(body)
+    with pytest.raises(ValueError):
+        _stack._configs(tmp_path, ("stt",), "custom")
 
-    for name in ("detect_gpu_config", "_build_processes", "require_credentials",
-                 "_stop_models", "run_stack"):
-        monkeypatch.setattr(_model_servers, name, unexpected)
-    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
+
+def test_unknown_profile_reports_choices():
+    base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
+    with pytest.raises(ValueError, match="unknown GPU profile.*available"):
+        _stack._configs(base, _SAMPLES["simple-vlm-example"], "../spark")
+
+
+@pytest.mark.parametrize("sample", _SAMPLES)
+@pytest.mark.parametrize("argv,code", [(["--help"], 0), (["--models", "x"], 2), (["--allow-anonymous"], 2)])
+def test_cli_help_and_removed_options_do_not_touch_servers(monkeypatch, sample, argv, code):
+    spec = importlib.util.spec_from_file_location(
+        "sample_models", _REPO_ROOT / "agent-samples" / sample / "model-servers/main.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "_run", lambda *_a, **_k: pytest.fail("must not touch services"))
+    monkeypatch.setattr(sys, "argv", ["models", *argv])
     with pytest.raises(SystemExit) as error:
-        _model_servers.run()
+        module.run()
     assert error.value.code == code
-    captured = capsys.readouterr()
-    assert message in captured.out + captured.err
+
+
+def _repository_yaml_paths(root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for path in root.rglob("*.yaml"):
+        relative_parts = path.relative_to(root).parts
+        if relative_parts[:1] == ("apps",) or ".venv" in relative_parts:
+            continue
+        paths.append(path)
+    return sorted(paths)
+
+
+def test_all_shipped_vllm_images_track_dispatcher_default() -> None:
+    configured_images: dict[Path, str] = {}
+    for path in _repository_yaml_paths(_REPO_ROOT):
+        config = yaml.safe_load(path.read_text())
+        if isinstance(config, dict) and "vllm_image" in config:
+            configured_images[path] = config["vllm_image"]
+
+    assert configured_images
+    assert set(configured_images.values()) == {_nano.DEFAULT_IMAGE}
+
+
+def test_repository_yaml_paths_exclude_apps_and_virtual_environments(
+    tmp_path: Path,
+) -> None:
+    included = tmp_path / "services" / "server.yaml"
+    nested_apps = tmp_path / "services" / "apps" / "helper.yaml"
+    app = tmp_path / "apps" / "private-app" / "config.yaml"
+    virtualenv = tmp_path / "services" / "worker" / ".venv" / "config.yaml"
+    for path in (included, nested_apps, app, virtualenv):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("enabled: true\n")
+
+    assert _repository_yaml_paths(tmp_path) == sorted((included, nested_apps))

@@ -20,9 +20,9 @@ runs alongside as its own stream; neither stack passes through the other.
 Prerequisites
 -------------
 All model services must already be running before this demo starts. The sample
-never starts or stops them. The shared model stack includes Pocket TTS:
+never starts or stops them. The sample model stack includes Pocket TTS:
 
-    uv run --project model-server-samples/model-servers model_servers
+    uv run --project agent-samples/xr-render-demo/model-servers xr_render_demo_model_servers
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
