@@ -169,6 +169,7 @@ class CameraPublicationTests {
         f.backend.startCamera(CameraConfig())
         assertNotSame(retained, f.active)
         Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(previousTrack)
+        Mockito.verify(previousTrack, Mockito.never()).dispose()
         assertEquals(f.policy(null), f.defaults)
         assertEquals("h264", f.defaults.videoCodec)
         assertFalse(f.defaults.simulcast)
@@ -217,6 +218,7 @@ class CameraPublicationTests {
             stop!!.join()
             assertNull(f.active)
             Mockito.verify(f.participant).unpublishTrack(f.track)
+            Mockito.verify(f.track).dispose()
         }
     }
 
@@ -334,6 +336,68 @@ class CameraPublicationTests {
                 pending = null
                 unfinished?.resumeWithException(CancellationException())
             }
+        }
+    }
+
+    @Test fun explicitlyCreatedDeviceIsDisposedWhenReturningToSDKCamera() = runBlocking {
+        val f = Fixture()
+        f.prepareDeviceCamera()
+        f.prepareInjection()
+        f.defaults = f.defaults.copy(simulcast = true)
+        f.setField("cameraPublishBaseline", f.defaults)
+        Mockito.`when`(f.track.dimensions).thenReturn(Track.Dimensions(1280, 720))
+        val captureArgument = LocalVideoTrackOptions()
+        Mockito.doReturn(f.track).`when`(f.participant).createVideoTrack(
+            Mockito.anyString(), Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
+        )
+        f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig(maxBitrateBps = 50_000)))
+        Mockito.verify(f.track, Mockito.never()).dispose()
+        f.backend.startCamera(CameraConfig())
+        Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
+        Mockito.verify(f.track, Mockito.times(1)).dispose()
+        assertNotSame(f.track, f.active!!.track)
+        f.backend.stopCamera()
+        Mockito.verify(f.active!!.track!!, Mockito.never()).dispose()
+    }
+
+    @Test fun failedFirstDeliveryDisposesAlreadyPublishedOwnedTrack() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        val frameArgument = ByteBuffer.allocate(0)
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java) { capturer, _ ->
+            Mockito.doThrow(IllegalStateException("delivery failed")).`when`(capturer).pushI420Frame(
+                Mockito.any(ByteBuffer::class.java) ?: frameArgument,
+                Mockito.anyInt(), Mockito.anyInt(), Mockito.anyLong(),
+            )
+        }.use {
+            try {
+                f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+                fail("First delivery must report its error")
+            } catch (_: IllegalStateException) {
+                assertNull(f.active)
+                Mockito.verify(f.participant).unpublishTrack(f.track)
+                Mockito.verify(f.track, Mockito.times(1)).dispose()
+            }
+        }
+    }
+
+    @Test fun failedDisposalRemainsOwnedUntilStopRetrySucceeds() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            Mockito.doThrow(IllegalStateException("dispose failed")).doNothing().`when`(f.track).dispose()
+            try {
+                f.backend.stopCamera()
+                fail("Cleanup failure must remain visible")
+            } catch (_: IllegalStateException) {
+                assertNull(f.active)
+            }
+            f.backend.stopCamera()
+            Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
+            Mockito.verify(f.track, Mockito.times(2)).dispose()
+            f.backend.stopCamera()
+            Mockito.verify(f.track, Mockito.times(2)).dispose()
         }
     }
 }
