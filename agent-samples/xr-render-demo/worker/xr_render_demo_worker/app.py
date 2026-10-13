@@ -104,7 +104,7 @@ async def run_app(
                 min_speech=config.min_speech,
                 silero_threshold=config.silero_threshold,
             ),
-        voice_gate=voice_gate,
+            voice_gate=voice_gate,
             probes={"agent-llm": warmed_llm_probe},
             ready_file=ready_file,
             closeables=(llm, vlm),

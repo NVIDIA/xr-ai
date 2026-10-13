@@ -213,7 +213,8 @@ class VoiceAgent(Agent):
     is accepted only with enabled, required speaker ASR; startup then waits
     for that service. Ordinary STT and automatic speaker selection require a
     batch ``STTService``. Missing that dependency raises :class:`ValueError`
-    before media allocation.
+    before VoiceAgent allocates media. An injected transport is already allocated
+    by its caller, who retains cleanup responsibility if construction fails.
 
     :meth:`from_models` resolves that dependency from an already-loaded model
     profile and the same voice-gate configuration, without application-side
@@ -305,8 +306,15 @@ class VoiceAgent(Agent):
         selection constructs the existing ``stt`` model role. Automatic
         selection retains that real batch client for its startup fallback.
         Other arguments and resource ownership match the normal constructor.
+
+        Raises :class:`KeyError` when the selected batch ``stt`` role is absent,
+        :class:`TypeError` when it names another model role, and
+        :class:`ValueError` for an unsupported adapter or non-positive response
+        capacity. Caller-created clients and transports remain caller-owned
+        when construction fails.
         """
 
+        # Reject capacity before allocating the factory-owned batch client.
         if response_capacity <= 0:
             raise ValueError("voice response capacity must be positive")
         speaker = voice_gate._speaker

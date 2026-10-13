@@ -81,11 +81,16 @@ async def test_sample_does_not_register_model_health_probes(
 
 
 @pytest.mark.parametrize("sample, package, preset", [
-    ("simple-vlm-example", "simple_vlm_example_worker", "voice_gate.yaml"),
-    ("lab-instrument-monitoring", "lab_instrument_monitoring_worker", "voice_gate.yaml"),
-    ("tea-making-sample", "tea_making_worker", "voice_gate.yaml"),
-    ("tea-making-sample", "tea_making_worker", "voice_gate.always-on.yaml"),
-    ("xr-render-demo", "xr_render_demo_worker", "voice_gate.yaml"),
+    (sample, package, preset.name)
+    for sample, package in (
+        ("simple-vlm-example", "simple_vlm_example_worker"),
+        ("lab-instrument-monitoring", "lab_instrument_monitoring_worker"),
+        ("tea-making-sample", "tea_making_worker"),
+        ("xr-render-demo", "xr_render_demo_worker"),
+    )
+    for preset in sorted(
+        (Path(__file__).resolve().parents[1] / "agent-samples" / sample / "yaml").glob("voice_gate*.yaml")
+    )
 ])
 @pytest.mark.parametrize("optional_batch_entry", [False, True])
 async def test_shipped_speaker_mode_never_constructs_batch_client(

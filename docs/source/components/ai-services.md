@@ -363,8 +363,9 @@ The default model profile starts speaker ASR through its private `services`
 declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. `--stop`
-uses the same port discovery and verified process ownership as the other model
-services. The speaker service listens on port 8102 and supports streaming audio
+stops only managed services in the selected deployment, using their configured
+ports and the existing process-ownership guards. The speaker service listens
+on port 8102 and supports streaming audio
 over a private WebSocket.
 Native NIM speech uses independently deployed Riva endpoints rather than this
 local model stack. Refer to {doc}`/guides/deploying-with-nim` and

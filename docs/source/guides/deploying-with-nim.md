@@ -173,27 +173,31 @@ application latency in the deployment environment.
 
 ## Switch an existing sample
 
-Keep copies of the sample's active local JSON and voice-gate YAML. Replace its model entries with
+Keep copies of the sample's active local JSON and selected voice-gate YAML. Replace its model entries with
 the roles required for native deployment in the table below, including the
 explicit `stt` entry for ordinary Riva speech. This example adapts
 simple VLM; run it from the repository root after validation:
 
 ```bash
-cp agent-samples/simple-vlm-example/yaml/models.json /tmp/simple-vlm.models.local.json
-cp agent-samples/simple-vlm-example/yaml/voice_gate.yaml /tmp/simple-vlm.voice-gate.local.yaml
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models python - <<'PYTHON'
 import json
+import shutil
 from pathlib import Path
 import yaml
 source = yaml.safe_load(Path('/tmp/models.nim.yaml').read_text())['models']
 target = Path('agent-samples/simple-vlm-example/yaml/models.json')
+gate_path = Path('agent-samples/simple-vlm-example/yaml/voice_gate.yaml')
 active = json.loads(target.read_text())
 active['models'] = {name: source[name] for name in active['models']}
 active['models']['stt'] = source['stt']
-target.write_text(json.dumps(active, indent=2) + '\n')
-gate_path = Path('agent-samples/simple-vlm-example/yaml/voice_gate.yaml')
 gate = yaml.safe_load(gate_path.read_text())
 gate['speaker']['enabled'] = False
+backup_dir = Path('/tmp/simple-vlm.local-backup')
+# Refuse a repeated switch before modifying files or the original backup.
+backup_dir.mkdir()
+shutil.copyfile(target, backup_dir / target.name)
+shutil.copyfile(gate_path, backup_dir / gate_path.name)
+target.write_text(json.dumps(active, indent=2) + '\n')
 gate_path.write_text(yaml.safe_dump(gate, sort_keys=False))
 PYTHON
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models --extra riva \
@@ -215,18 +219,29 @@ update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.
 
+Use the worker's selected `voice_gate_yaml` path for `gate_path`. Tea making can
+select `voice_gate.always-on.yaml` instead of `voice_gate.yaml`; disable speaker
+ASR in the selected preset, and back up and restore that same file. Use a
+different backup directory when adapting another sample. If the directory
+already exists, this procedure fails without overwriting its original local
+configuration or changing the active files. Do not rerun the switch to replace
+a backup; restore first and retain the backup for recovery. To switch again
+after restoring, choose a new unused backup directory.
+
 To return simple VLM to local development, restore both saved configurations,
 start the local stack, and restart the sample:
 
 ```bash
-cp /tmp/simple-vlm.models.local.json agent-samples/simple-vlm-example/yaml/models.json
-cp /tmp/simple-vlm.voice-gate.local.yaml agent-samples/simple-vlm-example/yaml/voice_gate.yaml
+cp /tmp/simple-vlm.local-backup/models.json agent-samples/simple-vlm-example/yaml/models.json
+cp /tmp/simple-vlm.local-backup/voice_gate.yaml agent-samples/simple-vlm-example/yaml/voice_gate.yaml
 uv run --project model-server-samples/model-servers model_servers
 uv run --project agent-samples/simple-vlm-example simple_vlm_example
 ```
 
 Restoring the voice-gate YAML reselects required local speaker ASR. Restoring a
-profile does not stop remote NIMs; the deployment operator controls them.
+profile does not stop remote NIMs; the deployment operator controls them. These
+copies preserve your local customization; resetting tracked files to repository
+defaults would discard it.
 
 ## Removed managed NIM stack
 
