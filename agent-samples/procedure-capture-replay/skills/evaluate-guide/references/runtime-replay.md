@@ -6,15 +6,15 @@
 # Recorded-camera runtime evaluation
 
 Use a checkout containing SOP replay and its installed `tests` environment.
-The guide-generation-only branch does not contain the replay engine. Set
-`--replay-root` to the integrated or replay checkout; do not copy engine code
+Set `--replay-root` to this checkout or another checkout containing the
+replay sample; do not copy engine code
 into the skill. Start that checkout's configured local model servers first.
 The runner checks local LLM and VLM health and never substitutes another model.
 
 From the repository root, replacing the paths:
 
 ```bash
-uv run --project /path/to/replay-checkout/tests python agent-samples/sop-sample/skills/evaluate-guide/scripts/replay_capture.py --replay-root /path/to/replay-checkout --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
+uv run --project /path/to/replay-checkout/tests python agent-samples/procedure-capture-replay/skills/evaluate-guide/scripts/replay_capture.py --replay-root /path/to/replay-checkout --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
 ```
 
 The output directory must not exist. This command writes test artifacts, not

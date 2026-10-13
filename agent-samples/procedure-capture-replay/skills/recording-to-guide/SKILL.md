@@ -32,7 +32,7 @@ a question they do not answer.
 
 Keep the repository root as the working directory. Use the requested packet,
 otherwise the most recently ended
-`agent-samples/sop-sample/artifacts/sessions/*/packet.json` with `status: complete`.
+`agent-samples/procedure-capture-replay/artifacts/sessions/*/packet.json` with `status: complete`.
 If none is complete, report the capture problem. Read its referenced narration,
 captions, frame index, summary, and errors if present. Match narration
 `timestamp_us` to caption `frame_timestamp_us`, not `generated_at_us`.
@@ -43,6 +43,13 @@ narrated actions, open selected original images with an image-viewing tool.
 Inspect before and after the relevant source time, including uncaptained frames;
 file names and image metadata are not visual inspection. Record corrections with
 frame IDs without editing source records. Report unavailable images honestly.
+
+When relying on a delta, use its `delta_reference_frame_id` to locate the actual
+earlier image, not the preceding sampled image. Keep both evidence IDs in review
+notes, never as executable guide timestamps. A missing reference in an older
+packet is unspecified provenance, not proof that no earlier image existed.
+Neither a no-change description nor an uncertain comparison proves that nothing
+happened between snapshots; preserve supported actions and inspect their intervals.
 
 ## Account for the actions
 
@@ -96,7 +103,7 @@ commits. Prefer direct `evidence.commit`; uncertainty and failure never complete
 
 ## Write, validate, and review
 
-Write `agent-samples/sop-sample/guides/<slug>.guide.yaml` and the matching
+Write `agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml` and the matching
 `<slug>.review.md`, or use the user's specified directory. Do not overwrite
 without permission. Keep `task.status: draft`, the exact packet session ID,
 a 1–5 word punctuation-free name, and a
@@ -111,7 +118,7 @@ Preserve the linked step chain and user-controlled advancement.
 Validate from the repository root and repair YAML yourself until it passes:
 
 ```bash
-uv run --project agent-samples/sop-sample/worker python -m sop_sample_worker._validate_guide agent-samples/sop-sample/guides/<slug>.guide.yaml
+uv run --project agent-samples/procedure-capture-replay/worker python -m procedure_capture_replay_worker._validate_guide agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml
 ```
 
 Then compare each review-table row to the actual trigger and gate: no omitted

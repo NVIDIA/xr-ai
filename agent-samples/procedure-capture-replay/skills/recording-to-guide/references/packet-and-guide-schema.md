@@ -8,7 +8,7 @@
 ## Capture input
 
 Start with `packet.json`: `session_id`, `status`, `narration_status`, `counts`,
-`files`, `hierarchy`, and `media_capture`. Resolve `files` paths relative to the
+`files`, and `hierarchy`. Resolve `files` paths relative to the
 packet directory. A complete packet can still contain caption errors or no
 narration; inspect the contents, not only its status.
 
@@ -23,9 +23,25 @@ narration; inspect the contents, not only its status.
 Source timestamps are Unix microseconds. Caption `generated_at_us` measures
 inference completion, not event time. STT timestamps are alignment hints, not
 precise action boundaries. Inspect nearby frames if timing is uncertain.
-`media_capture.manifest` references the raw capture bundle; retain it with the
-packet. Raw audio may help review missing narration, but generation does not
-automatically retranscribe it. Do not fabricate speech for silent recordings.
+Newer captions also contain pipeline-generated `delta_reference_frame_id` and
+`delta_reference_timestamp_us`: the earlier image actually supplied to the VLM.
+Both are `null` for an initial single-image observation. Resolve the reference
+through the frame index. Sampling can outpace captioning, and failed captions
+do not advance the comparison image, so do not subtract one from `frame_id`.
+Older packets may omit these fields; do not invent an exact comparison pair.
+Reference metadata identifies inputs, not the truth of the model's delta.
+Keep comparison IDs and source times in review notes, not executable guide state.
+No meaningful visible change differs from an indeterminate comparison: neither
+establishes inactivity throughout the interval. Uncertain labels are not actions
+and must not erase actions supported by narration or inspected images.
+SOP snapshots, captions, and narration cover the spoken start/stop recording
+boundary. Optional `--capture` media covers the whole participant connection;
+it is not required for guide generation and may span multiple SOP packets.
+Use packet-local narration, not the whole shared transcript. New packets have
+no `media_capture` field. Older packets may link a bundle through
+`media_capture.manifest`; retain that bundle if present. Raw audio may help review
+missing narration, but generation does not automatically retranscribe it.
+Do not fabricate speech for silent recordings.
 
 ## Executable YAML
 
@@ -151,6 +167,6 @@ Runtime evaluation uses the replay engine and configured local models with
 recorded camera input. The authoring model observes actual traces and revises
 the guide; it does not replace visual inference, tool results, or state commits.
 Test artifacts and recording timestamps stay outside the executable guide.
-Write these outputs under `agent-samples/sop-sample/guides/` from the repository
+Write these outputs under `agent-samples/procedure-capture-replay/guides/` from the repository
 root, unless a different output directory was requested. Links between these
 references resolve relative to their containing files, not the working directory.

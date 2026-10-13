@@ -255,6 +255,213 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.
 
+## Generate a draft guide
+
+After the packet is finalized, use a coding agent with local file and image
+access to follow
+[`recording-to-guide`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/procedure-capture-replay/skills/recording-to-guide/SKILL.md).
+This is the manual generation stage. `recording-to-guide` owns direct YAML
+authoring and revisions. The companion
+[`evaluate-guide`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/procedure-capture-replay/skills/evaluate-guide/SKILL.md)
+checks a fixed draft against the original capture and returns findings without
+editing it. Both use the same schema and tool contract. The workflow is generate,
+evaluate, revise, and reevaluate before handoff for human review.
+There is no Python YAML generator, plan compiler, automatic approval, or new
+model-server requirement. Selecting GPT Luna happens in the coding agent, not
+in the capture sample's `models.json`.
+
+From the repository root, give the coding agent this request, replacing the
+session placeholder:
+
+```text
+Read agent-samples/procedure-capture-replay/skills/recording-to-guide/SKILL.md and follow it.
+Use agent-samples/procedure-capture-replay/artifacts/sessions/<session-id>/packet.json.
+Use this packet's narration; optional full-session media is not required.
+Keep the repository root as your working directory for reads, writes, and validation.
+Read the schema and applicable examples linked relative to the skill directory.
+Write the demonstrated procedure as guide YAML directly, plus evidence
+review notes, under agent-samples/procedure-capture-replay/guides/. Reuse captions and narration;
+inspect selected saved images when needed. Trace a delta to its pipeline-recorded
+delta_reference_frame_id when present, not the preceding sampled image; keep the
+comparison pair in review notes, never as executable guide timestamps. Missing
+reference metadata in older packets is unspecified provenance. No visible change
+and an uncertain comparison are different, but neither proves interval inactivity.
+For each step, combine its instructions
+and chronological captions to extract the action, object, target, and required
+count, orientation, order, or duration. Distinguish in-progress states from the
+completed result. Merge repeated views of one action without losing distinct
+actions or required instances. Use this evidence mapping for both the user
+instruction and completion question. Distinguish a missing capture image from an
+unresolved requirement: the former needs a review note, the latter may need a
+blocked draft step.
+Run the validator, then use
+agent-samples/procedure-capture-replay/skills/evaluate-guide/SKILL.md to evaluate the fixed draft
+against the original capture. Prefer a fresh evaluator context when available;
+give it the guide and original evidence, not the author's self-review or expected
+answers. Provide the replay checkout path and start its configured local models.
+The evaluator must run the bundled recorded-camera runner against the actual
+XR-AI engine, tools, prompts, and local models. GPT Luna is only an observer and
+guide author, never a substitute runtime VLM or source of tool answers.
+The evaluator writes findings without changing the guide. Use those
+findings, including actual tool calls, model outputs, commits, and state traces, to revise the guide's
+prompts and steps. Use at most three evaluation-and-update rounds by default,
+stopping early when no correctable failures remain. Revalidate every update and
+evaluate the final revision before handoff; the final check is not another update
+round. Never weaken requirements to fit the demonstration. Report the actual
+evaluation-and-update round count, guide, authoring review, and evaluation paths,
+actual
+results, changes, untested checks, and approval blockers. Keep the guide draft;
+do not approve it, connect to a live user, alter source recordings, or generate a
+YAML-writing program.
+```
+
+No skill installation is required for this explicit-file workflow. To install
+the skills into an agent's skill directory, copy the **entire** `recording-to-guide/`
+and `evaluate-guide/` directories as siblings, including their references and
+agent metadata, rather than only `SKILL.md`. The evaluation skill links to the
+authoring skill's shared contract and examples.
+Keep the target repository and sample directory explicit when using an installed
+copy. An agent without an image tool can draft from available evidence, but it
+must report uninspected visual ambiguities rather than claim they are resolved.
+
+The outputs are local and Git-ignored:
+
+- `guides/<slug>.guide.yaml`: authoritative, model-authored draft guide.
+- `guides/<slug>.review.md`: the author's evidence mapping, caption corrections,
+  revisions, and unresolved requirements.
+- `guides/<slug>.evaluation.md`: evaluation findings, guide identity, observed
+  check results, untested checks, and approval blockers. Neither Markdown file
+  is executable guide state.
+
+Generated task names use 1–5 punctuation-free words. The skill preserves narrated
+actions, prerequisites, counts, and orientations; it does not use activity labels
+as an exhaustive list of steps. It combines chronological captions into actions,
+not one step per caption, and maps each action's object, target, and constraints
+to an instruction and a completion question. It inspects selected original
+frames when necessary. Missing narration or occluded actions remain evidence
+gaps. A schema-valid guide can still omit a physical requirement, so human review
+must compare both the instructions and completion questions with the recording.
+
+### Validate and review
+
+From the repository root:
+
+```bash
+uv run --project agent-samples/procedure-capture-replay/worker python -m procedure_capture_replay_worker._validate_guide agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml
+```
+
+The read-only validator checks the same guide contract used by the SOP replay
+work: state types and write sets, linked steps, allowed tools, trigger arguments,
+result fields, and the 500-character visual question limit. Text fields must be
+actual strings. Duplicate mapping keys are rejected at every level, including
+overrides introduced through YAML merges, instead of silently replacing earlier
+requirements. It reports errors
+with a nonzero exit status. It does not generate, rewrite, approve, or execute
+the guide, and it does not certify evidence coverage or physical correctness.
+
+Before handoff, `evaluate-guide` checks the fixed draft against the saved
+recording, including incomplete and completed states, action coverage, tool
+dispatch, transitions, and timer boundaries. It does not revise the guide.
+`recording-to-guide` applies justified corrections, validates, and requests
+another evaluation. The default is at most three evaluation and revision passes,
+stopping early when no correctable failures remain. The latest YAML must be
+checked after edits; missing evidence and unresolved failures are reported.
+
+For evaluation alone, provide the original packet and guide paths to
+`evaluate-guide`. Prefer a fresh evaluator context without the author's
+self-review or claimed test results. If the same context is used, disclose it.
+The evaluator reports the guide's content hash and task version to distinguish
+findings about different revisions. Evaluation does not grant approval.
+
+The evaluation skill includes a recorded-camera runner and its invocation
+contract in `references/runtime-replay.md`. It requires a checkout containing
+SOP replay, that checkout's tests environment, and healthy local LLM and VLM
+services. The replay engine and the generation skills share this sample.
+The runner uses isolated hub IPC and original frame intervals with the real
+current-frame tool, replay engine, configured models, prompts, evidence gates,
+conversation tools, aggregation, and wall-clock timers. The camera and typed
+Next commands are simulated; browser, LiveKit, STT, and TTS audio are excluded.
+It preserves the source draft and records hash-pinned YAML, input manifests,
+selected frames, model responses, tool calls, commits, and agent output. Luna
+observes those outputs and revises only the guide. A mental walkthrough or a
+Luna-generated visual answer cannot substitute for a runtime result.
+If a local model is unavailable, evaluation is blocked, not passed. A fixed
+recording cannot respond to instructions, so report timing and evidence gaps
+separately from guide defects. Count modification rounds only when a completed
+runtime evaluation leads to a substantive YAML change; reruns and the final
+verification without edits do not add rounds.
+Recorded replay cannot prove generalization to other demonstrations.
+
+Review the evidence notes and resolve every blocker before manually changing
+`task.status` from `draft` to `approved`. Preserve the original capture. When
+revising a guide, increment `task.version` and check that the title, step prompts,
+and completion messages still describe the same procedure. Execute the approved
+guide by launching the sample with `uv run main.py --mode replay "Guide Name"`,
+then saying "start replay".
+
+### Verification limits
+
+The generation contract exposes `current_view`, `clock__now`, and
+`clock__timer`. A current view verifies visible state, counts, and orientation;
+it cannot prove a hidden fit or the order of past actions. Timer setup captures
+the live clock after a visual prerequisite, followed by an elapsed-time-only
+waiting step. Neither this pattern nor repeated positive images proves
+uninterrupted contact.
+
+The skill does not emit experimental sequence triggers or arbitrary tool names.
+For requirements the contract cannot verify, it preserves the action in a draft
+step with a never-matching evidence gate and records the missing capability for
+review. Comparing several saved images during generation is not the same as
+verifying several replay images at runtime. Do not approve a guide by simply
+removing such a blocker or weakening the required condition.
+
+### Check skill changes
+
+Treat the request above, both skills, the shared schema, and the worked examples
+as one generation package. Review and evaluate them together; a skill-only test does
+not qualify the documented workflow. Preserve a snapshot or hashes of all these
+files with each run, and rerun the same cases when any part changes.
+
+The skill incorporates lessons from smaller-model evaluations: explicit action
+coverage, selective image inspection for stale captions, concrete verification
+questions, consistent state-field names, and block-style YAML. These instructions
+reduce known failure opportunities; they are not a measured accuracy guarantee
+for a particular model version.
+
+Synthetic evaluation cases live in
+`tests/fixtures/sop_guide_generation/cases.yaml`. They cover missed narrated
+additions, multi-caption action grouping, prerequisites and counts, uncertain
+transcription, elapsed waits,
+unsupported temporal verification, and incomplete demonstrations during recorded
+replay. Each contains capture excerpts and a
+semantic review checklist, not a ready-made guide or third-party recording.
+
+For an end-to-end comparison, copy the package, unchanged validator, and one
+capture into an isolated workspace with the documented paths. Use the exact
+request above, changing only `<session-id>`. Allow file reads, selective image
+inspection, direct YAML edits, and validator-driven repairs. Synthetic cases
+can be materialized as packet, caption, and transcript files from `input` only;
+keep `checks` outside the model workspace. Include real saved captures when
+evaluating visual inspection. Do not replace this request with an inline
+"return YAML only" prompt or a plan compiler.
+
+Validate the output independently, then review action coverage, actual trigger
+questions, timer initialization, uncertainty gates, and evidence references.
+Check recorded-replay coverage, reported versus actual observations, whether
+changes were retested, and whether failures were hidden by weakening requirements.
+Record model and reasoning setting, package hashes, prompt, raw tool trace,
+validation attempts, approval blockers, elapsed time, and reported token usage.
+Count the complete authoring turn, including inspection and repair; cached
+input is a subset of total input. Separate environment failures from guide
+failures. Schema validity is not semantic accuracy, and a shorter prompt is not
+an improvement if it loses actions or disables otherwise usable checks.
+
+Run the offline schema and validator regressions from the repository root:
+
+```bash
+uv --config-file uv.toml run --project tests pytest tests/test_sop_guide_generation.py
+```
+
 ## Follow an approved guide
 
 Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the

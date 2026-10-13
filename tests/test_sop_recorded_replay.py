@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[1] / "agent-samples/sop-sample/skills/evaluate-guide/scripts/replay_capture.py"
+    Path(__file__).resolve().parents[1]
+    / "agent-samples/procedure-capture-replay/skills/evaluate-guide/scripts/replay_capture.py"
 )
 _SPEC = importlib.util.spec_from_file_location("recorded_replay", _SCRIPT)
 runner = importlib.util.module_from_spec(_SPEC)

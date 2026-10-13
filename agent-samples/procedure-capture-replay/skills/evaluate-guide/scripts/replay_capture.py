@@ -43,16 +43,16 @@ def capture_frames(packet):
 
 async def replay(args):
     root = args.replay_root.resolve()
-    worker = root / "agent-samples/sop-sample/worker"
+    worker = root / "agent-samples/procedure-capture-replay/worker"
     sys.path.insert(0, str(worker))
     import nemo_relay
     import yaml
     from device_io_hub.ipc import ConnectorEndpoint, HubEndpoint
     from PIL import Image
-    from sop_sample_worker._workflow_spec import parse_workflow
-    from sop_sample_worker.guides import SelectedGuide
-    from sop_sample_worker.replay import ReplayAgent
-    from sop_sample_worker.replay_events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
+    from procedure_capture_replay_worker._workflow_spec import parse_workflow
+    from procedure_capture_replay_worker.guides import SelectedGuide
+    from procedure_capture_replay_worker.replay import ReplayAgent
+    from procedure_capture_replay_worker.replay_events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
     from xr_ai_hub import PixelFormat, ProcessorEndpoint
     from xr_ai_models import load_models_config, make_llm, make_vlm
     from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
@@ -61,7 +61,7 @@ async def replay(args):
     from xr_ai_tools.vision import ImageQueryTool
     from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceAggregationAgent, VoiceOutput, VoiceParticipantJoined
 
-    settings_path = root / "agent-samples/sop-sample/yaml/replay.yaml"
+    settings_path = root / "agent-samples/procedure-capture-replay/yaml/replay.yaml"
     settings = yaml.safe_load(settings_path.read_text())
     models_path = (settings_path.parent / settings["models_config"]).resolve()
     model_config = json.loads(models_path.read_text())
@@ -204,7 +204,7 @@ async def replay(args):
             query = ImageQueryTool(
                 images=images,
                 vlm=vlm,
-                system_prompt=(worker / "sop_sample_worker/prompts/replay_vision.txt").read_text(),
+                system_prompt=(worker / "procedure_capture_replay_worker/prompts/replay_vision.txt").read_text(),
             )
             image_handler = query.handler
 
