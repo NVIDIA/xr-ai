@@ -492,14 +492,18 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     ///   The pixel format must be one supported by LiveKit
     ///   (`kCVPixelFormatType_420YpCbCr8BiPlanarFullRange`, `kCVPixelFormatType_32BGRA`, etc.).
     /// - Throws: ``StreamError/notConnected`` if not connected.
-    @MainActor
     public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws {
         try await injectVideoFrame(sampleBuffer, encoding: nil)
     }
 
-    @MainActor
     public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
                                  encoding: CameraEncodingConfig?) async throws {
+        try await injectCameraFrame(sampleBuffer, encoding: encoding)
+    }
+
+    @MainActor
+    private func injectCameraFrame(_ sampleBuffer: sending CMSampleBuffer,
+                                   encoding: CameraEncodingConfig?) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
