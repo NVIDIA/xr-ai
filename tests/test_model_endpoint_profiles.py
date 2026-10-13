@@ -130,12 +130,16 @@ async def test_embedding_cancellation_does_not_submit_second_group(monkeypatch):
 
 def test_endpoint_profile_and_sample_environments_use_existing_contract():
     config = load_models_config(ROOT / "deployment/nim/models.yaml")
-    assert set(config.entries) == {"llm", "agent_llm", "vlm", "stt", "tts", "embedding"}
+    assert set(config.entries) == {"llm", "agent_llm", "vlm", "stt", "tts", "embedding", "ocr"}
     assert all(spec.deployment.ownership == "external" for spec in config.entries.values())
     assert config.required_credentials == ("NIM_ENDPOINT_API_KEY",)
     assert config.embedding("embedding").kind == "openai_compat"
     assert config.embedding("embedding").default_extras == {"input_type": "passage"}
     assert config.stt("stt").kind == config.tts("tts").kind == "riva_grpc"
+    assert config.ocr("ocr").kind == "nemotron_ocr"
+    assert config.ocr("ocr").health_path == "/v1/health/ready"
+    assert config.ocr("ocr").base_url == "https://ocr.example.com"
+    assert config.ocr("ocr").deployment.service is None
     for path in ROOT.glob("agent-samples/*/worker/pyproject.toml"):
         project = tomllib.loads(path.read_text())["project"]
         if any(dep.startswith("xr-ai-models") for dep in project["dependencies"]):
@@ -158,6 +162,65 @@ async def test_smoke_check_accepts_native_embedding_dimensions(endpoint, tmp_pat
     }}))
     await SMOKE["check"](profile)
     assert "1-dimensional vectors" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("readiness,status,with_text,expected_error", [
+    ("health", 200, True, None),
+    ("none", 200, True, None),
+    ("health", 200, False, RuntimeError),
+    ("health", 401, True, RuntimeError),
+    ("none", 503, True, httpx.HTTPStatusError),
+])
+async def test_external_ocr_smoke_auth_inference_and_cleanup(
+    monkeypatch, tmp_path, readiness, status, with_text, expected_error,
+):
+    import yaml
+
+    real_client = httpx.AsyncClient
+    opened, calls = [], []
+    source = yaml.safe_load((ROOT / "deployment/nim/models.yaml").read_text())
+    entry = source["models"]["ocr"]
+    entry["endpoint"]["readiness"] = readiness
+    profile = tmp_path / "models.yaml"
+    profile.write_text(yaml.safe_dump({"models": {"ocr": entry}}))
+    image = tmp_path / "text.png"
+    image.write_bytes(SMOKE["_red_image"]())
+    monkeypatch.setenv("NIM_ENDPOINT_API_KEY", "ocr-inference-token")
+
+    def handle(request):
+        calls.append(request)
+        assert request.url.host == "ocr.example.com"
+        assert request.headers["Authorization"] == "Bearer ocr-inference-token"
+        if request.method == "GET":
+            assert request.url.path == "/v1/health/ready"
+            return httpx.Response(status)
+        assert request.url.path == "/v1/ocr"
+        assert json.loads(request.content)["merge_levels"] == ["word"]
+        # Fixture is a transport test, not real OCR of the generated blank PNG.
+        detections = [{
+            "text_prediction": {"text": "温度 23.5", "confidence": 0.95},
+            "bounding_box": {"points": [
+                {"x": 0.1, "y": 0.2}, {"x": 0.8, "y": 0.2},
+                {"x": 0.8, "y": 0.4}, {"x": 0.1, "y": 0.4},
+            ]},
+        }] if with_text else []
+        return httpx.Response(status, json={"data": [{"index": 0, "text_detections": detections}]})
+
+    def client(**kwargs):
+        instance = real_client(transport=httpx.MockTransport(handle), **kwargs)
+        opened.append(instance)
+        return instance
+
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    if expected_error is None:
+        await SMOKE["check"](profile, ocr_image=image)
+    else:
+        with pytest.raises(expected_error):
+            await SMOKE["check"](profile, ocr_image=image)
+    assert len(opened) == 1 and opened[0].is_closed
+    assert [call.method for call in calls] == (
+        ["POST"] if readiness == "none" else ["GET"] if status != 200 else ["GET", "POST"]
+    )
 
 
 async def test_native_riva_endpoint_uses_real_grpc_serialization(monkeypatch):
@@ -315,6 +378,13 @@ async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(mon
             return httpx.Response(200, json={"status": "ready"})
         payload = json.loads(request.content)
         calls.append((request.url.host, payload))
+        if request.url.path == "/v1/ocr":
+            assert request.url.host == "ocr.example.com"
+            assert payload["merge_levels"] == ["word"]
+            assert len(payload["input"]) == 1
+            assert payload["input"][0]["url"].startswith("data:image/png;base64,")
+            assert "model" not in payload
+            return httpx.Response(200, json={"data": [{"index": 0, "text_detections": []}]})
         assert payload["model"].startswith("nvidia/")
         if request.url.path == "/v1/embeddings":
             assert payload["input_type"] in ("query", "passage")
@@ -339,7 +409,7 @@ async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(mon
         transport=httpx.MockTransport(handle), **kwargs,
     ))
     await SMOKE["check"](profile)
-    assert len(calls) == 10
+    assert len(calls) == 11
     vision = [payload for host, payload in calls if host == "vlm.example.com"]
     assert len(vision) == 2
     assert vision[0]["messages"][0]["content"][0]["type"] == "image_url"

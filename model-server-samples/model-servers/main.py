@@ -13,6 +13,7 @@ The default deployment (yaml/models.default.json) starts:
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM; llm + agent_llm)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
+    ocr        — Nemotron OCR v2 multilingual       port 8112  (Hugging Face)
 
 Use --models PATH for a custom deployment of these local services.
 For NVIDIA NIM models, configure independently deployed endpoints.
@@ -67,6 +68,7 @@ def _gpu_profile_name(value: str) -> str:
 # service → (project, command, config basename). Order is launch
 # order: agent-llm precedes the VLM so its FlashInfer MoE JIT compilation runs with
 # the full GPU free on single-GPU profiles.
+# OCR is the smallest checkpoint and starts last, after embeddings.
 _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
     "stt":       ("../../services/stt-server", "stt_server", "stt_server"),
     "tts":       ("../../services/pocket-tts", "pocket_tts_server", "pocket_tts_server"),
@@ -86,6 +88,7 @@ _MODEL_SERVICES: dict[str, tuple[str, str, str]] = {
         "embedding_server",
         "embedding_server",
     ),
+    "ocr":       ("../../services/ocr-server", "ocr_server", "ocr_server"),
 }
 
 

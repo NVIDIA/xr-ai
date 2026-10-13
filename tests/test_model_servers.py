@@ -58,9 +58,9 @@ def test_default_profile_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch, g
     processes, credentials = _model_servers._build_processes()
 
     assert [process.name for process in processes] == [
-        "stt", "tts", "omni", "vlm", "embedding",
+        "stt", "tts", "omni", "vlm", "embedding", "ocr",
     ]
-    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109]
+    assert [process.port for process in processes] == [8103, 8105, 8108, 8100, 8109, 8112]
     tts = next(process for process in processes if process.name == "tts")
     assert tts.project == "../../services/pocket-tts"
     assert tts.command == "pocket_tts_server"
@@ -228,6 +228,7 @@ def test_stop_uses_default_managed_launch_plan(monkeypatch: pytest.MonkeyPatch) 
         ("omni", 8108),
         ("vlm", 8100),
         ("embedding", 8109),
+        ("ocr", 8112),
     }
 
 

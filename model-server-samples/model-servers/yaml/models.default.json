@@ -1,5 +1,13 @@
 {
   "models": {
+    "ocr": {
+      "adapter": {"preset": "nemotron_ocr"},
+      "endpoint": {"base_url": "http://localhost:8112", "readiness": "health"},
+      "deployment": {
+        "ownership": "managed",
+        "service": "ocr"
+      }
+    },
     "stt": {
       "adapter": {
         "preset": "parakeet_stt"

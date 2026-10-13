@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Local Hugging Face weights and inference; Docker isolates Python 3.12/CUDA 13.
+port: 8112
+container_name: xr-ai-ocr
+model_cache: ../../../../models/ocr
+cuda_visible_devices: "0"
+cuda_arch: "12.1"
+# Fixed server-wide detector length; does not crop or enhance images.
+infer_length: 1024

@@ -30,6 +30,8 @@ with:
 - [Architecture](https://nvidia.github.io/xr-ai/latest/overview/architecture.html)
 
 The site also publishes the current `main` branch and release-tagged versions.
+For multilingual OCR with local Hugging Face inference or an external NIM endpoint, refer to
+[OCR serving](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#ocr-serving).
 
 ## Build your own app
 

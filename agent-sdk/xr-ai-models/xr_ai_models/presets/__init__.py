@@ -20,6 +20,7 @@ from .magpie_tts      import MAGPIE_TTS
 from .nemotron3_nano  import NEMOTRON3_NANO
 from .nemotron_omni   import NEMOTRON_OMNI
 from .nemotron_embedding import NEMOTRON_EMBEDDING
+from .nemotron_ocr import NEMOTRON_OCR
 from .parakeet_stt    import PARAKEET_STT
 from .pocket_tts       import POCKET_TTS
 
@@ -32,6 +33,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "nemotron3_nano": NEMOTRON3_NANO,
     "nemotron_omni":  NEMOTRON_OMNI,
     "nemotron_embedding": NEMOTRON_EMBEDDING,
+    "nemotron_ocr": NEMOTRON_OCR,
     "parakeet_stt":   PARAKEET_STT,
     "pocket_tts":      POCKET_TTS,
 }
