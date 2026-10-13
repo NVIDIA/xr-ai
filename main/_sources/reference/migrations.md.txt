@@ -85,6 +85,27 @@ during startup returns 130. Refer to
 {doc}`../components/launcher-and-process-model` for failure diagnostics and
 shutdown behavior.
 
+## Shared model-stack speaker filtering
+
+The default shared model profile starts Nemotron 3 Diarization with Multitalker
+Parakeet through its private `services` declaration and reuses matching warm
+speaker-ASR instances. Samples with
+`speaker.backend: required` wait for the speaker service before worker readiness.
+The four shipped voice samples no longer declare a batch-STT endpoint on 8103;
+the default stack does not serve that port. Ordinary STT remains an explicit
+choice configured in both the server deployment and consuming worker.
+Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
+The local default contains no batch-STT model entry. Before updating an existing
+checkout, stop its running stack with that checkout's `model_servers --stop`
+and the deployment profile it started (`--models PATH` for a custom profile).
+The new default stop plan does not include batch STT on 8103. Also stop the
+selected stack before changing its deployment configuration. Replace
+unconditional worker `make_stt` calls with `VoiceAgent.from_models`, passing
+the loaded models and voice-gate settings. To serve batch STT, explicitly add its
+managed model entry and configure the consuming worker's batch adapter;
+for batch-only speech omit `services.speaker-stt` and disable speaker enrollment.
+Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
+
 ## Voice sample conversation defaults
 
 The shipped voice samples now require `Hey agent, let's start talking` after
@@ -107,7 +128,8 @@ controls.
 ## Local model-server CLI
 
 The `model-servers` sample launches only local server wrappers. Its default
-Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+speaker ASR, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is described
+in {doc}`/guides/customizing-model-servers`.
 Named `--models` selections are retired:
 
 - Replace `model_servers --models default` with `model_servers`.
@@ -120,8 +142,8 @@ Named `--models` selections are retired:
 
 Before updating a checkout that ran the former NIM profile, stop it with the
 old checkout's `uv run model_servers --stop`. The updated local launcher no
-longer discovers the removed NIM-only ports. Stop the old stack before starting
-the separate NIM sample because they share client ports. Caches are not removed.
+longer discovers the removed NIM-only ports. Deploy native endpoints using the
+operator's tooling instead of starting a NIM sample. Caches are not removed.
 
 `--help` now displays usage and exits. Unknown options are rejected instead of
 being silently ignored; `--dry-run` remains unsupported by `model-servers`.

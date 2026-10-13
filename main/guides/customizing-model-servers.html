@@ -500,12 +500,60 @@ selects the deployment profile independently.</p>
 </section>
 <section id="start-from-a-shipped-deployment-profile">
 <h2>Start from a shipped deployment profile<a class="headerlink" href="#start-from-a-shipped-deployment-profile" title="Link to this heading">#</a></h2>
-<p>The default <code class="docutils literal notranslate"><span class="pre">yaml/models.default.json</span></code> profile starts local Parakeet STT,
+<p>The default <code class="docutils literal notranslate"><span class="pre">yaml/models.default.json</span></code> profile starts local speaker ASR,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> without <code class="docutils literal notranslate"><span class="pre">--models</span></code> to use it.</p>
 <p>For NIM deployment, configure independently deployed endpoints with the same
 SDK factories. Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> service
 catalog contains only local server wrappers.</p>
+<p>The default profile starts Nemotron 3 Diarization and Multitalker Parakeet with the
+normal model-stack command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
+</pre></div>
+</div>
+<p>The stack uses <code class="docutils literal notranslate"><span class="pre">yaml/&lt;gpu-profile&gt;/speaker_stt.yaml</span></code> for model placement and
+capacity. It waits for speaker ASR readiness,
+reuses matching warm instances, and includes the service in <code class="docutils literal notranslate"><span class="pre">--stop</span></code> cleanup.
+The shipped voice samples require speaker ASR in their voice-gate YAML and do
+not configure a batch-STT fallback. Worker readiness waits for speaker ASR.
+Out-of-tree workers must enable enrollment and restart, or select batch STT
+explicitly in a custom server profile. Refer to
+<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for enrollment configuration and interaction
+with wake phrases. This streaming HTTP service does not change the workers’ batch model
+adapter JSON.</p>
+<p>Speaker ASR is an operator-owned HTTP service on port 8102. The default profile
+declares it outside the typed model-client entries:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"services"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"speaker-stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The model-stack launcher owns this declaration; it does not change the shared
+model-client or launcher SDK schemas. Its host, port and model settings live in
+<code class="docutils literal notranslate"><span class="pre">speaker_stt.yaml</span></code>. The default profile contains no batch-STT entry or server.
+To run batch STT, add this entry under <code class="docutils literal notranslate"><span class="pre">models</span></code> in an explicit deployment JSON:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>For batch-only speech, omit <code class="docutils literal notranslate"><span class="pre">services.speaker-stt</span></code> and set the consuming worker’s
+voice-gate YAML to:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+<p>Add the same <code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> objects under <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker’s
+own model profile. Samples use <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code> to resolve speech from
+the loaded profile and voice-gate settings: disabled or automatic speaker
+selection constructs the <code class="docutils literal notranslate"><span class="pre">stt</span></code> client; required speaker selection does not.
+Refer to <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for the constructor contract.
+To serve both paths, retain the speaker declaration and add the
+managed batch-STT entry; this loads both sets of model weights.
+Run <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> before changing deployment JSON or hardware YAML,
+then launch the desired configuration and restart its consumers.</p>
 <p>Copy the default profile to customize it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>model-server-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>model-server-samples/model-servers/yaml/models.my-stack.json

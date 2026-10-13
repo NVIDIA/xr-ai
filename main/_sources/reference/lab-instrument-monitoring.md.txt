@@ -12,6 +12,9 @@ visual identification, and event-driven notifications. Refer to the
 architecture reference focuses on reusing the sample's structure for another
 application.
 
+For speech deployment and explicit batch-STT selection, refer to
+{doc}`/guides/customizing-model-servers`.
+
 The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
 its display, a stateful agent decides whether the reading changed, and a

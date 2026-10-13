@@ -32,13 +32,71 @@ selects the deployment profile independently.
 
 ## Start from a shipped deployment profile
 
-The default `yaml/models.default.json` profile starts local Parakeet STT,
+The default `yaml/models.default.json` profile starts local speaker ASR,
 Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
 services. Run `model_servers` without `--models` to use it.
 
 For NIM deployment, configure independently deployed endpoints with the same
 SDK factories. Refer to {doc}`deploying-with-nim`. The `model-servers` service
 catalog contains only local server wrappers.
+
+The default profile starts Nemotron 3 Diarization and Multitalker Parakeet with the
+normal model-stack command:
+
+```bash
+uv run --project model-server-samples/model-servers model_servers
+```
+
+The stack uses `yaml/<gpu-profile>/speaker_stt.yaml` for model placement and
+capacity. It waits for speaker ASR readiness,
+reuses matching warm instances, and includes the service in `--stop` cleanup.
+The shipped voice samples require speaker ASR in their voice-gate YAML and do
+not configure a batch-STT fallback. Worker readiness waits for speaker ASR.
+Out-of-tree workers must enable enrollment and restart, or select batch STT
+explicitly in a custom server profile. Refer to
+{doc}`/reference/agent-sdk-voice` for enrollment configuration and interaction
+with wake phrases. This streaming HTTP service does not change the workers' batch model
+adapter JSON.
+
+Speaker ASR is an operator-owned HTTP service on port 8102. The default profile
+declares it outside the typed model-client entries:
+
+```json
+"services": {
+  "speaker-stt": {"ownership": "managed"}
+}
+```
+
+The model-stack launcher owns this declaration; it does not change the shared
+model-client or launcher SDK schemas. Its host, port and model settings live in
+`speaker_stt.yaml`. The default profile contains no batch-STT entry or server.
+To run batch STT, add this entry under `models` in an explicit deployment JSON:
+
+```json
+"stt": {
+  "adapter": {"preset": "parakeet_stt"},
+  "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+  "deployment": {"ownership": "managed", "service": "stt"}
+}
+```
+
+For batch-only speech, omit `services.speaker-stt` and set the consuming worker's
+voice-gate YAML to:
+
+```yaml
+speaker:
+  enabled: false
+```
+
+Add the same `adapter` and `endpoint` objects under `models.stt` in the worker's
+own model profile. Samples use `VoiceAgent.from_models` to resolve speech from
+the loaded profile and voice-gate settings: disabled or automatic speaker
+selection constructs the `stt` client; required speaker selection does not.
+Refer to {doc}`/reference/agent-sdk-voice` for the constructor contract.
+To serve both paths, retain the speaker declaration and add the
+managed batch-STT entry; this loads both sets of model weights.
+Run `model_servers --stop` before changing deployment JSON or hardware YAML,
+then launch the desired configuration and restart its consumers.
 
 Copy the default profile to customize it:
 

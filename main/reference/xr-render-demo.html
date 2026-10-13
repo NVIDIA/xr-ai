@@ -494,11 +494,11 @@ shared model services.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">cloudxr_runtime</span></code></p></td>
 <td><p>48322 (WSS proxy for WebRTC profiles; unused by <code class="docutils literal notranslate"><span class="pre">auto-native</span></code>)</p></td>
 </tr>
-<tr class="row-odd"><td><p>stt</p></td>
+<tr class="row-odd"><td><p>speaker-stt</p></td>
 <td><p>reused</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stt_server</span></code></p></td>
-<td><p>8103</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">speaker_stt</span></code></p></td>
+<td><p>8102</p></td>
 </tr>
 <tr class="row-even"><td><p>tts</p></td>
 <td><p>reused</p></td>
@@ -659,7 +659,7 @@ overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin<
 <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> for <code class="docutils literal notranslate"><span class="pre">gpu_index</span></code>; the CloudXR, video-memory, and model-server GPU
 settings are independent and must be planned together. Keep
 <code class="docutils literal notranslate"><span class="pre">allow_sim_pose:</span> <span class="pre">false</span></code> outside the live eval harness.</p>
-<p>Each <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
+<p>Each default <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
 or <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for
@@ -761,13 +761,21 @@ sets it to <code class="docutils literal notranslate"><span class="pre">false</s
 disabled, perception uses current frames only.</p>
 <p>Start the shared model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
-The worker does not poll model health endpoints. It retains a tool-shaped LLM
+The worker waits for required speaker ASR; it does not poll batch STT or TTS
+health endpoints. It retains a tool-shaped LLM
 inference warmup before announcing readiness so that LLM memory settles before
 LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.</p>
 </section>
 </section>
-<section id="stt-parakeet-tdt-0-6b-v3">
-<h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
+<section id="speech-recognition">
+<span id="stt-parakeet-tdt-0-6b-v3"></span><h2>Speech recognition<a class="headerlink" href="#speech-recognition" title="Link to this heading">#</a></h2>
+<p>The default requires speaker ASR on port 8102 before worker readiness and sends
+continuous audio to its private streaming endpoint. Enrollment selects which
+speaker may submit queries. The worker does not create a batch-STT client in
+this mode. Refer to <a class="reference internal" href="agent-sdk-voice.html#speaker-enrollment"><span class="std std-ref">Speaker filtering and backend selection</span></a> for the stream and enrollment
+contract, and <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for explicit batch setup.</p>
+<section id="optional-batch-stt-parakeet-tdt-0-6b-v3">
+<h3>Optional batch STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#optional-batch-stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h3>
 <p>Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceAgent
   → VAD and STT
@@ -785,6 +793,7 @@ LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.<
 </div>
 <p>The STT server serializes inference with a process-local lock because its shared
 NeMo model is not reentrant.</p>
+</section>
 </section>
 <section id="tts-pocket-tts">
 <span id="tts-piper"></span><h2>TTS — Pocket TTS<a class="headerlink" href="#tts-pocket-tts" title="Link to this heading">#</a></h2>
@@ -806,7 +815,7 @@ cancelled before its reply is published, so no partial stream is left open.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private media session → selected speech processor ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic
@@ -1225,7 +1234,10 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recorded-video-prerequisites">Recorded-video prerequisites</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speech-recognition">Speech recognition</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-batch-stt-parakeet-tdt-0-6b-v3">Optional batch STT — parakeet-tdt-0.6b-v3</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-pocket-tts">TTS — Pocket TTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>

@@ -873,6 +873,17 @@ Either way vLLM keeps running after the orchestrator exits.</p>
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
 that survived a previous stack run, and is stopped by the same
 <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
+<p>The default model profile starts speaker ASR through its private <code class="docutils literal notranslate"><span class="pre">services</span></code>
+declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
+before reporting readiness, and reuses warm instances with matching configuration.
+Configuration changes require stopping and restarting the service. <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
+stops only managed services in the selected deployment, using their configured
+ports and the existing process-ownership guards. The speaker service listens
+on port 8102 and supports streaming audio
+over a private WebSocket.
+Native NIM speech uses independently deployed Riva endpoints rather than this
+local model stack. Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> and
+<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for worker backend selection and enrollment.</p>
 <p>Pocket TTS uses the launcher’s persistent process group directly. Its bootstrap
 reuses an existing healthy listener. In a monitored stack, the reuse invocation
 remains alive as a health proxy so the launcher can detect service loss. A
