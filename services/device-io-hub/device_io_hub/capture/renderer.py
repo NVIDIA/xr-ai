@@ -224,6 +224,7 @@ class CaptureRenderer:
             max_total_bytes=0,
         )
         self._nvc = _load_nvc()
+        self._encoder_caps = self._nvc.GetEncoderCaps(gpu_id, "h264")
         self._frontend = _DemoCaptureFrontend(overlay_lines=overlay_lines)
 
     def render(self, bundle: Path) -> Path:
@@ -315,6 +316,7 @@ class CaptureRenderer:
                 if writer is None:
                     writer = _H264TrackWriter(
                         nvc=self._nvc,
+                        encoder_caps=self._encoder_caps,
                         root=video_root,
                         track_id=track_id,
                         stream_name="render",
