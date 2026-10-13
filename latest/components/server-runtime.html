@@ -710,7 +710,10 @@ and timestamps. <code class="docutils literal notranslate"><span class="pre">tra
 timestamp. <code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code> remains the complete directional data timeline, and
 <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> is the machine-readable entry point. Its <code class="docutils literal notranslate"><span class="pre">complete</span></code> and
 <code class="docutils literal notranslate"><span class="pre">incomplete_reason</span></code> fields distinguish a normally drained session from a
-bounded recovery when the return-traffic departure marker is lost.</p>
+bounded recovery when the return-traffic departure marker is lost
+(<code class="docutils literal notranslate"><span class="pre">return_traffic_drain_timeout</span></code>) or a fatal video capture failure
+(<code class="docutils literal notranslate"><span class="pre">video_capture_failed</span></code>). Video failure takes precedence if both occur; exception
+details remain in the capture log. Both causes set <code class="docutils literal notranslate"><span class="pre">complete</span></code> to <code class="docutils literal notranslate"><span class="pre">false</span></code>.</p>
 <p>In a captioned rendering, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
 the paced media queue, so its caption is timestamped from the first
@@ -724,7 +727,14 @@ pixels. Reserved speech-caption metadata stays inside hub IPC and is never
 forwarded to the client data channel.</p>
 <p>Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
 dedicated threads in the capture process. Recorder overload therefore drops
-capture frames without delaying the hub’s publish path. PyNvVideoCodec receives
+capture frames without delaying the hub’s publish path. The manifest’s
+<code class="docutils literal notranslate"><span class="pre">dropped_video_frames</span></code> also counts sampled-out frames and source frames with odd
+dimensions or dimensions outside the selected GPU’s encoder limits. Unsupported
+source frames are skipped before conversion without stopping audio or subsequent
+video. Encoder capabilities are queried at recorder and renderer construction,
+not under recording locks. An oversized composed rendering fails with its
+dimensions and encoder limits rather than silently dropping rendered frames.
+PyNvVideoCodec receives
 contiguous NV12 CPU input and emits H.264 Annex B chunks with repeated parameter
 sets and no B-frames. At session finalization, each raw stream’s chunks are
 joined in timestamp order. When requested, the renderer reconstructs captions
