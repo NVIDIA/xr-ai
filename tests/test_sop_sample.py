@@ -851,12 +851,16 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
         assert state.caption_count == 3
         await speak(demo, "stop recording")
         assert packet(state)["counts"] == {"frames": 4, "captions": 3, "transcripts": 0}
+        captions = [json.loads(line) for line in (state.directory / "captions.jsonl").read_text().splitlines()]
+        assert [(c["frame_id"], c["delta_reference_frame_id"], c["delta_reference_timestamp_us"])
+                for c in captions] == [(1, None, None), (3, 1, 100), (4, 3, 300)]
         # The next recording gets fresh live references, not the previous session's pair.
         source = source.model_copy(update={"image": demo.recorder._images.put(paths[0].read_bytes())})
     assert vlm.ask_images.await_count == 6
 
 
-async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo):
+@pytest.mark.parametrize("failure", ["unavailable", "invalid_json"])
+async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo, failure):
     demo = manual_caption_demo
     await speak(demo, "start recording")
     state = demo.recorder._sessions["user"]
@@ -868,8 +872,10 @@ async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo):
         await demo.recorder._capture(state)
         paths.append(state.directory / state.latest_frame.path)
         if timestamp == 200:
-            demo.captioner.execute.return_value = SimpleNamespace(available=False, text="VLM unavailable")
-            with pytest.raises(RuntimeError, match="VLM unavailable"):
+            demo.captioner.execute.return_value = SimpleNamespace(
+                available=failure != "unavailable", text="VLM unavailable" if failure == "unavailable" else "{",
+            )
+            with pytest.raises(RuntimeError if failure == "unavailable" else ValueError):
                 await demo.recorder._caption(state)
             assert state.last_captioned_frame.frame_id == 1
             demo.captioner.execute.return_value = success
@@ -879,6 +885,9 @@ async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo):
     assert [demo.recorder._images.resolve(image) for image in request.images] == [paths[0], paths[2]]
     assert state.caption_count == 2
     assert state.last_captioned_frame.frame_id == 3
+    captions = [json.loads(line) for line in (state.directory / "captions.jsonl").read_text().splitlines()]
+    assert captions[-1]["delta_reference_frame_id"] == 1
+    assert captions[-1]["delta_reference_timestamp_us"] == 100
 
 
 async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monkeypatch):

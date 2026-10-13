@@ -116,6 +116,16 @@ Malformed responses are recorded as `caption_error` in `errors.jsonl`, including
 the raw response, and are excluded from captions and summaries. The next request
 still compares against the last successfully captioned image.
 
+Each saved caption includes pipeline-generated `delta_reference_frame_id` and
+`delta_reference_timestamp_us` for the earlier image actually supplied to the
+model. Both are `null` on the first observation. Resolve the reference ID through
+`frames/index.jsonl`; it need not be the preceding sampled frame, especially
+after slow or failed inference. Current-image provenance remains in `frame_id`,
+`frame_timestamp_us`, and `frame_path`. These references identify the evidence
+pair; they do not verify the model's interpretation or establish intervening
+actions. Older packets without the reference fields do not explicitly record
+that comparison provenance.
+
 The SOP transcript contains narration between the spoken commands. The optional
 shared transcript covers the connection, including those commands. Match shared
 bundles to SOP packets using participant identity and timestamps.

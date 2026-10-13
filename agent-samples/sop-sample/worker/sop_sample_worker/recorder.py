@@ -424,6 +424,10 @@ class RecorderAgent(Agent):
                 "generated_at_us": generated_at_us,
                 "generated_at": _iso(generated_at_us),
                 "frame_path": frame.path,
+                # This is the actual visual comparison input, not the previous
+                # sampled frame: inference can skip samples or fail entirely.
+                "delta_reference_frame_id": previous_frame.frame_id if previous_frame else None,
+                "delta_reference_timestamp_us": previous_frame.timestamp_us if previous_frame else None,
                 **caption,
             }
             await self._write(
