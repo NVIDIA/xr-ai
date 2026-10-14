@@ -8,6 +8,11 @@ speaker-stt:
   cuda_visible_devices: '0'
 tts:
   cuda_visible_devices: '0'
+omni:
+  max_num_seqs: 4
+  gpu_memory_utilization: 0.25
+  kv_cache_memory_bytes: 2147483648
+  spark_uma: true
 vlm:
   gpu_memory_utilization: 0.2
   kv_cache_memory_bytes: 1610612736

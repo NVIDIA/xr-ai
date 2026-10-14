@@ -6,7 +6,8 @@
 # simple-vlm-example model servers
 
 This directory contains the convenience launcher and GPU tuning for this sample's
-local inference stack. Refer to the
+local inference stack, including speaker STT, TTS, Omni conversation, and Cosmos
+VLM services. Refer to the
 [model-server workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html)
 for startup, shutdown, switching samples, and configuration composition.
 
