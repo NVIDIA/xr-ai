@@ -4,9 +4,9 @@
 name: dependency-manifest
 
 # dependency-manifest/ holds the committed, fully resolved dependency set as of
-# the last uv.toml cutoff change, so ordinary pull requests never trigger these
-# checks; only the cutoff, the manifest, or the files that generate it do. Each
-# job regenerates one lock the way DEPENDENCIES.md describes and fails on drift.
+# the last uv.toml cutoff change or targeted security refresh. Ordinary project
+# changes remain deferred to the next refresh. Each job regenerates one lock the
+# way DEPENDENCIES.md describes and fails on drift.
 
 on:
   push:

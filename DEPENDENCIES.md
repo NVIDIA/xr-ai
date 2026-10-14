@@ -62,27 +62,29 @@ cutoff still bounds resolver-selected versions; moving it remains a dedicated
 dependency refresh because it can change unrelated Python and web packages.
 
 Committed lockfiles live only under `dependency-manifest/`. The Python one is
-`dependency-manifest/uv.lock`: the `dependency-manifest/` project depends on
-every package in the repository, so
-its lock records the complete resolved runtime dependency set at the
-qualification cutoff for dependency analysis tooling; build-system requirements
-such as `hatchling` are not part of a uv lock. That project's `pyproject.toml`
-and `uv.lock` describe the repository as of the last cutoff change or targeted
-dependency security refresh. Regenerate and commit both files for either event;
-ordinary project changes remain deferred to the next refresh. A release yanked
-from the index changes the next fresh resolution.
+`dependency-manifest/uv.lock`: the manifest aggregates repository projects except
+those explicitly listed in the generator's `EXCLUDED_PROJECTS`. Speaker STT is
+excluded because its pinned NeMo Speech revision and lhotse artifact conflict
+with the other ASR services' sources; validate its local lock separately. The
+committed lock records the resolved runtime dependency set at the qualification
+cutoff for dependency analysis tooling. Build-system requirements such as
+`hatchling` are not part of a uv lock. Regenerate and commit the manifest and lock
+for a cutoff change or targeted security refresh; ordinary dependency or project
+changes remain deferred to the next refresh. A release yanked from the index
+changes the next fresh resolution.
+
 `uv run --script .github/scripts/generate_dependency_manifest.py` generates both
-files and always resolves with the uv version pinned inside the script,
-because lock output varies across uv releases. The manifest's `requires-python`
-is the range of interpreters every project accepts, so a project with a narrower
-declaration narrows the manifest. vLLM service projects resolve in a `vllm`
-extra, while all other projects resolve in a `repository` extra. Those extras
-are mutually exclusive because their PyNvVideoCodec and protobuf constraints
-are incompatible; the universal lock inventories both real environments
-without overriding either one. The pre-commit hook runs the script when
-`uv.toml` is staged, and the `dependency-manifest` workflow verifies both files
-with `--check` on changes that touch `uv.toml`, `dependency-manifest/`, or the
-generator scripts. Nothing installs from the directory.
+files with the uv version pinned inside the script because lock output varies
+across uv releases. The manifest's `requires-python` is the range of interpreters
+every included project accepts, so a narrower declaration narrows the manifest.
+vLLM service projects resolve in a `vllm` extra; all other included projects
+resolve in a `repository` extra. These extras are mutually exclusive because
+their PyNvVideoCodec and protobuf constraints are incompatible. The universal
+lock inventories both environments without overriding either one. The pre-commit
+hook runs the script when `uv.toml` is staged, and the `dependency-manifest`
+workflow verifies both files with `--check` on changes that touch `uv.toml`,
+`dependency-manifest/`, or the generator scripts. Nothing installs from the
+directory.
 
 The same directory holds the client lockfiles. Refresh an affected client lock
 with a targeted exact SDK pin, and refresh all of them when the cutoff moves;
@@ -187,6 +189,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `nemo-relay>=0.7.2,<0.8`
   - `pydantic>=2.10`
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
@@ -311,6 +314,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `pyjwt>=2.15.1`
   - `urllib3>=2.8.0`
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -338,6 +342,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -357,6 +362,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -376,6 +382,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[tts]>=2.5`
@@ -398,6 +407,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -417,6 +427,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -486,6 +497,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `fastapi>=0.115.0`
   - `uvicorn[standard]>=0.34.0`
   - `anyio>=4.8.0`
@@ -507,6 +521,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
+  - `werkzeug>=3.1.9`
+  - `pytorch-lightning>=2.6.6`
   - `urllib3>=2.8.0`
   - `transformers>=5.17.0`
   - `nemo_toolkit[asr]>=2.5`
@@ -544,6 +561,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `multidict>=6.9.1`
   - `urllib3>=2.8.0`
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
@@ -816,20 +834,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
     - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
-    - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+    - `xr-ai-models[riva,speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
     - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
     - `xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
+    - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
     - `model-servers` → [`model-servers`](model-server-samples/model-servers/) (local, editable)
-    - `model-servers-nim`
-    - `nim-model-adapter`
-    - `nim-riva-server`
+    - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
-    - `magpie-nim-tts`
     - `magpie-tts-server` → [`magpie-tts-server`](services/magpie-tts/) (local, editable)
-    - `nim-server`
     - `xr-openxr-service` → [`xr-openxr-service`](services/openxr-service/) (local, editable)
     - `pocket-tts-server` → [`pocket-tts-server`](services/pocket-tts/) (local, editable)
     - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)

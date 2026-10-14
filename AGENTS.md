@@ -137,7 +137,8 @@ When preparing a repository sample, refer to
   `dependency-manifest/` for a `uv.toml` qualification refresh or a targeted
   dependency security refresh, and commit the generated project and lock in
   the same change. Do not regenerate it for ordinary dependency or project
-  changes, even when a new project is missing from it.
+  changes, even when a new project is missing from it. The generator explicitly
+  excludes incompatible projects; validate their local locks separately.
 - Never put API keys or tokens in source files. Use environment variables or
   the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.

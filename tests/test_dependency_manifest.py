@@ -343,3 +343,34 @@ def test_generation_error_is_reported(tmp_path: Path, monkeypatch, capsys) -> No
 
     assert dependency_manifest.main(["--check"], root=tmp_path) == 1
     assert "generation failed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("change", ["new", "renamed", "deleted-source"])
+def test_manifest_check_detects_membership_drift(tmp_path: Path, monkeypatch, change: str) -> None:
+    manifest_dir = _write_repo(tmp_path)
+    if change == "new":
+        _write_project(tmp_path, "services/new-server", name="new-server")
+    elif change == "renamed":
+        project = tmp_path / "services" / "server" / "pyproject.toml"
+        project.write_text(project.read_text().replace("name = 'server'", "name = 'renamed-server'"))
+    else:
+        manifest = manifest_dir / "pyproject.toml"
+        lines = [line for line in manifest.read_text().splitlines() if '"server"' not in line]
+        manifest.write_text("\n".join(lines) + "\n")
+    calls: list[Path] = []
+    monkeypatch.setattr(dependency_manifest, "lock_manifest", _fake_lock(calls))
+
+    assert dependency_manifest.main(["--check"], root=tmp_path) == 1
+    assert calls == []
+
+
+def test_manifest_excludes_only_explicit_incompatible_project(tmp_path: Path) -> None:
+    _write_repo(tmp_path)
+    _write_project(tmp_path, "services/speaker-stt", name="xr-ai-speaker-stt", requires_python=">=3.12,<3.14")
+    _write_project(tmp_path, "services/clef-server", name="clef-server")
+    _write_project(tmp_path, "model-server-samples/clef-flash", name="clef-flash-model-server")
+
+    manifest = tomllib.loads(_render(tmp_path))
+    assert "xr-ai-speaker-stt" not in manifest["tool"]["uv"]["sources"]
+    assert {"clef-server", "clef-flash-model-server"} <= manifest["tool"]["uv"]["sources"].keys()
+    assert manifest["project"]["requires-python"] == ">=3.11,<3.13"

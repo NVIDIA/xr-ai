@@ -22,3 +22,10 @@ nvidia-cutlass-dsl-libs-base = "2026-09-23T00:00:00Z"
 nvidia-cutlass-dsl-libs-core = "2026-09-23T00:00:00Z"
 nvidia-cutlass-dsl-libs-cu12 = "2026-09-23T00:00:00Z"
 nvidia-cutlass-dsl-libs-cu13 = "2026-09-23T00:00:00Z"
+
+# CVE-2026-104874: qualify multidict 6.9.1.
+multidict = "2026-09-22T00:00:00Z"
+# CVE-2026-102598: qualify werkzeug 3.1.9.
+werkzeug = "2026-09-28T00:00:00Z"
+# CVE-2026-58659: qualify pytorch-lightning 2.6.6.
+pytorch-lightning = "2026-09-11T00:00:00Z"
