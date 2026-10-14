@@ -16,8 +16,9 @@ sample's design and operational details.
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
 starts passive session capture; capture is disabled by default. The
-`yaml/models.json` profile configures client adapters and shared endpoints for
-speaker ASR, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
+`yaml/models.json` profile configures the Cosmos3 Nano and Pocket TTS client
+adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
+endpoint. Start those endpoints together with
 the sample's model-server stack.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,

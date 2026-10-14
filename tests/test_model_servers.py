@@ -8,13 +8,22 @@ import importlib.util
 import os.path
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
 from _helpers_model_servers import profile_config
 from xr_ai_model_server_stack import _stack, run_model_stack
+from xr_ai_models import load_models_config
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def isolate_stack_logging(monkeypatch, tmp_path):
+    log_file = tmp_path / "logs" / "orchestrator.log"
+    log_file.parent.mkdir()
+    monkeypatch.setattr(_stack, "setup_logging", lambda *_a, **_kw: log_file)
 
 _OMNI_PATH = (
     _REPO_ROOT
@@ -293,6 +302,13 @@ def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path,
     configs = _stack._configs(base, module._SERVICES, profile)
     processes = _stack._processes(configs, tmp_path, _REPO_ROOT)
     assert tuple(process.name for process in processes) == services
+    model_file = "models.local.json" if sample == "tea-making-sample" else "models.json"
+    models = load_models_config(base.parent / "yaml" / model_file)
+    ports = {config["port"] for config in configs.values()}
+    for spec in models.entries.values():
+        endpoint = urlsplit(spec.endpoint.base_url)
+        assert endpoint.hostname in {"localhost", "127.0.0.1"}
+        assert endpoint.port in ports
     for process in processes:
         assert (Path(process.project) / "pyproject.toml").is_file()
         assert process.launch_mode == "persist"
@@ -335,7 +351,64 @@ def test_stop_failure_is_reported(monkeypatch):
         run_model_stack(base, _SAMPLES["simple-vlm-example"], stop=True, gpu_profile="spark")
 
 
+@pytest.mark.parametrize("sample, services", _SAMPLES.items())
+def test_default_stop_needs_no_gpu_or_credentials(monkeypatch, sample, services):
+    from xr_ai_launcher import GPUInventoryError
+
+    base = _REPO_ROOT / "agent-samples" / sample / "model-servers"
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    def failed_inventory():
+        raise GPUInventoryError("nvidia-smi unavailable")
+    monkeypatch.setattr(_stack, "detect_gpu_config", failed_inventory)
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop launched servers"))
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    run_model_stack(base, services, stop=True)
+    expected_ports = {"speaker-stt": 8102, "tts": 8105, "omni": 8108, "vlm": 8100, "embedding": 8109}
+    assert stopped == [(service, expected_ports[service]) for service in services]
+
+
+def test_failed_readiness_retains_private_merged_configs_without_credentials(monkeypatch, capsys):
+    from xr_ai_launcher._failure import FailureContext, emit_failure_summary
+
+    base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
+    original_configs = _stack._configs
+    def configured(*args):
+        configs = original_configs(*args)
+        configs["vlm"]["hf_token"] = "inline-credential"
+        return configs
+    monkeypatch.setattr(_stack, "_configs", configured)
+    monkeypatch.setenv("HF_TOKEN", "environment-credential")
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: None)
+    captured = []
+    def fail(processes, *_a, **_kw):
+        captured.extend(Path(process.config) for process in processes)
+        vlm = processes[-1]
+        path = Path(vlm.config)
+        assert yaml.safe_load(path.read_text())["hf_token"] == "inline-credential"
+        emit_failure_summary(FailureContext(vlm.name, ("server", "--config", str(path)),
+                                           Path(vlm.project), path), "readiness", returncode=1)
+        raise SystemExit(1)
+    monkeypatch.setattr(_stack, "run_stack", fail)
+    with pytest.raises(SystemExit, match="1"):
+        run_model_stack(base, _SAMPLES["simple-vlm-example"], gpu_profile="spark")
+    assert captured
+    for path in captured:
+        assert path.is_file()
+        assert path.parent.parent.name == "logs"
+        assert path.parent.stat().st_mode & 0o777 == 0o700
+        assert path.stat().st_mode & 0o777 == 0o600
+        text = path.read_text()
+        assert "credential" not in text
+        config = yaml.safe_load(text)
+        assert config["port"] in {8100, 8102, 8105}
+    assert str(captured[-1]) in capsys.readouterr().err
+
+
 def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("explicit stop detected GPU"))
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
     (tmp_path / "yaml").mkdir()
     (tmp_path / "yaml/custom.yaml").write_text('stt:\n  port: 9213\n  model_cache: ../cache\n')
     config = _stack._configs(tmp_path, ("stt",), "custom")["stt"]

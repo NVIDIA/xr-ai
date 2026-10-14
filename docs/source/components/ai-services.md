@@ -361,7 +361,7 @@ Each sample's model-server list selects speaker ASR. The launcher waits for
 model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. `--stop`
-stops only managed services in the selected deployment, using their configured
+stops only the sample's explicitly selected server list, using its configured
 ports and the existing process-ownership guards. The speaker service listens
 on port 8102 and supports streaming audio
 over a private WebSocket.

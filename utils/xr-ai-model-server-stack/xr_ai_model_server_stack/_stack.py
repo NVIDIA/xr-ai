@@ -4,6 +4,7 @@
 """Compose sample configs and delegate lifecycle to existing server utilities."""
 from __future__ import annotations
 
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -34,21 +35,23 @@ def _read_yaml(path: Path) -> dict:
     return data
 
 
-def _configs(base: Path, services: tuple[str, ...], profile: str) -> dict[str, dict]:
-    profiles = {path.stem for path in (base / "yaml").glob("*.yaml")}
-    if profile not in profiles:
-        raise ValueError(f"unknown GPU profile {profile!r}; available: {', '.join(sorted(profiles))}")
+def _configs(base: Path, services: tuple[str, ...], profile: str | None) -> dict[str, dict]:
     overrides_path = base / "yaml" / f"{profile}.yaml"
-    overrides = _read_yaml(overrides_path)
-    if set(overrides) != set(services):
-        raise ValueError(f"{overrides_path}: must contain exactly these servers: {', '.join(services)}")
+    overrides = {}
+    if profile is not None:
+        profiles = {path.stem for path in (base / "yaml").glob("*.yaml")}
+        if profile not in profiles:
+            raise ValueError(f"unknown GPU profile {profile!r}; available: {', '.join(sorted(profiles))}")
+        overrides = _read_yaml(overrides_path)
+        if set(overrides) != set(services):
+            raise ValueError(f"{overrides_path}: must contain exactly these servers: {', '.join(services)}")
     configs = {}
     for service in services:
         if service not in _SERVICES:
             raise ValueError(f"unknown model service {service!r}")
         common_path = _COMMON / f"{_SERVICES[service][2]}.yaml"
         config = _read_yaml(common_path)
-        override = overrides[service]
+        override = overrides.get(service, {})
         if not isinstance(override, dict):
             raise ValueError(f"{overrides_path}: {service} must be a mapping")
         config.update(override)
@@ -77,6 +80,7 @@ def _processes(configs: dict[str, dict], directory: Path, root: Path) -> list[Pr
         config = configs[service]
         path = directory / f"{basename}.yaml"
         path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        path.chmod(0o600)
         processes.append(Process(
             service, str(root / "services" / project), command,
             config=path, launch_mode="persist", port=config["port"],
@@ -106,10 +110,12 @@ def run_model_stack(
     omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
-    detects the hardware automatically. ``stop=False`` requires ``HF_TOKEN``,
+    detects the hardware automatically for startup. ``stop=False`` requires ``HF_TOKEN``,
     waits for every server to become ready, and returns with servers running.
-    ``stop=True`` needs no download credentials and stops only recognized
-    servers on the selected configuration's ports. It can stop servers used
+    ``stop=True`` needs neither GPU detection nor download credentials. With no
+    explicit profile it uses the selected services' shared default ports; pass
+    ``gpu_profile`` to honor profile-specific port overrides. It stops only recognized
+    servers on those selected ports. It can stop servers used
     by another sample sharing those ports; no launch history is recorded.
 
     Stop the current stack before switching samples, editing its server
@@ -122,15 +128,26 @@ def run_model_stack(
         SystemExit: Required credentials are absent or stack startup aborts.
     """
     base = base.resolve()
-    setup_logging("orchestrator", namespace=f"{base.parent.name}-models")
-    configs = _configs(base, services, gpu_profile or detect_gpu_config())
+    log_file = setup_logging("orchestrator", namespace=f"{base.parent.name}-models")
     if stop:
+        configs = _configs(base, services, gpu_profile)
         if not stop_persistent_servers([(name, config["port"]) for name, config in configs.items()]):
             raise RuntimeError("one or more configured model servers could not be stopped")
         return
+    configs = _configs(base, services, gpu_profile or detect_gpu_config())
     require_credentials("HF_TOKEN")
     # Configs stay available through child initialization and readiness. Services
     # read their config at startup; persistent servers do not reopen it afterward.
-    with tempfile.TemporaryDirectory(prefix=f"{base.parent.name}-models-") as directory:
+    directory = tempfile.mkdtemp(prefix="model-configs-", dir=log_file.parent)
+    try:
         processes = _processes(configs, Path(directory), base.parents[2])
         run_stack(processes, base, exit_after_ready=True)
+    except BaseException:
+        # Keep failure-summary Config paths usable, without retaining inline HF credentials.
+        for service, config in configs.items():
+            path = Path(directory) / f"{_SERVICES[service][2]}.yaml"
+            if path.exists() and config.get("hf_token"):
+                path.write_text(yaml.safe_dump({**config, "hf_token": ""}, sort_keys=False), encoding="utf-8")
+        raise
+    else:
+        shutil.rmtree(directory)

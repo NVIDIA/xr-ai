@@ -21,7 +21,7 @@ def run() -> None:
     )
     parser.add_argument(
         "--gpu-profile", metavar="NAME",
-        help="Select a checked-in GPU profile instead of automatic detection.",
+        help="Select a startup hardware profile; with --stop, apply its port overrides without GPU detection.",
     )
     args = parser.parse_args()
     try:

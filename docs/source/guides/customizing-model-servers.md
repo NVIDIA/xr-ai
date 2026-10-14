@@ -57,9 +57,19 @@ when finished:
 uv run --project model-servers simple_vlm_example_model_servers --stop
 ```
 
-Use the same explicit `--gpu-profile NAME` for start and stop. Stop does not
-require download credentials. Refer to {doc}`/reference/command-line` for each sample's
+Stop does not detect GPUs or require download credentials. Without an explicit
+profile it uses the selected services' shared default ports. If a hardware
+profile overrides ports, pass that same `--gpu-profile NAME` when stopping;
+this applies its port settings without inspecting the GPU. GPU placement and
+memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
 command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
+
+On startup failure, merged server YAML remains in a private `model-configs-*`
+directory under the existing run logs, at the paths printed in the failure
+summary. Successful startup removes those files. Credentials belong in the
+environment, not YAML; retained snapshots clear the supported inline `hf_token`
+field and never copy environment variables. Treat customized configurations
+and logs as private when sharing diagnostics.
 
 ## Switch samples or update the checkout
 

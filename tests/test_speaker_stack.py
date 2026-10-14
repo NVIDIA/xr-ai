@@ -15,6 +15,15 @@ from xr_ai_vllm import _docker
 from xr_ai_voicegate import load_voice_gate_config
 
 _ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def isolate_stack_logging(monkeypatch, tmp_path):
+    log_file = tmp_path / "logs" / "orchestrator.log"
+    log_file.parent.mkdir()
+    monkeypatch.setattr(_stack, "setup_logging", lambda *_a, **_kw: log_file)
+
+
 _SAMPLES = {
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),

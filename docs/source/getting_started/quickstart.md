@@ -66,8 +66,9 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Its
-fixed `yaml/models.json` expects speaker ASR on port 8102, Cosmos3-Nano on
-port 8100, and Pocket TTS on port 8105. From the sample directory, start the
+fixed `yaml/models.json` configures Cosmos3-Nano on port 8100 and Pocket TTS on
+port 8105; `yaml/voice_gate.yaml` configures speaker ASR on port 8102.
+From the sample directory, start the
 repository defaults first:
 
 ```bash
