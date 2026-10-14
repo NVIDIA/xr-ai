@@ -40,6 +40,7 @@ PARTICIPANT_JOINED_TOPIC = Topic("simple-vlm.participant-joined", VoiceParticipa
 _PROMPTS = Path(__file__).parent / "prompts"
 _CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
 _VISION_INSTRUCTIONS = (_PROMPTS / "vision.txt").read_text(encoding="utf-8").strip()
+_ENVIRONMENT_INSTRUCTIONS = (_PROMPTS / "environment_reasoning.txt").read_text(encoding="utf-8").strip()
 
 
 class SimpleVlmAgent(Agent):

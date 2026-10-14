@@ -292,9 +292,15 @@ class _RouteDecisions:
         else:
             choice = self.destinations.pop(0) if len(self.destinations) > 1 else self.destinations[0]
             answer_name = "destination"
-        probability_names = ("accept", "decline", "clarify") if answer_name == "admission" else (
-            "conversation",
-            "vision",
+        probability_names = (
+            ("accept", "decline", "clarify")
+            if answer_name == "admission"
+            else (
+                "conversation",
+                "vision",
+                "observation",
+                "environment",
+            )
         )
         return DecisionResponse(
             answers={
@@ -337,10 +343,7 @@ def _make_front_end(
         conversations.append(visual)
     decisions = _RouteDecisions(destination, admission)
     front_end = ConversationFrontEnd(
-        {
-            name: app.ClefAdmissionDestination(item, decisions)
-            for name, item in destinations.items()
-        },
+        {name: app.ClefAdmissionDestination(item, decisions) for name, item in destinations.items()},
         decisions,  # type: ignore[arg-type]
     )
     return front_end, tuple(conversations)
@@ -657,9 +660,7 @@ async def test_declining_route_preserves_its_context_until_participant_leaves() 
     assert general._context.sections("alice") == (  # noqa: SLF001
         ("tea.status", "The timer is at 4 minutes."),
     )
-    assert "The timer is at 4 minutes." in "\n".join(
-        str(message.content) for message in llm.requests[1][0]
-    )
+    assert "The timer is at 4 minutes." in "\n".join(str(message.content) for message in llm.requests[1][0])
 
     agent = SimpleVlmAgent(_ignore_status, front_end=front_end, conversations=conversations)
     await agent.participant_left(
@@ -792,9 +793,7 @@ async def test_interruption_during_clef_admission_emits_nothing() -> None:
             admission_started.set()
             await release_admission.wait()
             return DecisionResponse(
-                answers={
-                    "admission": DecisionAnswer("accept", 1.0, {"accept": 1.0, "decline": 0.0, "clarify": 0.0})
-                },
+                answers={"admission": DecisionAnswer("accept", 1.0, {"accept": 1.0, "decline": 0.0, "clarify": 0.0})},
                 model="fake",
                 usage={},
                 raw={},
@@ -1060,6 +1059,15 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     vision_prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "vision.txt").read_text()
     assert "current camera view" in vision_prompt
     assert "Do not answer general knowledge" in vision_prompt
+    planner_prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "environment_planner.txt").read_text()
+    assert "Use inspect_current_view when the request needs evidence" in planner_prompt
+    assert "Treat historical visual" in planner_prompt
+    assert "recorded time" in planner_prompt
+    environment_prompt = (
+        _WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "environment_reasoning.txt"
+    ).read_text()
+    assert "current-turn visual evidence" in environment_prompt
+    assert "broader goal" in environment_prompt
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
@@ -1088,21 +1096,32 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
 
     assert by_name["general_question_without_camera"]["destination"] == "conversation"
     assert by_name["general_question_without_camera"]["admission"] == "accept"
-    assert by_name["general_question_without_camera"]["declined_alternative"] == "vision"
+    assert by_name["general_question_without_camera"]["declined_alternative"] == "observation"
     assert by_name["general_question_without_camera"]["route"] == "direct"
     assert by_name["general_question_without_camera"]["image"] == "blank"
+    assert by_name["use_completed_visual_context_without_rechecking"]["destination"] == "environment"
+    assert by_name["use_completed_visual_context_without_rechecking"]["route"] == "direct"
+    sign_recommendation = by_name["recommend_how_to_improve_sign_visibility"]
+    assert sign_recommendation["destination"] == "environment"
+    assert sign_recommendation["admission"] == "accept"
+    assert sign_recommendation["route"] == "inspect_current_view_then_synthesize"
     unavailable_action = by_name["unavailable_external_action"]
     assert unavailable_action["route"] == "direct"
     assert unavailable_action["any_of"] == ["can't", "cannot", "unable"]
     assert by_name["read_visible_sign_text"]["route"] == "current_view"
-    assert by_name["read_visible_sign_text"]["destination"] == "vision"
+    assert by_name["read_visible_sign_text"]["destination"] == "observation"
     assert by_name["read_visible_sign_text"]["admission"] == "accept"
     assert by_name["read_visible_sign_text"]["declined_alternative"] == "conversation"
     followup = by_name["resolve_visual_followup_referent"]
     assert followup["route"] == "current_view"
-    assert followup["destination"] == "vision"
+    assert followup["destination"] == "observation"
     assert followup["history"]
     assert followup["any_of"] == ["red"]
+    current_visual = by_name["current_visual_check_over_historical_answer"]
+    assert current_visual["route"] == "current_view"
+    assert current_visual["destination"] == "observation"
+    assert current_visual["history"][0]["assistant"] == "A red circle."
+    assert current_visual["any_of"] == ["blue"]
     stale_clarification = by_name["new_question_after_stale_clarification"]
     assert stale_clarification["route"] == "direct"
     assert stale_clarification["destination"] == "conversation"
@@ -1126,18 +1145,22 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert bowline["route"] == "direct"
     assert bowline["destination"] == "conversation"
     assert bowline["admission"] == "accept"
-    assert bowline["declined_alternative"] == "vision"
+    assert bowline["declined_alternative"] == "observation"
     assert bowline["image"] == "blank"
     assert bowline["any_of"] == ["rope", "loop"]
     domain_visual = by_name["domain_scoped_visual_question"]
     assert domain_visual["route"] == "current_view"
-    assert domain_visual["destination"] == "vision"
+    assert domain_visual["destination"] == "observation"
     assert domain_visual["any_of"] == ["blue"]
     ambiguous = by_name["ambiguous_reference_clarifies_before_camera_access"]
     assert ambiguous["route"] == "clarify"
     assert ambiguous["admission"] == "clarify"
-    assert ambiguous["destination"] == "vision"
+    assert ambiguous["destination"] == "observation"
     assert ambiguous["any_of"] == ["general answer", "visible"]
+    environment = by_name["recommend_visible_place_for_reminder"]
+    assert environment["destination"] == "environment"
+    assert environment["route"] == "inspect_current_view_then_synthesize"
+    assert environment["any_of"] == ["whiteboard", "reminder"]
 
 
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
@@ -1344,9 +1367,7 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
     async def set_status(_status: str, _participant_id: str) -> None:
         return None
 
-    agent = SimpleVlmAgent(
-        set_status, front_end=front_end, conversations=conversations
-    )
+    agent = SimpleVlmAgent(set_status, front_end=front_end, conversations=conversations)
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
     runtime.register("conversation-context", conversation.context_subscriber((context_topic,)))
@@ -1401,7 +1422,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     llm = _ConversationService()
     vlm = _Service()
     tts = _Service()
-    router = _RouteDecisions()
+    router = _RouteDecisions("observation")
     transport = _Transport()
     sessions: list[VoiceSession] = []
     run_options = {}
@@ -1512,7 +1533,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
-    assert {"conversation-context", "vision-context"} <= runtimes[0]._agents.keys()
+    assert {"conversation-context", "environment-context"} <= runtimes[0]._agents.keys()
     assert _CurrentFrameTool.instances[0].kwargs["frame_max_age_s"] == (config.frame_max_age_s)
     assert _CurrentFrameTool.instances[0].kwargs["frame_timeout_s"] == (config.frame_timeout_s)
     assert _CurrentFrameTool.instances[0].released == ["alice"]

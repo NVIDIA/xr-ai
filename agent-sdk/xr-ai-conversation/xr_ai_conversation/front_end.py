@@ -6,13 +6,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from collections.abc import Mapping
 from functools import partial
 
 import nemo_relay
 from xr_ai_models import DecisionQuestion, DecisionService
 
+from ._context import _active_history_timestamps, _format_minute
 from .contracts import (
     ConversationDestination,
     ConversationExchange,
@@ -55,6 +58,7 @@ class ConversationFrontEnd:
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._history: dict[str, list[ConversationExchange]] = {}
+        self._history_times: dict[str, list[int]] = {}
         self._destinations_used: dict[str, set[str]] = {}
 
     async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
@@ -68,12 +72,17 @@ class ConversationFrontEnd:
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
             await self.interrupt(participant_id)
-            history = tuple(self._history.get(participant_id, ())) or turn.history
+            owned_history = self._history.get(participant_id)
+            history = tuple(owned_history) if owned_history else turn.history
+            timestamps = tuple(self._history_times.get(participant_id, ())) if owned_history else (None,) * len(history)
+            history, timestamps = _bounded_history_with_times(
+                history, timestamps, self._context_budget_bytes, participant_id
+            )
             current_turn = ConversationTurn(
                 participant_id=turn.participant_id,
                 turn_id=turn.turn_id,
                 query=turn.query,
-                history=_bounded_history(history, self._context_budget_bytes, participant_id),
+                history=history,
             )
             generation = object()
             self._generation[participant_id] = generation
@@ -82,8 +91,15 @@ class ConversationFrontEnd:
                 if self._generation.get(participant_id) is generation:
                     await emit(source, text)
 
+            async def run_handle() -> DestinationResult:
+                token = _active_history_timestamps.set(timestamps)
+                try:
+                    return await self._handle(current_turn, emit=emit_if_current, generation=generation)
+                finally:
+                    _active_history_timestamps.reset(token)
+
             task = asyncio.create_task(
-                self._handle(current_turn, emit=emit_if_current, generation=generation),
+                run_handle(),
                 name=f"conversation-front-end:{participant_id}",
                 context=nemo_relay.fork_asyncio_context(),
             )
@@ -234,6 +250,7 @@ class ConversationFrontEnd:
         if used:
             self._destinations_used.setdefault(participant_id, set()).update(used)
         self._history.pop(participant_id, None)
+        self._history_times.pop(participant_id, None)
         self._locks.pop(participant_id, None)
         errors = []
         for name in used:
@@ -258,6 +275,7 @@ class ConversationFrontEnd:
     def _remember(self, turn: ConversationTurn, answer: str) -> None:
         history = self._history.setdefault(turn.participant_id, [])
         history.append(ConversationExchange(turn.query, answer))
+        self._history_times.setdefault(turn.participant_id, []).append(time.time_ns() // 1_000)
 
     async def _select(self, turn: ConversationTurn, candidates: list[str]) -> str | None:
         if not candidates:
@@ -284,10 +302,15 @@ class ConversationFrontEnd:
         criteria["clarify"] = "The request cannot safely be assigned to one available destination."
         state = {
             "participant_id": turn.participant_id,
+            "current_time_utc": _format_minute(time.time_ns() // 1_000),
             "request": turn.query,
             "completed_history": [
-                {"user": item.user, "assistant": item.assistant}
-                for item in _bounded_history(turn.history, self._context_budget_bytes, turn.participant_id)
+                {
+                    "user": item.user,
+                    "assistant": item.assistant,
+                    "recorded_around_utc": _history_timestamp(index),
+                }
+                for index, item in enumerate(turn.history)
             ],
             "destinations": [
                 {
@@ -329,10 +352,32 @@ def _bounded_history(
     budget_bytes: int,
     participant_id: str,
 ) -> tuple[ConversationExchange, ...]:
+    bounded, _ = _bounded_history_with_times(history, (None,) * len(history), budget_bytes, participant_id)
+    return bounded
+
+
+def _bounded_history_with_times(
+    history: tuple[ConversationExchange, ...],
+    timestamps: tuple[int | None, ...],
+    budget_bytes: int,
+    participant_id: str,
+) -> tuple[tuple[ConversationExchange, ...], tuple[int | None, ...]]:
+    """Bound serialized completed-history entries, including their time labels.
+
+    The current request, current-time anchor, and destination descriptions are
+    separate routing fields and are outside this history-entry budget.
+    """
+
     retained: list[ConversationExchange] = []
     size = 0
-    for exchange in reversed(history):
-        item_size = len(exchange.user.encode("utf-8")) + len(exchange.assistant.encode("utf-8")) + 2
+    retained_times: list[int | None] = []
+    for exchange, timestamp_us in reversed(tuple(zip(history, timestamps, strict=True))):
+        item = {
+            "user": exchange.user,
+            "assistant": exchange.assistant,
+            "recorded_around_utc": "unknown" if timestamp_us is None else _format_minute(timestamp_us),
+        }
+        item_size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if retained and size + item_size > budget_bytes:
             _logger.error(
                 "dropping old routing context participant=%r source=%r size_bytes=%d budget_bytes=%d",
@@ -352,8 +397,16 @@ def _bounded_history(
             )
             break
         retained.append(exchange)
+        retained_times.append(timestamp_us)
         size += item_size
-    return tuple(reversed(retained))
+    return tuple(reversed(retained)), tuple(reversed(retained_times))
+
+
+def _history_timestamp(index: int) -> str:
+    timestamps = _active_history_timestamps.get()
+    if index >= len(timestamps) or timestamps[index] is None:
+        return "unknown"
+    return _format_minute(timestamps[index])
 
 
 __all__ = ["ConversationFrontEnd"]

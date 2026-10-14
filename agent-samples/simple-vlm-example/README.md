@@ -7,10 +7,11 @@
 
 This sample is the smallest complete voice-and-vision application in the
 repository. Its reusable `xr_ai_conversation.ConversationFrontEnd` routes each
-turn through Clef to separate conversation and visual destinations. The visual
-destination uses the current-view tools. The worker uses an existing live video
-frame when the client is streaming; otherwise it asks the client to take one
-picture for that turn.
+turn through Clef to general conversation, direct visual observation, or
+environment reasoning. The environment destination asks Omni for focused
+visual evidence from Cosmos before synthesizing a response. The worker uses an
+existing live video frame when the client is streaming; otherwise it asks the
+client to take one picture for that turn.
 Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
@@ -33,6 +34,8 @@ files before starting the sample:
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
+| `worker/simple_vlm_example_worker/prompts/environment_planner.txt` | Environment destination's targeted visual-evidence planning instructions |
+| `worker/simple_vlm_example_worker/prompts/environment_reasoning.txt` | Environment destination's answer synthesis instructions |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
 long a second utterance can omit “Hey Agent”:

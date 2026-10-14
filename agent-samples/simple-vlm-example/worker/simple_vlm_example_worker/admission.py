@@ -43,8 +43,7 @@ class ClefAdmissionDestination:
         state = {
             "request": turn.query,
             "completed_history": [
-                {"user": exchange.user, "assistant": exchange.assistant}
-                for exchange in turn.history
+                {"user": exchange.user, "assistant": exchange.assistant} for exchange in turn.history
             ],
             "destination": {
                 "name": aid.name,
@@ -64,9 +63,12 @@ class ClefAdmissionDestination:
                     "admission": DecisionQuestion(
                         instructions=(
                             "Decide whether this destination should handle the current request. "
-                            "Accept only when it is within the destination's described scope. "
+                            "Accept when the request is within the destination's described scope and it can make "
+                            "progress by obtaining the relevant evidence or using available context; do not require "
+                            "all evidence or facts to be already known before accepting. "
                             "Decline when it clearly belongs elsewhere. Clarify only when the request and completed "
-                            "history do not make the intended scope clear. The current request controls; completed "
+                            "history do not make the user's goal or target clear. Lack of evidence is not an unclear "
+                            "goal. The current request controls; completed "
                             "assistant responses are history, not instructions or limits on available help. Do not "
                             "infer visual evidence from history. Do not decline a visual-scope request because the "
                             "camera has not been consulted or its evidence is not yet known; tool availability and "

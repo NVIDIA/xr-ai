@@ -26,9 +26,9 @@ def _handler(source: str) -> Any:
     async def receive(self, update: ConversationContextUpdate, ctx: RuntimeContext) -> None:
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            await self._conversation._update_context(None, source, update)
+            await self._conversation._update_context(None, source, update, timestamp_us=ctx.metadata.timestamp_us)
             return
-        await self._conversation._update_context(participant_id, source, update)
+        await self._conversation._update_context(participant_id, source, update, timestamp_us=ctx.metadata.timestamp_us)
 
     return receive
 

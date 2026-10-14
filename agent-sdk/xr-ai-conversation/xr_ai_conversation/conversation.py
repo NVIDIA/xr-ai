@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
@@ -16,7 +17,13 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.types import StrictRequest
 from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
-from ._context import _ConversationContext, _TranscriptEntry
+from ._context import (
+    _active_history_timestamps,
+    _ConversationContext,
+    _format_minute,
+    _rendered_source_size,
+    _TranscriptEntry,
+)
 from ._topics import make_context_subscriber
 from .contracts import (
     Admission,
@@ -169,6 +176,8 @@ class Conversation:
         participant_id: str | None,
         source: str,
         update: ConversationContextUpdate,
+        *,
+        timestamp_us: int | None = None,
     ) -> None:
         """Apply one runtime context update to a participant's background."""
 
@@ -178,24 +187,24 @@ class Conversation:
         if self._closing or participant_id in self._closed_participants:
             _logger.error("dropping context update for closed participant=%r source=%r", participant_id, source)
             return
-        if update.mode == "summary" and len(update.text.encode("utf-8")) > self._context_budget_bytes:
-            await self._context.drop_source(participant_id, source)
-            _logger.error(
-                "dropping oversized context summary participant=%r source=%r size_bytes=%d budget_bytes=%d",
-                participant_id,
-                source,
-                len(update.text.encode("utf-8")),
-                self._context_budget_bytes,
-            )
-            return
         stored, trimmed = await self._context.update(
             participant_id,
             source,
             update.mode,
             update.text,
             context_budget_bytes=self._context_budget_bytes,
+            timestamp_us=timestamp_us,
         )
         if trimmed:
+            if update.mode == "summary":
+                _logger.error(
+                    "dropping oversized context summary participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                    participant_id,
+                    source,
+                    _rendered_source_size(source, update.text, timestamp_us),
+                    self._context_budget_bytes,
+                )
+                return
             _logger.error(
                 "context records dropped to fit participant=%r source=%r size_bytes=%d budget_bytes=%d",
                 participant_id,
@@ -231,24 +240,36 @@ class Conversation:
         """Yield one direct answer or stream a delegated current-view answer."""
 
         self.activate_participant(participant_id)
+        history_timestamps = _active_history_timestamps.get()
+        if len(history_timestamps) != len(history):
+            history_timestamps = (None,) * len(history)
         self._context.reconcile_transcript(
             participant_id,
-            tuple((exchange.user, exchange.assistant) for exchange in history),
+            tuple(
+                (exchange.user, exchange.assistant, timestamp_us)
+                for exchange, timestamp_us in zip(history, history_timestamps, strict=True)
+            ),
         )
         self._schedule_dialogue_compaction(participant_id)
         dialogue_summary, dialogue_entries = self._context.dialogue_snapshot(participant_id)
-        recent_history = tuple(
-            ConversationExchange(entry.user, entry.assistant) for entry in dialogue_entries
-        )
-        background = self._context.sections(participant_id)
+        recent_history = tuple(ConversationExchange(entry.user, entry.assistant) for entry in dialogue_entries)
+        background = self._context.sections_with_recency(participant_id)
         if dialogue_summary:
-            background += (("earlier conversation", dialogue_summary),)
+            background += (
+                (
+                    "earlier conversation",
+                    dialogue_summary,
+                    self._context.dialogue_recency(participant_id),
+                    "exchange completion time",
+                ),
+            )
         messages = _messages(
             request,
             recent_history,
             instructions=self._instructions,
             vision_available=self._vision is not None,
             background=background,
+            history_timestamps=tuple(entry.timestamp_us for entry in dialogue_entries),
             context_budget_bytes=self._context_budget_bytes,
             participant_id=participant_id,
         )
@@ -313,7 +334,7 @@ class Conversation:
     def _record_completed_exchange(self, participant_id: str, user: str, assistant: str) -> None:
         if not assistant.strip():
             return
-        self._context.append(participant_id, user, assistant)
+        self._context.append(participant_id, user, assistant, timestamp_us=time.time_ns() // 1_000)
         self._schedule_dialogue_compaction(participant_id)
 
     def _schedule_dialogue_compaction(self, participant_id: str) -> None:
@@ -346,7 +367,9 @@ class Conversation:
                 content=(
                     f"Source: {source}\nPrevious source summary:\n{previous}\n\n"
                     "New source updates in order:\n"
-                    + "\n".join(f"- {entry.user}" for entry in entries)
+                    + "\n".join(
+                        f"- Published around {_entry_time(entry.timestamp_us)}: {entry.user}" for entry in entries
+                    )
                 ),
             ),
         )
@@ -375,7 +398,10 @@ class Conversation:
                     f"Previous completed-history summary:\n{previous}\n\n"
                     "New completed exchanges in order:\n"
                     + "\n".join(
-                        f"User: {entry.user}\nAssistant: {entry.assistant}" for entry in entries
+                        f"Exchange completed around "
+                        f"{_entry_time(entry.timestamp_us)}:\n"
+                        f"User: {entry.user}\nAssistant: {entry.assistant}"
+                        for entry in entries
                     )
                 ),
             ),
@@ -390,7 +416,8 @@ def _messages(
     *,
     instructions: str,
     vision_available: bool,
-    background: tuple[tuple[str, str], ...] = (),
+    background: tuple[tuple[str, str] | tuple[str, str, str] | tuple[str, str, str, str], ...] = (),
+    history_timestamps: tuple[int | None, ...] = (),
     context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
     participant_id: str | None = None,
 ) -> tuple[ChatMessage, ...]:
@@ -402,18 +429,27 @@ def _messages(
             "\n\nNo camera or visual-inspection tool is available. Do not claim to inspect the current view; "
             "briefly explain this limitation when a request requires live visual information."
         )
+    system_prompt += f"\n\nCurrent time reference: around {_format_minute(time.time_ns() // 1_000)}."
     messages = [ChatMessage(role="system", content=system_prompt)]
     context_blocks: list[tuple[str, str]] = []
-    for index, item in enumerate(history, start=1):
+    if len(history_timestamps) != len(history):
+        history_timestamps = (None,) * len(history)
+    for index, (item, timestamp_us) in enumerate(zip(history, history_timestamps, strict=True), start=1):
+        recorded = _format_minute(timestamp_us) if timestamp_us is not None else "unknown"
         context_blocks.append(
             (
                 "dialogue",
                 f"Turn {index}: user asked: {item.user}\n"
-                f"Turn {index}: assistant said: “{item.assistant}”",
+                f"Turn {index}: assistant said: “{item.assistant}”\n"
+                f"Exchange completion time: {recorded}",
             )
         )
-    for source, text in background:
-        context_blocks.append(("background", f"Source {source}:\n{text}"))
+    for section in background:
+        source, text = section[:2]
+        recency = section[2] if len(section) >= 3 else "unknown"
+        time_kind = section[3] if len(section) == 4 else "publication time"
+        context_blocks.append(("background", f"Source {source} ({time_kind} {recency}):\n{text}"))
+
     def over_budget() -> bool:
         return len(_render_context(context_blocks).encode("utf-8")) > context_budget_bytes
 
@@ -436,6 +472,10 @@ def _messages(
     return tuple(messages)
 
 
+def _entry_time(timestamp_us: int | None) -> str:
+    return _format_minute(timestamp_us) if timestamp_us is not None else "unknown"
+
+
 def _render_context(blocks: Sequence[tuple[str, str]]) -> str:
     dialogue = [text for kind, text in blocks if kind == "dialogue"]
     background = [text for kind, text in blocks if kind == "background"]
@@ -455,7 +495,8 @@ def _drop_context_block(
         "dropping old conversation context participant=%r source=%r kind=%s size_bytes=%d budget_bytes=%d",
         participant_id,
         removed[1].splitlines()[0].removeprefix("Source ").removesuffix(":")
-        if removed[0] == "background" else "dialogue",
+        if removed[0] == "background"
+        else "dialogue",
         removed[0],
         len(removed[1].encode("utf-8")),
         budget_bytes,

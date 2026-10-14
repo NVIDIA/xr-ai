@@ -34,14 +34,14 @@ from xr_ai_models import (
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
-from xr_ai_tools.vision import StreamingImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
 from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .admission import ClefAdmissionDestination
 from .agent import (
     _CONVERSATION_INSTRUCTIONS,
-    _VISION_INSTRUCTIONS,
+    _ENVIRONMENT_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -49,10 +49,15 @@ from .agent import (
     SimpleVlmAgent,
 )
 from .config import WorkerConfig
+from .visual_destinations import EnvironmentReasoningDestination, VisualObservationDestination
 
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4
 _VLM_WARMUP_TIMEOUT_S = 120.0
+_ENVIRONMENT_EVIDENCE_TOPIC = Topic(
+    "simple-vlm.environment-evidence",
+    ConversationContextUpdate,
+)
 
 
 def _vlm_warmup_jpeg() -> bytes:
@@ -189,38 +194,65 @@ async def run_app(
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
-    visual_conversation = Conversation(
+    environment_conversation = Conversation(
         llm,
-        instructions=_VISION_INSTRUCTIONS,
+        instructions=_ENVIRONMENT_INSTRUCTIONS,
         routing=RoutingAid(
-            name="vision",
-            description=(
-                "Questions that need evidence from the participant's current camera view, "
-                "including visible objects, text, colors, counts, and spatial relations."
-            ),
+            name="environment",
+            description=("Explain, compare, recommend, or plan using current-scene evidence and conversation context."),
         ),
-        frames=frames,
-        vision=vision,
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
+    )
+
+    async def publish_environment_evidence(
+        participant_id: str,
+        update: ConversationContextUpdate,
+    ) -> None:
+        await runtime.publish(
+            _ENVIRONMENT_EVIDENCE_TOPIC,
+            update,
+            participant_id=participant_id,
+            source="simple-vlm.environment",
+        )
+
+    observation = VisualObservationDestination(
+        frames,
+        vision,
+        context_budget_bytes=config.context_budget_bytes,
+    )
+    environment = EnvironmentReasoningDestination(
+        llm,
+        frames,
+        ImageQueryTool(images=images, vlm=vlm, system_prompt=config.system_prompt),
+        environment_conversation,
+        publish_environment_evidence,
+        context_budget_bytes=config.context_budget_bytes,
     )
     front_end = ConversationFrontEnd(
         {
             "conversation": ClefAdmissionDestination(conversation, router),
-            "vision": ClefAdmissionDestination(visual_conversation, router),
+            "observation": ClefAdmissionDestination(observation, router),
+            "environment": ClefAdmissionDestination(environment, router),
         },
         router,
     )
-    if config.context_topics:
-        topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
-        runtime.register("conversation-context", conversation.context_subscriber(topics))
-        runtime.register("vision-context", visual_conversation.context_subscriber(topics))
+    configured_topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
+    if configured_topics:
+        runtime.register("conversation-context", conversation.context_subscriber(configured_topics))
+    environment_topics = tuple(
+        {topic.name: topic for topic in (*configured_topics, _ENVIRONMENT_EVIDENCE_TOPIC)}.values()
+    )
+    runtime.register(
+        "environment-context",
+        environment_conversation.context_subscriber(environment_topics),
+    )
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
             transport.endpoint.set_status,
             front_end=front_end,
-            conversations=(conversation, visual_conversation),
+            conversations=(conversation, environment_conversation),
             frames=frames,
         ),
     )
@@ -237,6 +269,6 @@ async def run_app(
                     await simple_vlm.stop()
     finally:
         await conversation.close()
-        await visual_conversation.close()
+        await environment_conversation.close()
         await llm.close()
     logger.info("simple-vlm-example stopped")

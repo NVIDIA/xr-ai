@@ -92,12 +92,35 @@ def test_message_history_keeps_full_exchanges_and_latest_request_separate():
     assert "Turn 6: user asked: Question 5" in context
     assert "Turn 1: assistant said: “Answer 0”" in context
     assert "Turn 6: assistant said: “Answer 5”" in context
+    assert "Exchange completion time: unknown" in context
+
+
+def test_message_history_renders_coarse_known_recency_and_source_ranges():
+    messages = _messages(
+        "Current question",
+        (ConversationExchange("Earlier question", "Earlier answer"),),
+        instructions="",
+        vision_available=True,
+        history_timestamps=(1_790_856_000_000_000,),
+        background=(
+            (
+                "tea.status",
+                "Timer is running.",
+                "from around 2026-10-01 12:00 UTC through around 2026-10-01 13:00 UTC",
+            ),
+        ),
+    )
+    context = messages[-2].content
+    assert "Exchange completion time: 2026-10-01 12:00 UTC" in context
+    assert (
+        "Source tea.status (publication time from around 2026-10-01 12:00 UTC through around 2026-10-01 13:00 UTC)"
+        in context
+    )
 
 
 def test_message_history_drops_whole_old_context_to_byte_budget_without_truncating_query():
     history = tuple(
-        ConversationExchange(f"Question {index}: " + "q" * 160, f"Answer {index}: " + "a" * 160)
-        for index in range(6)
+        ConversationExchange(f"Question {index}: " + "q" * 160, f"Answer {index}: " + "a" * 160) for index in range(6)
     )
     query = "Current question " + "z" * 300
     messages = _messages(
@@ -193,9 +216,7 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
         ConversationExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
         ConversationExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
     )
-    first_output = [
-        chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)
-    ]
+    first_output = [chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)]
     assert first_output == ["Hello there."]
     memory = conversation._context._participants["alice"]
     for _ in range(3):
@@ -235,13 +256,16 @@ def test_dialogue_compaction_does_not_split_an_oversized_exchange():
     async def unused_compactor(_previous, _entries):
         raise AssertionError("oversized exchange must not be sent partially")
 
-    assert context.schedule_dialogue_compaction(
-        "alice",
-        trigger_budget_bytes=1,
-        payload_budget_bytes=10,
-        summary_budget_bytes=100,
-        compact=unused_compactor,
-    ) is None
+    assert (
+        context.schedule_dialogue_compaction(
+            "alice",
+            trigger_budget_bytes=1,
+            payload_budget_bytes=10,
+            summary_budget_bytes=100,
+            compact=unused_compactor,
+        )
+        is None
+    )
     assert context.transcript("alice")[0].utf8_size > len("é" * 8) + len("answer")
 
 
@@ -265,7 +289,7 @@ async def test_dialogue_compaction_keeps_appended_tail_and_cancels_on_departure(
             assert [entry.user for entry in entries] == ["Old question"]
             return "Old question was answered."
         second_entered.set()
-        assert previous == "Old question was answered."
+        assert "Old question was answered." in previous
         assert [entry.user for entry in entries] == ["Middle question"]
         await asyncio.Event().wait()
         return "never completes"
@@ -273,7 +297,7 @@ async def test_dialogue_compaction_keeps_appended_tail_and_cancels_on_departure(
     task = context.schedule_dialogue_compaction(
         "alice",
         trigger_budget_bytes=1,
-        payload_budget_bytes=100,
+        payload_budget_bytes=180,
         summary_budget_bytes=100,
         compact=blocked_compaction,
     )
@@ -324,15 +348,93 @@ async def test_runtime_named_context_topics_are_participant_scoped_and_summary_r
 
 
 @pytest.mark.asyncio
+async def test_context_recency_uses_publication_time_and_keeps_it_after_compaction():
+    context = _ConversationContext()
+    await context.update(
+        "alice",
+        "tea.status",
+        "incremental",
+        "Timer started.",
+        context_budget_bytes=1000,
+        timestamp_us=1_790_856_000_000_000,
+    )
+    summary_call = []
+
+    async def compact(source, previous, entries):
+        summary_call.append((source, previous, entries[0].timestamp_us))
+        return "Timer was started."
+
+    task = context.schedule_context_compaction("alice", "tea.status", payload_budget_bytes=1000, compact=compact)
+    assert task is not None and await task is True
+    assert summary_call == [("tea.status", "", 1_790_856_000_000_000)]
+    section = context.sections_with_recency("alice")[0]
+    assert section[1] == "Timer was started."
+    assert "2026-10-01 12:00 UTC" in section[2]
+
+    await context.update(
+        "alice",
+        "tea.status",
+        "incremental",
+        "Timer extended.",
+        context_budget_bytes=1000,
+        timestamp_us=1_790_859_600_000_000,
+    )
+    task = context.schedule_context_compaction("alice", "tea.status", payload_budget_bytes=1000, compact=compact)
+    assert task is not None and await task is True
+    assert summary_call[1][1] == (
+        "Earlier summary (publication times around 2026-10-01 12:00 UTC):\nTimer was started."
+    )
+
+    await context.update(
+        "alice",
+        "tea.status",
+        "summary",
+        "Timer is now at 6 minutes.",
+        context_budget_bytes=1000,
+        timestamp_us=1_790_859_600_000_000,
+    )
+    assert context.sections_with_recency("alice")[0][2] == "around 2026-10-01 13:00 UTC"
+
+
+@pytest.mark.asyncio
+async def test_incremental_context_budget_counts_rendered_publication_time_label():
+    context = _ConversationContext()
+    summary_budget = len("Source tea (publication time around 2026-10-01 12:00 UTC):\né".encode("utf-8"))
+    await context.update(
+        "alice",
+        "tea",
+        "summary",
+        "é",
+        context_budget_bytes=summary_budget,
+        timestamp_us=1_790_856_000_000_000,
+    )
+    retained, dropped = await context.update(
+        "alice",
+        "tea",
+        "incremental",
+        "水",
+        context_budget_bytes=summary_budget,
+        timestamp_us=1_790_856_000_000_000,
+    )
+
+    assert (retained, dropped) == (False, True)
+    assert context.sections("alice") == (("tea", "é"),)
+    assert context.sections_with_recency("alice")[0][2] == "around 2026-10-01 12:00 UTC"
+
+
+@pytest.mark.asyncio
 async def test_context_topic_rejects_unscoped_update_and_oversized_summary_drops_old_source(caplog):
-    conversation = Conversation(_LLM(), context_budget_bytes=8)  # type: ignore[arg-type]
+    conversation = Conversation(_LLM(), context_budget_bytes=1000)  # type: ignore[arg-type]
     await conversation._update_context("alice", "tea", ConversationContextUpdate(mode="summary", text="old"))
-    await conversation._update_context("alice", "tea", ConversationContextUpdate(mode="summary", text="123456789"))
+    conversation._context_budget_bytes = 5  # noqa: SLF001
+    await conversation._update_context("alice", "tea", ConversationContextUpdate(mode="summary", text="é"))
     await conversation._update_context(None, "tea", ConversationContextUpdate(mode="summary", text="shared"))
 
     assert conversation._context.sections("alice") == ()
     assert "oversized context summary" in caplog.text
     assert "without participant" in caplog.text
+    rendered_summary_size = len("Source tea (publication time unknown):\né".encode("utf-8"))
+    assert f"size_bytes={rendered_summary_size}" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -348,16 +450,19 @@ async def test_summary_update_supersedes_inflight_compaction_and_departure_block
 
     conversation = Conversation(_BlockingLLM())  # type: ignore[arg-type]
     await conversation._update_context(
-        "alice", "tea", ConversationContextUpdate(mode="incremental", text="timer started"))
+        "alice", "tea", ConversationContextUpdate(mode="incremental", text="timer started")
+    )
     await entered.wait()
 
     await conversation._update_context(
-        "alice", "tea", ConversationContextUpdate(mode="summary", text="timer is at 6 minutes"))
+        "alice", "tea", ConversationContextUpdate(mode="summary", text="timer is at 6 minutes")
+    )
     assert conversation._context.sections("alice") == (("tea", "timer is at 6 minutes"),)
 
     await conversation.participant_left("alice")
     await conversation._update_context(
-        "alice", "tea", ConversationContextUpdate(mode="summary", text="late stale update"))
+        "alice", "tea", ConversationContextUpdate(mode="summary", text="late stale update")
+    )
     assert conversation._context.sections("alice") == ()
     await conversation.close()
 
@@ -381,19 +486,15 @@ async def test_incremental_update_during_compaction_keeps_prefix_and_compacts_ne
             assert [entry.user for entry in entries] == ["first fact"]
             return "summary of first fact"
         second_entered.set()
-        assert previous == "summary of first fact"
+        assert "summary of first fact" in previous
         assert [entry.user for entry in entries] == ["second fact"]
         return "summary of both facts"
 
-    first = context.schedule_context_compaction(
-        "alice", "tea", payload_budget_bytes=100, compact=compact
-    )
+    first = context.schedule_context_compaction("alice", "tea", payload_budget_bytes=100, compact=compact)
     assert first is not None
     await entered.wait()
     await context.update("alice", "tea", "incremental", "second fact", context_budget_bytes=100)
-    assert context.schedule_context_compaction(
-        "alice", "tea", payload_budget_bytes=100, compact=compact
-    ) is first
+    assert context.schedule_context_compaction("alice", "tea", payload_budget_bytes=100, compact=compact) is first
     finish_first.set()
     assert await first is True
     await second_entered.wait()

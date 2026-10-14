@@ -5,7 +5,7 @@
   image: blank
   destination: conversation
   admission: accept
-  declined_alternative: vision
+  declined_alternative: observation
   route: direct
   query: What is twice eleven?
   any_of: ["22", twenty-two]
@@ -19,7 +19,7 @@
 
 - name: read_visible_sign_text
   image: closed_sign
-  destination: vision
+  destination: observation
   admission: accept
   declined_alternative: conversation
   route: current_view
@@ -28,13 +28,23 @@
 
 - name: resolve_visual_followup_referent
   image: red_left_blue_right
-  destination: vision
+  destination: observation
   route: current_view
   history:
     - user: Which shape is on the right?
       assistant: A blue circle.
   query: What color is the shape on the left?
   any_of: [red]
+
+- name: current_visual_check_over_historical_answer
+  image: red_left_blue_right
+  destination: observation
+  route: current_view
+  history:
+    - user: Which shape is on the right?
+      assistant: A red circle.
+  query: What color is the shape on the right now?
+  any_of: [blue]
 
 - name: new_question_after_stale_clarification
   image: blank
@@ -72,7 +82,7 @@
   query: Stop repeating, just show me how to make pasta.
   any_of: ["add the pasta", "cook according to the package directions"]
   admission: accept
-  declined_alternative: vision
+  declined_alternative: observation
 
 - name: direct_howto_after_visual_clarification
   image: blank
@@ -84,11 +94,11 @@
   query: How do I tie a bowline knot?
   any_of: [rope, loop]
   admission: accept
-  declined_alternative: vision
+  declined_alternative: observation
 
 - name: ambiguous_reference_clarifies_before_camera_access
   image: red_left_blue_right
-  destination: vision
+  destination: observation
   admission: clarify
   route: clarify
   history:
@@ -99,7 +109,34 @@
 
 - name: domain_scoped_visual_question
   image: red_left_blue_right
-  destination: vision
+  destination: observation
   route: current_view
   query: For my exhibit notes, what color is the circle on the right?
   any_of: [blue]
+
+- name: recommend_visible_place_for_reminder
+  image: whiteboard_room
+  destination: environment
+  admission: accept
+  route: inspect_current_view_then_synthesize
+  query: Where would be a good place to write a short reminder in this room?
+  any_of: [whiteboard, reminder]
+
+- name: recommend_how_to_improve_sign_visibility
+  image: closed_sign
+  destination: environment
+  admission: accept
+  route: inspect_current_view_then_synthesize
+  query: What could I do to make this sign easier to notice from farther away?
+  any_of: [larger, higher, visible, contrast]
+
+- name: use_completed_visual_context_without_rechecking
+  image: whiteboard_room
+  destination: environment
+  admission: accept
+  route: direct
+  history:
+    - user: What writing surface is visible?
+      assistant: A whiteboard is visible beside the table.
+  query: Based on that earlier observation, where could I write a short reminder?
+  any_of: [whiteboard]

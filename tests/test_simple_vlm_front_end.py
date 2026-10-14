@@ -23,6 +23,8 @@ from xr_ai_conversation import (  # noqa: E402
     DestinationResult,
     RoutingAid,
 )
+from xr_ai_conversation._context import _active_history_timestamps  # noqa: E402
+from xr_ai_conversation.front_end import _bounded_history_with_times  # noqa: E402
 
 
 class _Decisions:
@@ -409,7 +411,10 @@ async def test_route_decision_receives_bounded_completed_context():
     await _run(front_end, query="Add the next object.", history=history)
 
     routed_history = decisions.calls[0][0]["completed_history"]
-    assert routed_history == [{"user": f"request {index}", "assistant": f"reply {index}"} for index in range(1, 5)]
+    assert routed_history == [
+        {"user": f"request {index}", "assistant": f"reply {index}", "recorded_around_utc": "unknown"}
+        for index in range(5)
+    ]
     assert xr.calls[0] == ("admit", "Add the next object.", False)
 
 
@@ -459,3 +464,40 @@ async def test_replacement_turn_cancels_old_answer_before_it_can_emit():
     assert output == [("xr", "fresh result")]
     assert front_end._focus == {}  # noqa: SLF001
     assert [item.assistant for item in front_end._history["alice"]] == ["fresh result"]  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_front_end_attaches_completion_recency_to_its_owned_history():
+    decisions = _Decisions("conversation", "conversation")
+    conversation = _Destination(
+        "conversation",
+        results=(DestinationResult("answer", "first answer"), DestinationResult("answer", "second answer")),
+    )
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "observation": _Destination("observation")}, decisions
+    )
+
+    await _run(front_end, query="first request")
+    await _run(front_end, query="follow-up")
+
+    history = decisions.calls[1][0]["completed_history"]
+    assert history[0]["user"] == "first request"
+    assert history[0]["recorded_around_utc"] != "unknown"
+
+
+def test_routing_history_byte_budget_counts_timestamp_and_utf8_json_fields():
+    history = (ConversationExchange("質問", "答え"),)
+    timestamp = 1_790_856_000_000_000
+    token = _active_history_timestamps.set((timestamp,))
+    try:
+        rendered = '{"user":"質問","assistant":"答え","recorded_around_utc":"2026-10-01 12:00 UTC"}'
+        exact_bytes = len(rendered.encode("utf-8"))
+        retained, retained_times = _bounded_history_with_times(history, (timestamp,), exact_bytes, "alice")
+        dropped, dropped_times = _bounded_history_with_times(history, (timestamp,), exact_bytes - 1, "alice")
+    finally:
+        _active_history_timestamps.reset(token)
+
+    assert retained == history
+    assert retained_times == (timestamp,)
+    assert dropped == ()
+    assert dropped_times == ()

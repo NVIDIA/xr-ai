@@ -6,9 +6,11 @@
 # Simple VLM example
 
 The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It uses a Clef decision service to route ordinary spoken or
-typed questions to a text-only conversation destination and current-camera
-questions to a separate visual destination. Both use the reusable
+the repository. It uses Clef to route ordinary spoken or typed questions among
+a general conversation destination, a direct visual-observation destination,
+and an environment-reasoning destination. Environment reasoning asks Omni for
+focused evidence from Cosmos before the conversation component synthesizes an
+answer. Conversation destinations use the reusable
 `xr_ai_conversation.Conversation` component and stream through the same voice
 output path to Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
@@ -29,22 +31,28 @@ readiness, checks Clef health, and performs an image warmup through the VLM.
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` delegates each turn to
-`xr_ai_conversation.ConversationFrontEnd`. Clef selects either the text-only
-conversation destination or the visual destination from their routing aids and
-the current request/history. Each selected destination asks Clef to accept,
+`xr_ai_conversation.ConversationFrontEnd`. Clef selects general conversation,
+direct visual observation, or environment reasoning from their routing aids
+and the current request/history. Each selected destination asks Clef to accept,
 decline, or clarify before it starts answering. A decline produces no spoken
 output and gives the front end one bounded reroute; ambiguity produces one
-clarifying question. The general destination has no frame or VLM tools; the
-visual destination owns the frame and VLM tools. Scope admission is based on
-the request, not whether the camera will return a usable frame. Visual tool calls
-include a standalone query with follow-up references resolved by the LLM. The
+clarifying question. The general destination has no frame or VLM tools. Direct
+observation sends the current image and user's question to Cosmos. Environment
+reasoning lets Omni decide whether current-scene evidence is needed. If needed,
+Omni requests one focused visual question, the worker queries Cosmos, adds that
+result as turn-scoped context, and asks the conversation component to synthesize
+the answer. Otherwise the conversation component answers with its subscribed
+context and completed history. Planner text and Cosmos evidence are not spoken
+or stored as user or assistant turns. Scope admission is based on the request,
+not whether the camera will return a usable frame. Visual tool calls include
+standalone questions with follow-up references resolved from completed history. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
 image and return it through a targeted LiveKit byte stream. The fallback is
 invisible to the agent: it receives the same opaque image-reference shape and
-passes it to `StreamingImageQueryTool` before publishing response chunks to
-voice output. Tool-call preamble suppression is prompt-guided: text already
+passes it to the appropriate Cosmos query path before publishing response
+chunks to voice output. Tool-call preamble suppression is prompt-guided: text already
 streamed before a later tool call cannot be recalled.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
@@ -55,16 +63,25 @@ already streaming do not receive a redundant capture request.
 
 A newer participant turn cancels superseded routing, answer, and vision work and
 interrupts its voice response. Participant departure releases cached frames,
-both destinations' conversation state, front-end history, and source-context
+conversation destination state, front-end history, and source-context
 tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
-The worker can also subscribe to named runtime context topics configured in
-`yaml/simple_vlm_example_worker.yaml`. Publishers use the public
+Both conversation destinations can subscribe to named runtime context topics
+configured in `yaml/simple_vlm_example_worker.yaml`. Environment reasoning also
+receives its Cosmos result through a private turn-scoped summary topic and clears
+that section after synthesis or interruption. Publishers use the public
 `ConversationContextUpdate` contract; incremental updates are compacted in the
 background per participant and source, while summary updates replace that
 source section as-is. The context and compaction payload limits are UTF-8 byte
 budgets, not token limits.
+
+Conversation prompts show the current time and coarse minute-rounded timestamps
+for completed exchanges and named context where available. FE-owned turns use
+their completion time, runtime context uses its publication time, and visual
+evidence includes the frame's source timestamp. Imported history without a time
+is labeled unknown. These timestamps help the model distinguish older context
+from a present observation; they do not expire or remove information.
 
 ## Source map
 
@@ -78,11 +95,14 @@ The worker package is under
 | `agent.py` | Owns participant-scoped routed turns, voice streaming, cancellation, and cleanup |
 | `admission.py` | Applies Clef accept/decline/clarify checks before a destination answers |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
-| `xr_ai_conversation.Conversation` | Streams general answers or delegates standalone visual questions to the frame/VLM tools |
+| `xr_ai_conversation.Conversation` | Streams general answers and synthesizes environment answers from bounded history and named context |
+| `visual_destinations.py` | Implements direct Cosmos observation and Omni-planned Cosmos evidence |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 | `prompts/vision.txt` | Application instructions for the visual destination |
-| `eval/conversation-cases.yaml` | Clef routing and admission, direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
+| `prompts/environment_planner.txt` | Guides the environment destination to answer from history when sufficient, or request focused evidence from the current view |
+| `prompts/environment_reasoning.txt` | Guides synthesis from current-turn visual evidence and conversation history |
+| `eval/conversation-cases.yaml` | Clef routing and admission, direct-answer, observation, follow-up, and environment-reasoning evaluation inputs |
 
 ## Readiness and warmup
 
