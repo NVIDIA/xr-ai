@@ -378,6 +378,16 @@ work and separate temporary ASR caches for non-owner speakers. The
 simple VLM sample enables diagnostics for live inspection. They have no effect
 when ordinary STT is selected.
 
+The shared voice I/O layer also returns accepted, gate-normalized query text
+on the configured query topic's existing name. Speaker ASR uses `Speaker N`;
+ordinary STT and typed queries use `User`. The application receives the same
+typed query as before, without speaker-display metadata or a sample-specific
+echo subscriber. Disabling speaker diagnostics does not disable accepted-query
+display. The existing hub return path is best effort, not an end-to-end receipt
+acknowledgment. Display errors do not reject accepted queries; local transport
+backpressure remains unchanged. No additional display queue or dropping policy
+is introduced.
+
 Start the inference process separately from the repository root:
 
 ```bash

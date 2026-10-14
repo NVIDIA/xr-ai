@@ -42,7 +42,8 @@ its voice response. Participant departure releases the sample agent's cached
 frames and tasks. This is the reference composition for a single foreground
 streaming image query.
 
-Each accepted query returns as UTF-8 text on `simple-vlm.user-query`. The web
+The shared voice layer returns accepted queries as UTF-8 text on
+`simple-vlm.user-query`; the sample has no display adapter. The web
 client's **RECEIVED** list displays it using the existing text-message handling,
 for example `Speaker 0: What is in front of me?`. The number is the diarization
 model's label within this participant's voice connection. Typed input and

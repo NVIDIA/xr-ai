@@ -749,6 +749,7 @@ async def test_speaker_pipeline_honors_stop_policy_for_partial_and_final_transcr
 async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monkeypatch, use_speaker, require_wake):
     cfg = _config(tmp_path, require_wake=require_wake)
     stt, captions, accepted = SimpleNamespace(transcribe=AsyncMock()), AsyncMock(), []
+    display = AsyncMock()
 
     class Detector:
         def __init__(self, on_utterance, on_speech_start, **_kwargs):
@@ -761,7 +762,9 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
     async def accept(query):
         accepted.append(query)
     transport = HubVoiceTransport()
-    output = _VoiceIOProcessor(accept)
+    output = _VoiceIOProcessor(
+        accept, transport=SimpleNamespace(send_return_data=display), query_topic="custom.accepted-query",
+    )
     # This harness delivers frames directly instead of running Pipecat queues.
     output._enable_direct_mode = True
     output.push_frame = AsyncMock()
@@ -825,6 +828,12 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         await speak("do not send this")
         assert len(accepted) == count
         assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        messages = [call.args[0] for call in display.await_args_list]
+        assert len(messages) == len(accepted)
+        label = "Speaker 7" if use_speaker else "User"
+        assert [message.data.decode() for message in messages] == [f"{label}: {query.text}" for query in accepted]
+        assert all(message.topic == "custom.accepted-query" and message.participant_id == "a" for message in messages)
+        assert [message.pts_us for message in messages] == [query.timestamp_us for query in accepted]
         if use_speaker:
             stt.transcribe.assert_not_awaited()
     finally:
@@ -910,7 +919,9 @@ async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries
     sender = AsyncMock(side_effect=RuntimeError("display unavailable") if send_fails else None)
     processor = _SpeakerSttProcessor(cfg=cfg, on_partial_transcript=partial, on_final_transcript=final)
     gate = VoiceGateProcessor(cfg=_voice_cfg(tmp_path, diagnostics=diagnostics), tts=SimpleNamespace())
-    output = _VoiceIOProcessor(accepted, transport=SimpleNamespace(send_return_data=sender))
+    output = _VoiceIOProcessor(
+        accepted, transport=SimpleNamespace(send_return_data=sender), query_topic="custom.accepted-query",
+    )
     output.push_frame = AsyncMock()
 
     async def to_gate(frame, *_args):
@@ -947,7 +958,11 @@ async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries
         })
         await asyncio.gather(*output._input_tasks)
         query = accepted.call_args.args[0]
-        assert query.speaker_id == 0 and query.text == "look around" and query.timestamp_us == 123
+        assert not hasattr(query, "speaker_id")
+        assert query.text == "look around" and query.timestamp_us == 123
+        message = sender.call_args.args[0]
+        assert message.topic == "custom.accepted-query" and message.participant_id == "wearer"
+        assert message.pts_us == 123 and message.data.decode() == "Speaker 0: look around"
         assert gate._feeding_speaker_id is None
     finally:
         await processor.cleanup()

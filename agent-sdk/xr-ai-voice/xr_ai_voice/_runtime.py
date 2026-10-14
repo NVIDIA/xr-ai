@@ -15,7 +15,7 @@ from typing import Any
 
 import nemo_relay
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import DataMessage
 from xr_ai_hub._capture import CAPTURE_STT_TOPIC
 from xr_ai_models import ModelsConfig, STTService, TTSService, make_stt
@@ -25,7 +25,7 @@ from xr_ai_voicegate import VoiceGateConfig
 from ._processors import VadConfig
 from ._session import _VoiceSession
 from ._transport import HubVoiceTransport
-from ._types import VoiceQuery, _SpeakerVoiceQuery
+from ._types import VoiceQuery
 
 _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
@@ -40,7 +40,6 @@ class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
 
     model_config = ConfigDict(extra="forbid")
-    _speaker_id: int | None = PrivateAttr(default=None)
 
     text: str = Field(min_length=1)
     """Gate-accepted speech or direct typed text."""
@@ -220,6 +219,12 @@ class VoiceAgent(Agent):
     :meth:`from_models` resolves that dependency from an already-loaded model
     profile and the same voice-gate configuration, without application-side
     backend inspection. The normal constructor accepts explicitly owned clients.
+
+    Accepted queries also return participant-routed UTF-8 display text on
+    ``query_topic.name``. Speaker ASR includes its session-local speaker label;
+    ordinary STT and typed input use ``User``. This display does not change
+    :class:`UserQuery` or require an application subscriber. Delivery uses the
+    existing hub transport and retains its backpressure and best-effort semantics.
     """
 
     def __init__(
@@ -368,6 +373,7 @@ class VoiceAgent(Agent):
                     unsubscribe_data = self._session.endpoint.on_data(self._on_data)
                 await self._session.run(
                     self._publish_input,
+                    query_topic=self.query_topic.name,
                     on_transcript=self._publish_transcript,
                     on_participant_joined=self._participant_joined,
                     on_participant_left=self._participant_left,
@@ -515,9 +521,6 @@ class VoiceAgent(Agent):
 
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
-        request = UserQuery(text=query.text, timestamp_us=query.timestamp_us)
-        if isinstance(query, _SpeakerVoiceQuery):
-            request._speaker_id = query.speaker_id
         if query.interrupted_output and self.interrupted_topic is not None:
             await runtime.publish(
                 self.interrupted_topic,
@@ -527,7 +530,7 @@ class VoiceAgent(Agent):
             )
         await runtime.publish(
             self.query_topic,
-            request,
+            UserQuery(text=query.text, timestamp_us=query.timestamp_us),
             participant_id=query.participant_id,
             source=self._source,
         )
