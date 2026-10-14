@@ -18,17 +18,6 @@ models:
       health_path: /v1/health/ready
     deployment:
       ownership: external
-  agent_llm:
-    adapter:
-      preset: nemotron_omni
-      model_name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-      reasoning_field: reasoning
-    endpoint:
-      base_url: https://llm.example.com
-      api_key_env: NIM_ENDPOINT_API_KEY
-      health_path: /v1/health/ready
-    deployment:
-      ownership: external
   vlm:
     adapter:
       preset: cosmos3_nano_reasoner

@@ -199,7 +199,6 @@ def test_bundled_render_config_supports_worker_accessors() -> None:
     models = load_models_config(_RENDER_YAML / "models.json")
 
     models.llm("llm")
-    models.llm("agent_llm")
     assert "stt" not in models.entries
     models.vlm("vlm")
     models.tts("tts")
@@ -273,6 +272,7 @@ def test_bundled_model_servers_profile_has_launcher_sdk_parity() -> None:
     profile = _MODEL_SERVERS_YAML / "models.default.json"
     deployment = load_deployment_profile(profile)
     models = load_models_config(profile)
+    assert set(models.entries) == {"llm", "tts", "vlm", "embedding"}
     expected_services = {
         spec.deployment.service: (
             "own" if spec.deployment.ownership == "managed" else "reuse"

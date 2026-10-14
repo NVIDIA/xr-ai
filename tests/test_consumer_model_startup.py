@@ -15,7 +15,7 @@ from xr_ai_voicegate import VoiceGateConfig
     ("simple-vlm-example", "simple_vlm_example_worker", {"vlm"}),
     ("lab-instrument-monitoring", "lab_instrument_monitoring_worker", set()),
     ("tea-making-sample", "tea_making_worker", {"rag"}),
-    ("xr-render-demo", "xr_render_demo_worker", {"agent-llm"}),
+    ("xr-render-demo", "xr_render_demo_worker", {"llm"}),
 ])
 async def test_sample_does_not_register_model_health_probes(
     sample, package, expected_probes, monkeypatch, tmp_path,
@@ -75,7 +75,7 @@ async def test_sample_does_not_register_model_health_probes(
         service.chat.assert_awaited_once()
         assert service.chat.call_args.kwargs["tools"][0].name == "warmup_noop"
         service.chat.side_effect = RuntimeError("still loading")
-        assert await probes["agent-llm"]() is False
+        assert await probes["llm"]() is False
     if sample == "tea-making-sample":
         rag.health.assert_awaited_once()
 

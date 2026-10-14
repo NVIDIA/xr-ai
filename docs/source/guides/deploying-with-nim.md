@@ -41,11 +41,12 @@ GPU layout or manage NIM container lifecycle. Refer to NVIDIA's
 [Speech NIM deployment guide](https://docs.nvidia.com/nim/speech/latest/deployment/index.html),
 and the deployment guide for each selected model and container version.
 
-The example in `deployment/nim/models.yaml` selects Nemotron Omni for both LLM
-roles, Cosmos3 for vision, Parakeet for recognition, Magpie for synthesis, and
-Llama Nemotron Embed for retrieval. These are endpoint configuration examples,
-not a claim of production or hardware qualification. Match model IDs, supported
-languages, voices, input limits, and inference options to the deployed versions.
+The example in `deployment/nim/models.yaml` selects Nemotron Omni for LLM
+chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
+synthesis, and Llama Nemotron Embed for retrieval. These are endpoint
+configuration examples, not a claim of production or hardware qualification.
+Match model IDs, supported languages, voices, input limits, and inference options
+to the deployed versions.
 Changing the serving model can change sample behavior; validate the application's
 prompts and evaluations as well as its transport.
 
@@ -210,7 +211,7 @@ uv run --project agent-samples/simple-vlm-example simple_vlm_example
 |---|---|---|
 | Simple VLM | `yaml/models.json` | `stt`, `vlm`, `tts` |
 | Lab instrument monitoring | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
-| XR render demo | `yaml/models.json` | `llm`, `agent_llm`, `vlm`, `stt`, `tts` |
+| XR render demo | `yaml/models.json` | `llm`, `vlm`, `stt`, `tts` |
 | Tea making | `yaml/models.local.json` | `llm`, `vlm`, `stt`, `tts`, `embedding` |
 
 Simple VLM, lab monitoring, and XR render resolve `models.json` beside their

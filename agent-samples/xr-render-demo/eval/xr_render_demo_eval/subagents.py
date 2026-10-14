@@ -730,7 +730,7 @@ async def run_case(case: SubagentCase) -> bool:
         physical_answer=case.physical_answer,
         physical_expect_source=case.physical_expect_source,
     )
-    llm = make_llm(load_models_config(harness._CONFIG.models_config), "agent_llm")
+    llm = make_llm(load_models_config(harness._CONFIG.models_config), "llm")
     try:
         fake_scene, fake_tracking, fake_text_memory, fake_current_frame, fake_image_query = scene.make_tools()
         context = SceneContext(fake_scene, fake_tracking)

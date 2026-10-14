@@ -53,16 +53,19 @@ def _wav_16khz(audio: bytes) -> bytes:
 async def check(profile: Path) -> None:
     """Check every role, including TTS-to-STT and image inference; fail on errors."""
     config = load_models_config(profile)
-    roles = {"stt", "tts", "llm", "agent_llm", "vlm", "embedding"}
-    if not config.entries or config.entries.keys() - roles:
-        raise ValueError("smoke profile must contain supported sample roles: " + ", ".join(sorted(roles)))
+    roles = {"stt", "tts", "llm", "vlm", "embedding"}
+    if not config.entries:
+        raise ValueError("smoke profile must contain at least one supported sample role")
+    unsupported = config.entries.keys() - roles
+    if unsupported:
+        raise ValueError(f"smoke profile contains unsupported roles: {sorted(unsupported)}")
     for credential in config.required_credentials:
         if not os.environ.get(credential, "").strip():
             raise ValueError(f"missing endpoint credential: {credential}")
     async with AsyncExitStack() as stack:
         clients = {}
         for name, factory in (("stt", make_stt), ("tts", make_tts), ("llm", make_llm),
-                              ("agent_llm", make_llm), ("vlm", make_vlm), ("embedding", make_embedding)):
+                              ("vlm", make_vlm), ("embedding", make_embedding)):
             if name not in config.entries:
                 continue
             client = factory(config, name)
@@ -97,34 +100,32 @@ async def check(profile: Path) -> None:
         elif "stt" in clients:
             print("SKIP STT inference: include a TTS role for the speech round trip", flush=True)
 
-        for role in ("llm", "agent_llm"):
-            if role not in clients:
-                continue
-            response = await clients[role].chat(
+        if "llm" in clients:
+            response = await clients["llm"].chat(
                 [ChatMessage("user", "Reply with the word ready.")], max_tokens=64, timeout=120,
             )
             if not response.content.strip():
-                raise RuntimeError(f"{role} returned no visible text")
-            print(f"PASS {role}: {response.content.strip()}")
-            capabilities = config.entries[role].adapter.capabilities
+                raise RuntimeError("llm returned no visible text")
+            print(f"PASS llm: {response.content.strip()}")
+            capabilities = config.entries["llm"].adapter.capabilities
             if capabilities.get("streaming"):
-                async with aclosing(clients[role].stream(
+                async with aclosing(clients["llm"].stream(
                     [ChatMessage("user", "Reply with the word ready.")], max_tokens=64, timeout=120,
                 )) as chunks:
                     streamed = "".join([text async for text in chunks])
                 if not streamed.strip():
-                    raise RuntimeError(f"{role} returned no streamed text")
-                print(f"PASS {role} text stream", flush=True)
+                    raise RuntimeError("llm returned no streamed text")
+                print("PASS llm text stream", flush=True)
             if capabilities.get("tool_calls"):
-                response = await clients[role].chat(
+                response = await clients["llm"].chat(
                     [ChatMessage("user", "Call deployment_ready with no arguments. Do not answer in text.")],
                     tools=[ToolDef("deployment_ready", "Report deployment readiness.",
                                    {"type": "object", "properties": {}, "additionalProperties": False})],
                     max_tokens=128, timeout=120,
                 )
                 if not response.tool_calls or not any(call.name == "deployment_ready" for call in response.tool_calls):
-                    raise RuntimeError(f"{role} did not return the requested function call")
-                print(f"PASS {role} function call", flush=True)
+                    raise RuntimeError("llm did not return the requested function call")
+                print("PASS llm function call", flush=True)
 
         if "vlm" in clients:
             response = await clients["vlm"].ask_image(
