@@ -14,9 +14,15 @@ processing.
 Run commands from `agent-samples/task-capture/`:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json
 uv run main.py
 ```
+
+The sample's `yaml/models.json` configures both the worker's model clients and
+the shared launcher's managed services: batch Parakeet STT on port 8103, Cosmos
+VLM on 8100, and Pocket TTS on 8105. Batch STT accepts narration without speaker
+enrollment. Use `--models yaml/models.json`: the launcher's default speech
+service uses a different streaming protocol and requires speaker enrollment.
 
 Wait for the shared models to be ready before starting the sample. Open the
 authenticated web-client URL printed by DeviceIOHub, enable the microphone,
@@ -32,6 +38,11 @@ saving silently; processing errors are logged. Disconnecting finalizes the packe
 without announcements.
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
+To stop the services selected by this sample's deployment:
+
+```bash
+uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json --stop
+```
 
 ## Output destination
 
@@ -43,7 +54,7 @@ uv run main.py --output-root /path/to/task-evidence
 
 Packets are saved under `PATH/sessions/<session-id>/`. Relative command-line
 paths resolve against the launch directory; `~` is expanded. Without this option,
-`artifacts_dir` from `yaml/worker.yaml` is used, relative to that YAML. The override
+`artifacts_dir` from `yaml/capture-agent-config.yaml` is used, relative to that YAML. The override
 does not relocate model or voice configuration and does not edit the YAML.
 
 The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
@@ -194,7 +205,8 @@ and `MultiImageQueryTool` for captions.
 
 The registered `CaptureAgent` in `task_worker/capture/agent.py` owns commands,
 narration admission, participant generations, and acknowledgements. Its private
-recorder helper owns sampling, caption tasks, persistence, and finalization.
+`_Capture` helper in `capture/capturing.py` owns sampling, caption tasks,
+persistence, and finalization.
 `capture/captioning.py` defines the request and response contract used by both
 recording and evaluation. Application cleanup explicitly drains capture work
 before closing its frame endpoint and VLM client.
@@ -209,10 +221,17 @@ cannot cancel its own response.
 
 | Configuration | Settings |
 |---|---|
-| `yaml/worker.yaml` | Output paths, frame and caption intervals, speech detection |
-| `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
+| `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/models.json` | Managed batch STT, VLM, and acknowledgement TTS services and endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
 | `yaml/device_io_hub.yaml` | Room and web server |
 
-Paths resolve relative to their owning YAML. Restart after configuration edits.
+`worker.yaml` selects the capture YAML through `capture_config`, resolved relative
+to the worker YAML. `artifacts_dir` resolves relative to the selected capture
+YAML, even when it is in another directory. Model and voice configuration remain
+beside the worker YAML. Absolute configuration and output paths are also supported.
+The worker loads shared settings into `WorkerConfig` and capture-specific settings
+into `CaptureConfig` under `capture/config.py`; `app.py` supplies each to its
+owning component. Restart after configuration edits.
 Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI options.

@@ -1,11 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Paths are relative to this YAML. Spoken commands control task recording.
-# --output-root overrides artifacts_dir; packets are written under sessions/.
-artifacts_dir: ../artifacts
-capture_fps: 2.0
-caption_interval_s: 5.0
+# Shared frame and voice settings. Configuration paths are relative to this YAML.
+capture_config: capture-agent-config.yaml
 frame_max_age_s: 2.0
 frame_timeout_s: 3.0
 silence_duration: 0.6

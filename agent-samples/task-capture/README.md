@@ -11,10 +11,10 @@ saves sampled frames, visual captions, and narration as local evidence packets.
 ## Run
 
 Run all commands from `agent-samples/task-capture/`. Start the shared model
-servers and wait for them to report ready:
+servers with the sample's deployment configuration and wait for them to report ready:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json
 ```
 
 Then start the sample from the same terminal:
@@ -42,19 +42,20 @@ To choose where packets are saved, launch with `uv run main.py --output-root PAT
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers --stop
+uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json --stop
 ```
 
 ## Configure
 
 | File | Common settings |
 |---|---|
-| `yaml/worker.yaml` | Task output directory, frame and caption intervals, speech detection |
-| `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
+| `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
+| `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
+| `yaml/models.json` | Managed batch STT, VLM, and acknowledgement TTS services and endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 
-For example, increase the interval between captions in `yaml/worker.yaml`:
+For example, increase the interval between captions in `yaml/capture-agent-config.yaml`:
 
 ```yaml
 caption_interval_s: 8.0

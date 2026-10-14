@@ -2,15 +2,18 @@
   "models": {
     "stt": {
       "adapter": {"preset": "parakeet_stt"},
-      "endpoint": {"base_url": "http://localhost:8103"}
+      "endpoint": {"base_url": "http://localhost:8103"},
+      "deployment": {"ownership": "managed", "service": "stt"}
     },
     "vlm": {
       "adapter": {"preset": "cosmos3_nano_reasoner"},
-      "endpoint": {"base_url": "http://localhost:8100"}
+      "endpoint": {"base_url": "http://localhost:8100"},
+      "deployment": {"ownership": "managed", "service": "vlm"}
     },
     "tts": {
       "adapter": {"preset": "pocket_tts"},
-      "endpoint": {"base_url": "http://localhost:8105"}
+      "endpoint": {"base_url": "http://localhost:8105"},
+      "deployment": {"ownership": "managed", "service": "tts"}
     }
   }
 }

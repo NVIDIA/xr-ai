@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from urllib.parse import urlsplit
 
 import pytest
 from PIL import Image
@@ -29,14 +30,14 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from task_worker.capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent  # noqa: E402
 from task_worker.capture.captioning import caption_query  # noqa: E402
-from task_worker.capture.recorder import _Recorder  # noqa: E402
+from task_worker.capture.capturing import _Capture  # noqa: E402
 from task_worker.config import load_config  # noqa: E402
 
 
 def test_config_and_cli(monkeypatch, tmp_path):
     worker = load_config(_SAMPLE / "yaml/worker.yaml")
     assert not hasattr(worker, "media_capture_dir")
-    assert (worker.capture_fps, worker.caption_interval_s) == (2, 5)
+    assert (worker.capture.capture_fps, worker.capture.caption_interval_s) == (2, 5)
     load_models_config(worker.models_config)
     spec = importlib.util.spec_from_file_location("sop_main", _SAMPLE / "main.py")
     module = importlib.util.module_from_spec(spec)
@@ -63,28 +64,95 @@ def test_config_and_cli(monkeypatch, tmp_path):
         assert request.is_file()
         requests.append(request)
         config = load_config(request)
-        assert config.artifacts_dir == tmp_path / "my evidence"
+        assert config.capture.artifacts_dir == tmp_path / "my evidence"
         assert config.models_config == worker.models_config
         assert config.voice_gate_yaml == worker.voice_gate_yaml
-        assert config.caption_prompt == worker.caption_prompt
-        assert config.capture_fps == worker.capture_fps
+        assert config.capture.caption_prompt == worker.capture.caption_prompt
+        assert config.capture.capture_fps == worker.capture.capture_fps
 
     original_yaml = (_SAMPLE / "yaml/worker.yaml").read_bytes()
+    original_capture_yaml = (_SAMPLE / "yaml/capture-agent-config.yaml").read_bytes()
     monkeypatch.setattr(module, "run_stack", launch)
     module.run(["--output-root", "my evidence"])
     module.run(["--output-root", str(tmp_path / "my evidence")])
     assert all(not path.exists() for path in requests)
     assert (_SAMPLE / "yaml/worker.yaml").read_bytes() == original_yaml
+    assert (_SAMPLE / "yaml/capture-agent-config.yaml").read_bytes() == original_capture_yaml
 
 
-def test_output_root_defaults_to_yaml_and_preserves_relative_paths(tmp_path):
+@pytest.mark.parametrize("absolute_reference", [False, True])
+def test_output_root_defaults_to_yaml_and_preserves_relative_paths(tmp_path, absolute_reference):
     config_path = tmp_path / "settings" / "worker.yaml"
     config_path.parent.mkdir()
-    config_path.write_text("artifacts_dir: ../configured-evidence\n")
+    capture_path = tmp_path / "capture-settings" / "capture-agent-config.yaml"
+    capture_path.parent.mkdir()
+    capture_path.write_text("artifacts_dir: evidence\ncapture_fps: 3\ncaption_interval_s: 8\n")
+    reference = capture_path if absolute_reference else "../capture-settings/capture-agent-config.yaml"
+    config_path.write_text(f"capture_config: {reference}\nsilence_duration: 0.8\nframe_timeout_s: 4\n")
     config = load_config(config_path)
-    assert config.artifacts_dir == tmp_path / "configured-evidence"
+    assert config.capture.artifacts_dir == capture_path.parent / "evidence"
+    assert (config.capture.capture_fps, config.capture.caption_interval_s) == (3, 8)
+    assert (config.silence_duration, config.frame_timeout_s) == (0.8, 4)
     assert config.models_config == config_path.parent / "models.json"
     assert config.voice_gate_yaml == config_path.parent / "voice_gate.yaml"
+    request = tmp_path / "launch.json"
+    request.write_text(json.dumps({"worker_config": str(config_path), "output_root": str(tmp_path / "override")}))
+    overridden = load_config(request)
+    assert overridden.capture.artifacts_dir == tmp_path / "override"
+    assert overridden.capture.capture_fps == config.capture.capture_fps
+    assert overridden.capture.caption_prompt == config.capture.caption_prompt
+    assert overridden.models_config == config.models_config
+    assert overridden.voice_gate_yaml == config.voice_gate_yaml
+
+
+@pytest.mark.parametrize("name", ["capture_fps", "caption_interval_s"])
+@pytest.mark.parametrize("value", ["0", "-1", ".inf", ".nan"])
+def test_capture_config_rejects_invalid_intervals(tmp_path, name, value):
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text("{}\n")
+    (tmp_path / "capture-agent-config.yaml").write_text(f"{name}: {value}\n")
+    with pytest.raises(ValueError, match=f"{name} must be finite and positive"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
+def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
+    from xr_ai_voicegate import load_voice_gate_config
+
+    server_main = _SAMPLE.parents[1] / "model-server-samples/model-servers/main.py"
+    spec = importlib.util.spec_from_file_location("task_capture_model_servers", server_main)
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+    monkeypatch.chdir(_SAMPLE)
+    config = load_config(_SAMPLE / "yaml/worker.yaml")
+    models = load_models_config(config.models_config)
+    processes, _ = launcher._build_processes(Path("yaml/models.json"), gpu_profile)
+    services = {process.name: process for process in processes}
+    assert set(services) == {"stt", "tts", "vlm"}
+    for name, model in models.entries.items():
+        assert urlsplit(model.endpoint.base_url).port == services[name].port
+        assert services[name].launch_mode == "persist"
+    # Match the batch protocol as well as the port; speaker-STT is not a
+    # drop-in replacement and would require an enrollment conversation.
+    assert models.stt("stt").kind == "openai_compat"
+    assert services["stt"].command == "stt_server"
+    assert services["stt"].project == "../../services/stt-server"
+    gate = load_voice_gate_config(config.voice_gate_yaml)
+    assert gate._speaker is None
+    assert gate._conversation is None
+
+
+@pytest.mark.parametrize("document", [
+    _SAMPLE / "README.md",
+    _SAMPLE.parents[1] / "docs/source/reference/task-capture.md",
+])
+def test_documented_model_commands_select_sample_deployment(document):
+    commands = [line for line in document.read_text().splitlines()
+                if line.startswith("uv run --project ") and " model_servers" in line]
+    assert commands == [
+        "uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json",
+        "uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json --stop",
+    ]
 
 
 @pytest.mark.parametrize("failure", [None, "one_invalid", "all_invalid", "unavailable"])
@@ -146,14 +214,14 @@ async def demo(tmp_path):
             {"activity": "Setup", "phase": "Arrange", "caption": "A blue block", "delta": "Initial view"}
         ),
     )))
-    recorder = _Recorder(
+    capture_backend = _Capture(
         sessions_dir=tmp_path / "sessions", current_frame=frames, images=images,
         query_images=captioner, capture_fps=2, caption_interval_s=5,
     )
-    capture = CaptureAgent(recorder)
+    capture = CaptureAgent(capture_backend)
     try:
         yield SimpleNamespace(
-            recorder=recorder, capture=capture, root=tmp_path, frames=frames,
+            capture_backend=capture_backend, capture=capture, root=tmp_path, frames=frames,
             captioner=captioner, output=AsyncMock(),
         )
     finally:
@@ -197,10 +265,10 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
     assert announcements(demo) == []
     for _ in range(2):
         await speak(demo, " Start  CAPTURE! ")
-        state = demo.recorder._sessions["user"]
+        state = demo.capture_backend._sessions["user"]
         await speak(demo, "start capture")  # Duplicate command, not narration or another packet.
         await demo.capture.receive(event)
-        assert demo.recorder._sessions["user"] is state
+        assert demo.capture_backend._sessions["user"] is state
         await speak(demo, "Place the cup")
         async with asyncio.timeout(2):
             while state.caption_count == 0:
@@ -212,7 +280,7 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
         assert narration(state) == ["Place the cup"]
         await speak(demo, "After recording")
         await demo.capture.receive(event)
-        assert not demo.recorder.is_recording("user")
+        assert not demo.capture_backend.is_capturing("user")
         assert narration(state) == ["Place the cup"]
     assert len(list((demo.root / "sessions").iterdir())) == 2
     assert announcements(demo) == [
@@ -228,16 +296,16 @@ async def test_join_is_idle_and_voice_can_record_multiple_sessions(demo):
 async def test_stop_acknowledgement_precedes_silent_finalization(demo, monkeypatch, disconnect):
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     entered, release = asyncio.Event(), asyncio.Event()
-    original = demo.recorder._finalize
+    original = demo.capture_backend._finalize
 
     async def delayed(*args, **kwargs):
         entered.set()
         await release.wait()
         await original(*args, **kwargs)
 
-    monkeypatch.setattr(demo.recorder, "_finalize", delayed)
+    monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
     await speak(demo, "stop capture", wait=False)
     await asyncio.wait_for(entered.wait(), 2)
     assert announcements(demo) == ["Capture started.", "Capture stopped."]
@@ -262,7 +330,7 @@ async def test_announcement_failure_does_not_prevent_finalization(demo):
     demo.output.side_effect = RuntimeError("voice unavailable")
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     await speak(demo, "Place the cup")
     await speak(demo, "stop capture")
     assert packet(state)["status"] == "complete"
@@ -274,7 +342,7 @@ async def test_finalization_exception_does_not_add_announcements(demo, monkeypat
     await speak(demo, "start capture")
     # Fail the requested stop; allow fixture shutdown to drain the real packet.
     with monkeypatch.context() as patch:
-        patch.setattr(demo.recorder, "finish_recording", AsyncMock(side_effect=OSError("disk full")))
+        patch.setattr(demo.capture_backend, "finish_capture", AsyncMock(side_effect=OSError("disk full")))
         await speak(demo, "stop capture")
     assert announcements(demo) == [
         "Capture started.", "Capture stopped.",
@@ -296,7 +364,7 @@ async def test_runtime_shutdown_during_stop_announcement_preserves_stop_record(d
 
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     await speak(demo, "Place the cup")
     runtime = AgentRuntime()
     runtime.register("capture", demo.capture)
@@ -323,29 +391,29 @@ async def test_close_drains_other_participants_after_cancelled_action(demo, monk
     for pid in ("user", "other"):
         await demo.capture.receive(joined(pid))
         await speak(demo, "start capture", pid)
-    state = demo.recorder._sessions["other"]
+    state = demo.capture_backend._sessions["other"]
     entered, release = asyncio.Event(), asyncio.Event()
-    original = demo.recorder.record_transcript
+    original = demo.capture_backend.capture_transcript
 
     async def delayed(*args):
         entered.set()
         await release.wait()
         await original(*args)
 
-    monkeypatch.setattr(demo.recorder, "record_transcript", delayed)
+    monkeypatch.setattr(demo.capture_backend, "capture_transcript", delayed)
     # A failed participant tail must not short-circuit draining another one.
     failed = demo.capture._enqueue("user", lambda: asyncio.sleep(60))
     failed.cancel()
     await asyncio.gather(failed, return_exceptions=True)
     await speak(demo, "Finish placing the cup", "other", wait=False)
     await asyncio.wait_for(entered.wait(), 2)
-    original_stop = demo.recorder.stop
+    original_stop = demo.capture_backend.stop
 
     async def stop_after_drain():
         assert demo.capture._tails["other"].done()
         await original_stop()
 
-    monkeypatch.setattr(demo.recorder, "stop", stop_after_drain)
+    monkeypatch.setattr(demo.capture_backend, "stop", stop_after_drain)
     closing = asyncio.create_task(demo.capture.close())
     try:
         await asyncio.sleep(0)
@@ -360,16 +428,16 @@ async def test_close_drains_other_participants_after_cancelled_action(demo, monk
 async def test_disconnect_and_old_events_cannot_stop_new_recording(demo):
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    old = demo.recorder._sessions["user"]
+    old = demo.capture_backend._sessions["user"]
     await speak(demo, "First procedure")
     await demo.capture.receive(ParticipantEvent("user", False, 2, participant_session_id="session"))
     assert packet(old)["status"] == "complete"
     await demo.capture.receive(joined(session="new", pts_us=100))
-    assert not demo.recorder.is_recording("user")
+    assert not demo.capture_backend.is_capturing("user")
     await speak(demo, "start capture", timestamp_us=101)
     await demo.capture.receive(ParticipantEvent("user", False, 3, participant_session_id="session"))
     await speak(demo, "stop capture", timestamp_us=50)
-    assert demo.recorder.is_recording("user")
+    assert demo.capture_backend.is_capturing("user")
 
 @pytest.mark.parametrize("stop_command", [False, True])
 async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_closes(demo, monkeypatch, stop_command):
@@ -417,7 +485,7 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
 
     capture_endpoint.close = close_capture
     monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: capture_endpoint)
-    monkeypatch.setattr(app, "ImageRegistry", lambda: demo.recorder._images)
+    monkeypatch.setattr(app, "ImageRegistry", lambda: demo.capture_backend._images)
     monkeypatch.setattr(app, "CurrentFrameTool", lambda **kwargs: demo.frames)
     monkeypatch.setattr(app, "setup_logging", lambda *args: None)
     for name in ("make_stt", "make_tts", "make_vlm"):
@@ -479,10 +547,8 @@ async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_close
                     await asyncio.sleep(0.001)
 
     monkeypatch.setattr(_VoiceSession, "run", run_session)
-    config = replace(
-        load_config(_SAMPLE / "yaml/worker.yaml"),
-        artifacts_dir=demo.root / "app-sessions",
-    )
+    config = load_config(_SAMPLE / "yaml/worker.yaml")
+    config = replace(config, capture=replace(config.capture, artifacts_dir=demo.root / "app-sessions"))
     task = asyncio.create_task(app.run_app(config))
     try:
         done, _ = await asyncio.wait({task}, timeout=2)
@@ -598,7 +664,7 @@ async def test_recording_acknowledgements_follow_voice_input(demo, monkeypatch, 
                 await demo.capture.receive(joined())
                 for _ in range(2):
                     await utterance("Start capture.", acknowledgement=True)
-                    state = demo.recorder._sessions["user"]
+                    state = demo.capture_backend._sessions["user"]
                     await utterance("Place a cup")
                     await utterance("Stop capture.", acknowledgement=True)
                     await utterance("Stop capture.")  # Already stopped: no duplicate reply.
@@ -636,10 +702,10 @@ async def test_participants_are_independent(demo):
         await demo.capture.receive(joined(pid))
         await speak(demo, "start capture", pid)
         await speak(demo, pid + " narration", pid)
-    other = demo.recorder._sessions["other"]
+    other = demo.capture_backend._sessions["other"]
     await speak(demo, "stop capture")
-    assert not demo.recorder.is_recording("user")
-    assert demo.recorder.is_recording("other")
+    assert not demo.capture_backend.is_capturing("user")
+    assert demo.capture_backend.is_capturing("other")
     assert narration(other) == ["other narration"]
 
 
@@ -650,21 +716,21 @@ async def test_participants_are_independent(demo):
 async def test_only_standalone_commands_control_recording(demo, text):
     await demo.capture.receive(joined())
     await speak(demo, text)
-    assert not demo.recorder.is_recording("user")
+    assert not demo.capture_backend.is_capturing("user")
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     await speak(demo, text)
-    assert demo.recorder.is_recording("user")
+    assert demo.capture_backend.is_capturing("user")
     await speak(demo, "stop capture")
     assert narration(state) == [text]
 
 
 async def test_failed_narration_write_cannot_seal_a_complete_packet(demo, monkeypatch):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     original = module._append_jsonl
 
     def fail_transcript(path, row):
@@ -684,7 +750,7 @@ async def test_no_camera_frames_does_not_end_narration(demo):
     demo.frames.execute.side_effect = FrameUnavailable("no camera available")
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     async with asyncio.timeout(2):
         while not (state.directory / "errors.jsonl").exists():
             await asyncio.sleep(0.001)
@@ -698,9 +764,9 @@ async def test_no_camera_frames_does_not_end_narration(demo):
 async def test_queued_restart_and_narration_are_ordered_without_media_wait(demo, monkeypatch, boundary):
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    old = demo.recorder._sessions["user"]
+    old = demo.capture_backend._sessions["user"]
     entered, release = asyncio.Event(), asyncio.Event()
-    original = demo.recorder._finalize
+    original = demo.capture_backend._finalize
 
     async def delayed(state, **kwargs):
         if state is old:
@@ -708,7 +774,7 @@ async def test_queued_restart_and_narration_are_ordered_without_media_wait(demo,
             await release.wait()
         await original(state, **kwargs)
 
-    monkeypatch.setattr(demo.recorder, "_finalize", delayed)
+    monkeypatch.setattr(demo.capture_backend, "_finalize", delayed)
     await speak(demo, "First", wait=False)
     finishing = asyncio.create_task(speak(demo, "stop capture"))
     await asyncio.wait_for(entered.wait(), 2)
@@ -729,7 +795,7 @@ async def test_queued_restart_and_narration_are_ordered_without_media_wait(demo,
     if boundary != "shutdown":
         await speak(demo, "start capture", "other")
     try:
-        assert demo.recorder._sessions["user"] is old
+        assert demo.capture_backend._sessions["user"] is old
     finally:
         release.set()
         await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
@@ -737,11 +803,11 @@ async def test_queued_restart_and_narration_are_ordered_without_media_wait(demo,
             await asyncio.wait_for(closing, 2)
     assert narration(old) == ["First"]
     if boundary == "restart":
-        new = demo.recorder._sessions["user"]
+        new = demo.capture_backend._sessions["user"]
         assert new is not old
         assert narration(new) == ["Second"]
     else:
-        assert not demo.recorder.is_recording("user")
+        assert not demo.capture_backend.is_capturing("user")
         assert len(list((demo.root / "sessions").glob("*-user"))) == 1
 
 
@@ -749,11 +815,11 @@ async def test_on_demand_images_and_republished_stream_are_distinct(demo, monkey
     async def idle(_state):
         await asyncio.Future()
 
-    monkeypatch.setattr(demo.recorder, "_capture_loop", idle)
-    monkeypatch.setattr(demo.recorder, "_caption_loop", idle)
+    monkeypatch.setattr(demo.capture_backend, "_capture_loop", idle)
+    monkeypatch.setattr(demo.capture_backend, "_caption_loop", idle)
     await demo.capture.receive(joined())
     await speak(demo, 'start capture')
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     image = demo.frames.execute.return_value
     # All on-demand snapshots use sequence zero. A live track can reset its
     # sequence too; neither should discard a different timestamp or source.
@@ -763,17 +829,17 @@ async def test_on_demand_images_and_republished_stream_are_distinct(demo, monkey
         demo.frames.execute.return_value = image.model_copy(update={
             "track_id": track, "timestamp_us": timestamp, "sequence": sequence,
         })
-        await demo.recorder._capture(state)
-        await demo.recorder._caption(state)
-        await demo.recorder._capture(state)  # Same observation is not new evidence.
-        await demo.recorder._caption(state)
+        await demo.capture_backend._capture(state)
+        await demo.capture_backend._caption(state)
+        await demo.capture_backend._capture(state)  # Same observation is not new evidence.
+        await demo.capture_backend._caption(state)
         assert state.frame_count == state.caption_count == index
     demo.frames.execute.side_effect = FrameUnavailable("live camera disabled")
     with pytest.raises(FrameUnavailable):
-        await demo.recorder._capture(state)
-    await demo.recorder._caption(state)
+        await demo.capture_backend._capture(state)
+    await demo.capture_backend._caption(state)
     assert state.caption_count == 5  # No repeated caption of the stale last frame.
-    assert demo.recorder.is_recording("user")
+    assert demo.capture_backend.is_capturing("user")
     await speak(demo, 'stop capture')
     packet = json.loads((state.directory / "packet.json").read_text())
     assert packet["counts"]["frames"] == packet["counts"]["captions"] == 5
@@ -784,8 +850,8 @@ async def manual_caption_demo(demo, monkeypatch):
     async def idle(_state):
         await asyncio.Future()
 
-    monkeypatch.setattr(demo.recorder, "_capture_loop", idle)
-    monkeypatch.setattr(demo.recorder, "_caption_loop", idle)
+    monkeypatch.setattr(demo.capture_backend, "_capture_loop", idle)
+    monkeypatch.setattr(demo.capture_backend, "_caption_loop", idle)
     await demo.capture.receive(joined())
     return demo
 
@@ -794,28 +860,28 @@ async def manual_caption_demo(demo, monkeypatch):
 async def test_effective_end_preserves_frames_after_stop_utterance(manual_caption_demo, monkeypatch, boundary):
     from datetime import datetime
 
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     demo = manual_caption_demo
     await speak(demo, "start capture", timestamp_us=1_000_000)
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     assert packet(state)["ended_at"] is None
     # A frame arrives after the stop utterance was spoken, but before STT
     # delivers the recognized command. That frame remains legitimate evidence.
     demo.frames.execute.return_value = demo.frames.execute.return_value.model_copy(update={
         "timestamp_us": 3_000_000,
     })
-    await demo.recorder._capture(state)
+    await demo.capture_backend._capture(state)
     clock = [4_000_000]
     monkeypatch.setattr(module, "_now_us", lambda: clock[0])
-    drain = demo.recorder._drain_writes
+    drain = demo.capture_backend._drain_writes
 
     async def slow_drain(session):
         # The end describes capture admission, not when filesystem work ends.
         clock[0] = 9_000_000
         await drain(session)
 
-    monkeypatch.setattr(demo.recorder, "_drain_writes", slow_drain)
+    monkeypatch.setattr(demo.capture_backend, "_drain_writes", slow_drain)
     if boundary == "command":
         await speak(demo, "stop capture", timestamp_us=2_000_000)
     elif boundary == "disconnect":
@@ -838,7 +904,7 @@ async def test_effective_end_preserves_frames_after_stop_utterance(manual_captio
 async def test_empty_packet_contract(manual_caption_demo):
     demo = manual_caption_demo
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     await speak(demo, "stop capture")
     saved = packet(state)
     assert saved["schema_version"] == 1
@@ -856,24 +922,24 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
     from xr_ai_tools.vision import MultiImageQueryTool
 
     demo = manual_caption_demo
-    prompt = load_config(_SAMPLE / "yaml/worker.yaml").caption_prompt
+    prompt = load_config(_SAMPLE / "yaml/worker.yaml").capture.caption_prompt
     response = demo.captioner.execute.return_value.text
     vlm = Mock(ask_images=AsyncMock(return_value=SimpleNamespace(content=response)))
-    demo.recorder._query_images = MultiImageQueryTool(
-        images=demo.recorder._images, vlm=vlm, system_prompt=prompt,
+    demo.capture_backend._query_images = MultiImageQueryTool(
+        images=demo.capture_backend._images, vlm=vlm, system_prompt=prompt,
     )
     source = demo.frames.execute.return_value
     for _ in range(2):
         await speak(demo, "start capture")
-        state = demo.recorder._sessions["user"]
+        state = demo.capture_backend._sessions["user"]
         paths = []
         for timestamp in (100, 200, 300):
             demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": timestamp})
-            await demo.recorder._capture(state)
+            await demo.capture_backend._capture(state)
             paths.append(state.directory / state.latest_frame.path)
             if timestamp == 200:
                 continue  # Sampling is faster than captioning; compare captioned frames.
-            await demo.recorder._caption(state)
+            await demo.capture_backend._caption(state)
         initial_call = vlm.ask_images.await_args_list[-2]
         assert initial_call.args[0] == [paths[0]]
         assert "exactly ONE image" in initial_call.args[1]
@@ -891,12 +957,12 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
         assert "Do not use Initial observation" in call.args[1]
         # Re-resolve from saved snapshots even after the live registry evicts them.
         demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": 400})
-        await demo.recorder._capture(state)
+        await demo.capture_backend._capture(state)
         current = state.directory / state.latest_frame.path
-        demo.recorder._images.clear()
-        await demo.recorder._caption(state)
+        demo.capture_backend._images.clear()
+        await demo.capture_backend._caption(state)
         assert vlm.ask_images.await_args.args[0] == [paths[2], current]
-        await demo.recorder._caption(state)  # No additional call for a stale image.
+        await demo.capture_backend._caption(state)  # No additional call for a stale image.
         assert state.caption_count == 3
         await speak(demo, "stop capture")
         assert packet(state)["counts"] == {"frames": 4, "captions": 3, "transcripts": 0}
@@ -904,7 +970,7 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
         assert [(c["frame_id"], c["delta_reference_frame_id"], c["delta_reference_timestamp_us"])
                 for c in captions] == [(1, None, None), (3, 1, 100), (4, 3, 300)]
         # The next recording gets fresh live references, not the previous session's pair.
-        source = source.model_copy(update={"image": demo.recorder._images.put(paths[0].read_bytes())})
+        source = source.model_copy(update={"image": demo.capture_backend._images.put(paths[0].read_bytes())})
     assert vlm.ask_images.await_count == 6
 
 
@@ -912,26 +978,26 @@ async def test_caption_uses_saved_image_pairs_in_order_and_resets(manual_caption
 async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo, failure):
     demo = manual_caption_demo
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     source = demo.frames.execute.return_value
     success = demo.captioner.execute.return_value
     paths = []
     for timestamp in (100, 200, 300):
         demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": timestamp})
-        await demo.recorder._capture(state)
+        await demo.capture_backend._capture(state)
         paths.append(state.directory / state.latest_frame.path)
         if timestamp == 200:
             demo.captioner.execute.return_value = SimpleNamespace(
                 available=failure != "unavailable", text="VLM unavailable" if failure == "unavailable" else "{",
             )
             with pytest.raises(RuntimeError if failure == "unavailable" else ValueError):
-                await demo.recorder._caption(state)
+                await demo.capture_backend._caption(state)
             assert state.last_captioned_frame.frame_id == 1
             demo.captioner.execute.return_value = success
         else:
-            await demo.recorder._caption(state)
+            await demo.capture_backend._caption(state)
     request = demo.captioner.execute.await_args.args[0]
-    assert [demo.recorder._images.resolve(image) for image in request.images] == [paths[0], paths[2]]
+    assert [demo.capture_backend._images.resolve(image) for image in request.images] == [paths[0], paths[2]]
     assert state.caption_count == 2
     assert state.last_captioned_frame.frame_id == 3
     captions = [json.loads(line) for line in (state.directory / "captions.jsonl").read_text().splitlines()]
@@ -940,7 +1006,7 @@ async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo, 
 
 
 async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monkeypatch):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     entered, release = threading.Event(), threading.Event()
     original = module._append_jsonl
@@ -954,7 +1020,7 @@ async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monke
     monkeypatch.setattr(module, "_append_jsonl", delayed)
     await demo.capture.receive(joined())
     await speak(demo, 'start capture')
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     finishing = None
     try:
         assert await asyncio.to_thread(entered.wait, 2)
@@ -982,11 +1048,11 @@ async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monke
 
 
 async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeypatch):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     await demo.capture.receive(joined())
     await speak(demo, 'start capture')
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     entered, release = threading.Event(), threading.Event()
     original = module._atomic_json
 
@@ -1000,7 +1066,7 @@ async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeyp
 
     async def write_view():
         async with state.lock:
-            await demo.recorder._write_packet(state)
+            await demo.capture_backend._write_packet(state)
 
     state.tasks.append(asyncio.create_task(write_view()))
     assert await asyncio.to_thread(entered.wait, 2)
@@ -1012,7 +1078,7 @@ async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeyp
         release.set()
         await asyncio.wait_for(closing, 2)
     assert json.loads((state.directory / "packet.json").read_text())["status"] == "complete"
-    assert not demo.recorder.is_recording("user")
+    assert not demo.capture_backend.is_capturing("user")
 
 
 @pytest.mark.parametrize("response", [
@@ -1025,10 +1091,10 @@ async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeyp
 ])
 async def test_invalid_caption_is_error_not_evidence(demo, response):
     demo.captioner.execute.return_value = SimpleNamespace(available=True, text=response)
-    demo.recorder._caption_interval_s = 0.01
+    demo.capture_backend._caption_interval_s = 0.01
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     async with asyncio.timeout(2):
         while not (state.directory / "errors.jsonl").exists():
             await asyncio.sleep(0.001)
@@ -1062,16 +1128,16 @@ def testcaption_query_treats_previous_labels_as_hints_not_visual_evidence():
 async def test_caption_grouping_uses_labels_only_and_preserves_transitions(manual_caption_demo):
     demo = manual_caption_demo
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     source = demo.frames.execute.return_value
     groups = [("Build", "Align"), ("Build", "Align"), ("Build", "Fasten"), ("Clean", "Wipe")]
     for index, (activity, phase) in enumerate(groups, 1):
         demo.frames.execute.return_value = source.model_copy(update={"timestamp_us": index})
-        await demo.recorder._capture(state)
+        await demo.capture_backend._capture(state)
         demo.captioner.execute.return_value.text = json.dumps({
             "activity": activity, "phase": phase, "caption": f"Observation {index}", "delta": f"Change {index}",
         })
-        await demo.recorder._caption(state)
+        await demo.capture_backend._caption(state)
         query = demo.captioner.execute.await_args.args[0].query
         if index > 1:
             assert json.dumps({"activity": groups[index-2][0], "phase": groups[index-2][1]}) in query
@@ -1090,7 +1156,7 @@ async def test_caption_grouping_uses_labels_only_and_preserves_transitions(manua
 @pytest.mark.parametrize("stage", ["start", "stop"])
 @pytest.mark.parametrize("target", ["transcript.jsonl", "packet.json", "summary.md"])
 async def test_storage_failure_releases_packet_and_allows_fresh_start(manual_caption_demo, monkeypatch, stage, target):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     demo = manual_caption_demo
     if stage == "stop":
@@ -1110,18 +1176,18 @@ async def test_storage_failure_releases_packet_and_allows_fresh_start(manual_cap
         else:
             # A missing narration log exercises the final read failure as well.
             if target == "transcript.jsonl":
-                state = demo.recorder._sessions["user"]
+                state = demo.capture_backend._sessions["user"]
                 (state.directory / "transcript.jsonl").unlink()
             await speak(demo, "stop capture")
-    assert not demo.recorder.is_recording("user")
-    assert "user" not in demo.recorder._sessions
+    assert not demo.capture_backend.is_capturing("user")
+    assert "user" not in demo.capture_backend._sessions
     assert "user" not in demo.capture._sessions
     assert demo.capture._connections["user"].recording is None
     old = next((demo.root / "sessions").iterdir())
     if (old / "packet.json").exists():
         assert json.loads((old / "packet.json").read_text())["status"] != "complete"
     await speak(demo, "start capture")
-    new = demo.recorder._sessions["user"]
+    new = demo.capture_backend._sessions["user"]
     assert new.directory != old
     await speak(demo, "Second procedure")
     await speak(demo, "stop capture")
@@ -1131,7 +1197,7 @@ async def test_storage_failure_releases_packet_and_allows_fresh_start(manual_cap
 
 @pytest.mark.parametrize("failing_file", ["index.jsonl", "captions.jsonl", "errors.jsonl"])
 async def test_background_write_failures_are_incomplete_and_loops_survive(demo, monkeypatch, failing_file):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     original = module._append_jsonl
     attempted = threading.Event()
@@ -1147,7 +1213,7 @@ async def test_background_write_failures_are_incomplete_and_loops_survive(demo, 
         demo.frames.execute.side_effect = FrameUnavailable("camera unavailable")
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     assert await asyncio.to_thread(attempted.wait, 2)
     await asyncio.sleep(0.05)
     assert all(not task.done() for task in state.tasks)
@@ -1180,7 +1246,7 @@ async def test_departure_during_start_directory_write_drains_without_narration_e
     await demo.capture.receive(joined())
     await speak(demo, "start capture", wait=False)
     assert await asyncio.to_thread(entered.wait, 2)
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     closing = asyncio.ensure_future(
         demo.capture.close() if boundary == "shutdown" else demo.capture.receive(
             ParticipantEvent("user", False, 2, participant_session_id="session"),
@@ -1192,7 +1258,7 @@ async def test_departure_during_start_directory_write_drains_without_narration_e
     finally:
         release.set()
         await asyncio.wait_for(closing, 2)
-    assert not demo.recorder._sessions
+    assert not demo.capture_backend._sessions
     assert not demo.capture._sessions
     assert announcements(demo) == []
     assert packet(state)["status"] == "incomplete"
@@ -1209,7 +1275,7 @@ def test_caption_parser_accepts_only_complete_structured_observations(wrapper):
 
 
 async def test_failed_pending_caption_write_cannot_seal_complete(demo, monkeypatch):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     original = module._append_jsonl
     entered, release = threading.Event(), threading.Event()
@@ -1224,7 +1290,7 @@ async def test_failed_pending_caption_write_cannot_seal_complete(demo, monkeypat
     monkeypatch.setattr(module, "_append_jsonl", delayed_failure)
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
-    state = demo.recorder._sessions["user"]
+    state = demo.capture_backend._sessions["user"]
     assert await asyncio.to_thread(entered.wait, 2)
     closing = asyncio.create_task(speak(demo, "stop capture"))
     try:
@@ -1237,15 +1303,15 @@ async def test_failed_pending_caption_write_cannot_seal_complete(demo, monkeypat
         await asyncio.wait_for(closing, 2)
     assert packet(state)["status"] == "incomplete"
     assert packet(state)["counts"]["captions"] == 0
-    assert not demo.recorder._sessions
+    assert not demo.capture_backend._sessions
 
 
 async def test_failed_stop_does_not_clear_queued_restart(manual_caption_demo, monkeypatch):
-    import task_worker.capture.recorder as module
+    import task_worker.capture.capturing as module
 
     demo = manual_caption_demo
     await speak(demo, "start capture")
-    old = demo.recorder._sessions["user"]
+    old = demo.capture_backend._sessions["user"]
     entered, release = threading.Event(), threading.Event()
     original = module._atomic_text
 
@@ -1265,7 +1331,7 @@ async def test_failed_stop_does_not_clear_queued_restart(manual_caption_demo, mo
     finally:
         release.set()
         await asyncio.wait_for(asyncio.shield(demo.capture._tails["user"]), 2)
-    new = demo.recorder._sessions["user"]
+    new = demo.capture_backend._sessions["user"]
     assert new is not old
     assert demo.capture._connections["user"].recording is demo.capture._sessions["user"]
     assert narration(new) == ["New narration"]

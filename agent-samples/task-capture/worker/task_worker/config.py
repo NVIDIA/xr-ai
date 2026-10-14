@@ -1,22 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Task recording configuration with paths anchored to the source YAML."""
+"""Load shared worker settings and the separately owned capture configuration.
+
+Keep each YAML's paths anchored to that file so launch-time overrides do not
+relocate model, voice, or capture configuration.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+from .capture.config import CaptureConfig, load_capture_config
+
 
 @dataclass(frozen=True, slots=True)
 class WorkerConfig:
     models_config: Path
     voice_gate_yaml: Path
-    artifacts_dir: Path
-    caption_prompt: str
-    capture_fps: float = 2.0
-    caption_interval_s: float = 5.0
+    capture: CaptureConfig
     frame_max_age_s: float = 2.0
     frame_timeout_s: float = 3.0
     silence_duration: float = 0.6
@@ -38,8 +41,6 @@ def load_config(path: Path | None) -> WorkerConfig:
     base = path.resolve().parent
     settings = {}
     for name in (
-        "capture_fps",
-        "caption_interval_s",
         "frame_max_age_s",
         "frame_timeout_s",
         "silence_duration",
@@ -54,9 +55,8 @@ def load_config(path: Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_config=base / "models.json",
         voice_gate_yaml=base / "voice_gate.yaml",
-        artifacts_dir=(
-            output_root if output_root is not None else base / data.get("artifacts_dir", "../artifacts")
-        ).resolve(),
-        caption_prompt=(Path(__file__).parent / "capture/prompts/caption.txt").read_text(encoding="utf-8"),
+        capture=load_capture_config(
+            base / data.get("capture_config", "capture-agent-config.yaml"), output_root=output_root,
+        ),
         **settings,
     )

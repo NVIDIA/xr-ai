@@ -56,9 +56,9 @@ async def evaluate(output: Path, config_path: Path) -> bool:
     images = ImageRegistry()
     # Reuse production components so the evaluation tests the actual caption
     # contract rather than a separate, potentially easier prompt or parser.
-    tool = MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt)
+    tool = MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.capture.caption_prompt)
     cases = yaml.safe_load(Path(__file__).with_name("caption_cases.yaml").read_text())["cases"]
-    (output / "prompt.txt").write_text(config.caption_prompt)
+    (output / "prompt.txt").write_text(config.capture.caption_prompt)
     passed = 0
     try:
         for case in cases:

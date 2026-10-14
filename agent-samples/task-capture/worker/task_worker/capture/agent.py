@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Ordered owner of recording commands, narration, and participant departures."""
+"""Coordinate voice commands and narration for task capture.
+
+Commands and narration must stay ordered so speech is saved to the intended
+capture session. Participant disconnects must also finalize active capture
+and prevent queued commands from starting work after the participant leaves.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,7 @@ from xr_ai_hub import ParticipantEvent
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceOutput
 
-from .recorder import _Recorder
+from .capturing import _Capture
 
 _COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
 CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
@@ -35,15 +40,15 @@ class _Recording:
 
 
 class CaptureAgent(Agent):
-    """Admit input per connection and serialize each participant's recording work.
+    """Admit input per connection and serialize each participant's capture work.
 
-    Pending command identity and the recorder's physical session are distinct:
+    Pending command identity and the capture backend's physical session are distinct:
     a new start can be queued while the previous packet is still finalizing.
     Connection invalidation is immediate so departure cancels queued starts.
     """
-    def __init__(self, recorder: _Recorder) -> None:
+    def __init__(self, capture_backend: _Capture) -> None:
         super().__init__()
-        self._recorder = recorder
+        self._capture_backend = capture_backend
         self._sessions: dict[str, _Recording] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}
@@ -58,7 +63,7 @@ class CaptureAgent(Agent):
             try:
                 await action()
             except Exception:
-                logger.exception("task recording action failed pid={!r}", pid)
+                logger.exception("task capture action failed pid={!r}", pid)
 
         task = None if self._closed else asyncio.create_task(apply())
         if task is not None:
@@ -74,7 +79,7 @@ class CaptureAgent(Agent):
         except (Exception, BaseExceptionGroup):
             # Runtime shutdown wraps cancelled output deliveries in a group.
             # Announcement delivery is best effort, not a prerequisite for saving.
-            logger.exception("task recording announcement failed pid={!r}", pid)
+            logger.exception("task capture announcement failed pid={!r}", pid)
 
     def _forget(self, pid: str, recording: _Recording) -> None:
         # A later start may already be queued on this connection.
@@ -104,12 +109,12 @@ class CaptureAgent(Agent):
             try:
                 if recording is not None and recording.connection is connection and not (event.joined and duplicate):
                     try:
-                        await self._recorder.finish_recording(pid)
+                        await self._capture_backend.finish_capture(pid)
                     finally:
                         self._forget(pid, recording)
             finally:
                 if not event.joined and pid not in self._connections:
-                    self._recorder.release(pid)
+                    self._capture_backend.release(pid)
 
         task = self._enqueue(pid, apply)
 
@@ -147,13 +152,13 @@ class CaptureAgent(Agent):
                     return
                 self._sessions[pid] = recording
                 try:
-                    await self._recorder.start_recording(
+                    await self._capture_backend.start_capture(
                         pid, cancelled=connection.cancelled, timestamp_us=transcript.timestamp_us,
                     )
-                    if self._recorder.is_recording(pid):
+                    if self._capture_backend.is_capturing(pid):
                         await self._say(pid, connection, ctx, "Capture started.")
                 finally:
-                    if not self._recorder.is_recording(pid):
+                    if not self._capture_backend.is_capturing(pid):
                         self._forget(pid, recording)
 
             self._enqueue(pid, start)
@@ -164,7 +169,7 @@ class CaptureAgent(Agent):
                 if recording is not None and self._sessions.get(pid) is recording:
                     await self._say(pid, connection, ctx, "Capture stopped.")
                     try:
-                        await self._recorder.finish_recording(
+                        await self._capture_backend.finish_capture(
                             pid,
                             stop_command={"text": transcript.text.strip(), "timestamp_us": transcript.timestamp_us},
                         )
@@ -175,7 +180,7 @@ class CaptureAgent(Agent):
         elif recording is not None:
             async def narrate() -> None:
                 if self._sessions.get(pid) is recording:
-                    await self._recorder.record_transcript(pid, transcript.text, transcript.timestamp_us)
+                    await self._capture_backend.capture_transcript(pid, transcript.text, transcript.timestamp_us)
 
             self._enqueue(pid, narrate)
         # Return promptly; this owner drains per-participant writes and boundaries.
@@ -189,12 +194,12 @@ class CaptureAgent(Agent):
             results = await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
             for (pid, _), result in zip(pending, results):
                 if isinstance(result, BaseException):
-                    logger.opt(exception=result).error("task recording action failed during shutdown pid={!r}", pid)
+                    logger.opt(exception=result).error("task capture action failed during shutdown pid={!r}", pid)
         finally:
             try:
-                await self._recorder.stop()
+                await self._capture_backend.stop()
             finally:
                 for pid in self._connections.keys() | self._sessions.keys():
-                    self._recorder.release(pid)
+                    self._capture_backend.release(pid)
                 self._connections.clear()
                 self._sessions.clear()

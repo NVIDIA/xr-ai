@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Capture policy; voice and frame infrastructure settings live in worker.yaml.
+# Paths are relative to this YAML. --output-root overrides artifacts_dir.
+# Packets are written under artifacts_dir/sessions/.
+artifacts_dir: ../artifacts
+capture_fps: 2.0
+caption_interval_s: 5.0

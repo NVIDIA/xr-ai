@@ -1,10 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Caption request and response contract shared by recording and evaluation.
+"""Share caption request construction and response validation.
 
-Image references are supplied separately in chronological order. Previous
-grouping labels are naming hints, not evidence about the current image.
+Recording and evaluation use the same helpers so evaluations exercise the
+production caption format. Previous activity and phase names help maintain
+consistent grouping, but must not replace evidence from the supplied images.
+
+Validate responses before saving them so malformed output cannot enter the
+caption history. Format validation does not establish visual accuracy.
 """
 
 from __future__ import annotations

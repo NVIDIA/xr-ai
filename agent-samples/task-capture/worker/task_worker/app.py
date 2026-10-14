@@ -3,9 +3,18 @@
 
 """Compose voice, frame tools, and the agent that captures task demonstrations.
 
-Infrastructure is constructed here and injected into CaptureAgent's recorder.
-The agent owns commands and narration ordering; the recorder owns sampling,
-captioning, and durable files. This module owns startup and resource cleanup.
+Keep infrastructure ownership here so capture logic can use injected tools
+without managing model clients or transport lifetimes. Capture cleanup must
+finish before those resources close, including when the voice session exits.
+
+Frame selection and captioning share an image registry so visual inference
+uses the selected evidence. Live frames and on-demand stills use the same tool
+so capture does not depend on a continuously streaming camera.
+
+Commands, narration, and participant departures reach one capture agent so
+speech stays with the intended session and disconnects finalize pending work.
+Readiness checks wait for speech recognition, acknowledgements, and captioning
+services so the worker can support the full capture flow before accepting use.
 """
 
 from __future__ import annotations
@@ -24,7 +33,7 @@ from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent
-from .capture.recorder import _Recorder
+from .capture.capturing import _Capture
 from .config import WorkerConfig
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
@@ -35,27 +44,27 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     setup_logging("worker")
     models = load_models_config(config.models_config)
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
-    # Recording must finish draining after voice stops. Its frame and participant
+    # Capture must finish draining after voice stops. Its frame and participant
     # endpoint therefore has a lifetime controlled by this composition layer.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     images = ImageRegistry()
     frames = CurrentFrameTool(
         endpoint=endpoint, images=images, frame_max_age_s=config.frame_max_age_s, frame_timeout_s=config.frame_timeout_s
     )
-    recorder = _Recorder(
-        sessions_dir=config.artifacts_dir / "sessions",
+    capture_backend = _Capture(
+        sessions_dir=config.capture.artifacts_dir / "sessions",
         current_frame=frames,
         images=images,
-        query_images=MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt),
-        capture_fps=config.capture_fps,
-        caption_interval_s=config.caption_interval_s,
+        query_images=MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.capture.caption_prompt),
+        capture_fps=config.capture.capture_fps,
+        caption_interval_s=config.capture.caption_interval_s,
     )
     # One owner orders command boundaries and admitted narration, including
-    # repeated recordings on the same participant connection.
-    capture = CaptureAgent(recorder)
+    # repeated captures on the same participant connection.
+    capture = CaptureAgent(capture_backend)
     endpoint.on_participant(capture.receive)
     # Accepted voice input is delivered after prior speech is cancelled, so
-    # each recording command cannot interrupt its own acknowledgement.
+    # each capture command cannot interrupt its own acknowledgement.
     voice = VoiceAgent(
         query_topic=CAPTURE_INPUT_TOPIC,
         stt=stt,
@@ -64,7 +73,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             silence_duration=config.silence_duration,
             min_speech=config.min_speech,
             silero_threshold=config.silero_threshold,
-            # Wait for the final utterance before interpreting recording commands;
+            # Wait for the final utterance before interpreting capture commands;
             # a partial "stop" must not interrupt narration or acknowledgements.
             stop_probe_after_s=0,
         ),
@@ -87,7 +96,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             # or filesystem threads. Explicitly finalize before closing resources.
             await capture.close()
         finally:
-            # stop() alone cannot wake an idle ZMQ receive. Drain recordings
+            # stop() alone cannot wake an idle ZMQ receive. Drain captures
             # first, then cancel the receiver before closing its sockets.
             receiver.cancel()
             await asyncio.gather(receiver, return_exceptions=True)
