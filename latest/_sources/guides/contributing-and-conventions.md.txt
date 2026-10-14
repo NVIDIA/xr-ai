@@ -67,7 +67,10 @@ with `uv --config-file uv.toml lock --upgrade --project <directory>`, and run
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
 locks under `dependency-manifest/`; the pre-commit hook does the Python one when
-`uv.toml` is staged.
+`uv.toml` is staged. Ordinary dependency or project changes remain deferred to
+the next qualification or targeted security refresh. The generator
+explicitly excludes Speaker STT because its NeMo Speech sources conflict with
+the other ASR services; validate its local lock separately.
 
 For a targeted security refresh, add an `exclude-newer-package` timestamp in
 `uv.toml` for each fixed package and add its minimum safe version to the
