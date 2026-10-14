@@ -429,6 +429,13 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="single-llm-entry-in-model-profiles">
+<h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
+<p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> you need into <code class="docutils literal notranslate"><span class="pre">llm</span></code>, then remove the old entry. The NIM smoke
+check rejects the old entry.</p>
+</section>
 <section id="selected-model-server-cleanup">
 <h2>Selected model-server cleanup<a class="headerlink" href="#selected-model-server-cleanup" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> now stops only managed services in the selected launch
@@ -474,17 +481,6 @@ inputs. Local model-server defaults remain unchanged.</p>
 Riva client readiness checks channel connectivity; validate inference separately.
 Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for migration and validation commands.</p>
 </section>
-<section id="single-llm-entry-in-model-profiles">
-<h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
-<p>XR Render, the shared local model profile, and the NIM endpoint example now use
-one <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry for text chat and tool-calling loops. XR Render workers and eval commands read
-<code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>. For a custom XR Render profile, move any
-<code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> settings you want to retain into <code class="docutils literal notranslate"><span class="pre">llm</span></code>, then remove the duplicate
-entry. Model endpoints, presets, and inference settings are unchanged.</p>
-<p>Application-defined names remain supported by <code class="docutils literal notranslate"><span class="pre">ModelsConfig</span></code> and <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>.
-Applications that need multiple LLMs can retain distinct named entries of the
-LLM category; no SDK type or factory has changed.</p>
-</section>
 <section id="livekit-sample-credentials">
 <h2>LiveKit sample credentials<a class="headerlink" href="#livekit-sample-credentials" title="Link to this heading">#</a></h2>
 <p>Shipped DeviceIOHub YAML files now leave <code class="docutils literal notranslate"><span class="pre">api_key</span></code> and <code class="docutils literal notranslate"><span class="pre">api_secret</span></code> blank.
@@ -516,6 +512,27 @@ during startup returns 130. Refer to
 <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
 shutdown behavior.</p>
 </section>
+<section id="shared-model-stack-speaker-filtering">
+<h2>Shared model-stack speaker filtering<a class="headerlink" href="#shared-model-stack-speaker-filtering" title="Link to this heading">#</a></h2>
+<p>The default shared model profile starts Nemotron 3 Diarization with Multitalker
+Parakeet through its private <code class="docutils literal notranslate"><span class="pre">services</span></code> declaration and reuses matching warm
+speaker-ASR instances. Samples with
+<code class="docutils literal notranslate"><span class="pre">speaker.backend:</span> <span class="pre">required</span></code> wait for the speaker service before worker readiness.
+The four shipped voice samples no longer declare a batch-STT endpoint on 8103;
+the default stack does not serve that port. Ordinary STT remains an explicit
+choice configured in both the server deployment and consuming worker.
+Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
+The local default contains no batch-STT model entry. Before updating an existing
+checkout, stop its running stack with that checkout’s <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
+and the deployment profile it started (<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> for a custom profile).
+The new default stop plan does not include batch STT on 8103. Also stop the
+selected stack before changing its deployment configuration. Replace
+unconditional worker <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> calls with <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code>, passing
+the loaded models and voice-gate settings. To serve batch STT, explicitly add its
+managed model entry and configure the consuming worker’s batch adapter;
+for batch-only speech omit <code class="docutils literal notranslate"><span class="pre">services.speaker-stt</span></code> and disable speaker enrollment.
+Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for serving both paths.</p>
+</section>
 <section id="voice-sample-conversation-defaults">
 <h2>Voice sample conversation defaults<a class="headerlink" href="#voice-sample-conversation-defaults" title="Link to this heading">#</a></h2>
 <p>The shipped voice samples now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after
@@ -536,7 +553,8 @@ controls.</p>
 <section id="local-model-server-cli">
 <h2>Local model-server CLI<a class="headerlink" href="#local-model-server-cli" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> sample launches only local server wrappers. Its default
-Parakeet, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is unchanged.
+speaker ASR, Pocket TTS, Nemotron Omni, Cosmos, and embedding stack is described
+in <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.
 Named <code class="docutils literal notranslate"><span class="pre">--models</span></code> selections are retired:</p>
 <ul class="simple">
 <li><p>Replace <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--models</span> <span class="pre">default</span></code> with <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>.</p></li>
@@ -549,8 +567,8 @@ Custom deployments can no longer select <code class="docutils literal notranslat
 </ul>
 <p>Before updating a checkout that ran the former NIM profile, stop it with the
 old checkout’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">model_servers</span> <span class="pre">--stop</span></code>. The updated local launcher no
-longer discovers the removed NIM-only ports. Stop the old stack before starting
-the separate NIM sample because they share client ports. Caches are not removed.</p>
+longer discovers the removed NIM-only ports. Deploy native endpoints using the
+operator’s tooling instead of starting a NIM sample. Caches are not removed.</p>
 <p><code class="docutils literal notranslate"><span class="pre">--help</span></code> now displays usage and exits. Unknown options are rejected instead of
 being silently ignored; <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> remains unsupported by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>.</p>
 </section>
@@ -800,13 +818,14 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#swift-microphone-cleanup-errors">Swift microphone cleanup errors</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-model-stack-speaker-filtering">Shared model-stack speaker filtering</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-sample-conversation-defaults">Voice sample conversation defaults</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-server-cli">Local model-server CLI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streamkit-image-capture-dependencies">StreamKit image-capture dependencies</a></li>

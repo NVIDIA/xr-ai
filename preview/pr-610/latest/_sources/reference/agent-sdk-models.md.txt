@@ -54,6 +54,10 @@ and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
 documents the local service and its pinned model release.
 
 (profile-contract)=
+Model entry names are application-defined. Applications can configure multiple
+LLMs under distinct names with `make_llm(config, name)`, using the same endpoint
+or different endpoints.
+
 A client profile names logical roles and declares adapters and endpoints:
 
 ```json

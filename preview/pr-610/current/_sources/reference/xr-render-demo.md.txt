@@ -24,7 +24,7 @@ shared model services.
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
 | capture | sample, opt-in | `services/device-io-hub/` | `device_io_capture` | — |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
-| stt | reused | `services/stt-server/` | `stt_server` | 8103 |
+| speaker-stt | reused | `services/speaker-stt/` | `speaker_stt` | 8102 |
 | tts | reused | `services/pocket-tts/` | `pocket_tts_server` | 8105 |
 | omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
 | vlm | reused | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
@@ -132,7 +132,7 @@ overrides `lovr_bin` in `scene/scene_service.yaml`. Use a GPU index reported by
 settings are independent and must be planned together. Keep
 `allow_sim_pose: false` outside the live eval harness.
 
-Each `models.json` entry maps a logical role (`llm`, `stt`, `tts`,
+Each default `models.json` entry maps a logical role (`llm`, `tts`,
 or `vlm`) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to {doc}`/guides/customizing-model-servers` for
@@ -207,8 +207,7 @@ launch configuration changed.
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
 The `llm` entry in `yaml/models.json` runs the supervisor and subagent
-tool-calling loops. The same `LLMService` interface supports chat calls with
-and without tools. Thinking stays off unless a call explicitly enables it.
+tool-calling loops. Thinking stays off unless a call explicitly enables it.
 
 ## VLM — Cosmos3 Nano Reasoner
 
@@ -243,11 +242,22 @@ disabled, perception uses current frames only.
 
 Start the shared model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
-The worker does not poll model health endpoints. It retains a tool-shaped LLM
+The worker waits for required speaker ASR; it does not poll batch STT or TTS
+health endpoints. It retains a tool-shaped LLM
 inference warmup before announcing readiness so that LLM memory settles before
 LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.
 
-## STT — parakeet-tdt-0.6b-v3
+(stt-parakeet-tdt-0-6b-v3)=
+
+## Speech recognition
+
+The default requires speaker ASR on port 8102 before worker readiness and sends
+continuous audio to its private streaming endpoint. Enrollment selects which
+speaker may submit queries. The worker does not create a batch-STT client in
+this mode. Refer to {ref}`speaker-enrollment` for the stream and enrollment
+contract, and {doc}`/guides/customizing-model-servers` for explicit batch setup.
+
+### Optional batch STT — parakeet-tdt-0.6b-v3
 
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
@@ -293,7 +303,7 @@ cancelled before its reply is published, so no partial stream is left open.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
+VoiceAgent → private media session → selected speech processor ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic

@@ -12,6 +12,9 @@ observers, and voice output. Refer to the
 architecture reference explains how to adapt the sample to another procedure
 rather than merely changing model settings.
 
+For speech deployment and explicit batch-STT selection, refer to
+{doc}`/guides/customizing-model-servers`.
+
 The defining pattern is a deterministic workflow around an agentic core. YAML
 declares the steps and state contract. A VLM describes each current view, and
 the observation LLM judges that natural-language caption and selects native

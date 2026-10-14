@@ -436,19 +436,25 @@ and defaults.</p>
 <p><a id="usage"></a></p>
 <section id="voice-agent">
 <span id="agent-sdk-voice-usage"></span><h2>Voice agent<a class="headerlink" href="#voice-agent" title="Link to this heading">#</a></h2>
-<p>Applications register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceInterrupted</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voicegate</span><span class="w"> </span><span class="kn">import</span> <span class="n">VoiceGateConfig</span>
+<p>Applications construct speech from their loaded model profile and voice-gate
+configuration, then register one <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> with their runtime:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceInterrupted</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voicegate</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_voice_gate_config</span>
+
+<span class="n">models</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
+<span class="n">voice_gate</span> <span class="o">=</span> <span class="n">load_voice_gate_config</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"yaml/voice_gate.yaml"</span><span class="p">))</span>
 <span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.user-query"</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
 <span class="n">interruptions</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">"my-sample.interrupted"</span><span class="p">,</span> <span class="n">VoiceInterrupted</span><span class="p">)</span>
-<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="o">.</span><span class="n">from_models</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
-    <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
     <span class="n">tts</span><span class="o">=</span><span class="n">tts</span><span class="p">,</span>
     <span class="n">vad</span><span class="o">=</span><span class="n">VadConfig</span><span class="p">(),</span>
-    <span class="n">voice_gate</span><span class="o">=</span><span class="n">VoiceGateConfig</span><span class="p">(),</span>
+    <span class="n">voice_gate</span><span class="o">=</span><span class="n">voice_gate</span><span class="p">,</span>
     <span class="n">interrupted_topic</span><span class="o">=</span><span class="n">interruptions</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"voice"</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
@@ -626,18 +632,26 @@ to the agent; the latency-saving interruption is not undone.</p>
 </section>
 <section id="speaker-filtering-and-backend-selection">
 <span id="speaker-enrollment"></span><h2>Speaker filtering and backend selection<a class="headerlink" href="#speaker-filtering-and-backend-selection" title="Link to this heading">#</a></h2>
-<p>The same conversation controls work with ordinary STT and optional speaker
-filtering. Add <code class="docutils literal notranslate"><span class="pre">speaker</span></code> alongside <code class="docutils literal notranslate"><span class="pre">conversation</span></code> in the worker’s voice-gate YAML:</p>
+<p>The same conversation controls work with ordinary STT and speaker filtering.
+Shipped samples select required speaker ASR alongside <code class="docutils literal notranslate"><span class="pre">conversation</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
 </pre></div>
 </div>
 <p>Before announcing readiness, the worker probes the service’s HTTP <code class="docutils literal notranslate"><span class="pre">/health</span></code>
 endpoint. A ready compatible service selects diarization. In automatic mode,
-connection absence selects the configured ordinary <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, including the
-unchanged NIM stack’s HTTP STT adapter. Once a listener is observed, an unresponsive
+connection absence selects an explicitly supplied ordinary <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, including
+native Riva speech. Automatic mode requires that real batch client; it is not
+the shipped default. <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models(models=...,</span> <span class="pre">voice_gate=...,</span> <span class="pre">...)</span></code>
+uses the already-loaded model profile and the same voice-gate settings as its
+sole speech selector. Required speaker mode constructs no batch client;
+disabled or automatic mode constructs the existing <code class="docutils literal notranslate"><span class="pre">stt</span></code> role, including native
+Riva when configured. The low-level constructor remains available for callers
+supplying their own clients. Required speaker mode accepts <code class="docutils literal notranslate"><span class="pre">VoiceAgent(stt=None)</span></code> and
+waits even when the service is absent; disabled or automatic speaker mode needs
+a batch client. Once a listener is observed, an unresponsive
 or interrupted response means not-ready: the worker waits using the existing
 service-readiness polling instead of silently selecting unfiltered STT. A stalled
 listener can therefore hold startup until it is ready or startup is cancelled.
@@ -676,6 +690,25 @@ resets. Explicit same-track capture epochs are outside this integration.</p>
 <span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>speaker_stt<span class="w"> </span>--config<span class="w"> </span>services/speaker-stt/speaker_stt.yaml
 </pre></div>
 </div>
+<p>Alternatively, the default shared model stack starts speaker ASR. Stop a
+standalone instance before switching to the stack’s hardware configuration;
+their configuration fingerprints can differ. From the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>model_servers
+</pre></div>
+</div>
+<p>It uses <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/speaker_stt.yaml</span></code>
+for placement and capacity, waits for decoder warmup, and reuses matching warm
+instances. <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> includes the speaker service. Stop the stack
+before changing its speaker-service YAML. Native NIM deployment configures the
+worker’s ordinary speech adapters for independently deployed Riva endpoints;
+disable <code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> when choosing that speech path. Refer to
+<a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. Automatic selection can use the configured
+ordinary STT adapter when speaker ASR is absent at backend selection; once a
+listener is observed, it waits for compatible service readiness instead.</p>
+<p>The default profile does not start batch STT. Consumers that require it can
+manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for these deployment choices.</p>
 <p>Say the exact start phrase to nominate its speaker. Other speech can continue:
 the service conditions each candidate transcript on that speaker’s target and
 interference masks. Candidate phrases finalize on each speaker’s configured

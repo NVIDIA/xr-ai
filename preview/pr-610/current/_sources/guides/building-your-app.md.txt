@@ -198,7 +198,7 @@ copied VLM application. If the weights are already cached or unauthenticated
 rate limits are acceptable, append `--allow-anonymous` to the `model_servers`
 command below.
 
-The copied application reuses STT, VLM, and TTS services. Start those shared
+The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:
 

@@ -14,21 +14,27 @@ and defaults.
 (agent-sdk-voice-usage)=
 ## Voice agent
 
-Applications register one `VoiceAgent` with their runtime:
+Applications construct speech from their loaded model profile and voice-gate
+configuration, then register one `VoiceAgent` with their runtime:
 
 ```python
+from pathlib import Path
+
+from xr_ai_models import load_models_config
 from xr_ai_runtime import Topic
 from xr_ai_voice import UserQuery, VadConfig, VoiceAgent, VoiceInterrupted
-from xr_ai_voicegate import VoiceGateConfig
+from xr_ai_voicegate import load_voice_gate_config
 
+models = load_models_config("yaml/models.json")
+voice_gate = load_voice_gate_config(Path("yaml/voice_gate.yaml"))
 queries = Topic("my-sample.user-query", UserQuery)
 interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
-voice = VoiceAgent(
+voice = VoiceAgent.from_models(
+    models=models,
     query_topic=queries,
-    stt=stt,
     tts=tts,
     vad=VadConfig(),
-    voice_gate=VoiceGateConfig(),
+    voice_gate=voice_gate,
     interrupted_topic=interruptions,
 )
 runtime.register("voice", voice)
@@ -233,20 +239,28 @@ to the agent; the latency-saving interruption is not undone.
 
 ## Speaker filtering and backend selection
 
-The same conversation controls work with ordinary STT and optional speaker
-filtering. Add `speaker` alongside `conversation` in the worker's voice-gate YAML:
+The same conversation controls work with ordinary STT and speaker filtering.
+Shipped samples select required speaker ASR alongside `conversation`:
 
 ```yaml
 speaker:
   enabled: true
-  backend: auto
+  backend: required
   base_url: http://127.0.0.1:8102
 ```
 
 Before announcing readiness, the worker probes the service's HTTP `/health`
 endpoint. A ready compatible service selects diarization. In automatic mode,
-connection absence selects the configured ordinary `STTService`, including the
-unchanged NIM stack's HTTP STT adapter. Once a listener is observed, an unresponsive
+connection absence selects an explicitly supplied ordinary `STTService`, including
+native Riva speech. Automatic mode requires that real batch client; it is not
+the shipped default. `VoiceAgent.from_models(models=..., voice_gate=..., ...)`
+uses the already-loaded model profile and the same voice-gate settings as its
+sole speech selector. Required speaker mode constructs no batch client;
+disabled or automatic mode constructs the existing `stt` role, including native
+Riva when configured. The low-level constructor remains available for callers
+supplying their own clients. Required speaker mode accepts `VoiceAgent(stt=None)` and
+waits even when the service is absent; disabled or automatic speaker mode needs
+a batch client. Once a listener is observed, an unresponsive
 or interrupted response means not-ready: the worker waits using the existing
 service-readiness polling instead of silently selecting unfiltered STT. A stalled
 listener can therefore hold startup until it is ready or startup is cancelled.
@@ -289,6 +303,29 @@ Start the inference process separately from the repository root:
 uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
+
+Alternatively, the default shared model stack starts speaker ASR. Stop a
+standalone instance before switching to the stack's hardware configuration;
+their configuration fingerprints can differ. From the repository root:
+
+```bash
+uv --config-file uv.toml run --project model-server-samples/model-servers \
+  model_servers
+```
+
+It uses `model-server-samples/model-servers/yaml/<gpu-profile>/speaker_stt.yaml`
+for placement and capacity, waits for decoder warmup, and reuses matching warm
+instances. `model_servers --stop` includes the speaker service. Stop the stack
+before changing its speaker-service YAML. Native NIM deployment configures the
+worker's ordinary speech adapters for independently deployed Riva endpoints;
+disable `speaker.enabled` when choosing that speech path. Refer to
+{doc}`/guides/deploying-with-nim`. Automatic selection can use the configured
+ordinary STT adapter when speaker ASR is absent at backend selection; once a
+listener is observed, it waits for compatible service readiness instead.
+
+The default profile does not start batch STT. Consumers that require it can
+manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
+{doc}`/guides/customizing-model-servers` for these deployment choices.
 
 Say the exact start phrase to nominate its speaker. Other speech can continue:
 the service conditions each candidate transcript on that speaker's target and
