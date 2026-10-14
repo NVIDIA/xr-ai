@@ -41,10 +41,10 @@ ownership, and event composition are reusable.
 ## Quick start
 
 Run commands from `agent-samples/tea-making-sample/`. The tea sample reuses all
-model services, so start the shared stack, including Pocket TTS, first:
+model services, so start the sample's model stack, including Pocket TTS, first:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers tea_making_sample_model_servers
 ```
 
 Wait for the model launcher to report readiness and return. Then launch the
@@ -221,7 +221,7 @@ The `--expose-web-events` option intentionally overrides `web_events_host` in
 the runtime copy. Changing `models.local.json` changes the endpoints used by
 the worker and RAG service but not the persistent servers. Refer to
 {doc}`/guides/customizing-model-servers` for a server-side model, GPU, port, or
-memory change, then restart the shared stack.
+memory change, then restart the sample's model stack.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.

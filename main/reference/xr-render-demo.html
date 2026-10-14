@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -604,7 +605,8 @@ LOVR inherits the pin; <code class="docutils literal notranslate"><span class="p
 <p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.</p>
-<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/</span></code>. Set them
+<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> and
+<code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/model-servers/yaml/</span></code>. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.</p>
 </section>
@@ -723,7 +725,7 @@ intentionally selects <code class="docutils literal notranslate"><span class="pr
 and starts vLLM through the selected <code class="docutils literal notranslate"><span class="pre">pip</span></code> or Docker backend. The vLLM process
 or container runs in a separate session so the shared model remains available
 across stack restarts; the wrapper monitors its health and reports readiness.
-The shared model-server stack reuses a healthy instance and replaces one whose
+The sample’s model-server stack reuses a healthy instance and replaces one whose
 launch configuration changed.</p>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
@@ -758,7 +760,7 @@ effective <code class="docutils literal notranslate"><span class="pre">video_rec
 <p>Omitting <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> enables history. The checked-in worker YAML
 sets it to <code class="docutils literal notranslate"><span class="pre">false</span></code> because the sample hub disables recording. With history
 disabled, perception uses current frames only.</p>
-<p>Start the shared model-server stack and wait for its launcher to return before
+<p>Start the sample’s model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
 The worker waits for required speaker ASR; it does not poll batch STT or TTS
 health endpoints. It retains a tool-shaped LLM

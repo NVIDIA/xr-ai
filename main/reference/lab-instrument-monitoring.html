@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -703,7 +704,7 @@ hot-reloaded. The <code class="docutils literal notranslate"><span class="pre">-
 the host to expose the unauthenticated viewer. Changing <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes
 only the endpoints consumed by this sample. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for server-side model, GPU, port, or
-memory changes, then restart the persistent shared stack.</p>
+memory changes, then restart the sample’s persistent model stack.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
@@ -944,7 +945,7 @@ participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.</p>
 <section id="routing-and-visual-evals">
 <h3>Routing and visual evals<a class="headerlink" href="#routing-and-visual-evals" title="Link to this heading">#</a></h3>
-<p>Start the shared model servers, then run these commands from
+<p>Start the sample’s local model servers, then run these commands from
 <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/visual_eval.py

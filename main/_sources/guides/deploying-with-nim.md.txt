@@ -174,6 +174,11 @@ application latency in the deployment environment.
 
 ## Switch an existing sample
 
+Stop the agent and its local model stack before switching to NIM endpoints.
+Use the current sample's model command with `--stop` and the same explicit
+`--gpu-profile NAME` used at startup. Refer to
+{doc}`customizing-model-servers` for the stop/start workflow.
+
 Keep copies of the sample's active local JSON and selected voice-gate YAML. Replace its model entries with
 the roles required for native deployment in the table below, including the
 explicit `stt` entry for ordinary Riva speech. This example adapts
@@ -229,13 +234,19 @@ configuration or changing the active files. Do not rerun the switch to replace
 a backup; restore first and retain the backup for recovery. To switch again
 after restoring, choose a new unused backup directory.
 
+When all required roles use NIM endpoints, run only the agent sample; skip its
+`model-servers/` convenience launcher. That launcher always starts its declared
+local servers and does not read the consumer profile's `external` ownership.
+For a mixture of local and NIM models, keep only the local servers in the model
+launcher's list and GPU-profile entries, and tune their budgets together.
+
 To return simple VLM to local development, restore both saved configurations,
 start the local stack, and restart the sample:
 
 ```bash
 cp /tmp/simple-vlm.local-backup/models.json agent-samples/simple-vlm-example/yaml/models.json
 cp /tmp/simple-vlm.local-backup/voice_gate.yaml agent-samples/simple-vlm-example/yaml/voice_gate.yaml
-uv run --project model-server-samples/model-servers model_servers
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
 uv run --project agent-samples/simple-vlm-example simple_vlm_example
 ```
 

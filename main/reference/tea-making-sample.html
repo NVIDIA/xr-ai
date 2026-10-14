@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -487,8 +488,8 @@ ownership, and event composition are reusable.</p>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
 <p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/tea-making-sample/</span></code>. The tea sample reuses all
-model services, so start the shared stack, including Pocket TTS, first:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+model services, so start the sample’s model stack, including Pocket TTS, first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>tea_making_sample_model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return. Then launch the
@@ -788,7 +789,7 @@ The <code class="docutils literal notranslate"><span class="pre">--expose-web-ev
 the runtime copy. Changing <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> changes the endpoints used by
 the worker and RAG service but not the persistent servers. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for a server-side model, GPU, port, or
-memory change, then restart the shared stack.</p>
+memory change, then restart the sample’s model stack.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>

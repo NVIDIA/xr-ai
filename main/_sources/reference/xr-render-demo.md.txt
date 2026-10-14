@@ -98,7 +98,8 @@ If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.
 
-The model-side fields live under `model-server-samples/model-servers/yaml/`. Set them
+The model-side fields live under `utils/xr-ai-model-server-stack/yaml/` and
+`agent-samples/xr-render-demo/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
@@ -199,7 +200,7 @@ A small Python wrapper reads YAML configuration, sets the model environment,
 and starts vLLM through the selected `pip` or Docker backend. The vLLM process
 or container runs in a separate session so the shared model remains available
 across stack restarts; the wrapper monitors its health and reports readiness.
-The shared model-server stack reuses a healthy instance and replaces one whose
+The sample's model-server stack reuses a healthy instance and replaces one whose
 launch configuration changed.
 
 `vllm serve` uses `--tool-call-parser qwen3_coder` and
@@ -240,7 +241,7 @@ Omitting `video_history_enabled` enables history. The checked-in worker YAML
 sets it to `false` because the sample hub disables recording. With history
 disabled, perception uses current frames only.
 
-Start the shared model-server stack and wait for its launcher to return before
+Start the sample's model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
 The worker waits for required speaker ASR; it does not poll batch STT or TTS
 health endpoints. It retains a tool-shaped LLM

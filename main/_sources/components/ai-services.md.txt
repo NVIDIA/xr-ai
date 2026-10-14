@@ -8,7 +8,7 @@
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and consumer model configuration, refer to
+shared server defaults, sample GPU overrides, and consumer model configuration, refer to
 {doc}`/guides/customizing-model-servers`.
 
 Multiple reusable inference and typed capability services are available as
@@ -202,7 +202,7 @@ and Docker images are already installed. To forbid downloads, set
 it into its containers:
 
 ```bash
-HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers
+HF_HUB_OFFLINE=1 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
 ```
 
 In this mode, a service whose model is not cached fails at startup with an
@@ -241,13 +241,12 @@ start successfully without network access. Recreate project environments with
 
 ## Connecting a sample to shared model services
 
-Model services are operator-owned by the persistent `model-servers` stack.
-Application samples reuse those endpoints; they do not own model processes or
-copy server YAML into their own configuration directories. Follow
-{doc}`/guides/customizing-model-servers` to select a deployment profile, tune
-its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample's models JSON. Omit the `deployment` object from copied entries;
-it belongs to the shared model-server profile.
+Each sample's `model-servers/` project conveniently starts its required local
+inference services. Shared defaults live under `utils/xr-ai-model-server-stack/`;
+sample GPU profiles contain only placement and workload overrides. Workers
+consume endpoints from their models JSON and can also use services started
+individually or independently operated endpoints. Refer to
+{doc}`/guides/customizing-model-servers` for configuration and the stop/start flow.
 
 Declare only application processes in the sample orchestrator. Application
 capability services such as RAG remain sample-owned. For startup ordering and
@@ -323,9 +322,8 @@ configuration paths, smoke checks, and deployment qualification.
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-**survive stack restarts by design**, including when a deployment profile
-marks them `managed`: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. Use `model_servers --stop`
+**survive agent restarts by design**: the sample's convenience launcher starts
+them and returns after readiness, leaving weights warm. Use the sample's model command with `--stop`
 for the selected local deployment. Startup does not sweep services omitted
 from its configuration. Independently deployed NIMs follow their operator's
 lifecycle. At startup a wrapper
@@ -356,14 +354,14 @@ Either way vLLM keeps running after the orchestrator exits.
 
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
-that survived a previous stack run, and is stopped by the same
-`model_servers --stop` cleanup.
+that survived a previous stack run, and is stopped by the sample's model
+command with `--stop` when selected in that stack.
 
-The default model profile starts speaker ASR through its private `services`
-declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
+Each sample's model-server list selects speaker ASR. The launcher waits for
+model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. `--stop`
-stops only managed services in the selected deployment, using their configured
+stops only the sample's explicitly selected server list, using its configured
 ports and the existing process-ownership guards. The speaker service listens
 on port 8102 and supports streaming audio
 over a private WebSocket.
@@ -388,7 +386,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -403,29 +401,20 @@ survive as orphans and launcher abort-time escalation can still reach Pocket
 TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
 other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
-`model_servers --stop` exits nonzero if any target could not be stopped. Absent
+the sample's model command with `--stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
 
-Stop targets are the managed services in the same launch plan used for
-startup, with ports read from the selected hardware YAMLs. Entries explicitly
-marked `external` or `reused`, and services omitted from the deployment, are
-not stop targets. For a custom deployment, use the same selection as at launch:
+Stop targets are only the servers listed by that sample's convenience launcher,
+with ports read from the shared defaults and selected sample GPU overrides.
+Use the same explicit `--gpu-profile NAME` on start and stop. Stop does not
+require model-download credentials.
 
-```bash
-uv run --project model-server-samples/model-servers model_servers \
-  --models /path/to/models.custom.json --gpu-profile dual_48G_ada --stop
-```
-
-Automatic GPU detection remains the default; use the same `--gpu-profile` when
-it was explicitly selected at launch or detection is unavailable. Stop does
-not require model-download credentials. Stop the old selection before changing
-its JSON, hardware profile, or service ports; no previous configuration is
-recorded or rediscovered.
-
-This is configuration-scoped cleanup, not exclusive launch-instance ownership.
-A matching managed-service listener on a selected port can be stopped even if
-it was started independently. Existing identity checks reject unknown listeners;
-they do not identify which deployment originally started a recognized service.
+Before switching samples, updating the checkout, or editing server settings,
+stop the current stack using its current checkout and profile. Then start the
+new stack. The convenience launchers do not track previous configurations or
+provide isolation between samples using the same ports. Cleanup can stop a
+recognized service used by another sample or manual invocation. Refer to
+{doc}`/guides/customizing-model-servers` for the complete development flow.
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
@@ -461,7 +450,7 @@ When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
 docker pull nvcr.io/nvidia/vllm:26.09-py3
 ```
 
@@ -535,7 +524,7 @@ The selected image reports this in-container vLLM version:
 
 ### Cleanup
 
-`model_servers --stop` works for both modes within the selected managed launch
+the sample's model command with `--stop` works for both modes within the selected managed launch
 plan. Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
 Pip-mode processes carry an `xr-ai-vllm` ownership marker; unknown listeners
@@ -656,7 +645,7 @@ cleanup.
   and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - Standalone service YAMLs live beside services for direct single-service
-  launches; they are not sample configuration. Shared deployments use the
-  hardware-specific YAML under
-  `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
-  resulting endpoints through their models JSON.
+  launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
+  `utils/xr-ai-model-server-stack/yaml/` with overrides under
+  `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml`. Workers
+  consume the resulting endpoints through their models JSON.

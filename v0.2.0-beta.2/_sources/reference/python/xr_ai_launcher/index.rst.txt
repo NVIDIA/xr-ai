@@ -139,8 +139,7 @@ Package Contents
 
    Exit non-zero unless each named token is available; NEVER prompts.
 
-   *allow_missing* (wired to the orchestrators' ``--allow-anonymous`` flag)
-   downgrades to ``warn_if_missing`` behavior.
+   *allow_missing* downgrades to ``warn_if_missing`` behavior.
 
 
 .. py:function:: warn_if_missing(*names: str) -> None

@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -691,16 +692,13 @@ live-frame selection from <code class="docutils literal notranslate"><span class
 uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 </pre></div>
 </div>
-<p>The shared model launcher requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> by default. Configure it through
-one of the sources in <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> before starting the
-copied VLM application. If the weights are already cached or unauthenticated
-rate limits are acceptable, append <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code>
-command below.</p>
-<p>The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
+<p>The model launcher requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>. Configure it through one of the
+sources in <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> before starting the application.
+The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+<span class="w">  </span>--project<span class="w"> </span>../../agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
 <p>Then start the application from the same directory:</p>

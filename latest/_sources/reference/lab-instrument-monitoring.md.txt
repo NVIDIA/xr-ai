@@ -162,7 +162,7 @@ hot-reloaded. The `--expose-web-events` option intentionally overrides
 the host to expose the unauthenticated viewer. Changing `models.json` changes
 only the endpoints consumed by this sample. Refer to
 {doc}`/guides/customizing-model-servers` for server-side model, GPU, port, or
-memory changes, then restart the persistent shared stack.
+memory changes, then restart the sample's persistent model stack.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
@@ -412,7 +412,7 @@ notification as distinct stages.
 
 ### Routing and visual evals
 
-Start the shared model servers, then run these commands from
+Start the sample's local model servers, then run these commands from
 `agent-samples/lab-instrument-monitoring/`:
 
 ```bash

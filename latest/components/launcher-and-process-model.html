@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -456,7 +457,7 @@
 <h1>Launcher and process model<a class="headerlink" href="#launcher-and-process-model" title="Link to this heading">#</a></h1>
 <p>Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> and started separately through the
-shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.</p>
+sample’s separate <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher.</p>
 <p>An application sample has at least these two sub-projects:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -477,8 +478,11 @@ shared <code class="docutils literal notranslate"><span class="pre">model-server
 </tbody>
 </table>
 </div>
-<p>Samples may add capability or eval sub-projects. <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> is a dedicated
-orchestrator and has no worker sub-project.</p>
+<p>Samples may add capability or eval sub-projects. Each sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code>
+project is a separate inference convenience launcher with no worker. It combines
+shared defaults under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with sample-owned GPU
+profiles. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and
+startup, shutdown, and sample-switching workflows.</p>
 <p><strong>Configuration convention</strong> — the YAML configuration path for each process is declared
 explicitly in the orchestrator’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list via the <code class="docutils literal notranslate"><span class="pre">config=</span></code> field of
 <code class="docutils literal notranslate"><span class="pre">Process</span></code>. The launcher passes it as <code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">&lt;path&gt;</span></code> to the subprocess.
@@ -495,9 +499,9 @@ the configured endpoints; their launchers do not read model profiles.</p>
 <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>, and <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects for each model. <code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code>
 reads the profile selected by the worker YAML, while <code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code>
 reads a profile path directly. Both use only the standard library and expose
-deployment metadata and credential requirements. The shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>
-sample uses the direct loader and managed entries to select servers. Legacy
-explicit reused and external deployment entries remain accepted. Refer to
+deployment metadata and credential requirements. The sample-local model
+launchers declare their service lists directly and do not use these loaders.
+Explicit reused and external deployment entries remain accepted by the loaders. Refer to
 <a class="reference internal" href="../reference/agent-sdk-models.html#deployment-profiles"><span class="std std-ref">model profile formats</span></a> for the worker and launcher
 requirements.</p>
 <p>The orchestrator declares the process sequence in code:</p>

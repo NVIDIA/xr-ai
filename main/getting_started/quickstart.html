@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -468,7 +469,7 @@ walk me through the rest of the setup.
 </pre></div>
 </div>
 <p>The remainder of this quickstart is the manual path.</p>
-<p>Every sample follows the same pattern: <strong>start the shared model stack, wait for
+<p>Every sample follows the same pattern: <strong>start the sample’s model stack, wait for
 its launcher to report readiness and return, start the sample from the same
 terminal, then connect a client.</strong> Once the sample is ready, any supported
 client — web browser, Android app, iOS/visionOS app, or AR glasses — can join
@@ -482,67 +483,26 @@ with “Hey Agent”; one follow-up utterance within five seconds can omit the w
 phrase. Typed requests bypass the voice gate. Treat the reply as a
 conversational introduction rather than an exhaustive capability reference.</p>
 </section>
-<section id="model-servers-shared-ai-services">
-<h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
-<p>Before the first launch, complete <a class="reference internal" href="requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a>, including on DGX
-Spark. Docker must be accessible without <code class="docutils literal notranslate"><span class="pre">sudo</span></code> from the launch session, and
-the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime must be registered.</p>
-<p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
-immediately — the services keep running in the background with weights hot.
-Start this once before running <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>,
-<code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">tea-making-sample</span></code>, or <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or
-whenever you want to pre-warm models:</p>
-<p>From the repository root, enter the model-server sample directory:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>model-server-samples/model-servers
-</pre></div>
-</div>
-<div class="admonition important">
-<p class="admonition-title">Important</p>
-<p>Before updating the checkout, stop the model servers using the old checkout
-and its selected configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
-</pre></div>
-</div>
-<p>For a custom deployment, use the cleanup commands supported by that old
-checkout to stop its services. The updated default launch plan cannot stop
-services omitted from its selection. Once using the selected-plan cleanup,
-pass the same <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> and explicit <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at startup.</p>
-<p>Persisted vLLM processes or containers may otherwise keep serving the previous
-models and images even though the checked-in configuration now selects
-Nemotron-3 Nano Omni and Cosmos3 Nano Reasoner.</p>
-</div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync
-uv<span class="w"> </span>run<span class="w"> </span>model_servers
-</pre></div>
-</div>
-<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The
-profiles are presets for common configurations; to run on a different GPU,
-refer to <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
-Detection inventories every visible device. If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> fails, returns
-malformed data, or reports a topology without an existing model-server
-configuration, startup stops with the detected per-GPU capacity instead of
-assuming a fallback.
-On first run each model downloads from Hugging Face (tens of GB; can take
-tens of minutes). On subsequent runs the containers restart in under a minute.</p>
-<p>The default starts Nemotron-3 Nano Omni (8108),
-Cosmos3 Nano Reasoner (8100), speaker ASR (8102), Pocket TTS (8105), and embeddings
-(8109). Use <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> only for a custom local deployment JSON. Starting
-a profile stops persisted servers outside it first and aborts if they cannot
-be stopped, avoiding GPU overcommit.</p>
-<p>For deployment using NVIDIA NIM, configure independently deployed endpoints.
-Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>; no NIM model launcher is required.</p>
-<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
-can stall indefinitely. Refer to the
-<a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
-pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
-<p>To stop the default deployment’s managed model services when done:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
-</pre></div>
-</div>
-<p>For a custom deployment, combine <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>; use the same
-<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> if you selected one at startup. Cleanup targets only that
-managed launch plan, not every model-server port. Refer to
-<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for service guards and configuration changes.</p>
+<section id="model-servers-for-each-sample">
+<span id="model-servers-shared-ai-services"></span><h2>Model servers for each sample<a class="headerlink" href="#model-servers-for-each-sample" title="Link to this heading">#</a></h2>
+<p>Complete <a class="reference internal" href="requirements.html#docker-host-setup"><span class="std std-ref">Docker access and NVIDIA runtime</span></a> before the first local launch, including on
+DGX Spark. Configure <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> using <a class="reference internal" href="credentials.html"><span class="doc">Credentials</span></a>.</p>
+<p>Each sample has a <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher for just the inference
+services it needs. The commands below start that stack, wait for healthy
+servers, and return to the same terminal. Models stay warm across agent
+restarts. Compatible independently deployed endpoints can also serve the
+sample; refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p>
+<p>GPU profiles are auto-detected (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). Use
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> to select an explicitly tuned sample profile. Unsupported
+hardware or failed GPU inventory stops startup; refer to
+<a class="reference internal" href="requirements.html"><span class="doc">Requirements</span></a> for custom profiles. First launch downloads missing weights
+and can take tens of minutes.</p>
+<p>Before switching samples, updating the checkout, or editing server settings,
+stop the current agent and its model stack with that sample’s model command
+and <code class="docutils literal notranslate"><span class="pre">--stop</span></code>. Use the same explicit GPU profile, then start the destination
+stack and agent. This releases unused models and applies the current settings
+without keeping track of previous launches. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and the full flow.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
@@ -552,11 +512,12 @@ Replies arrive as streaming Pocket TTS audio plus a <code class="docutils litera
 <p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
 <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>The sample always reuses model services and never starts or stops them. Its
-fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> selects Cosmos3-Nano on port 8100 and Pocket TTS on
-port 8105; <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code> requires speaker ASR on port 8102. From the sample directory, start the
+fixed <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> configures Cosmos3-Nano on port 8100 and Pocket TTS on
+port 8105; <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> configures speaker ASR on port 8102.
+From the sample directory, start the
 repository defaults first:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/simple-vlm-example
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
 <p>The command may download model weights on its first run. Refer to the
@@ -636,9 +597,9 @@ speaks only discovered, changed, or long-missing device updates, and persists
 final pre-gate transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
 and intentionally serves no sample-specific monitoring web UI. Its fixed model
 configuration uses Cosmos for visual inference.</p>
-<p>Start the shared <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack, which includes Pocket TTS:</p>
+<p>Start the sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> stack, which includes Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/lab-instrument-monitoring
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>lab_instrument_monitoring_model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return, then start the
@@ -675,9 +636,9 @@ transcript, and video observation. Nemotron-3 Nano Omni supplies both language
 and visual inference. Records are written as JSON Lines under the sample’s
 <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> directory. A separate live event viewer presents selected runtime
 events without replacing those durable records.</p>
-<p>Start the shared model services, including Pocket TTS:</p>
+<p>Start the sample model services, including Pocket TTS:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/tea-making-sample
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>tea_making_sample_model_servers
 </pre></div>
 </div>
 <p>Wait for the model launcher to report readiness and return, then launch the
@@ -733,7 +694,7 @@ own model services.</p>
 <section id="step-1-start-model-servers-once">
 <h3>Step 1 — Start model servers (once)<a class="headerlink" href="#step-1-start-model-servers-once" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/xr-render-demo
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>xr_render_demo_model_servers
 </pre></div>
 </div>
 <p>This exits immediately once all configured services are ready. Weights stay
@@ -799,10 +760,10 @@ Agent: [Changes the sphere's color or explains why it could not.]
 The scene draws two shapes, boxes and spheres; ask for either by name. Refer to
 <a class="reference internal" href="clients.html"><span class="doc">Connecting clients</span></a> for headset and native-client setup.</p>
 <p>To stop the model servers when done:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>../../model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>xr_render_demo_model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>XR Render uses the configured shared endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does
+<p>XR Render uses the configured configured endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>; it does
 not select or own model deployment profiles.</p>
 </section>
 </section>
@@ -869,7 +830,7 @@ documented beside its value.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-with-a-coding-agent">Set up with a coding agent</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-shared-ai-services">Model servers (shared AI services)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-servers-for-each-sample">Model servers for each sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-vlm-example-vision-q-a-over-voice-text">Simple VLM example (vision Q&amp;A over voice + text)</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-start-the-server">Step 1 — Start the server</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-connect-a-client">Step 2 — Connect a client</a></li>

@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -457,7 +458,7 @@
 <p>Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and consumer model configuration, refer to
+shared server defaults, sample GPU overrides, and consumer model configuration, refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>Multiple reusable inference and typed capability services are available as
 launchable peers of <code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code>. Model HTTP is encapsulated by
@@ -732,7 +733,7 @@ model cache without network access. This assumes their runtime dependencies
 and Docker images are already installed. To forbid downloads, set
 <code class="docutils literal notranslate"><span class="pre">HF_HUB_OFFLINE=1</span></code>. The host services inherit it, and the vLLM wrapper forwards
 it into its containers:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">HF_HUB_OFFLINE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">HF_HUB_OFFLINE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
 <p>In this mode, a service whose model is not cached fails at startup with an
@@ -764,13 +765,12 @@ start successfully without network access. Recreate project environments with
 </section>
 <section id="connecting-a-sample-to-shared-model-services">
 <span id="adding-a-server-to-a-sample"></span><h2>Connecting a sample to shared model services<a class="headerlink" href="#connecting-a-sample-to-shared-model-services" title="Link to this heading">#</a></h2>
-<p>Model services are operator-owned by the persistent <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> stack.
-Application samples reuse those endpoints; they do not own model processes or
-copy server YAML into their own configuration directories. Follow
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> to select a deployment profile, tune
-its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample’s models JSON. Omit the <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object from copied entries;
-it belongs to the shared model-server profile.</p>
+<p>Each sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> project conveniently starts its required local
+inference services. Shared defaults live under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/</span></code>;
+sample GPU profiles contain only placement and workload overrides. Workers
+consume endpoints from their models JSON and can also use services started
+individually or independently operated endpoints. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and the stop/start flow.</p>
 <p>Declare only application processes in the sample orchestrator. Application
 capability services such as RAG remain sample-owned. For startup ordering and
 readiness, refer to <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
@@ -839,9 +839,8 @@ configuration paths, smoke checks, and deployment qualification.</p>
 <h2>Model-server persistence<a class="headerlink" href="#model-server-persistence" title="Link to this heading">#</a></h2>
 <p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
-<strong>survive stack restarts by design</strong>, including when a deployment profile
-marks them <code class="docutils literal notranslate"><span class="pre">managed</span></code>: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. Use <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
+<strong>survive agent restarts by design</strong>: the sample’s convenience launcher starts
+them and returns after readiness, leaving weights warm. Use the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
 for the selected local deployment. Startup does not sweep services omitted
 from its configuration. Independently deployed NIMs follow their operator’s
 lifecycle. At startup a wrapper
@@ -871,13 +870,13 @@ container while the foreground <code class="docutils literal notranslate"><span 
 Either way vLLM keeps running after the orchestrator exits.</p>
 <p>The STT server follows the same pattern without Docker: <code class="docutils literal notranslate"><span class="pre">stt_server</span></code> spawns
 its persistent process with <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code>, reuses a healthy server
-that survived a previous stack run, and is stopped by the same
-<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> cleanup.</p>
-<p>The default model profile starts speaker ASR through its private <code class="docutils literal notranslate"><span class="pre">services</span></code>
-declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
+that survived a previous stack run, and is stopped by the sample’s model
+command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> when selected in that stack.</p>
+<p>Each sample’s model-server list selects speaker ASR. The launcher waits for
+model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
-stops only managed services in the selected deployment, using their configured
+stops only the sample’s explicitly selected server list, using its configured
 ports and the existing process-ownership guards. The speaker service listens
 on port 8102 and supports streaming audio
 over a private WebSocket.
@@ -897,7 +896,7 @@ launcher-controlled Docker contract. This prevents a failed container created
 by one sample profile—or by older launcher behavior—from being restarted later
 with stale memory limits, entrypoint, setup commands, or model arguments.</p>
 <p><strong>Stopping the persisted servers</strong>, from the repo root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
 <p>Cleanup locates labelled Docker containers before inspecting ports, then
@@ -912,25 +911,18 @@ survive as orphans and launcher abort-time escalation can still reach Pocket
 TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
 other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
-<code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
+the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.</p>
-<p>Stop targets are the managed services in the same launch plan used for
-startup, with ports read from the selected hardware YAMLs. Entries explicitly
-marked <code class="docutils literal notranslate"><span class="pre">external</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code>, and services omitted from the deployment, are
-not stop targets. For a custom deployment, use the same selection as at launch:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--models<span class="w"> </span>/path/to/models.custom.json<span class="w"> </span>--gpu-profile<span class="w"> </span>dual_48G_ada<span class="w"> </span>--stop
-</pre></div>
-</div>
-<p>Automatic GPU detection remains the default; use the same <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code> when
-it was explicitly selected at launch or detection is unavailable. Stop does
-not require model-download credentials. Stop the old selection before changing
-its JSON, hardware profile, or service ports; no previous configuration is
-recorded or rediscovered.</p>
-<p>This is configuration-scoped cleanup, not exclusive launch-instance ownership.
-A matching managed-service listener on a selected port can be stopped even if
-it was started independently. Existing identity checks reject unknown listeners;
-they do not identify which deployment originally started a recognized service.</p>
+<p>Stop targets are only the servers listed by that sample’s convenience launcher,
+with ports read from the shared defaults and selected sample GPU overrides.
+Use the same explicit <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> on start and stop. Stop does not
+require model-download credentials.</p>
+<p>Before switching samples, updating the checkout, or editing server settings,
+stop the current stack using its current checkout and profile. Then start the
+new stack. The convenience launchers do not track previous configurations or
+provide isolation between samples using the same ports. Cleanup can stop a
+recognized service used by another sample or manual invocation. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the complete development flow.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
 <h2>Choosing the vLLM runtime (pip vs Docker)<a class="headerlink" href="#choosing-the-vllm-runtime-pip-vs-docker" title="Link to this heading">#</a></h2>
@@ -981,7 +973,7 @@ another tag, an internal mirror, or a custom build.</p>
 <p class="admonition-title">Important</p>
 <p>When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
 docker<span class="w"> </span>pull<span class="w"> </span>nvcr.io/nvidia/vllm:26.09-py3
 </pre></div>
 </div>
@@ -1066,7 +1058,7 @@ their pip-mode <code class="docutils literal notranslate"><span class="pre">star
 </section>
 <section id="cleanup">
 <h3>Cleanup<a class="headerlink" href="#cleanup" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> works for both modes within the selected managed launch
+<p>the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> works for both modes within the selected managed launch
 plan. Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
 Pip-mode processes carry an <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code> ownership marker; unknown listeners
@@ -1188,10 +1180,10 @@ When <code class="docutils literal notranslate"><span class="pre">recordings_dir
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p>Standalone service YAMLs live beside services for direct single-service
-launches; they are not sample configuration. Shared deployments use the
-hardware-specific YAML under
-<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code>, while samples reuse the
-resulting endpoints through their models JSON.</p></li>
+launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
+<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with overrides under
+<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>. Workers
+consume the resulting endpoints through their models JSON.</p></li>
 </ul>
 </section>
 </section>

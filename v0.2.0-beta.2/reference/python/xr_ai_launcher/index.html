@@ -387,6 +387,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -631,8 +632,7 @@ fallback so existing HuggingFace logins are picked up automatically.</p>
 <dt class="sig sig-object py" id="xr_ai_launcher.require_credentials">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">require_credentials</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_launcher.require_credentials" title="Link to this definition">#</a></dt>
 <dd><p>Exit non-zero unless each named token is available; NEVER prompts.</p>
-<p><em>allow_missing</em> (wired to the orchestrators’ <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> flag)
-downgrades to <code class="docutils literal notranslate"><span class="pre">warn_if_missing</span></code> behavior.</p>
+<p><em>allow_missing</em> downgrades to <code class="docutils literal notranslate"><span class="pre">warn_if_missing</span></code> behavior.</p>
 </dd></dl>
 
 <dl class="py function">

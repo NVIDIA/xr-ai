@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -454,17 +455,113 @@
 -->
 <section id="customizing-model-servers">
 <h1>Customizing model servers<a class="headerlink" href="#customizing-model-servers" title="Link to this heading">#</a></h1>
-<p>Use this workflow to change which shared models run, where they run, or how a
-sample connects to them. Model-server customization has two separate parts:</p>
+<p>Each agent sample has a <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher that brings up
+only its required local inference servers. It waits for readiness and returns;
+the servers remain running while you start, stop, or develop the agent sample.
+These launchers are editable development presets. Applications can also use
+compatible services launched individually or independently operated endpoints.
+Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for external NIM endpoints.</p>
+<section id="required-local-servers">
+<h2>Required local servers<a class="headerlink" href="#required-local-servers" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Sample</p></th>
+<th class="head"><p>Servers</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Simple VLM</p></td>
+<td><p>speaker ASR, Pocket TTS, Cosmos VLM</p></td>
+</tr>
+<tr class="row-odd"><td><p>Lab instrument monitoring</p></td>
+<td><p>Speaker ASR, TTS, Nemotron Omni, Cosmos VLM</p></td>
+</tr>
+<tr class="row-even"><td><p>Tea making</p></td>
+<td><p>Speaker ASR, TTS, Nemotron Omni, Nemotron embedding</p></td>
+</tr>
+<tr class="row-odd"><td><p>XR render demo</p></td>
+<td><p>Speaker ASR, TTS, Nemotron Omni, Cosmos VLM</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Tea making uses Omni for both language and vision. Its RAG service needs
+embeddings. XR rendering uses one Omni server for its LLM roles and does not
+need embeddings. Hubs, workers, RAG, scene, and rendering processes remain in
+the agent launcher; the model launcher brings up inference servers only.</p>
+<p>The shipped workers require speaker ASR on port 8102. They do not contain a
+batch-STT model role or automatically fall back to the batch server on 8103.
+For explicit batch speech, replace <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> with <code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s
+launcher service list and every selected hardware YAML, add the existing
+batch adapter under <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker profile, and disable
+<code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> in the selected voice-gate YAML. To use automatic selection,
+retain both servers and a real batch client. Refer to
+<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for backend policy.</p>
+</section>
+<section id="start-develop-and-stop">
+<h2>Start, develop, and stop<a class="headerlink" href="#start-develop-and-stop" title="Link to this heading">#</a></h2>
+<p>Run these commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers
+uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
+</pre></div>
+</div>
+<p>The first command downloads any missing weights, waits for healthy servers,
+and returns. Configure <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> first; refer to
+<a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>. Automatic GPU detection selects a bundled
+profile. To choose a reviewed profile explicitly, add
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">dual_48G_ada</span></code> to the model command.</p>
+<p>Stopping or restarting the agent leaves models warm. Stop its model stack
+when finished:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Stop does not detect GPUs or require download credentials. Without an explicit
+profile it uses the selected services’ shared default ports. If a hardware
+profile overrides ports, pass that same <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> when stopping;
+this applies its port settings without inspecting the GPU. GPU placement and
+memory budgets do not affect cleanup. Refer to <a class="reference internal" href="../reference/command-line.html"><span class="doc">Command-line reference</span></a> for each sample’s
+command. Each launcher has only <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code>, besides help.</p>
+<p>On startup failure, merged server YAML remains in a private <code class="docutils literal notranslate"><span class="pre">model-configs-*</span></code>
+directory under the existing run logs, at the paths printed in the failure
+summary. Successful startup removes those files. Credentials belong in the
+environment, not YAML; retained snapshots clear the supported inline <code class="docutils literal notranslate"><span class="pre">hf_token</span></code>
+field and never copy environment variables. Treat customized configurations
+and logs as private when sharing diagnostics.</p>
+</section>
+<section id="switch-samples-or-update-the-checkout">
+<h2>Switch samples or update the checkout<a class="headerlink" href="#switch-samples-or-update-the-checkout" title="Link to this heading">#</a></h2>
+<p>Use this flow whenever the set of models or server settings changes:</p>
 <ol class="arabic simple">
-<li><p>A <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> deployment profile declares which shared services the
-operator starts and owns.</p></li>
-<li><p>Each sample’s active models JSON declares compatible client adapters and
-endpoints. Consumer entries do not need a <code class="docutils literal notranslate"><span class="pre">deployment</span></code> object.</p></li>
+<li><p>Stop the agent and run its model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code>, using the current
+checkout and the profile that launched it.</p></li>
+<li><p>Switch samples, update the checkout, or edit the server configuration.</p></li>
+<li><p>Run the destination sample’s model launcher, wait for readiness, and start
+the agent.</p></li>
 </ol>
-<p>Samples do not start or stop model services. Keep that ownership boundary when
-adapting a sample: customize the shared stack first, start it, and then point
-the sample at the resulting endpoints.</p>
+<p>The downloaded weight cache is retained. You can restart the agent repeatedly
+without stopping models while its server configuration stays the same.</p>
+<p>These stacks use common ports and server identities. They are intended for
+one local sample stack at a time. Stopping a stack also stops recognized
+services on its configured ports if another sample or manual invocation
+started them. Starting a stack does not stop services outside its selection.
+Always stop the source stack before switching so unused models release memory.</p>
+<p>Launchers read the current configuration; they do not keep a launch history
+or reconcile every older checkout. If you already switched, use the previous
+checkout’s stop command and configuration before starting the new stack.
+This explicit workflow is the supported way to apply upgrades and config
+edits. Changes to a convenience preset do not require backward-compatible
+launch plans or migration machinery for old running servers. Existing service
+ownership checks still refuse to stop unknown listeners. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for runtime persistence and cleanup details.</p>
+</section>
+<section id="developer-sample-api">
+<h2>Developer sample API<a class="headerlink" href="#developer-sample-api" title="Link to this heading">#</a></h2>
+<p>Model-server samples call the public
+<a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html#xr_ai_model_server_stack.run_model_stack" title="xr_ai_model_server_stack.run_model_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">xr_ai_model_server_stack.run_model_stack()</span></code></a> entry point. Their code
+owns argument parsing, the base directory, and the list of required local
+servers. Configuration composition and process management remain inside the
+utility; sample code imports only public XR AI APIs.</p>
+</section>
 <section id="configuration-layers">
 <h2>Configuration layers<a class="headerlink" href="#configuration-layers" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -475,240 +572,103 @@ the sample at the resulting endpoints.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Deployment profile</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/models.default.json</span></code> or a custom JSON path</p></td>
-<td><p>Logical roles, client adapters, endpoints, credentials, and shared-service ownership</p></td>
+<tr class="row-even"><td><p>Shared server defaults</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/*.yaml</span></code></p></td>
+<td><p>Models, images, ports, cache paths, and common runtime settings</p></td>
 </tr>
-<tr class="row-odd"><td><p>Hardware profile</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/</span></code></p></td>
-<td><p>Image or checkpoint, ports, GPU placement, cache paths, and runtime memory settings</p></td>
+<tr class="row-odd"><td><p>Sample GPU profile</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code></p></td>
+<td><p>Placement, memory budgets, concurrency, and workload overrides for that sample</p></td>
 </tr>
-<tr class="row-even"><td><p>Sample models JSON</p></td>
+<tr class="row-even"><td><p>Model selection</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/main.py</span></code></p></td>
+<td><p>Explicit list of required local servers</p></td>
+</tr>
+<tr class="row-odd"><td><p>Consumer profile</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/yaml/models*.json</span></code></p></td>
-<td><p>The roles that worker consumes and the endpoints it reuses</p></td>
-</tr>
-<tr class="row-odd"><td><p>Sample worker YAML</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/yaml/&lt;worker&gt;.yaml</span></code></p></td>
-<td><p>Application behavior such as prompts, voice gating, timeouts, and capability-service endpoints</p></td>
+<td><p>Client adapters and endpoints used by workers and capability services</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Do not use <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code> to select models. It selects the reviewed hardware
-layout (<code class="docutils literal notranslate"><span class="pre">dual_48G_ada</span></code>, <code class="docutils literal notranslate"><span class="pre">spark</span></code>, or <code class="docutils literal notranslate"><span class="pre">96G_blackwell</span></code>). The <code class="docutils literal notranslate"><span class="pre">--models</span></code> option
-selects the deployment profile independently.</p>
+<p>The launcher combines each server’s shared defaults with its entry in the
+selected sample GPU profile. Sample values replace whole top-level fields;
+there is no recursive inheritance. For example, a <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code> mapping
+replaces the shared mapping entirely. Every selected server must have a
+mapping in the profile, including <code class="docutils literal notranslate"><span class="pre">{}</span></code> if no overrides are needed.</p>
+<p>The resulting complete YAML files are temporary startup inputs to the existing
+service commands. Cache paths in shared defaults resolve relative to the shared
+YAML; a sample <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> override resolves relative to that sample profile.
+The helper makes those paths absolute before launching services. Other relative
+path settings must be supplied as absolute paths when added to an override.
+Refer to <a class="reference internal" href="../reference/configuration.html"><span class="doc">Sample configuration reference</span></a> for the checked-in YAML and comments.</p>
 </section>
-<section id="start-from-a-shipped-deployment-profile">
-<h2>Start from a shipped deployment profile<a class="headerlink" href="#start-from-a-shipped-deployment-profile" title="Link to this heading">#</a></h2>
-<p>The default <code class="docutils literal notranslate"><span class="pre">yaml/models.default.json</span></code> profile starts local speaker ASR,
-Pocket TTS, Nemotron Omni, Cosmos3-Nano Reasoner, and Nemotron embedding
-services. Run <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> without <code class="docutils literal notranslate"><span class="pre">--models</span></code> to use it.</p>
-<p>For NIM deployment, configure independently deployed endpoints with the same
-SDK factories. Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> service
-catalog contains only local server wrappers.</p>
-<p>The default profile starts Nemotron 3 Diarization and Multitalker Parakeet with the
-normal model-stack command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers
+<section id="tune-a-sample-and-hardware-combination">
+<h2>Tune a sample and hardware combination<a class="headerlink" href="#tune-a-sample-and-hardware-combination" title="Link to this heading">#</a></h2>
+<p>Edit the sample’s GPU profile rather than copying complete server YAML files.
+For example, this entry places Cosmos on GPU 0 with an explicit cache:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
+<span class="w">  </span><span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
-<p>The stack uses <code class="docutils literal notranslate"><span class="pre">yaml/&lt;gpu-profile&gt;/speaker_stt.yaml</span></code> for model placement and
-capacity. It waits for speaker ASR readiness,
-reuses matching warm instances, and includes the service in <code class="docutils literal notranslate"><span class="pre">--stop</span></code> cleanup.
-The shipped voice samples require speaker ASR in their voice-gate YAML and do
-not configure a batch-STT fallback. Worker readiness waits for speaker ASR.
-Out-of-tree workers must enable enrollment and restart, or select batch STT
-explicitly in a custom server profile. Refer to
-<a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for enrollment configuration and interaction
-with wake phrases. This streaming HTTP service does not change the workers’ batch model
-adapter JSON.</p>
-<p>Speaker ASR is an operator-owned HTTP service on port 8102. The default profile
-declares it outside the typed model-client entries:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"services"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"speaker-stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>The model-stack launcher owns this declaration; it does not change the shared
-model-client or launcher SDK schemas. Its host, port and model settings live in
-<code class="docutils literal notranslate"><span class="pre">speaker_stt.yaml</span></code>. The default profile contains no batch-STT entry or server.
-To run batch STT, add this entry under <code class="docutils literal notranslate"><span class="pre">models</span></code> in an explicit deployment JSON:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parakeet_stt"</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8103"</span><span class="p">,</span><span class="w"> </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"stt"</span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>For batch-only speech, omit <code class="docutils literal notranslate"><span class="pre">services.speaker-stt</span></code> and set the consuming worker’s
-voice-gate YAML to:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-</pre></div>
-</div>
-<p>Add the same <code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> objects under <code class="docutils literal notranslate"><span class="pre">models.stt</span></code> in the worker’s
-own model profile. Samples use <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code> to resolve speech from
-the loaded profile and voice-gate settings: disabled or automatic speaker
-selection constructs the <code class="docutils literal notranslate"><span class="pre">stt</span></code> client; required speaker selection does not.
-Refer to <a class="reference internal" href="../reference/agent-sdk-voice.html"><span class="doc">xr-ai-voice</span></a> for the constructor contract.
-To serve both paths, retain the speaker declaration and add the
-managed batch-STT entry; this loads both sets of model weights.
-Run <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> before changing deployment JSON or hardware YAML,
-then launch the desired configuration and restart its consumers.</p>
-<p>Copy the default profile to customize it:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>model-server-samples/model-servers/yaml/models.default.json<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>model-server-samples/model-servers/yaml/models.my-stack.json
-</pre></div>
-</div>
-<p>Run it by JSON path:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
-</pre></div>
-</div>
-<p>You can also pass an absolute JSON path or a path relative to the current
-working directory to <code class="docutils literal notranslate"><span class="pre">--models</span></code>.
-The profile must retain the wrapped JSON shape:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cosmos3_nano_reasoner"</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>Within the shared profile, <code class="docutils literal notranslate"><span class="pre">managed</span></code> means <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> owns that service.
-Entries may share a service; for example, two LLM entries can both name <code class="docutils literal notranslate"><span class="pre">omni</span></code>.
-A service name must have a corresponding row in <code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in
-<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/main.py</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> controls vLLM’s startup admission threshold. With
+explicit <code class="docutils literal notranslate"><span class="pre">kv_cache_memory_bytes</span></code>, the byte value sizes the cache independently;
+neither is a cap on total server memory. Embedding models retain a fractional
+memory budget. Place STT and TTS alongside the larger models deliberately.</p>
+<p>Context length, concurrency, image and video limits, and CUDA graph settings
+can also affect memory. Tune them with placement and cache size, accounting for
+all selected models and application processes; XR rendering also needs graphics
+memory. The initial per-sample overrides retain the former conservative stack
+budgets. Removing unused models leaves spare capacity rather than automatically
+increasing the remaining models’ allocations.</p>
+<p>To support custom hardware, copy the closest profile YAML within that sample,
+edit its server entries, and select its filename stem with <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code>.
+An explicit profile bypasses automatic selection; it does not establish that
+the models fit. Validate a cold start of the whole sample stack on the target
+hardware and inspect vLLM’s reported token capacity and concurrency.</p>
 </section>
-<section id="customize-a-hardware-specific-server">
-<h2>Customize a hardware-specific server<a class="headerlink" href="#customize-a-hardware-specific-server" title="Link to this heading">#</a></h2>
-<p>Each managed service resolves its YAML from the detected GPU-profile
-directory. Change the relevant file there when customizing an existing
-service. Common fields include:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.55</span>
-</pre></div>
-</div>
-<p>When one deployment profile needs a different launch configuration, add a
-variant beside the base YAML:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>vlm_server.yaml
-vlm_server_my-stack.yaml
-</pre></div>
-</div>
-<p>The suffix is the deployment profile filename without <code class="docutils literal notranslate"><span class="pre">models.</span></code> or <code class="docutils literal notranslate"><span class="pre">.json</span></code>.
-Only add a variant when the base configuration is not valid for that profile.
-Review GPU placement and aggregate memory before running several services
-together. A custom configuration needs validation on its target hardware.</p>
+<section id="change-a-model-or-endpoint">
+<h2>Change a model or endpoint<a class="headerlink" href="#change-a-model-or-endpoint" title="Link to this heading">#</a></h2>
+<p>Stop models before changing shared defaults, sample overrides, or ports. A
+shared default edit affects every sample that uses that server. Keep each
+consumer profile’s model adapters and endpoints synchronized with the service.
+Consumer profiles do not need deployment ownership objects; the convenience
+launcher’s explicit server list controls local startup and shutdown.</p>
+<p>For an independently operated or hosted model, start no local replacement:
+configure the corresponding role in the sample’s consumer profile and launch
+the agent against that endpoint. If keeping some local models, edit the local
+launcher list and its GPU-profile entries to match. Refer to
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a> for adapters and credentials.</p>
 </section>
-<section id="adapt-a-sample-to-the-shared-stack">
-<h2>Adapt a sample to the shared stack<a class="headerlink" href="#adapt-a-sample-to-the-shared-stack" title="Link to this heading">#</a></h2>
-<p>Do not copy a complete model-server profile into a sample. It can omit roles
-the sample needs, and its <code class="docutils literal notranslate"><span class="pre">managed</span></code> ownership belongs only in the shared stack.
-Copy or update the relevant role entries in the sample’s active models JSON,
-omitting their <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects. Keep adapter settings and endpoint
-credentials needed by the client; server-only credentials stay in the shared
-stack’s deployment profile.</p>
-<p>The standard local stack works with samples’ checked-in models JSON.
-For deployment against native NIM endpoints, change only
-the roles whose model adapters or endpoints differ. Preserve the sample’s other
-roles and any required RAG embedding health settings described below.</p>
-<p>Sample launchers declare only their application processes; model endpoints
-are specified in the client profile. Starting or stopping a sample never
-changes the shared model servers. For startup ordering, refer to
-<a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
-</section>
-<section id="use-an-endpoint-at-another-address">
-<h2>Use an endpoint at another address<a class="headerlink" href="#use-an-endpoint-at-another-address" title="Link to this heading">#</a></h2>
-<p>If an operator already runs a compatible service elsewhere, no model-server
-change is required. Update the sample entry’s <code class="docutils literal notranslate"><span class="pre">endpoint.base_url</span></code>. Both
-operator-managed XR AI services and hosted APIs use client entries without
-<code class="docutils literal notranslate"><span class="pre">deployment</span></code>. Worker model clients do not need health polling settings; the
-RAG embedding exception is described below. A hosted endpoint may also need a
-credential:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
+<section id="launch-a-service-individually">
+<h2>Launch a service individually<a class="headerlink" href="#launch-a-service-individually" title="Link to this heading">#</a></h2>
+<p>Service projects already expose commands accepting complete YAML via <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
+For example, from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/vlm-server<span class="w"> </span>vlm_server<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--config<span class="w"> </span>services/vlm-server/vlm_server.yaml
 </pre></div>
 </div>
-<p>Do not put the credential value in JSON. Export it or use the credential store.
-Refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> for credential options.</p>
+<p>Standalone YAML under <code class="docutils literal notranslate"><span class="pre">services/</span></code> is intended for individual launch and can
+use more memory than a multi-model sample stack. A sample override file is
+partial and cannot be passed directly to a service command. For a manually
+assembled stack, provide complete service YAML and tune the aggregate GPU use.
+Refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for the service entry points and lifecycle.</p>
 </section>
 <section id="rag-embedding-health">
 <span id="id1"></span><h2>RAG embedding health<a class="headerlink" href="#rag-embedding-health" title="Link to this heading">#</a></h2>
 <p>Tea making’s RAG service reads the <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role from the same
-<code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> profile as the worker. Unlike worker model clients,
-it explicitly calls embedding <code class="docutils literal notranslate"><span class="pre">health()</span></code> before building its index and when
-reporting RAG readiness. Preserve health settings for this role when changing
-its endpoint.</p>
-<p>For a hosted embedding provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code>
-in the embedding entry’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> object:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://integrate.api.nvidia.com"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"api_key_env"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NGC_API_KEY"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"none"</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>This skips the health request; actual embedding requests still use the configured
-adapter and credentials. If the provider exposes a supported health route,
-use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and set <code class="docutils literal notranslate"><span class="pre">health_path</span></code> to that route instead, for example
-<code class="docutils literal notranslate"><span class="pre">/v1/health/ready</span></code>. Omitting these settings defaults to probing <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which
-can prevent RAG startup even when embedding inference works.</p>
-</section>
-<section id="riva-speech-boundary">
-<h2>Riva speech boundary<a class="headerlink" href="#riva-speech-boundary" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher does not launch Riva NIMs. Direct Riva clients
-normalize native speech in the SDK; no HTTP compatibility adapter is required.
-The sample voice workers include the Riva SDK extra. Configure the speech
-adapter and endpoint in the active models profile. Refer to
-<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p>
-</section>
-<section id="validate-and-switch-profiles">
-<h2>Validate and switch profiles<a class="headerlink" href="#validate-and-switch-profiles" title="Link to this heading">#</a></h2>
-<p>Before committing a custom profile:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span>empty<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
-
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>tests/test_model_servers.py<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>tests/test_launcher_config.py
-</pre></div>
-</div>
-<p>Model servers persist after the <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> command reports readiness.
-Starting another profile leaves services outside its selection running. Stop
-the old selection explicitly when it is no longer needed or occupies resources
-required by the new deployment. After changing an image, checkpoint, or launch
-setting, stop the old stack once so it cannot continue serving stale
-configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json<span class="w"> </span>--stop
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>model_servers<span class="w"> </span>--models<span class="w"> </span>model-server-samples/model-servers/yaml/models.my-stack.json
-</pre></div>
-</div>
-<p>Use the same hardware-profile selection for start and stop, including
-<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> when it was explicitly selected. Stop before editing
-service ports or replacing the deployment JSON: cleanup reads the current
-managed launch plan and does not remember its prior contents.</p>
-<p>For adapter fields and model capabilities, refer to
-<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. For server runtime behavior, persistence,
-and NIM credentials, refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a>.</p>
+<code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> profile as its worker. It calls embedding <code class="docutils literal notranslate"><span class="pre">health()</span></code>
+before indexing and while reporting readiness. Preserve its health settings
+when changing the endpoint.</p>
+<p>For a hosted provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> in the
+embedding role’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>. Otherwise use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and the
+provider’s <code class="docutils literal notranslate"><span class="pre">health_path</span></code>. Omitting these settings probes <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which can
+prevent RAG startup when that route is absent. Refer to
+<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech and NIM configuration.</p>
 </section>
 </section>
 
@@ -761,14 +721,15 @@ and NIM credentials, refer to <a class="reference internal" href="../components/
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-local-servers">Required local servers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-develop-and-stop">Start, develop, and stop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#switch-samples-or-update-the-checkout">Switch samples or update the checkout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#developer-sample-api">Developer sample API</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-layers">Configuration layers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-from-a-shipped-deployment-profile">Start from a shipped deployment profile</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#customize-a-hardware-specific-server">Customize a hardware-specific server</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adapt-a-sample-to-the-shared-stack">Adapt a sample to the shared stack</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-an-endpoint-at-another-address">Use an endpoint at another address</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tune-a-sample-and-hardware-combination">Tune a sample and hardware combination</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#change-a-model-or-endpoint">Change a model or endpoint</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launch-a-service-individually">Launch a service individually</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rag-embedding-health">RAG embedding health</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#riva-speech-boundary">Riva speech boundary</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validate-and-switch-profiles">Validate and switch profiles</a></li>
 </ul>
   </nav></div>
 

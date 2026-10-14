@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -715,16 +716,17 @@ resets. Explicit same-track capture epochs are outside this integration.</p>
 <span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>speaker_stt<span class="w"> </span>--config<span class="w"> </span>services/speaker-stt/speaker_stt.yaml
 </pre></div>
 </div>
-<p>Alternatively, the default shared model stack starts speaker ASR. Stop a
+<p>Alternatively, each sample-local model stack starts speaker ASR. Stop a
 standalone instance before switching to the stack’s hardware configuration;
 their configuration fingerprints can differ. From the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>model_servers
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
-<p>It uses <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;gpu-profile&gt;/speaker_stt.yaml</span></code>
-for placement and capacity, waits for decoder warmup, and reuses matching warm
-instances. <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> includes the speaker service. Stop the stack
+<p>It composes shared <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/speaker_stt.yaml</span></code>
+defaults with that sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code> placement
+and capacity overrides, waits for decoder warmup, and reuses matching warm
+instances. The sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> includes the speaker service. Stop the stack
 before changing its speaker-service YAML. Native NIM deployment configures the
 worker’s ordinary speech adapters for independently deployed Riva endpoints;
 disable <code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> when choosing that speech path. Refer to

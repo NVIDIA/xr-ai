@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -463,9 +464,10 @@ sample’s design and operational details.</p>
 <h2>Composition<a class="headerlink" href="#composition" title="Link to this heading">#</a></h2>
 <p>The orchestrator starts DeviceIOHub and the worker. Passing <code class="docutils literal notranslate"><span class="pre">--capture</span></code> also
 starts passive session capture; capture is disabled by default. The
-<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile configures client adapters and shared endpoints for
-Cosmos3 Nano and Pocket TTS. Its voice-gate YAML requires speaker ASR on 8102.
-Start those services together with the shared model-server stack.</p>
+<code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> profile configures the Cosmos3 Nano and Pocket TTS client
+adapters and endpoints. <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> configures the speaker-ASR
+endpoint. Start those endpoints together with
+the sample’s model-server stack.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. <code class="docutils literal notranslate"><span class="pre">SimpleVlmAgent</span></code> always invokes <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code>. The tool uses
@@ -521,8 +523,8 @@ streaming image query.</p>
 a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
-call a health endpoint first. Required speaker ASR also gates worker readiness;
-TTS health is not polled automatically. Start the shared stack before the sample.</p>
+call a health endpoint first. STT and TTS do not gate worker startup; start the
+sample’s model-server stack before the sample so speech requests can succeed.</p>
 </section>
 <section id="configuration">
 <h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
@@ -569,14 +571,13 @@ from the shell’s current directory.</p>
 <p>Changing an entry in <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
 For a checkpoint, port, GPU, or model-runtime change, refer to
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>, update the shared stack, stop that
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>, update the sample model stack, stop that
 persistent stack, and start it again before restarting this sample.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 <p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then ask questions
 without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to finish. These
-controls work with required speaker ASR by default, or explicitly configured
-ordinary STT, including native NIM speech. Refer to
+controls work with the sample’s existing STT endpoint, including NIM. Refer to
 <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a> for paused phrases and the legacy wake mode.</p>
 </section>
 <section id="opt-in-session-capture">

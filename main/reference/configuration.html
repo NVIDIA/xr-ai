@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -476,6 +477,78 @@ workflow.</p></li>
 </ol>
 <section id="config-lab-instrument-monitoring">
 <h2>lab-instrument-monitoring<a class="headerlink" href="#config-lab-instrument-monitoring" title="Link to this heading">#</a></h2>
+<section id="config-lab-instrument-monitoring-model-servers-yaml-96g-blackwell-yaml">
+<h3>model-servers/yaml/96G_blackwell.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-model-servers-yaml-96g-blackwell-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.23</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+</pre></div>
+</div>
+</section>
+<section id="config-lab-instrument-monitoring-model-servers-yaml-dual-48g-ada-yaml">
+<h3>model-servers/yaml/dual_48G_ada.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-model-servers-yaml-dual-48g-ada-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+</pre></div>
+</div>
+</section>
+<section id="config-lab-instrument-monitoring-model-servers-yaml-spark-yaml">
+<h3>model-servers/yaml/spark.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-model-servers-yaml-spark-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-lab-instrument-monitoring-yaml-device-io-hub-yaml">
 <h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-lab-instrument-monitoring-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -613,6 +686,64 @@ workflow.</p></li>
 </section>
 <section id="config-simple-vlm-example">
 <h2>simple-vlm-example<a class="headerlink" href="#config-simple-vlm-example" title="Link to this heading">#</a></h2>
+<section id="config-simple-vlm-example-model-servers-yaml-96g-blackwell-yaml">
+<h3>model-servers/yaml/96G_blackwell.yaml<a class="headerlink" href="#config-simple-vlm-example-model-servers-yaml-96g-blackwell-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.23</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+</pre></div>
+</div>
+</section>
+<section id="config-simple-vlm-example-model-servers-yaml-dual-48g-ada-yaml">
+<h3>model-servers/yaml/dual_48G_ada.yaml<a class="headerlink" href="#config-simple-vlm-example-model-servers-yaml-dual-48g-ada-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+</pre></div>
+</div>
+</section>
+<section id="config-simple-vlm-example-model-servers-yaml-spark-yaml">
+<h3>model-servers/yaml/spark.yaml<a class="headerlink" href="#config-simple-vlm-example-model-servers-yaml-spark-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-simple-vlm-example-yaml-device-io-hub-yaml">
 <h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-simple-vlm-example-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -773,6 +904,73 @@ workflow.</p></li>
 </section>
 <section id="config-tea-making-sample">
 <h2>tea-making-sample<a class="headerlink" href="#config-tea-making-sample" title="Link to this heading">#</a></h2>
+<section id="config-tea-making-sample-model-servers-yaml-96g-blackwell-yaml">
+<h3>model-servers/yaml/96G_blackwell.yaml<a class="headerlink" href="#config-tea-making-sample-model-servers-yaml-96g-blackwell-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">embedding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-model-servers-yaml-dual-48g-ada-yaml">
+<h3>model-servers/yaml/dual_48G_ada.yaml<a class="headerlink" href="#config-tea-making-sample-model-servers-yaml-dual-48g-ada-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">embedding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
+</pre></div>
+</div>
+</section>
+<section id="config-tea-making-sample-model-servers-yaml-spark-yaml">
+<h3>model-servers/yaml/spark.yaml<a class="headerlink" href="#config-tea-making-sample-model-servers-yaml-spark-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">embedding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-tea-making-sample-yaml-device-io-hub-yaml">
 <h3>yaml/device_io_hub.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-device-io-hub-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -1217,6 +1415,78 @@ workflow.</p></li>
 </section>
 <section id="config-xr-render-demo">
 <h2>xr-render-demo<a class="headerlink" href="#config-xr-render-demo" title="Link to this heading">#</a></h2>
+<section id="config-xr-render-demo-model-servers-yaml-96g-blackwell-yaml">
+<h3>model-servers/yaml/96G_blackwell.yaml<a class="headerlink" href="#config-xr-render-demo-model-servers-yaml-96g-blackwell-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.23</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+</pre></div>
+</div>
+</section>
+<section id="config-xr-render-demo-model-servers-yaml-dual-48g-ada-yaml">
+<h3>model-servers/yaml/dual_48G_ada.yaml<a class="headerlink" href="#config-xr-render-demo-model-servers-yaml-dual-48g-ada-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'1'</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+</pre></div>
+</div>
+</section>
+<section id="config-xr-render-demo-model-servers-yaml-spark-yaml">
+<h3>model-servers/yaml/spark.yaml<a class="headerlink" href="#config-xr-render-demo-model-servers-yaml-spark-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Sample workload overrides. Ports, models, and images come from shared defaults.</span>
+<span class="c1"># These retain the existing conservative budgets; tune together on the target GPU.</span>
+<span class="c1"># With explicit KV bytes, utilization is startup admission, not a total-memory cap.</span>
+<span class="nt">speaker-stt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">tts</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">'0'</span>
+<span class="nt">omni</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">vlm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="w">  </span><span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
+<span class="w">  </span><span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
 <section id="config-xr-render-demo-scene-scene-service-yaml">
 <h3>scene/scene_service.yaml<a class="headerlink" href="#config-xr-render-demo-scene-scene-service-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -1489,549 +1759,118 @@ workflow.</p></li>
 </div>
 </section>
 </section>
-<section id="config-model-servers">
-<h2>model-servers<a class="headerlink" href="#config-model-servers" title="Link to this heading">#</a></h2>
-<section id="config-model-servers-yaml-96g-blackwell-embedding-server-yaml">
-<h3>yaml/96G_blackwell/embedding_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-embedding-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults">
+<h2>Shared model-server defaults<a class="headerlink" href="#config-shared-model-server-defaults" title="Link to this heading">#</a></h2>
+<section id="config-shared-model-server-defaults-yaml-embedding-server-yaml">
+<h3>yaml/embedding_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-embedding-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
 <span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/llama-nemotron-embed-1b-v2</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
+<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8109</span>
 <span class="nt">served_model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">embed</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
-<span class="c1"># Pooling models have no generation KV cache; retain a total-memory fraction.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
+<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml">
-<h3>yaml/96G_blackwell/nemotron_omni_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults-yaml-nemotron-omni-llm-server-yaml">
+<h3>yaml/nemotron_omni_llm_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-nemotron-omni-llm-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Nemotron-3-Nano-Omni — single Blackwell 96 GB.</span>
-<span class="c1"># NVFP4 is selected automatically. Leave moe_backend unset so vLLM can select</span>
-<span class="c1"># a compatible kernel for the checkpoint and hardware. This standalone Omni</span>
-<span class="c1"># stack leaves the remainder of the GPU for STT, rendering, and runtime overhead.</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
+<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="c1"># The fraction is the startup admission threshold. The explicit bytes</span>
-<span class="c1"># independently bound the resident cache; vLLM reports its token capacity and</span>
-<span class="c1"># maximum concurrency at startup.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
+<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">''</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 <span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="nt">video_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="nt">video_num_frames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
-
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
+<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
+<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">
-<h3>yaml/96G_blackwell/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults-yaml-pocket-tts-server-yaml">
+<h3>yaml/pocket_tts_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Shared GPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
 <span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
 <span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
 <span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-speaker-stt-yaml">
-<h3>yaml/96G_blackwell/speaker_stt.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-speaker-stt-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults-yaml-speaker-stt-yaml">
+<h3>yaml/speaker_stt.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-speaker-stt-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># Speaker-conditioned ASR on a single Blackwell GPU.</span>
-<span class="c1"># GPU memory and latency require live qualification on this hardware.</span>
+<span class="c1"># Speaker-conditioned ASR defaults. Placement belongs to each sample profile.</span>
+<span class="c1"># GPU memory and latency require live qualification on the target hardware.</span>
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8102</span>
 <span class="nt">asr_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/multitalker-parakeet-streaming-0.6b-v1</span>
 <span class="nt">diar_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Nemotron-3-Diarization</span>
 <span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
 <span class="nt">precision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bf16</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 <span class="nt">max_sessions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-stt-server-yaml">
-<h3>yaml/96G_blackwell/stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults-yaml-stt-server-yaml">
+<h3>yaml/stt_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-stt-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># STT server — single Blackwell 96 GB.</span>
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
 <span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
+<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
 <span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
+<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
 </pre></div>
 </div>
 </section>
-<section id="config-model-servers-yaml-96g-blackwell-vlm-server-yaml">
-<h3>yaml/96G_blackwell/vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml" title="Link to this heading">#</a></h3>
+<section id="config-shared-model-server-defaults-yaml-vlm-server-yaml">
+<h3>yaml/vlm_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-vlm-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
-<span class="c1"># VLM server — single Blackwell 96 GB.</span>
-<span class="c1">#</span>
-<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm. The Reasoner weights were</span>
-<span class="c1"># measured at 16.8 GiB. The 0.23 fraction is the startup admission threshold;</span>
-<span class="c1"># the explicit 1.5 GiB allocation bounds the KV cache independently.</span>
-<span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
-<span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
-
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
 <span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
 <span class="nt">hf_overrides</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">architectures</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cosmos3ForConditionalGeneration</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cosmos3ForConditionalGeneration</span>
+<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">''</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.23</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models</span>
 <span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
 <span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
-<span class="c1"># cold-start validation on the target profile.</span>
 <span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">
-<h3>yaml/dual_48G_ada/embedding_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/llama-nemotron-embed-1b-v2</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8109</span>
-<span class="nt">served_model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">embed</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
-<span class="c1"># Pooling models have no generation KV cache; retain a total-memory fraction.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
 <span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml">
-<h3>yaml/dual_48G_ada/nemotron_omni_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Nemotron-3-Nano-Omni — dual 48 GB Ada configuration.</span>
-<span class="c1"># Cosmos remains on GPU 0; FP8 Omni replaces Nano on GPU 1 beside STT.</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="c1"># The fraction is the startup admission threshold. The explicit bytes</span>
-<span class="c1"># independently bound the resident cache; vLLM reports its token capacity and</span>
-<span class="c1"># maximum concurrency at startup.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
-<span class="nt">video_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
-<span class="nt">video_num_frames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
-
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml">
-<h3>yaml/dual_48G_ada/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Shared GPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
-<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
-<span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
-<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-speaker-stt-yaml">
-<h3>yaml/dual_48G_ada/speaker_stt.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-speaker-stt-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Speech service selected by the normal model-server profiles.</span>
-<span class="c1"># Match this HTTP address in each worker's voice_gate.yaml.</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8102</span>
-<span class="nt">asr_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/multitalker-parakeet-streaming-0.6b-v1</span>
-<span class="nt">diar_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Nemotron-3-Diarization</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<span class="nt">precision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bf16</span>
-<span class="c1"># Speech on GPU 1; no additional batch-STT model is needed.</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">max_sessions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-stt-server-yaml">
-<h3>yaml/dual_48G_ada/stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># STT server configuration — nvidia/parakeet-tdt-0.6b-v3.</span>
-<span class="c1"># Auto-discovered by xr-ai-launcher and passed as --config to stt_server.</span>
-<span class="c1"># OpenAI-compatible API at http://localhost:8103/v1</span>
-
-<span class="c1"># NeMo model name.</span>
-<span class="c1"># nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; ~1.5 GB VRAM; English only</span>
-<span class="c1"># nvidia/parakeet-rnnt-1.1b    — stronger, larger; same CC-BY-4.0 license</span>
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
-
-<span class="c1"># Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
-
-<span class="c1"># GPU 1 only — VLM, embedding, and Pocket TTS share GPU 0.</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
-
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-
-<span class="c1"># NeMo + HuggingFace weight cache — resolved relative to this YAML file.</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">
-<h3>yaml/dual_48G_ada/vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># VLM server configuration — Cosmos3 Nano Reasoner.</span>
-<span class="c1"># Auto-discovered by xr-ai-launcher and passed as --config to vlm_server.</span>
-<span class="c1"># OpenAI-compatible API at http://localhost:8100/v1 (accepts image_url in messages)</span>
-
-<span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
-<span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
-<span class="c1"># Cosmos-Reason1 compatibility uses nvidia/Cosmos-Reason1-7B with the</span>
-<span class="c1"># cosmos_vlm client preset.</span>
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
-<span class="nt">hf_overrides</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">architectures</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cosmos3ForConditionalGeneration</span>
-
-<span class="c1"># HuggingFace token — optional for this public model and required for gated</span>
-<span class="c1"># alternatives.</span>
-<span class="c1"># !! Do not commit this file with a real token !!</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span><span class="w">   </span><span class="c1"># share GPU 0 with embeddings; Nemotron/STT use GPU 1</span>
-
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="c1"># The Reasoner weights were measured at 16.8 GiB. The 0.47 fraction is the</span>
-<span class="c1"># startup admission threshold; the explicit 1.5 GiB allocation bounds the KV</span>
-<span class="c1"># cache independently.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.47</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
 <span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
-<span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
-<span class="c1"># cold-start validation on the target profile.</span>
-<span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-models-default-json">
-<h3>yaml/models.default.json<a class="headerlink" href="#config-model-servers-yaml-models-default-json" title="Link to this heading">#</a></h3>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"services"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"speaker-stt"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"tts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pocket_tts"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8105"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tts"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8108"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"omni"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"vlm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cosmos3_nano_reasoner"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8100"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vlm"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">"embedding"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_embedding"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8109"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="s2">"health"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"ownership"</span><span class="p">:</span><span class="w"> </span><span class="s2">"managed"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"embedding"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-embedding-server-yaml">
-<h3>yaml/spark/embedding_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-embedding-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/llama-nemotron-embed-1b-v2</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8109</span>
-<span class="nt">served_model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">embed</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
 <span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
-<span class="c1"># Pooling models have no generation KV cache; retain a total-memory fraction.</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-
-<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
-<span class="c1"># and Docker did not OOM-kill it.</span>
-<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">
-<h3>yaml/spark/nemotron_omni_llm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Nemotron-3-Nano-Omni — DGX Spark (GB10).</span>
-<span class="c1"># The NVFP4 model shares unified memory with the rest of the stack. vLLM's</span>
-<span class="c1"># fractional profiler is unreliable while cold checkpoint reads change the</span>
-<span class="c1"># filesystem page cache, so reserve 2 GiB explicitly for the 32K hybrid</span>
-<span class="c1"># Mamba/attention cache. NGC 26.08 limits Nemotron Nano V3 on DGX Spark to</span>
-<span class="c1"># four concurrent sequences.</span>
-<span class="c1"># gpu_memory_utilization remains the vLLM startup admission threshold; it does</span>
-<span class="c1"># not size the cache when the byte value is set.</span>
-<span class="c1"># vLLM reports the resulting token capacity and maximum concurrency at startup.</span>
-
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8108</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-<span class="nt">tensor_parallel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32768</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2147483648</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-
-<span class="nt">video_pruning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
-<span class="nt">video_fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
-<span class="nt">video_num_frames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
-
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-
-<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
-<span class="c1"># and Docker did not OOM-kill it.</span>
-<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-pocket-tts-server-yaml">
-<h3>yaml/spark/pocket_tts_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Shared GPU Pocket TTS service. bill_boerst is a CC0 Voice-Zero recording.</span>
-<span class="nt">voice</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bill_boerst</span>
-<span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">english</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8105</span>
-<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-speaker-stt-yaml">
-<h3>yaml/spark/speaker_stt.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-speaker-stt-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Speaker-conditioned ASR on DGX Spark's single Blackwell GPU.</span>
-<span class="c1"># GPU memory and latency require live qualification on this hardware.</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8102</span>
-<span class="nt">asr_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/multitalker-parakeet-streaming-0.6b-v1</span>
-<span class="nt">diar_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Nemotron-3-Diarization</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<span class="nt">precision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bf16</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">max_sessions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-stt-server-yaml">
-<h3>yaml/spark/stt_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-stt-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># STT server — DGX Spark (1× Blackwell, 128 GB).</span>
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/parakeet-tdt-0.6b-v3</span>
-<span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8103</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">startup_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-</pre></div>
-</div>
-</section>
-<section id="config-model-servers-yaml-spark-vlm-server-yaml">
-<h3>yaml/spark/vlm_server.yaml<a class="headerlink" href="#config-model-servers-yaml-spark-vlm-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># VLM server — DGX Spark (GB10, ~120 GiB GPU-visible unified memory).</span>
-<span class="c1">#</span>
-<span class="c1"># vlm is THIRD in load order: STT → Omni → vlm.</span>
-<span class="c1"># free_at_startup ≈ 120 − 30 (Omni) − 2 (STT) ≈ 88 GiB.</span>
-<span class="c1"># Cosmos3 requires about 1.12 GiB of KV cache for one 8,192-token request.</span>
-<span class="c1"># Pin 1.5 GiB because vLLM's fractional memory profiler can misattribute</span>
-<span class="c1"># filesystem page-cache changes as model overhead on unified-memory systems.</span>
-<span class="c1"># Keep four sequences for concurrent shorter requests. The fixed cache is</span>
-<span class="c1"># shared, so concurrent maximum-length requests can queue, preempt, or</span>
-<span class="c1"># recompute when their aggregate token demand exceeds its capacity.</span>
-<span class="c1"># The 0.20 utilization remains vLLM's startup admission threshold; the fixed</span>
-<span class="c1"># byte value controls the KV-cache allocation.</span>
-<span class="c1"># hf_overrides selects the Reasoner runtime; details are documented in</span>
-<span class="c1"># docs/source/components/ai-services.md#per-server-notes.</span>
-
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Cosmos3-Nano</span>
-<span class="nt">hf_overrides</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">architectures</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cosmos3ForConditionalGeneration</span>
-<span class="nt">hf_token</span><span class="p">:</span><span class="w"> </span><span class="s">""</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8100</span>
-<span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../../models</span>
-<span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.20</span>
-<span class="nt">kv_cache_memory_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1610612736</span>
-<span class="nt">max_model_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8192</span>
-<span class="nt">max_num_seqs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-<span class="nt">enforce_eager</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">async_scheduling</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="nt">mm_encoder_tp_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
-<span class="nt">max_videos_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
-<span class="c1"># Increasing max_model_len also requires recalculating the fixed KV cache and</span>
-<span class="c1"># cold-start validation on the target profile.</span>
-<span class="nt">max_images_per_prompt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-
-<span class="c1"># vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).</span>
-<span class="c1"># See services/vlm-server/vlm_server.yaml for the full toggle docs.</span>
-<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.09-py3</span>
-
-<span class="c1"># Restart the container once if the CUDA driver rejects its initial allocation</span>
-<span class="c1"># and Docker did not OOM-kill it.</span>
-<span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -2088,6 +1927,9 @@ workflow.</p></li>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring">lab-instrument-monitoring</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-model-servers-yaml-96g-blackwell-yaml">model-servers/yaml/96G_blackwell.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-model-servers-yaml-dual-48g-ada-yaml">model-servers/yaml/dual_48G_ada.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-model-servers-yaml-spark-yaml">model-servers/yaml/spark.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-device-map-yaml">yaml/device_map.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-lab-instrument-monitoring-yaml-lab-instrument-monitoring-worker-yaml">yaml/lab_instrument_monitoring_worker.yaml</a></li>
@@ -2097,6 +1939,9 @@ workflow.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example">simple-vlm-example</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-model-servers-yaml-96g-blackwell-yaml">model-servers/yaml/96G_blackwell.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-model-servers-yaml-dual-48g-ada-yaml">model-servers/yaml/dual_48G_ada.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-model-servers-yaml-spark-yaml">model-servers/yaml/spark.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-simple-vlm-example-yaml-models-json">yaml/models.json</a></li>
@@ -2105,6 +1950,9 @@ workflow.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample">tea-making-sample</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-model-servers-yaml-96g-blackwell-yaml">model-servers/yaml/96G_blackwell.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-model-servers-yaml-dual-48g-ada-yaml">model-servers/yaml/dual_48G_ada.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-model-servers-yaml-spark-yaml">model-servers/yaml/spark.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-models-local-json">yaml/models.local.json</a></li>
@@ -2116,6 +1964,9 @@ workflow.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo">xr-render-demo</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-model-servers-yaml-96g-blackwell-yaml">model-servers/yaml/96G_blackwell.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-model-servers-yaml-dual-48g-ada-yaml">model-servers/yaml/dual_48G_ada.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-model-servers-yaml-spark-yaml">model-servers/yaml/spark.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-scene-scene-service-yaml">scene/scene_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-cloudxr-runtime-yaml">yaml/cloudxr_runtime.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-xr-render-demo-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
@@ -2131,26 +1982,13 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-clef-flash-yaml-clef-server-yaml">yaml/clef_server.yaml</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers">model-servers</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-embedding-server-yaml">yaml/96G_blackwell/embedding_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-nemotron-omni-llm-server-yaml">yaml/96G_blackwell/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-pocket-tts-server-yaml">yaml/96G_blackwell/pocket_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-speaker-stt-yaml">yaml/96G_blackwell/speaker_stt.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-stt-server-yaml">yaml/96G_blackwell/stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-96g-blackwell-vlm-server-yaml">yaml/96G_blackwell/vlm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-embedding-server-yaml">yaml/dual_48G_ada/embedding_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-nemotron-omni-llm-server-yaml">yaml/dual_48G_ada/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-pocket-tts-server-yaml">yaml/dual_48G_ada/pocket_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-speaker-stt-yaml">yaml/dual_48G_ada/speaker_stt.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-stt-server-yaml">yaml/dual_48G_ada/stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-dual-48g-ada-vlm-server-yaml">yaml/dual_48G_ada/vlm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-models-default-json">yaml/models.default.json</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-embedding-server-yaml">yaml/spark/embedding_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-nemotron-omni-llm-server-yaml">yaml/spark/nemotron_omni_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-pocket-tts-server-yaml">yaml/spark/pocket_tts_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-speaker-stt-yaml">yaml/spark/speaker_stt.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-stt-server-yaml">yaml/spark/stt_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-servers-yaml-spark-vlm-server-yaml">yaml/spark/vlm_server.yaml</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults">Shared model-server defaults</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-embedding-server-yaml">yaml/embedding_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-nemotron-omni-llm-server-yaml">yaml/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-pocket-tts-server-yaml">yaml/pocket_tts_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-speaker-stt-yaml">yaml/speaker_stt.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-vlm-server-yaml">yaml/vlm_server.yaml</a></li>
 </ul>
 </li>
 </ul>

@@ -392,6 +392,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -460,6 +461,27 @@
 For custom XR Render, NIM consumer, or shared model profiles, move any settings
 from <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> you need into <code class="docutils literal notranslate"><span class="pre">llm</span></code>, then remove the old entry. The NIM smoke
 check rejects the old entry.</p>
+</section>
+<section id="sample-local-model-server-launchers">
+<h2>Sample-local model-server launchers<a class="headerlink" href="#sample-local-model-server-launchers" title="Link to this heading">#</a></h2>
+<p>The common <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers</span></code> project is replaced by a
+<code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> project inside each agent sample. For Simple VLM, run from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Other samples have corresponding <code class="docutils literal notranslate"><span class="pre">&lt;sample&gt;_model_servers</span></code> commands. Keep
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> for explicit hardware selection. <code class="docutils literal notranslate"><span class="pre">--models</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> are removed: the sample launcher declares its servers,
+and local stacks require <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>.</p>
+<p>Shared defaults move to <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code>; sample-specific
+GPU overrides live under <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/</span></code>.
+Stop the old stack with its old checkout’s command before updating. Then start
+the desired sample’s stack. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
+<p>The remaining entries describe earlier release transitions and their commands.
+For the current model-server workflow, follow the sample-local launcher migration
+above.</p>
 </section>
 <section id="selected-model-server-cleanup">
 <h2>Selected model-server cleanup<a class="headerlink" href="#selected-model-server-cleanup" title="Link to this heading">#</a></h2>
@@ -539,8 +561,8 @@ shutdown behavior.</p>
 </section>
 <section id="shared-model-stack-speaker-filtering">
 <h2>Shared model-stack speaker filtering<a class="headerlink" href="#shared-model-stack-speaker-filtering" title="Link to this heading">#</a></h2>
-<p>The default shared model profile starts Nemotron 3 Diarization with Multitalker
-Parakeet through its private <code class="docutils literal notranslate"><span class="pre">services</span></code> declaration and reuses matching warm
+<p>Each sample-local model stack starts Nemotron 3 Diarization with Multitalker
+Parakeet through its explicit service list and reuses matching warm
 speaker-ASR instances. Samples with
 <code class="docutils literal notranslate"><span class="pre">speaker.backend:</span> <span class="pre">required</span></code> wait for the speaker service before worker readiness.
 The four shipped voice samples no longer declare a batch-STT endpoint on 8103;
@@ -548,14 +570,15 @@ the default stack does not serve that port. Ordinary STT remains an explicit
 choice configured in both the server deployment and consuming worker.
 Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
 The local default contains no batch-STT model entry. Before updating an existing
-checkout, stop its running stack with that checkout’s <code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code>
-and the deployment profile it started (<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> for a custom profile).
+checkout, stop its running stack with that checkout’s model command and <code class="docutils literal notranslate"><span class="pre">--stop</span></code>
+and the configuration it started (<code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> where that old command supports it).
 The new default stop plan does not include batch STT on 8103. Also stop the
 selected stack before changing its deployment configuration. Replace
 unconditional worker <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> calls with <code class="docutils literal notranslate"><span class="pre">VoiceAgent.from_models</span></code>, passing
-the loaded models and voice-gate settings. To serve batch STT, explicitly add its
-managed model entry and configure the consuming worker’s batch adapter;
-for batch-only speech omit <code class="docutils literal notranslate"><span class="pre">services.speaker-stt</span></code> and disable speaker enrollment.
+the loaded models and voice-gate settings. To serve batch STT, explicitly select
+<code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s launcher and hardware overrides and configure the consuming
+worker’s batch adapter. For batch-only speech omit <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> from that
+selection and disable speaker enrollment.
 Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for serving both paths.</p>
 </section>
 <section id="voice-sample-conversation-defaults">
@@ -844,6 +867,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>

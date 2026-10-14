@@ -7,7 +7,7 @@
 
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the
-shared `model-servers` stack.
+sample's separate `model-servers/` convenience launcher.
 
 An application sample has at least these two sub-projects:
 
@@ -16,8 +16,11 @@ An application sample has at least these two sub-projects:
 | `<sample>/` | Orchestrator — declares owned and reused processes in code | `xr-ai-launcher`, `xr-ai-logging`, and sample-specific orchestration dependencies |
 | `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-hub-client`, numpy, etc. |
 
-Samples may add capability or eval sub-projects. `model-servers` is a dedicated
-orchestrator and has no worker sub-project.
+Samples may add capability or eval sub-projects. Each sample's `model-servers/`
+project is a separate inference convenience launcher with no worker. It combines
+shared defaults under `utils/xr-ai-model-server-stack/yaml/` with sample-owned GPU
+profiles. Refer to {doc}`/guides/customizing-model-servers` for configuration and
+startup, shutdown, and sample-switching workflows.
 
 **Configuration convention** — the YAML configuration path for each process is declared
 explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
@@ -37,9 +40,9 @@ Launcher profile loaders require the wrapped JSON form with `adapter`,
 `endpoint`, and `deployment` objects for each model. `load_model_deployment()`
 reads the profile selected by the worker YAML, while `load_deployment_profile()`
 reads a profile path directly. Both use only the standard library and expose
-deployment metadata and credential requirements. The shared `model-servers`
-sample uses the direct loader and managed entries to select servers. Legacy
-explicit reused and external deployment entries remain accepted. Refer to
+deployment metadata and credential requirements. The sample-local model
+launchers declare their service lists directly and do not use these loaders.
+Explicit reused and external deployment entries remain accepted by the loaders. Refer to
 {ref}`model profile formats <deployment-profiles>` for the worker and launcher
 requirements.
 
