@@ -142,6 +142,22 @@ def test_endpoint_profile_and_sample_environments_use_existing_contract():
             assert "xr-ai-models[riva]" in project["dependencies"]
 
 
+@pytest.mark.parametrize("names, message", [
+    ((), "at least one supported sample role"),
+    (("summarizer", "planner"), "unsupported roles: ['planner', 'summarizer']"),
+])
+async def test_smoke_check_rejects_invalid_roles_before_connecting(names, message, monkeypatch, tmp_path):
+    profile = tmp_path / "models.json"
+    profile.write_text(json.dumps({"models": {name: {
+        "category": "llm", "adapter": {"preset": "nemotron_omni"},
+        "endpoint": {"base_url": "https://llm.example.com"},
+    } for name in names}}))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: pytest.fail("connected before validation"))
+    with pytest.raises(ValueError) as error:
+        await SMOKE["check"](profile)
+    assert message in str(error.value)
+
+
 async def test_smoke_check_rejects_missing_credentials_before_connecting(monkeypatch):
     monkeypatch.delenv("NIM_ENDPOINT_API_KEY", raising=False)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: pytest.fail("connected before validation"))
@@ -340,6 +356,13 @@ async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(mon
     ))
     await SMOKE["check"](profile)
     assert len(calls) == 7
+    llm = [payload for host, payload in calls if host == "llm.example.com"]
+    assert len(llm) == 3
+    chat, stream, tools = llm
+    assert not chat.get("stream") and not chat.get("tools")
+    assert stream["stream"] is True and not stream.get("tools")
+    assert not tools.get("stream")
+    assert tools["tools"][0]["function"]["name"] == "deployment_ready"
     vision = [payload for host, payload in calls if host == "vlm.example.com"]
     assert len(vision) == 2
     assert vision[0]["messages"][0]["content"][0]["type"] == "image_url"

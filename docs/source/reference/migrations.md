@@ -5,6 +5,13 @@
 
 # Release migration
 
+## Single LLM entry in model profiles
+
+XR Render and its eval commands now use `llm` instead of `agent_llm`.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from `agent_llm` you need into `llm`, then remove the old entry. The NIM smoke
+check rejects the old entry.
+
 ## Selected model-server cleanup
 
 `model_servers --stop` now stops only managed services in the selected launch
@@ -52,18 +59,6 @@ inputs. Local model-server defaults remain unchanged.
 Native Magpie speech does not append the compatibility wrapper's 300 ms pause.
 Riva client readiness checks channel connectivity; validate inference separately.
 Refer to {doc}`/guides/deploying-with-nim` for migration and validation commands.
-
-## Single LLM entry in model profiles
-
-XR Render, the shared local model profile, and the NIM endpoint example now use
-one `llm` entry for text chat and tool-calling loops. XR Render workers and eval commands read
-`llm` instead of `agent_llm`. For a custom XR Render profile, move any
-`agent_llm` settings you want to retain into `llm`, then remove the duplicate
-entry. Model endpoints, presets, and inference settings are unchanged.
-
-Application-defined names remain supported by `ModelsConfig` and `make_llm`.
-Applications that need multiple LLMs can retain distinct named entries of the
-LLM category; no SDK type or factory has changed.
 
 ## LiveKit sample credentials
 

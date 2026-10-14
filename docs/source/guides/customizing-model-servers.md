@@ -135,9 +135,7 @@ The profile must retain the wrapped JSON shape:
 ```
 
 Within the shared profile, `managed` means `model-servers` owns that service.
-Model entry names are application-defined. An application can configure multiple
-LLMs under distinct names using the same LLM category and `make_llm(config, name)`
-factory. Those entries may share a service or use different endpoints.
+Entries may share a service; for example, two LLM entries can both name `omni`.
 A service name must have a corresponding row in `_MODEL_SERVICES` in
 `model-server-samples/model-servers/main.py`.
 

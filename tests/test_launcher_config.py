@@ -272,6 +272,7 @@ def test_bundled_model_servers_profile_has_launcher_sdk_parity() -> None:
     profile = _MODEL_SERVERS_YAML / "models.default.json"
     deployment = load_deployment_profile(profile)
     models = load_models_config(profile)
+    assert set(models.entries) == {"llm", "tts", "vlm", "embedding"}
     expected_services = {
         spec.deployment.service: (
             "own" if spec.deployment.ownership == "managed" else "reuse"

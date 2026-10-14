@@ -322,8 +322,8 @@ dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
 worker calls those processes through Relay-managed native tools. The render
-agent runs a Nemotron-3-Nano-Omni-30B-A3B-Reasoning tool-calling loop over scene, tracking, spatial math, vision, and video-memory
-tools. Refer to the
+agent runs a Nemotron-3-Nano-Omni-30B-A3B-Reasoning tool-calling loop over
+scene, tracking, spatial math, vision, and video-memory tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
 map, agentic-loop details, and XR session lifecycle.
 

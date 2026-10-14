@@ -43,9 +43,10 @@ and the deployment guide for each selected model and container version.
 
 The example in `deployment/nim/models.yaml` selects Nemotron Omni for LLM
 chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
-synthesis, and Llama Nemotron Embed for retrieval. These are endpoint configuration examples,
-not a claim of production or hardware qualification. Match model IDs, supported
-languages, voices, input limits, and inference options to the deployed versions.
+synthesis, and Llama Nemotron Embed for retrieval. These are endpoint
+configuration examples, not a claim of production or hardware qualification.
+Match model IDs, supported languages, voices, input limits, and inference options
+to the deployed versions.
 Changing the serving model can change sample behavior; validate the application's
 prompts and evaluations as well as its transport.
 

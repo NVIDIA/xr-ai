@@ -54,8 +54,11 @@ async def check(profile: Path) -> None:
     """Check every role, including TTS-to-STT and image inference; fail on errors."""
     config = load_models_config(profile)
     roles = {"stt", "tts", "llm", "vlm", "embedding"}
-    if not config.entries or config.entries.keys() - roles:
-        raise ValueError("smoke profile must contain supported sample roles: " + ", ".join(sorted(roles)))
+    if not config.entries:
+        raise ValueError("smoke profile must contain at least one supported sample role")
+    unsupported = config.entries.keys() - roles
+    if unsupported:
+        raise ValueError(f"smoke profile contains unsupported roles: {sorted(unsupported)}")
     for credential in config.required_credentials:
         if not os.environ.get(credential, "").strip():
             raise ValueError(f"missing endpoint credential: {credential}")
