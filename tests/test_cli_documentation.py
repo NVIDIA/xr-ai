@@ -22,7 +22,10 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert set(commands) == {
         "clef_flash_model",
         "lab_instrument_monitoring",
-        "model_servers",
+        "simple_vlm_example_model_servers",
+        "lab_instrument_monitoring_model_servers",
+        "tea_making_sample_model_servers",
+        "xr_render_demo_model_servers",
         "simple_vlm_example",
         "tea_making_sample",
         "xr_render_demo",
@@ -37,13 +40,10 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--expose-web-events",),
         ("--capture",),
     ]
-    assert [argument.flags for argument in commands["model_servers"].arguments] == [
-        ("--stop",),
-        ("--models",),
-        ("--allow-anonymous",),
-        ("--gpu-profile",),
-    ]
-    assert commands["model_servers"].project_dir == Path("model-server-samples/model-servers")
+    for sample in ("simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"):
+        command = commands[sample.replace("-", "_") + "_model_servers"]
+        assert [argument.flags for argument in command.arguments] == [("--stop",), ("--gpu-profile",)]
+        assert command.project_dir == Path("agent-samples") / sample / "model-servers"
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--capture",),
     ]
@@ -59,9 +59,8 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
 def test_catalog_builds_sample_directory_invocation() -> None:
     commands = {command.program: command for command in load_cli_catalog(_ROOT)}
 
-    assert commands["model_servers"].invocation == (
-        "uv run model_servers [--stop] [--models PATH] "
-        "[--allow-anonymous] [--gpu-profile NAME]"
+    assert commands["simple_vlm_example_model_servers"].invocation == (
+        "uv run simple_vlm_example_model_servers [--stop] [--gpu-profile NAME]"
     )
 
 

@@ -185,13 +185,14 @@ def _extract_arguments(path: Path) -> tuple[CliArgument, ...]:
 
 
 def load_cli_catalog(repository_root: Path) -> tuple[CliCommand, ...]:
-    """Discover installed commands from top-level sample projects without imports."""
+    """Discover sample commands, including nested model-server launchers, without imports."""
 
     commands: list[CliCommand] = []
     project_paths = sorted(
         path
         for category in ("agent-samples", "model-server-samples")
-        for path in (repository_root / category).glob("*/pyproject.toml")
+        for pattern in ("*/pyproject.toml", "*/model-servers/pyproject.toml")
+        for path in (repository_root / category).glob(pattern)
     )
     for project_path in project_paths:
         project = tomllib.loads(project_path.read_text(encoding="utf-8"))

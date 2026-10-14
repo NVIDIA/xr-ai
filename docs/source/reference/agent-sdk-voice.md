@@ -304,18 +304,19 @@ uv --config-file uv.toml run --project services/speaker-stt \
   python -m speaker_stt --config services/speaker-stt/speaker_stt.yaml
 ```
 
-Alternatively, the default shared model stack starts speaker ASR. Stop a
+Alternatively, each sample-local model stack starts speaker ASR. Stop a
 standalone instance before switching to the stack's hardware configuration;
 their configuration fingerprints can differ. From the repository root:
 
 ```bash
-uv --config-file uv.toml run --project model-server-samples/model-servers \
-  model_servers
+uv --config-file uv.toml run --project agent-samples/simple-vlm-example/model-servers \
+  simple_vlm_example_model_servers
 ```
 
-It uses `model-server-samples/model-servers/yaml/<gpu-profile>/speaker_stt.yaml`
-for placement and capacity, waits for decoder warmup, and reuses matching warm
-instances. `model_servers --stop` includes the speaker service. Stop the stack
+It composes shared `utils/xr-ai-model-server-stack/yaml/speaker_stt.yaml`
+defaults with that sample's `model-servers/yaml/<gpu-profile>.yaml` placement
+and capacity overrides, waits for decoder warmup, and reuses matching warm
+instances. The sample's model command with `--stop` includes the speaker service. Stop the stack
 before changing its speaker-service YAML. Native NIM deployment configures the
 worker's ordinary speech adapters for independently deployed Riva endpoints;
 disable `speaker.enabled` when choosing that speech path. Refer to

@@ -44,7 +44,7 @@ through scaffolding, startup, and hardware-free verification.
 
 | Sample | Purpose |
 |---|---|
-| [`model-servers`](model-server-samples/model-servers/README.md) | Start and persist the shared model stack |
+| Model servers beside each agent sample | Convenience launchers for each sample’s required local models; refer to the [workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html) |
 | [NIM endpoints](deployment/nim/README.md) | Configure and validate independently deployed models |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
@@ -62,7 +62,7 @@ evaluation, and adaptation guidance.
 | `client-samples/` | Platform clients and shared StreamKit implementations |
 | `agent-sdk/` | Hub IPC, model clients, runtime, tools, voice, and web events |
 | `agent-samples/` | Runnable agent stacks |
-| `model-server-samples/` | Shared model-server launch samples |
+| `model-server-samples/` | Standalone model demonstrations (CLEF); agent sample model stacks live under `agent-samples/` |
 | `apps/` | Application workspaces outside repository sample tooling |
 | `services/` | Hub, model servers, and typed capability services |
 | `utils/` | Launcher, logging, VAD, vLLM, and voice-gate utilities |

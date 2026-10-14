@@ -16,8 +16,7 @@ from contextlib import asynccontextmanager
 
 import zmq
 import zmq.asyncio
-from xr_ai_hub._codec import encode
-from xr_ai_hub._types import DataMessage, MsgType, ParticipantEvent
+from xr_ai_hub import DataMessage, MsgType, ParticipantEvent, encode
 
 
 class LiveEvalEndpoint:

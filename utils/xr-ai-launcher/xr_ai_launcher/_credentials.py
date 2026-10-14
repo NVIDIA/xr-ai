@@ -127,8 +127,7 @@ def require_credentials(*names: str, allow_missing: bool = False) -> None:
     """
     Exit non-zero unless each named token is available; NEVER prompts.
 
-    *allow_missing* (wired to the orchestrators' ``--allow-anonymous`` flag)
-    downgrades to ``warn_if_missing`` behavior.
+    *allow_missing* downgrades to ``warn_if_missing`` behavior.
     """
     if allow_missing:
         warn_if_missing(*names)
@@ -146,7 +145,7 @@ def require_credentials(*names: str, allow_missing: bool = False) -> None:
             how = ("`export HF_TOKEN=...` or `huggingface-cli login`"
                    if name == "HF_TOKEN" else f"`export {name}=...`")
             print(f"  Get one at {url}, then {how}.", file=sys.stderr)
-        print("  Or pass --allow-anonymous to start without it. "
+        print("  Configure the credential before starting. "
               "See docs/source/getting_started/credentials.md.", file=sys.stderr)
     sys.exit(2)
 

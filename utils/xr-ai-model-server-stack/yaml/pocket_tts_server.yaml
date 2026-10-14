@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared defaults for sample convenience stacks. Standalone defaults live in services/.
+voice: bill_boerst
+language: english
+port: 8105
+startup_timeout_s: 600
+model_cache: ../../../models
+device: cuda

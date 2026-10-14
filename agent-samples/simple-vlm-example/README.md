@@ -13,7 +13,7 @@ response streams to Pocket TTS and to the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
 session capture. It reuses speaker ASR, Cosmos3 Nano Reasoner, and Pocket TTS
-from the shared model stack. Before the agent reports ready, the worker sends a
+from the sample's local model stack. Before the agent reports ready, the worker sends a
 representative image request through the VLM so the first user query does not
 pay the multimodal warmup cost.
 
@@ -37,7 +37,7 @@ long a second utterance can omit “Hey Agent”:
 followup_grace_s: 10.0
 ```
 
-Restart the sample after an edit. If you change a shared model server rather
+Restart the sample after an edit. If you change a local model server rather
 than only its sample endpoint, stop and restart that stack separately. Refer to
 the [sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/simple-vlm-example.html#configuration)
 for the edit workflow and to the generated
@@ -46,11 +46,11 @@ every checked-in field and example value.
 
 ## Run
 
-Run all commands from `agent-samples/simple-vlm-example/`. Start the shared
+Run all commands from `agent-samples/simple-vlm-example/`. Start the sample’s local
 models first:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers simple_vlm_example_model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -83,8 +83,8 @@ remain available without opening a voice conversation. With `--capture`, each co
 participant disconnects or the stack stops. The normal command writes no
 capture.
 
-The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
+The local models remain running after the sample stops. From this directory,
+stop them with `uv run --project model-servers simple_vlm_example_model_servers --stop`.
 
 <!-- Compatibility anchor for a heading consolidated into the documentation. -->
 <a id="relay-visibility"></a>

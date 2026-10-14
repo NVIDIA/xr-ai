@@ -20,6 +20,7 @@ dependencies = [
     "xr-ai-web-events",
     "device-io-hub",
     "xr-ai-launcher",
+    "xr-ai-model-server-stack",
     "xr-ai-logging",
     "xr-ai-vad",
     "xr-ai-voicegate",
@@ -43,6 +44,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+xr-ai-model-server-stack = { path = "../utils/xr-ai-model-server-stack", editable = true }
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-runtime",       editable = true }
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }

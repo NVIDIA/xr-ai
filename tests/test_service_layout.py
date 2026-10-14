@@ -405,11 +405,8 @@ def test_device_io_hub_preserves_its_package_and_command() -> None:
     assert (_HUB_PROJECT / "device_io_hub" / "capture" / "_render_cli.py").is_file()
 
 
-def test_sample_process_projects_resolve(monkeypatch) -> None:
-    model_servers = _load_module(
-        "service_layout_model_servers",
-        "model-server-samples/model-servers/main.py",
-    )
+def test_sample_process_projects_resolve(tmp_path, monkeypatch) -> None:
+    from xr_ai_model_server_stack import _stack as model_servers
     simple_vlm = _load_module(
         "service_layout_simple_vlm",
         "agent-samples/simple-vlm-example/main.py",
@@ -418,12 +415,16 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
         "service_layout_render_demo",
         "agent-samples/xr-render-demo/main.py",
     )
-    monkeypatch.setattr(model_servers, "detect_gpu_config", lambda: "spark")
 
     declarations = [
         (
-            _ROOT / "model-server-samples/model-servers",
-            model_servers._build_processes()[0],
+            _ROOT / "agent-samples/lab-instrument-monitoring/model-servers",
+            model_servers._processes(
+                model_servers._configs(
+                    _ROOT / "agent-samples/lab-instrument-monitoring/model-servers",
+                    ("speaker-stt", "tts", "omni", "vlm"), "spark",
+                ), tmp_path, _ROOT,
+            ),
         ),
         (
             _ROOT / "agent-samples/simple-vlm-example",
@@ -622,3 +623,21 @@ def test_manifests_and_ci_have_no_legacy_service_roots() -> None:
         )
 
     assert not stale, f"legacy service roots remain in manifests or CI: {stale}"
+
+
+def test_developer_samples_import_public_xr_ai_apis() -> None:
+    for path in _tracked_paths():
+        if path.parts[0] != "agent-samples" or path.suffix != ".py":
+            continue
+        for node in ast.walk(ast.parse((_ROOT / path).read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+                if node.module.startswith("xr_ai_"):
+                    assert not any(alias.name.startswith("_") for alias in node.names), path
+            elif isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            else:
+                continue
+            for module in modules:
+                if module.startswith("xr_ai_"):
+                    assert not any(part.startswith("_") for part in module.split(".")), (path, module)

@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared defaults for sample convenience stacks. Standalone defaults live in services/.
+model: nvidia/Cosmos3-Nano
+hf_overrides:
+  architectures:
+  - Cosmos3ForConditionalGeneration
+hf_token: ''
+port: 8100
+host: 0.0.0.0
+model_cache: ../../../models
+async_scheduling: true
+mm_encoder_tp_mode: data
+max_videos_per_prompt: 0
+max_images_per_prompt: 4
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.09-py3
+enforce_eager: true
+max_model_len: 8192

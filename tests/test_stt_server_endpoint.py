@@ -15,6 +15,7 @@ from unittest.mock import Mock, call
 
 import pytest
 import yaml
+from _helpers_model_servers import profile_config
 from fastapi.testclient import TestClient
 from stt_server import __main__ as stt_main
 from stt_server.__main__ import _build_app
@@ -23,9 +24,9 @@ _WAV = ("file", ("audio.wav", b"RIFF....WAVE", "audio/wav"))
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STT_CONFIGS = (
     "services/stt-server/stt_server.yaml",
-    "model-server-samples/model-servers/yaml/spark/stt_server.yaml",
-    "model-server-samples/model-servers/yaml/96G_blackwell/stt_server.yaml",
-    "model-server-samples/model-servers/yaml/dual_48G_ada/stt_server.yaml",
+    profile_config("stt_server", "spark"),
+    profile_config("stt_server", "96G_blackwell"),
+    profile_config("stt_server", "dual_48G_ada"),
 )
 
 

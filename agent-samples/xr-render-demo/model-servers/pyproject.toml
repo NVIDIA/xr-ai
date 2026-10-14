@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-render-demo-model-servers"
+version = "0.1.0"
+requires-python = ">=3.11,<3.15"
+dependencies = ["xr-ai-model-server-stack"]
+
+[tool.uv.sources]
+xr-ai-model-server-stack = { path = "../../../utils/xr-ai-model-server-stack", editable = true }
+
+[project.scripts]
+xr_render_demo_model_servers = "main:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["main.py"]

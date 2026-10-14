@@ -140,8 +140,10 @@ Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 
 - adapter behavior and model-specific wire details;
 - endpoint location, credentials, and health behavior;
-- optional deployment metadata for the shared model-server launcher. Consumer
-  profiles omit it and leave endpoint lifecycle to the operator.
+- optional deployment metadata. Consumer profiles omit it and leave endpoint
+  lifecycle to the operator. Sample-local model-server convenience launchers
+  declare their server selection separately and share runtime defaults under
+  `utils/xr-ai-model-server-stack/`.
 
 Tools are ordinary in-process `Tool` or `AsyncTool` objects. A tool can perform
 local work or call a typed service, but application agents retain ownership of
@@ -161,19 +163,20 @@ ready-file reports only that process's initialization. A premature process
 exit fails the stack and triggers coordinated shutdown. Ready-files order
 process startup; they do not determine whether a client may connect.
 
-The shared `model-servers` stack owns model services and can keep large weights
-loaded across sample restarts. Its deployment profiles mark services as
-`managed` to select processes to launch. Application samples declare only their
-own hub, workers, and capability services; their model profiles contain adapters
-and endpoints without deployment metadata. For model availability and worker
-startup behavior, refer to {ref}`consumer-model-readiness`.
+Each sample's `model-servers/` convenience launcher selects the local inference
+services it needs and keeps their weights loaded across agent restarts. Shared
+server defaults are combined with sample-owned hardware overrides. Startup
+waits for readiness; stop targets only that sample's configured service names
+and ports using the existing ownership guards. Application launchers separately
+declare their hub, workers, and capability services.
 
-Explicit `reused` and `external` model deployment entries remain supported for
-older custom profiles. Neither gives a consuming worker control over a server.
-The model-server profile co-locates process ownership and endpoint choices. The
-launcher does not validate an endpoint's `base_url` against the launched
-service's separate configuration. Detailed startup, shutdown, and persistence
-behavior belongs in {doc}`Launcher and process model
+Worker model profiles configure client adapters and endpoints, not the local
+model launch plan. Speaker-ASR selection and its endpoint live in the worker's
+voice-gate YAML. Independently deployed endpoints, including native NIM,
+remain consumer configuration choices; skip the local model launcher when all
+model services are external. For model availability and worker startup
+behavior, refer to {ref}`consumer-model-readiness`. Detailed local startup,
+shutdown, and persistence belongs in {doc}`Launcher and process model
 </components/launcher-and-process-model>`.
 
 ## Architectural invariants

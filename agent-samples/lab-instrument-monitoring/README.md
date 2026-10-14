@@ -12,8 +12,8 @@ durable participant-scoped output.
 
 Nemotron-3 Nano Omni handles foreground tool routing, while Cosmos3 Nano
 Reasoner handles image inference. The sample launches its hub, worker, and
-application-specific processes, but reuses speaker ASR, TTS, LLM, and VLM endpoints
-from the shared model stack.
+application-specific processes, but reuses STT, TTS, LLM, and VLM endpoints
+from the sample's local model stack.
 
 ## Configure
 
@@ -46,10 +46,10 @@ every checked-in field and example value.
 ## Run
 
 Run all commands from `agent-samples/lab-instrument-monitoring/`. Start the
-shared models first:
+local models first:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers
+uv run --project model-servers lab_instrument_monitoring_model_servers
 ```
 
 Wait for the launcher to report that all processes are ready and return. Then
@@ -86,8 +86,8 @@ Connect with the authenticated URL and token printed by DeviceIOHub. Durable
 JSONL output is written below `artifacts/`, and the bounded live event viewer
 is available at `http://127.0.0.1:8092` by default.
 
-The shared models remain running after the sample stops. From this directory,
-stop them with `uv run --project ../../model-server-samples/model-servers model_servers --stop`.
+The local models remain running after the sample stops. From this directory,
+stop them with `uv run --project model-servers lab_instrument_monitoring_model_servers --stop`.
 
 <!-- Compatibility anchors for headings consolidated into the documentation. -->
 <a id="file-outputs"></a><a id="foreground-routing-eval"></a>

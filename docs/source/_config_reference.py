@@ -39,6 +39,10 @@ def load_config_catalog(repository_root: Path) -> tuple[SampleConfig, ...]:
         sample_dir = project_path.parent
         yaml_dir = sample_dir / "yaml"
         candidates = {path for path in yaml_dir.rglob("*") if path.is_file() and path.suffix in _CONFIG_SUFFIXES}
+        candidates.update(
+            path for path in (sample_dir / "model-servers" / "yaml").rglob("*")
+            if path.is_file() and path.suffix in _CONFIG_SUFFIXES
+        )
         for capability_project in sample_dir.glob("*/pyproject.toml"):
             candidates.update(
                 path
@@ -58,6 +62,14 @@ def load_config_catalog(repository_root: Path) -> tuple[SampleConfig, ...]:
                     content=content,
                 )
             )
+    for path in sorted((repository_root / "utils/xr-ai-model-server-stack/yaml").glob("*.yaml")):
+        if path.is_symlink():
+            raise ValueError(f"{path}: shared configurations must not be symbolic links")
+        configs.append(SampleConfig(
+            sample="Shared model-server defaults",
+            path=path.relative_to(repository_root),
+            content=path.read_text(encoding="utf-8"),
+        ))
     return tuple(configs)
 
 

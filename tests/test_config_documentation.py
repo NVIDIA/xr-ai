@@ -24,8 +24,7 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
     ]
     projects = {path.parent.name for path in project_paths}
 
-    assert {config.sample for config in configs} == projects
-    assert "model-servers" in projects
+    assert {config.sample for config in configs} == projects | {"Shared model-server defaults"}
     assert len({config.path for config in configs}) == len(configs)
     assert [config.path for config in configs] == sorted(config.path for config in configs)
 
@@ -37,6 +36,10 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
             for path in sample_dir.joinpath("yaml").rglob("*")
             if path.is_file() and path.suffix in {".json", ".yaml", ".yml"}
         )
+        expected.update(
+            path.relative_to(_ROOT)
+            for path in (sample_dir / "model-servers/yaml").glob("*.yaml")
+        )
         for capability_project in sample_dir.glob("*/pyproject.toml"):
             expected.update(
                 path.relative_to(_ROOT)
@@ -44,6 +47,7 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
                 if path.is_file() and path.suffix in {".json", ".yaml", ".yml"}
             )
 
+    expected.update(path.relative_to(_ROOT) for path in (_ROOT / "utils/xr-ai-model-server-stack/yaml").glob("*.yaml"))
     assert {config.path for config in configs} == expected
 
 

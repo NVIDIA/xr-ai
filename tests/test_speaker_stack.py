@@ -1,130 +1,77 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Speaker-STT stack selection and shared port cleanup; no GPU models."""
+"""Sample-local speaker defaults, explicit batch selection and scoped stop."""
 
 from __future__ import annotations
 
-import importlib.util
-import json
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from xr_ai_model_server_stack import _stack, run_model_stack
+from xr_ai_models import load_models_config
 from xr_ai_vllm import _docker
-from xr_ai_voicegate._speaker import _SpeakerConfig
+from xr_ai_voicegate import load_voice_gate_config
 
 _ROOT = Path(__file__).resolve().parents[1]
-_SPEC = importlib.util.spec_from_file_location(
-    "speaker_stack_main", _ROOT / "model-server-samples/model-servers/main.py",
-)
-assert _SPEC and _SPEC.loader
-stack = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(stack)
 
 
-@pytest.fixture
-def batch_deployment(tmp_path):
-    profile = tmp_path / "models.batch.json"
-    profile.write_text(json.dumps({"models": {"stt": {
-        "adapter": {"preset": "parakeet_stt"},
-        "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
-        "deployment": {"ownership": "managed", "service": "stt"},
-    }}}))
-    voice_gate = tmp_path / "voice_gate.yaml"
-    voice_gate.write_text("speaker:\n  enabled: false\n")
-    return profile, voice_gate
+@pytest.fixture(autouse=True)
+def isolate_stack_logging(monkeypatch, tmp_path):
+    log_file = tmp_path / "logs" / "orchestrator.log"
+    log_file.parent.mkdir()
+    monkeypatch.setattr(_stack, "setup_logging", lambda *_a, **_kw: log_file)
 
 
-def test_speaker_config_requires_http_port(tmp_path, monkeypatch):
-    config = tmp_path / "yaml" / "custom" / "speaker_stt.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("host: 127.0.0.1\n")
-    profile = tmp_path / "models.speaker.json"
-    profile.write_text(json.dumps({
-        "models": {}, "services": {"speaker-stt": {"ownership": "managed"}},
-    }))
-    monkeypatch.setattr(stack, "_BASE", tmp_path)
-    with pytest.raises(ValueError, match="must declare port"):
-        stack._build_processes(profile, "custom")
+_SAMPLES = {
+    "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
+    "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
+    "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
+    "xr-render-demo": ("speaker-stt", "tts", "omni", "vlm"),
+}
 
 
 @pytest.mark.parametrize("hardware", ["dual_48G_ada", "96G_blackwell", "spark"])
-def test_normal_profile_selects_speaker_asr_and_uses_hardware_profile(hardware):
-    profile = json.loads((stack._BASE / "yaml/models.default.json").read_text())
-    assert "stt" not in profile["models"]
-    assert profile["services"] == {"speaker-stt": {"ownership": "managed"}}
-    processes, credentials = stack._build_processes(gpu_profile=hardware)
-    names = [p.name for p in processes]
-    assert "stt" not in names and "stt-nim" not in names
-    assert names.count("speaker-stt") == 1
+@pytest.mark.parametrize("sample, services", _SAMPLES.items())
+def test_sample_stack_matches_required_worker_speech(sample, services, hardware, tmp_path):
+    base = _ROOT / "agent-samples" / sample
+    configs = _stack._configs(base / "model-servers", services, hardware)
+    processes = _stack._processes(configs, tmp_path, _ROOT)
     speaker = next(p for p in processes if p.name == "speaker-stt")
     assert speaker.port == 8102 and speaker.launch_mode == "persist"
     assert speaker.command == "speaker_stt"
+    assert "stt" not in configs
     cfg = yaml.safe_load(Path(speaker.config).read_text())
     assert cfg["host"] == "127.0.0.1"
     assert cfg["cuda_visible_devices"] == ("1" if hardware == "dual_48G_ada" else "0")
-    assert (Path(speaker.config).parent / cfg["model_cache"]).resolve() == _ROOT / "models"
-    assert credentials == ()
+    assert Path(cfg["model_cache"]) == _ROOT / "models"
+    model_file = "models.local.json" if sample == "tea-making-sample" else "models.json"
+    assert "stt" not in load_models_config(base / "yaml" / model_file).entries
+    for gate_file in (base / "yaml").glob("voice_gate*.yaml"):
+        gate = load_voice_gate_config(gate_file)
+        assert gate._speaker.backend == "required"
+        assert gate._speaker.base_url == f"http://{cfg['host']}:{cfg['port']}"
 
 
-def test_explicit_batch_deployment_selects_batch_stt_and_disables_speaker(batch_deployment):
-    profile, voice_gate = batch_deployment
-    processes, credentials = stack._build_processes(profile, "dual_48G_ada")
-    assert [p.name for p in processes] == ["stt"]
-    assert credentials == ()
-    assert _SpeakerConfig._from_yaml(yaml.safe_load(voice_gate.read_text())["speaker"]) is None
-
-
-@pytest.mark.parametrize("declaration", [
-    [], {"unknown": {"ownership": "managed"}}, {"speaker-stt": {"ownership": "reused"}},
-    {"speaker-stt": {"ownership": "managed", "endpoint": "http://localhost:8102"}},
-])
-def test_invalid_operator_service_declaration_fails_before_launch(tmp_path, declaration):
-    profile = tmp_path / "models.invalid.json"
-    profile.write_text(json.dumps({"models": {}, "services": declaration}))
-    with pytest.raises(ValueError, match=f"{profile}:.*services"):
-        stack._build_processes(profile, "dual_48G_ada")
-
-
-@pytest.mark.parametrize("ownership", ["managed", "reused", "external"])
-def test_speaker_model_role_cannot_bypass_operator_service_schema(tmp_path, ownership):
-    profile = tmp_path / "models.invalid.json"
-    profile.write_text(json.dumps({"models": {"stt": {
-        "adapter": {"preset": "parakeet_stt"},
-        "endpoint": {"base_url": "http://localhost:8103"},
-        "deployment": {"ownership": ownership, "service": "speaker-stt"},
-    }}}))
-    with pytest.raises(ValueError, match=f"{profile}:.*not models"):
-        stack._build_processes(profile, "dual_48G_ada")
-
-
-def test_normal_cli_passes_only_profile_selection(monkeypatch):
-    selected = []
-    monkeypatch.setattr(stack, "setup_logging", lambda *_a, **_kw: None)
-    monkeypatch.setattr(stack, "require_credentials", lambda *_a, **_kw: None)
-    monkeypatch.setattr(stack, "run_stack", lambda *_a, **_kw: None)
-    monkeypatch.setattr(stack, "_build_processes", lambda *a, **kw: (selected.append((a, kw)) or [], ()))
-    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "models.custom.json"])
-    stack.run()
-    assert selected == [((Path("models.custom.json"), None), {})]
-
-
-def test_speaker_cleanup_uses_configured_port_not_default(tmp_path, monkeypatch):
-    config = tmp_path / "yaml" / "custom" / "speaker_stt.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("host: 127.0.0.1\nport: 12345\n")
-    profile = tmp_path / "models.speaker.json"
-    profile.write_text(json.dumps({
-        "models": {}, "services": {"speaker-stt": {"ownership": "managed"}},
-    }))
-    monkeypatch.setattr(stack, "_BASE", tmp_path)
-    processes, _ = stack._build_processes(profile, "custom")
-    assert processes[0].port == 12345
+def test_explicit_batch_selection_remains_independent(tmp_path, monkeypatch):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text("stt: {}\n")
+    configs = _stack._configs(tmp_path, ("stt",), "custom")
+    assert configs["stt"]["port"] == 8103
+    assert "speaker-stt" not in configs
     stopped = []
-    monkeypatch.setattr(stack, "stop_persistent_servers", lambda services: stopped.extend(services) or True)
-    stack._stop_models(processes)
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    run_model_stack(tmp_path, ("stt",), stop=True, gpu_profile="custom")
+    assert stopped == [("stt", 8103)]
+
+
+def test_speaker_stop_uses_selected_configured_port(tmp_path, monkeypatch):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml/custom.yaml").write_text("speaker-stt: {port: 12345}\n")
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    run_model_stack(tmp_path, ("speaker-stt",), stop=True, gpu_profile="custom")
     assert stopped == [("speaker-stt", 12345)]
 
 

@@ -39,7 +39,7 @@ stack automatically — no per-sample wiring needed.
 ## HuggingFace token (`HF_TOKEN`)
 
 **Required by default** for the launchers that download model checkpoints
-(`model_servers`). The default models are public, but
+(the sample-local model-server commands). The default models are public, but
 unauthenticated Hub downloads are rate-limited to the point of **stalling
 indefinitely** on multi-GB checkpoints (no error, no progress output), so the
 orchestrators refuse to start without a token rather than hang silently on
@@ -58,9 +58,8 @@ the repository's
 [`THIRD_PARTY_NOTICES.md`](https://github.com/NVIDIA/xr-ai/blob/main/THIRD_PARTY_NOTICES.md).
 
 The samples **do not prompt** for it. If `HF_TOKEN` is not set, the
-orchestrator prints an actionable error and exits; pass `--allow-anonymous`
-to start without a token anyway (all weights already cached, or you accept
-the stall risk). Provide the token any one of these ways; all are picked up
+orchestrator prints an actionable error and exits. Configure a token before
+starting a local model stack. Provide the token any one of these ways; all are picked up
 automatically:
 
 ```bash
@@ -119,14 +118,13 @@ resolve existing values in this priority order, highest first:
 3. Stored in `~/.cache/huggingface/token` (`HF_TOKEN` only)
 
 `ensure_credentials(...)` adds an interactive fourth step: it prompts for any
-missing value and saves it for future runs. Samples and `model_servers` do not
+missing value and saves it for future runs. Samples and their model-server launchers do not
 call this helper.
 
 `warn_if_missing(...)` runs steps 1–3 and, if the token is still absent, prints
 an actionable notice and continues **without prompting**.
 `require_credentials(...)` runs the same steps but exits non-zero when the
-token is absent. `model_servers --allow-anonymous` relaxes only the `HF_TOKEN`
-check.
+token is absent. Local model-stack launchers require `HF_TOKEN`.
 
 ## Managing saved tokens
 

@@ -26,6 +26,7 @@ import xr_ai_launcher._stack as launcher_stack
 import xr_ai_vllm
 import yaml
 from _helpers_hf import COMMIT, block_network, cache_file, use_hub_cache
+from _helpers_model_servers import profile_config
 
 from _helpers_subprocess import pick_free_port
 
@@ -35,9 +36,9 @@ _REFERENCE_CONFIG = _PROJECT / "pocket_tts_server.yaml"
 _DEFAULT_PORT = 8105
 _PROFILE_CONFIGS = (
     _REFERENCE_CONFIG,
-    _REPO_ROOT / "model-server-samples/model-servers/yaml/spark/pocket_tts_server.yaml",
-    _REPO_ROOT / "model-server-samples/model-servers/yaml/96G_blackwell/pocket_tts_server.yaml",
-    _REPO_ROOT / "model-server-samples/model-servers/yaml/dual_48G_ada/pocket_tts_server.yaml",
+    profile_config("pocket_tts_server", "spark"),
+    profile_config("pocket_tts_server", "96G_blackwell"),
+    profile_config("pocket_tts_server", "dual_48G_ada"),
 )
 
 

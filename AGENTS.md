@@ -18,7 +18,7 @@ Building an application? Read
 client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
-model-server-samples/  Local model-server launch samples
+model-server-samples/  Standalone model-server samples (CLEF)
 deployment/      External model endpoint profiles and validation
 apps/            Application workspaces outside repository sample tooling
 services/        Hub, model servers, and typed capability services
@@ -77,6 +77,7 @@ agent-samples/<kebab-name>/
   pyproject.toml
   README.md
   yaml/
+  model-servers/  Convenience launcher and sample-owned GPU-profile YAML
   worker/
     pyproject.toml
     <snake_name>_worker/
@@ -88,6 +89,14 @@ Applications that are not repository samples use the same internal layout
 under `apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog,
 and test discovery exclude that top-level directory.
 
+- Model-server convenience stacks use shared YAML under
+  `utils/xr-ai-model-server-stack/yaml/` and sample-owned overrides under
+  `model-servers/yaml/`. Stop the current stack before changing its settings,
+  switching samples, or updating the checkout; these launchers need no launch
+  history or cross-version reconciliation. Refer to
+  [Model-server workflow](docs/source/guides/customizing-model-servers.md).
+- Developer samples import public XR AI package APIs. Keep private module and
+  symbol imports inside their owning packages or implementation tests.
 - Orchestrators depend on `xr-ai-launcher`, declare `PROCESSES`, and call
   `run_stack`.
 - Stack items start in declaration order; members of a `Parallel` item start
@@ -170,8 +179,7 @@ the minimum local information needed before following that link. A top-level
 sample README under `agent-samples/` or `model-server-samples/` additionally keeps
 the exact commands needed to start that sample. State the sample directory as
 the working directory and write every command relative to it, including commands
-that invoke another sample such as `../../model-server-samples/model-servers`
-from an agent sample. It also includes a compact configuration entry point:
+that invoke a nested project such as `model-servers` from an agent sample. It also includes a compact configuration entry point:
 name the sample-owned YAML or JSON files, describe
 the common settings they own, and show one representative edit. Put exhaustive
 field descriptions, precedence, path resolution, architecture, behavior,

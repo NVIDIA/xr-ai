@@ -38,7 +38,8 @@ def _sample_projects() -> list[tuple[Path, str]]:
     project_paths = sorted(
         path
         for category in ("agent-samples", "model-server-samples")
-        for path in (_ROOT / category).glob("*/pyproject.toml")
+        for pattern in ("*/pyproject.toml", "*/model-servers/pyproject.toml")
+        for path in (_ROOT / category).glob(pattern)
     )
     for project_path in project_paths:
         sample_dir = project_path.parent
@@ -299,7 +300,7 @@ def test_getting_started_skill_routes_to_versioned_setup_docs() -> None:
         in skill
     )
     assert (
-        "Start `model-server-samples/model-servers` and wait for it to report readiness "
+        "Start `agent-samples/simple-vlm-example/model-servers` and wait for it to report readiness "
         "before starting `agent-samples/simple-vlm-example`"
     ) in normalized
 
@@ -325,7 +326,7 @@ def test_sample_readmes_use_sample_directory_commands() -> None:
             in configure_section
         )
         if sample_dir.parent.name == "agent-samples":
-            assert "uv run --project ../../model-server-samples/model-servers model_servers" in bash
+            assert f"uv run --project model-servers {sample_dir.name.replace('-', '_')}_model_servers" in bash
             assert "same terminal" in run_section
             assert "sample configuration guide" in configure_section
 
