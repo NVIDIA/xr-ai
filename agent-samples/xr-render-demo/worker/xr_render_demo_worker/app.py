@@ -40,7 +40,7 @@ async def run_app(
     setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
-    llm = make_llm(models, "agent_llm")
+    llm = make_llm(models, "llm")
 
     async def warmed_llm_probe() -> bool:
         """Report ready only after a real tool-shaped inference succeeds.
@@ -105,7 +105,7 @@ async def run_app(
                 silero_threshold=config.silero_threshold,
             ),
             voice_gate=voice_gate,
-            probes={"agent-llm": warmed_llm_probe},
+            probes={"llm": warmed_llm_probe},
             ready_file=ready_file,
             closeables=(llm, vlm),
             idle_timeout_secs=config.idle_timeout_secs,

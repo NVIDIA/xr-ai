@@ -135,8 +135,8 @@ The profile must retain the wrapped JSON shape:
 ```
 
 Within the shared profile, `managed` means `model-servers` owns that service.
-Roles may share a service; for example, `llm` and `agent_llm` can both name
-`omni`. A service name must have a corresponding row in `_MODEL_SERVICES` in
+Entries may share a service; for example, two LLM entries can both name `omni`.
+A service name must have a corresponding row in `_MODEL_SERVICES` in
 `model-server-samples/model-servers/main.py`.
 
 ## Customize a hardware-specific server

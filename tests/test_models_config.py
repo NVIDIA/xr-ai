@@ -91,11 +91,11 @@ def _write(tmp_path, text: str):
 
 def test_preset_reference_fills_in_defaults(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind: preset:nemotron3_nano
   base_url: http://localhost:8107
 """))
-    spec = cfg.llm("agent_llm")
+    spec = cfg.llm("planner")
     assert isinstance(spec, LLMSpec)
     assert spec.endpoint.base_url == "http://localhost:8107"
     assert spec.adapter.model_name == "llm"
@@ -106,7 +106,7 @@ agent_llm:
 def test_inline_spec_requires_category(tmp_path) -> None:
     with pytest.raises(ValueError, match="category"):
         load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind:       openai_compat
   base_url:   http://localhost:8107
   model_name: llm
@@ -115,27 +115,27 @@ agent_llm:
 
 def test_inline_spec_with_explicit_category(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind:       openai_compat
   category:   llm
   base_url:   http://localhost:8107
   model_name: llm
   capabilities: { tool_calls: true }
 """))
-    spec = cfg.llm("agent_llm")
+    spec = cfg.llm("planner")
     assert spec.model_name == "llm"
     assert spec.capabilities == {"tool_calls": True}
 
 
 def test_entry_overrides_preset(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind:       preset:nemotron3_nano
   base_url:   http://localhost:9999
   timeout:    120
   reasoning_field: reasoning_content
 """))
-    spec = cfg.llm("agent_llm")
+    spec = cfg.llm("planner")
     assert spec.base_url        == "http://localhost:9999"
     assert spec.timeout         == 120.0
     assert spec.reasoning_field == "reasoning_content"
@@ -422,14 +422,14 @@ vlm:
 def test_missing_base_url_raises(tmp_path) -> None:
     with pytest.raises(ValueError, match="base_url"):
         load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind: preset:nemotron3_nano
 """))
 
 
 def test_unknown_name_raises(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind:     preset:nemotron3_nano
   base_url: http://localhost:8107
 """))
@@ -442,11 +442,11 @@ agent_llm:
 
 async def test_make_llm_constructs_client(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
-agent_llm:
+planner:
   kind:     preset:nemotron3_nano
   base_url: http://localhost:8107
 """))
-    llm = make_llm(cfg, "agent_llm")
+    llm = make_llm(cfg, "planner")
     try:
         assert llm.capabilities.reasoning is True
     finally:
@@ -559,7 +559,7 @@ def test_every_role_loads_legacy_and_nested_profiles(
 def test_nested_profile_separates_adapter_endpoint_and_deployment() -> None:
     cfg = load_models_config_from_dict({
         "models": {
-            "agent_llm": {
+            "planner": {
                 "category": "llm",
                 "adapter": {
                     "preset": "nemotron3_nano",
@@ -579,7 +579,7 @@ def test_nested_profile_separates_adapter_endpoint_and_deployment() -> None:
         },
     })
 
-    spec = cfg.llm("agent_llm")
+    spec = cfg.llm("planner")
     assert spec.adapter == AdapterSpec(
         kind="openai_compat",
         model_name="llm",
@@ -617,13 +617,13 @@ def test_direct_nested_mapping_without_models_root_is_supported() -> None:
     assert cfg.vlm("vlm").adapter.model_name == "vlm"
 
 
-def test_render_shape_fixture_remains_compatible() -> None:
+def test_multiple_named_llm_fixture_remains_compatible() -> None:
     cfg = load_models_config_from_dict({
-        "llm": {
+        "summarizer": {
             "kind": "preset:llama_nemotron",
             "base_url": "http://localhost:8106",
         },
-        "agent_llm": {
+        "planner": {
             "kind": "preset:nemotron3_nano",
             "base_url": "http://localhost:8107",
         },
@@ -639,10 +639,12 @@ def test_render_shape_fixture_remains_compatible() -> None:
             "kind": "preset:cosmos_vlm",
             "base_url": "http://localhost:8100",
         },
-    }, source="render-shape fixture")
+    }, source="multi-LLM fixture")
 
-    assert set(cfg.entries) == {"llm", "agent_llm", "stt", "tts", "vlm"}
-    assert cfg.llm("agent_llm").adapter.reasoning_field == "reasoning"
+    assert set(cfg.entries) == {"summarizer", "planner", "stt", "tts", "vlm"}
+    assert cfg.llm("summarizer").base_url == "http://localhost:8106"
+    assert cfg.llm("planner").base_url == "http://localhost:8107"
+    assert cfg.llm("planner").adapter.reasoning_field == "reasoning"
     assert cfg.vlm("vlm").endpoint.base_url == "http://localhost:8100"
 
 
