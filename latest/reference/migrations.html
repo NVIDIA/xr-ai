@@ -454,6 +454,13 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="single-llm-entry-in-model-profiles">
+<h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
+<p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> you need into <code class="docutils literal notranslate"><span class="pre">llm</span></code>, then remove the old entry. The NIM smoke
+check rejects the old entry.</p>
+</section>
 <section id="selected-model-server-cleanup">
 <h2>Selected model-server cleanup<a class="headerlink" href="#selected-model-server-cleanup" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">model_servers</span> <span class="pre">--stop</span></code> now stops only managed services in the selected launch
@@ -836,6 +843,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-model-cache-configuration">Clef model cache configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>

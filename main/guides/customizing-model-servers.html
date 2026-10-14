@@ -585,8 +585,8 @@ The profile must retain the wrapped JSON shape:</p>
 </pre></div>
 </div>
 <p>Within the shared profile, <code class="docutils literal notranslate"><span class="pre">managed</span></code> means <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> owns that service.
-Roles may share a service; for example, <code class="docutils literal notranslate"><span class="pre">llm</span></code> and <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> can both name
-<code class="docutils literal notranslate"><span class="pre">omni</span></code>. A service name must have a corresponding row in <code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in
+Entries may share a service; for example, two LLM entries can both name <code class="docutils literal notranslate"><span class="pre">omni</span></code>.
+A service name must have a corresponding row in <code class="docutils literal notranslate"><span class="pre">_MODEL_SERVICES</span></code> in
 <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/main.py</span></code>.</p>
 </section>
 <section id="customize-a-hardware-specific-server">

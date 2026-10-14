@@ -659,7 +659,7 @@ overrides <code class="docutils literal notranslate"><span class="pre">lovr_bin<
 <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> for <code class="docutils literal notranslate"><span class="pre">gpu_index</span></code>; the CloudXR, video-memory, and model-server GPU
 settings are independent and must be planned together. Keep
 <code class="docutils literal notranslate"><span class="pre">allow_sim_pose:</span> <span class="pre">false</span></code> outside the live eval harness.</p>
-<p>Each default <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
+<p>Each default <code class="docutils literal notranslate"><span class="pre">models.json</span></code> entry maps a logical role (<code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>,
 or <code class="docutils literal notranslate"><span class="pre">vlm</span></code>) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for
@@ -728,9 +728,8 @@ launch configuration changed.</p>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> uses <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.</p>
-<p>One server backs both LLM roles in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs the
-supervisor and subagent tool-calling loops, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> remains available for
-untooled chat calls. Thinking stays off unless a call explicitly enables it.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">llm</span></code> entry in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> runs the supervisor and subagent
+tool-calling loops. Thinking stays off unless a call explicitly enables it.</p>
 </section>
 </section>
 <section id="vlm-cosmos3-nano-reasoner">

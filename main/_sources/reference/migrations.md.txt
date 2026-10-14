@@ -5,6 +5,13 @@
 
 # Release migration
 
+## Single LLM entry in model profiles
+
+XR Render and its eval commands now use `llm` instead of `agent_llm`.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from `agent_llm` you need into `llm`, then remove the old entry. The NIM smoke
+check rejects the old entry.
+
 ## Selected model-server cleanup
 
 `model_servers --stop` now stops only managed services in the selected launch

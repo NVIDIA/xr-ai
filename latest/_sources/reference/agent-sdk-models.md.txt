@@ -21,7 +21,7 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 from xr_ai_models import ChatMessage, load_models_config, make_llm
 
 config = load_models_config("yaml/models.json")
-async with make_llm(config, "agent_llm") as llm:
+async with make_llm(config, "llm") as llm:
     response = await llm.chat(
         [ChatMessage(role="user", content="hello")],
         max_tokens=128,
@@ -54,12 +54,16 @@ and an endpoint. The standalone {doc}`Clef-Flash guide </reference/clef-flash>`
 documents the local service and its pinned model release.
 
 (profile-contract)=
+Model entry names are application-defined. Applications can configure multiple
+LLMs under distinct names with `make_llm(config, name)`, using the same endpoint
+or different endpoints.
+
 A client profile names logical roles and declares adapters and endpoints:
 
 ```json
 {
   "models": {
-    "agent_llm": {
+    "llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
       "endpoint": {
