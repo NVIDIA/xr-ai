@@ -700,7 +700,46 @@ async def test_clef_admission_clarifies_without_answering_or_using_camera() -> N
     assert frames.requests == []
 
 
-async def test_clef_admission_all_declines_emit_one_clarification_without_history() -> None:
+async def test_admission_clarification_preserves_goal_for_followup_turn() -> None:
+    llm = _ConversationService(visual=True)
+    frames = _ConversationFrames()
+    front_end, _conversations = _make_front_end(
+        llm,
+        frames,
+        _StreamingImageQueryTool(),
+        destination="vision",
+        admission=("clarify", "accept"),
+    )
+    emitted = []
+
+    async def emit(source, text):
+        emitted.append((source, text))
+
+    first = await front_end.handle(
+        ConversationTurn("alice", "turn-date", "What date is printed on it?"),
+        emit=emit,
+    )
+    second = await front_end.handle(
+        ConversationTurn("alice", "turn-card", "The card I'm holding."),
+        emit=emit,
+    )
+
+    assert first.disposition == "clarify"
+    assert second.disposition == "answer"
+    clarifier = "Would you like a general answer, or help with what is visible in your camera view?"
+    assert emitted[0][1] == clarifier
+    prompt = "\n".join(str(message.content) for message in llm.requests[0][0])
+    assert "What date is printed on it?" in prompt
+    assert clarifier in prompt
+    assert "The card I'm holding." in prompt
+    assert [exchange.user for exchange in front_end._history["alice"]] == [
+        "What date is printed on it?",
+        "The card I'm holding.",
+    ]
+    assert len(frames.requests) == 1
+
+
+async def test_clef_admission_all_declines_emit_one_recorded_clarification() -> None:
     llm = _ConversationService(visual=False)
     front_end, _conversations = _make_front_end(
         llm,
@@ -723,7 +762,12 @@ async def test_clef_admission_all_declines_emit_one_clarification_without_histor
     assert len(emitted) == 1
     assert emitted[0][1] == "Would you like a general answer, or help with what is visible in your camera view?"
     assert llm.requests == []
-    assert front_end._history.get("alice", []) == []
+    assert [(item.user, item.assistant) for item in front_end._history["alice"]] == [
+        (
+            "Please do the thing.",
+            "Would you like a general answer, or help with what is visible in your camera view?",
+        )
+    ]
 
 
 async def test_interruption_during_clef_admission_emits_nothing() -> None:

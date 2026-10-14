@@ -152,6 +152,7 @@ class ConversationFrontEnd:
             if name is None:
                 text = "Which part would you like help with?"
                 await emit(self._default_destination, text)
+                self._remember(turn, text)
                 return DestinationResult("clarify", text)
             destination = self._destinations[name]
             self._destinations_used.setdefault(turn.participant_id, set()).add(name)
@@ -175,6 +176,7 @@ class ConversationFrontEnd:
             if admission.disposition == "clarify":
                 if admission.text:
                     await emit(name, admission.text)
+                    self._remember(turn, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
                 await destination.release(turn.participant_id)
@@ -188,6 +190,7 @@ class ConversationFrontEnd:
                 if not candidates or attempt == 1:
                     text = admission.text or "Which part would you like help with?"
                     await emit(self._default_destination, text)
+                    self._remember(turn, text)
                     return DestinationResult("clarify", text)
                 continue
 
