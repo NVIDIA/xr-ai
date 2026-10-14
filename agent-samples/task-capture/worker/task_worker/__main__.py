@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command-line entry point for the SOP capture worker."""
+"""Worker-process CLI for voice-controlled task capture.
+
+The outer main.py launches the hub and this worker as separate processes. This
+entry point accepts the launcher's configuration and readiness-file arguments,
+then starts the application that records snapshots, captions, and narration
+between spoken start and stop commands.
+"""
 
 from __future__ import annotations
 

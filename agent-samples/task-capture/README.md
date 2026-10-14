@@ -3,14 +3,14 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# SOP sample
+# Task capture
 
 Record narrated demonstrations with spoken start and stop commands. The sample
-saves sampled frames, captions, and narration, with optional shared media capture.
+saves sampled frames, visual captions, and narration as local evidence packets.
 
 ## Run
 
-Run all commands from `agent-samples/sop-sample/`. Start the shared model
+Run all commands from `agent-samples/task-capture/`. Start the shared model
 servers and wait for them to report ready:
 
 ```bash
@@ -27,18 +27,17 @@ uv run main.py
 Alternatively, use the installed entry point:
 
 ```bash
-uv run sop_sample
+uv run task_capture
 ```
 
 Open the authenticated web-client URL printed by the hub and connect. Enable
 the microphone and use live video or on-demand image capture. Say **start
-recording**, narrate the demonstration, then say **stop recording**. Repeat
-these commands to record another SOP without reconnecting. The worker announces
-recording start and stop, and stays silent during narration and finalization.
+capture**, narrate the demonstration, then say **stop capture**. Repeat
+these commands to record another task without reconnecting. The worker announces
+"Capture started." and "Capture stopped.", and stays silent during narration
+and finalization.
 
-Add `--capture` to either launch command to independently save participant-wide
-video, bidirectional audio, and data traffic for the connection. Use the spoken
-commands above to control SOP recording.
+To choose where packets are saved, launch with `uv run main.py --output-root PATH`.
 
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
@@ -50,8 +49,7 @@ uv run --project ../../model-server-samples/model-servers model_servers --stop
 
 | File | Common settings |
 |---|---|
-| `yaml/worker.yaml` | SOP output directory, frame and caption intervals, speech detection |
-| `yaml/media_capture.yaml` | Shared media output directory, encoding, retention |
+| `yaml/worker.yaml` | Task output directory, frame and caption intervals, speech detection |
 | `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
@@ -63,7 +61,7 @@ caption_interval_s: 8.0
 ```
 
 Restart the sample after configuration changes. Refer to the
-[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/sop-sample.html#composition-and-configuration)
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/task-capture.html#composition-and-configuration)
 for recording boundaries, output files, prerequisites, and limitations.
 Refer to the generated
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)

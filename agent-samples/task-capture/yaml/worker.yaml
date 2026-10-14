@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Paths are relative to this YAML. Spoken commands control SOP recording.
+# Paths are relative to this YAML. Spoken commands control task recording.
+# --output-root overrides artifacts_dir; packets are written under sessions/.
 artifacts_dir: ../artifacts
 capture_fps: 2.0
 caption_interval_s: 5.0

@@ -1,11 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run caption controls through the configured VLM and production request/parser.
+"""Exercise the task captioner on small, reproducible visual controls.
 
-Contract checks are automatic. Visual correctness and grouping require inspection
-of the saved images, raw responses, and case expectations; JSON success alone
-does not measure perception accuracy.
+Each YAML case defines one initial image or an earlier/current image pair made
+of colored shapes, optional previous activity/phase hints, and expected visible
+facts. The runner draws those images, queries the configured VLM with the same
+prompt, query builder, tool, and parser as recording, and saves the evidence.
+
+Automatic checks cover response availability and the four-field JSON contract.
+Inspect the saved images and raw responses against each case's expectations to
+assess direction, change, and grouping. This is a focused prompt regression aid,
+not a comprehensive real-world task or downstream guide-generation evaluation.
+Refer to docs/source/reference/task-capture.md for invocation and interpretation.
 """
 
 from __future__ import annotations
@@ -17,8 +24,8 @@ from pathlib import Path
 
 import yaml
 from PIL import Image, ImageDraw
-from sop_sample_worker.config import load_config
-from sop_sample_worker.recorder import _caption_query, _json_object
+from task_worker.capture.captioning import caption_query, parse_caption
+from task_worker.config import load_config
 from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import MultiImageQueryRequest, MultiImageQueryTool
@@ -27,6 +34,7 @@ _SAMPLE = Path(__file__).resolve().parents[1]
 
 
 def render(objects: list, path: Path) -> None:
+    """Make repeatable scenes whose visible facts are known without a recording."""
     image = Image.new("RGB", (512, 384), "white")
     draw = ImageDraw.Draw(image)
     for shape, color, *bounds in objects:
@@ -46,6 +54,8 @@ async def evaluate(output: Path, config_path: Path) -> bool:
     models = load_models_config(config.models_config)
     vlm = make_vlm(models, "vlm")
     images = ImageRegistry()
+    # Reuse production components so the evaluation tests the actual caption
+    # contract rather than a separate, potentially easier prompt or parser.
     tool = MultiImageQueryTool(images=images, vlm=vlm, system_prompt=config.caption_prompt)
     cases = yaml.safe_load(Path(__file__).with_name("caption_cases.yaml").read_text())["cases"]
     (output / "prompt.txt").write_text(config.caption_prompt)
@@ -57,14 +67,17 @@ async def evaluate(output: Path, config_path: Path) -> bool:
                 path = output / f'{case["id"]}-{index}.png'
                 render(objects, path)
                 references.append(images.put(path))
-            query = _caption_query(case.get("previous"))
+            # YAML image order is the comparison order: earlier, then current.
+            query = caption_query(case.get("previous"))
             result = await tool.execute(MultiImageQueryRequest(images=references, query=query))
             record = {"case": case["id"], "query": query, "raw_response": result.text,
                       "available": result.available, "expected": case["expected"]}
             try:
                 if not result.available:
                     raise ValueError("VLM unavailable")
-                record["caption"] = _json_object(result.text)
+                # This counts structural validity only. Expected visual facts
+                # stay in the saved record for review, never in the model input.
+                record["caption"] = parse_caption(result.text)
                 passed += 1
             except ValueError as exc:
                 record["error"] = str(exc)

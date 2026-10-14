@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Voice-controlled SOP recording, independent of optional media capture."""
+"""Compose voice, frame tools, and the agent that captures task demonstrations.
+
+Infrastructure is constructed here and injected into CaptureAgent's recorder.
+The agent owns commands and narration ordering; the recorder owns sampling,
+captioning, and durable files. This module owns startup and resource cleanup.
+"""
 
 from __future__ import annotations
 
@@ -18,9 +23,9 @@ from xr_ai_tools.vision import MultiImageQueryTool
 from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
+from .capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent
+from .capture.recorder import _Recorder
 from .config import WorkerConfig
-from .lifecycle import SOP_INPUT_TOPIC, CaptureRecording
-from .recorder import RecorderAgent
 
 _HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -30,13 +35,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     setup_logging("worker")
     models = load_models_config(config.models_config)
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
-    # Keep frame and participant delivery independent of the voice transport.
+    # Recording must finish draining after voice stops. Its frame and participant
+    # endpoint therefore has a lifetime controlled by this composition layer.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     images = ImageRegistry()
     frames = CurrentFrameTool(
         endpoint=endpoint, images=images, frame_max_age_s=config.frame_max_age_s, frame_timeout_s=config.frame_timeout_s
     )
-    recorder = RecorderAgent(
+    recorder = _Recorder(
         sessions_dir=config.artifacts_dir / "sessions",
         current_frame=frames,
         images=images,
@@ -44,17 +50,22 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         capture_fps=config.capture_fps,
         caption_interval_s=config.caption_interval_s,
     )
-    capture = CaptureRecording(recorder)
+    # One owner orders command boundaries and admitted narration, including
+    # repeated recordings on the same participant connection.
+    capture = CaptureAgent(recorder)
     endpoint.on_participant(capture.receive)
+    # Accepted voice input is delivered after prior speech is cancelled, so
+    # each recording command cannot interrupt its own acknowledgement.
     voice = VoiceAgent(
-        query_topic=SOP_INPUT_TOPIC,
+        query_topic=CAPTURE_INPUT_TOPIC,
         stt=stt,
         tts=tts,
         vad=VadConfig(
             silence_duration=config.silence_duration,
             min_speech=config.min_speech,
             silero_threshold=config.silero_threshold,
-            # Only sample-owned boundary acknowledgements; no early STOP probe.
+            # Wait for the final utterance before interpreting recording commands;
+            # a partial "stop" must not interrupt narration or acknowledgements.
             stop_probe_after_s=0,
         ),
         voice_gate=load_voice_gate_config(config.voice_gate_yaml),
@@ -65,7 +76,6 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     runtime = AgentRuntime()
     runtime.register("voice", voice)
     runtime.register("capture", capture)
-    # The always-on gate delivers commands and narration on one ordered path.
     receiver = asyncio.create_task(endpoint.run())
     try:
         await endpoint.wait_until_running()
@@ -73,6 +83,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             await voice.run(runtime)
     finally:
         try:
+            # Runtime shutdown drains message delivery, not agent-owned tasks
+            # or filesystem threads. Explicitly finalize before closing resources.
             await capture.close()
         finally:
             # stop() alone cannot wake an idle ZMQ receive. Drain recordings

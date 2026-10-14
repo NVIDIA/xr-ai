@@ -679,7 +679,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `simple_vlm_example_worker` → `simple_vlm_example_worker.__main__:run`
 
-#### `sop-sample` — [`agent-samples/sop-sample/`](agent-samples/sop-sample/)
+#### `task-capture` — [`agent-samples/task-capture/`](agent-samples/task-capture/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
@@ -689,9 +689,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
-  - `sop_sample` → `main:run`
+  - `task_capture` → `main:run`
 
-#### `sop-sample-worker` — [`agent-samples/sop-sample/worker/`](agent-samples/sop-sample/worker/)
+#### `task-capture-worker` — [`agent-samples/task-capture/worker/`](agent-samples/task-capture/worker/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
@@ -709,7 +709,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyyaml>=6.0`
 - Optional dependency groups: none
 - Commands:
-  - `sop_sample_worker` → `sop_sample_worker.__main__:run`
+  - `task_capture_worker` → `task_worker.__main__:run`
 
 #### `tea-making-sample` — [`agent-samples/tea-making-sample/`](agent-samples/tea-making-sample/)
 

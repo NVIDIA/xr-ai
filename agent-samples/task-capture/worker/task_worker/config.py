@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""SOP recording worker configuration."""
+"""Task recording configuration with paths anchored to the source YAML."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +28,13 @@ def load_config(path: Path | None) -> WorkerConfig:
     if path is None:
         path = Path(__file__).resolve().parents[2] / "yaml/worker.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    output_root = None
+    if "worker_config" in data:
+        # Launch requests carry only an output override; settings still resolve
+        # beside the original YAML, not beside the temporary request file.
+        output_root = Path(data["output_root"])
+        path = Path(data["worker_config"])
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     base = path.resolve().parent
     settings = {}
     for name in (
@@ -47,7 +54,9 @@ def load_config(path: Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_config=base / "models.json",
         voice_gate_yaml=base / "voice_gate.yaml",
-        artifacts_dir=(base / data.get("artifacts_dir", "../artifacts")).resolve(),
-        caption_prompt=(Path(__file__).parent / "prompts/caption.txt").read_text(encoding="utf-8"),
+        artifacts_dir=(
+            output_root if output_root is not None else base / data.get("artifacts_dir", "../artifacts")
+        ).resolve(),
+        caption_prompt=(Path(__file__).parent / "capture/prompts/caption.txt").read_text(encoding="utf-8"),
         **settings,
     )

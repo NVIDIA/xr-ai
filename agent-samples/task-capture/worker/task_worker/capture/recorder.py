@@ -18,10 +18,11 @@ from typing import Any
 import nemo_relay
 from loguru import logger
 from xr_ai_hub import FrameUnavailable
-from xr_ai_runtime import Agent
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import MultiImageQueryRequest, MultiImageQueryTool
+
+from .captioning import caption_query, parse_caption
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -116,42 +117,8 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     _atomic_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
 
-def _json_object(text: str) -> dict[str, Any]:
-    candidate = text.strip()
-    # Tolerate a Markdown wrapper, but never extract observations from reasoning
-    # or arbitrary prose (including an unfinished <think> response).
-    if candidate.startswith("```json\n") and candidate.endswith("```"):
-        candidate = candidate[8:-3].strip()
-    elif candidate.startswith("```\n") and candidate.endswith("```"):
-        candidate = candidate[4:-3].strip()
-    value = json.loads(candidate)
-    if not isinstance(value, dict):
-        raise ValueError("caption response was not a JSON object")
-    fields = {"activity", "phase", "caption", "delta"}
-    if set(value) != fields or any(not isinstance(v, str) or not v.strip() for v in value.values()):
-        raise ValueError("caption requires exactly four nonempty string fields: activity, phase, caption, delta")
-    return {key: value[key].strip()[:1000] for key in fields}
-
-
 def _markdown(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
-
-
-def _caption_query(previous: dict[str, str] | None) -> str:
-    query = (
-        "You received exactly TWO images, in chronological order: FIRST=earlier, SECOND=current. "
-        "Describe the SECOND image in caption. In delta use: Earlier: ... Current: ... Change: ... . "
-        "Do not use Initial observation: there are two images. Then identify the broad parent activity "
-        "and the specific current phase from the visual evidence."
-        if previous is not None else
-        "You received exactly ONE image: the current initial view. Describe that image in caption; "
-        "set delta to Initial observation. Identify a supported broad activity and current phase/state."
-    )
-    if previous is not None:
-        query += "\nPrevious grouping labels (fallible naming hints, not visual evidence): " + json.dumps({
-            "activity": previous["activity"], "phase": previous["phase"],
-        })
-    return query
 
 
 def _clock(timestamp_us: int, started_at_us: int) -> str:
@@ -161,8 +128,12 @@ def _clock(timestamp_us: int, started_at_us: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-class RecorderAgent(Agent):
-    """Capture a durable multimodal packet independently of camera availability."""
+class _Recorder:
+    """Private persistence helper owned by CaptureAgent, not a runtime agent.
+
+    Sampling and caption tasks can outlive a cancelled caller. Finalization
+    retains those tasks and drains filesystem writes before sealing the packet.
+    """
 
     def __init__(
         self,
@@ -174,7 +145,6 @@ class RecorderAgent(Agent):
         capture_fps: float,
         caption_interval_s: float,
     ) -> None:
-        super().__init__()
         self._sessions_dir = sessions_dir
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._current_frame = current_frame
@@ -226,12 +196,12 @@ class RecorderAgent(Agent):
                 (
                     asyncio.create_task(
                         self._capture_loop(state),
-                        name=f"sop-capture:{participant_id}",
+                        name=f"task-capture:{participant_id}",
                         context=nemo_relay.fork_asyncio_context(),
                     ),
                     asyncio.create_task(
                         self._caption_loop(state),
-                        name=f"sop-caption:{participant_id}",
+                        name=f"task-caption:{participant_id}",
                         context=nemo_relay.fork_asyncio_context(),
                     ),
                 )
@@ -250,7 +220,7 @@ class RecorderAgent(Agent):
                 await self._close(participant_id, status="incomplete")
 
     async def record_transcript(self, participant_id: str, text: str, timestamp_us: int) -> None:
-        """Save a final VoiceAgent transcript inside the active SOP boundary."""
+        """Save a final VoiceAgent transcript inside the active task boundary."""
         state = self._sessions.get(participant_id)
         if state is None or not text.strip():
             return
@@ -402,12 +372,12 @@ class RecorderAgent(Agent):
         # Register the saved snapshots at query time: live-frame references can
         # be evicted while a caption request is slow or the camera is idle.
         images = [self._images.put(state.directory / item.path, owner=state.session_id) for item in frames]
-        query = _caption_query(previous)
+        query = caption_query(previous)
         result = await self._query_images.execute(MultiImageQueryRequest(images=images, query=query))
         if not result.available:
             raise RuntimeError(result.text)
         try:
-            payload = _json_object(result.text)
+            payload = parse_caption(result.text)
         except ValueError as exc:
             raise ValueError(f"Invalid caption: {exc}; raw response: {result.text!r}") from exc
         caption = payload
@@ -597,7 +567,7 @@ class RecorderAgent(Agent):
             if state is not None and (finalizer is None or finalizer.done()):
                 finalizer = asyncio.create_task(
                     self._finalize(state, status=status),
-                    name=f"sop-finalize:{participant_id}",
+                    name=f"task-finalize:{participant_id}",
                     context=nemo_relay.fork_asyncio_context(),
                 )
                 self._finalizers[participant_id] = finalizer
@@ -607,12 +577,15 @@ class RecorderAgent(Agent):
     async def _finalize(self, state: _Session, *, status: str) -> None:
         await state.start_done.wait()
         participant_id = state.participant_id
-        state.ended_at = _iso(state.stop_command["timestamp_us"] if state.stop_command else _now_us())
         for task in state.tasks:
             task.cancel()
         results = await asyncio.gather(*state.tasks, return_exceptions=True)
         async with state.lock:
             state.active = False
+            # STT can deliver a stop after later frames have already been saved.
+            # Keep its requested boundary in stop_command; ended_at records when
+            # producers have stopped and no further evidence can be admitted.
+            state.ended_at = _iso(_now_us())
         if any(
             isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError) for result in results
         ):

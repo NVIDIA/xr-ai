@@ -3,15 +3,15 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# SOP sample
+# Task capture
 
-The SOP sample records narrated demonstrations between spoken commands. It saves
+Task capture records narrated demonstrations between spoken commands. It saves
 snapshots, visual captions, and transcribed narration for review and downstream
 processing.
 
 ## Run a demonstration
 
-Run commands from `agent-samples/sop-sample/`:
+Run commands from `agent-samples/task-capture/`:
 
 ```bash
 uv run --project ../../model-server-samples/model-servers model_servers
@@ -20,62 +20,57 @@ uv run main.py
 
 Wait for the shared models to be ready before starting the sample. Open the
 authenticated web-client URL printed by DeviceIOHub, enable the microphone,
-and connect. Say **start recording**, demonstrate and narrate, then say
-**stop recording**. Say **start recording** again for another SOP packet without
+and connect. Say **start capture**, demonstrate and narrate, then say
+**stop capture**. Say **start capture** again for another task packet without
 reconnecting. The worker logs each finalized packet's path and status.
 
 Use live video or on-demand image capture. Speak commands directly, without a
-wake phrase. After **start recording**, the worker says "Recording started."
-and stays silent during narration. After **stop recording**, it says
-"Recording stopped." The SOP packet, transcript, and summary then finish saving
-silently; processing errors are logged. This does not generate a guide or finalize
-the independent shared media capture bundle. Disconnecting still finalizes the
-packet without announcements.
+wake phrase. After **start capture**, the worker says "Capture started."
+and stays silent during narration. After **stop capture**, it says
+"Capture stopped." The evidence packet, transcript, and summary then finish
+saving silently; processing errors are logged. Disconnecting finalizes the packet
+without announcements.
 
 To stop the sample, press Ctrl+C. The shared model servers remain running.
 
-## Optional media capture
+## Output destination
 
-To additionally save participant-wide video, bidirectional audio, and data-channel
-traffic for the whole connection, add `--capture`:
+Choose an output root at launch without editing configuration:
 
 ```bash
-uv run main.py --capture
+uv run main.py --output-root /path/to/task-evidence
 ```
 
-The shared capture bundle starts on connection and ends on disconnect or service
-shutdown. One bundle may span several voice-controlled SOP recordings. The
-default demo profile saves MP4 output when streamed video is available, along
-with source media and a timeline. Audio, transcripts, and metadata can be saved
-without streamed video; on-demand stills remain in the SOP packet as snapshots.
+Packets are saved under `PATH/sessions/<session-id>/`. Relative command-line
+paths resolve against the launch directory; `~` is expanded. Without this option,
+`artifacts_dir` from `yaml/worker.yaml` is used, relative to that YAML. The override
+does not relocate model or voice configuration and does not edit the YAML.
 
-Refer to {doc}`/getting_started/requirements` for model and hub deployment and
-{doc}`/components/server-runtime` for shared media capture. Optional video
-recording uses the shared NVENC encoder and requires supported NVIDIA hardware.
-SOP snapshot recording requires STT and VLM services, plus TTS for the recording
-acknowledgements; the NVENC requirement
-applies to optional shared video capture.
+The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
+captions use the configured VLM, and recording acknowledgements use TTS. Refer to
+{doc}`/getting_started/requirements` for model and hub deployment. The sample
+does not launch a raw audio/video recorder or require NVENC for its snapshots.
 
 ## Recording boundaries
 
-- After connecting, the worker waits for **start recording** to open a packet.
-  **stop recording** finalizes it. Repeat the pair to record another demonstration
+- After connecting, the worker waits for **start capture** to open a packet.
+  **stop capture** finalizes it. Repeat the pair to record another demonstration
   on the same connection; duplicate starts during recording are ignored.
 - Say each command as a standalone utterance. Matching ignores case, surrounding
   whitespace, and trailing sentence punctuation. Other speech is saved as
-  narration while recording, including phrases such as “stop” or “stop capture.”
+  narration while recording, including phrases such as “stop” or “stop recording.”
   The two control commands are excluded from narration.
 - Recording and narration continue while the camera is off or images are
   unavailable. When a fresh live frame is unavailable, the worker requests a
   still from clients supporting on-demand capture; this can briefly activate
   the camera. Captioning resumes when a distinct image is saved.
 - Disconnect or graceful shutdown finalizes the active packet. Reconnecting
-  returns the worker to waiting for **start recording**.
+  returns the worker to waiting for **start capture**.
 
 Commands take effect after speech recognition finishes. Keep the microphone
-enabled and pause after the final narration before saying **stop recording** or
-disconnecting. A late transcript can miss the recording boundary; optional shared
-capture retains source audio independently.
+enabled and pause after the final narration before saying **stop capture** or
+disconnecting. A late transcript can miss the recording boundary; source audio
+is not retained by this sample.
 
 A new recording waits for the preceding packet to finish saving. Narration after
 its start command is queued in order, but snapshots during this brief restart
@@ -91,13 +86,45 @@ progress indicators.
 
 | Location | Contents |
 |---|---|
-| `artifacts/sessions/<session-id>/packet.json` | SOP status, participant, timestamps, counts, and activity hierarchy |
+| `artifacts/sessions/<session-id>/packet.json` | Recording status, participant, timestamps, counts, and activity hierarchy |
 | `artifacts/sessions/<session-id>/frames/` | JPEG samples targeting 2 fps and timestamped `index.jsonl` |
 | `artifacts/sessions/<session-id>/captions.jsonl` | Timestamped captions, activities, phases, and visible changes |
-| `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the SOP recording boundary |
+| `artifacts/sessions/<session-id>/transcript.jsonl` | Final user transcripts inside the task recording boundary |
 | `artifacts/sessions/<session-id>/summary.md` | Human-readable activity and phase summary |
 | `artifacts/sessions/<session-id>/errors.jsonl` | Frame, caption, or persistence errors, when present |
-| `artifacts/captures/<bundle>/` | Optional participant-wide media, transcripts, timeline, and manifest from `--capture` |
+
+### Evidence-packet contract
+
+`packet.json` uses `schema_version: 1`. A finalized `complete` packet contains
+`packet.json`, `summary.md`, and `transcript.jsonl` (which can be empty). The
+`frames/` directory exists, but `frames/index.jsonl` and `captions.jsonl` are
+created only when records are appended. An absent log with a zero corresponding
+count means no observations of that kind were saved. A missing log with a
+nonzero count is inconsistent and must not be silently interpreted as empty.
+`errors.jsonl` is optional; its absence is not proof of sufficient evidence.
+Cancelled startup or failed storage can leave an `incomplete` packet with fewer
+files; consumers must check status and file availability before conversion.
+
+JSONL files contain one object per nonempty line. `files` paths in the packet,
+image `path` values in the frame index, and caption `frame_path` values are
+relative to the packet directory. Preserve these paths when copying a packet.
+Frame IDs and caption reference IDs are local to that packet. Timestamps ending
+in `_us` are Unix microseconds; human-readable timestamps are UTC ISO 8601.
+
+`started_at` is the accepted start command's transcript timestamp. During a
+recording, `ended_at` is `null`. At finalization it records the effective end,
+after recording producers stop and further evidence admission closes, before
+pending writes and derived summaries finish draining. `stop_command.timestamp_us`
+preserves the accepted stop utterance's transcript timestamp, which can precede
+the last captured frames because speech recognition takes time. `stop_command`
+is `null` when no spoken stop was accepted. Neither
+timestamp is a claim that the demonstrated task itself finished successfully.
+
+Activity/phase grouping, captions, and `summary.md` are fallible model-derived
+interpretations. Use the frame index and saved images to inspect their evidence.
+Downstream coding-agent conversion consumes the packet as immutable input and
+writes generated replay material separately. A replay capability consumes that
+generated package rather than importing capture internals.
 
 The captioner starts when the first sampled frame is available, then waits
 5 seconds after each caption attempt before checking for a new frame. Each
@@ -126,9 +153,8 @@ pair; they do not verify the model's interpretation or establish intervening
 actions. Older packets without the reference fields do not explicitly record
 that comparison provenance.
 
-The SOP transcript contains narration between the spoken commands. The optional
-shared transcript covers the connection, including those commands. Match shared
-bundles to SOP packets using participant identity and timestamps.
+The transcript contains admitted narration between the spoken commands. The
+commands themselves are recorded as boundaries rather than narration.
 
 `packet.json.stop_command` records an accepted spoken stop. Packet status
 `complete` means local writes finished; evidence can still be missing or
@@ -160,21 +186,32 @@ recorded demonstrations.
 
 ## Composition and configuration
 
-The launcher starts the hub, optional shared capture service, and SOP worker.
+The outer `main.py` launches the hub and worker. The worker's `__main__.py`
+accepts configuration and readiness arguments; `task_worker/app.py` constructs
+the hub endpoint, model clients, voice runtime, and frame/image tools.
 The worker uses `VoiceAgent` for transcripts, `CurrentFrameTool` for snapshots,
 and `MultiImageQueryTool` for captions.
 
+The registered `CaptureAgent` in `task_worker/capture/agent.py` owns commands,
+narration admission, participant generations, and acknowledgements. Its private
+recorder helper owns sampling, caption tasks, persistence, and finalization.
+`capture/captioning.py` defines the request and response contract used by both
+recording and evaluation. Application cleanup explicitly drains capture work
+before closing its frame endpoint and VLM client.
+
+The worker keeps shared wiring outside the capture subpackage. A future replay
+capability can reuse that infrastructure with its own state; this sample
+currently registers only voice I/O and capture.
+
 The always-on voice gate passes commands and narration through the same accepted
 input path. Recording acknowledgements follow voice-input handling, so a command
-cannot cancel its own response. Shared media capture independently receives the
-raw final transcripts.
+cannot cancel its own response.
 
 | Configuration | Settings |
 |---|---|
 | `yaml/worker.yaml` | Output paths, frame and caption intervals, speech detection |
 | `yaml/models.json` | STT, VLM, and recording-acknowledgement TTS endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
-| `yaml/media_capture.yaml` | Shared capture output, encoding, and retention; defaults to participant mode and the demo profile |
 | `yaml/device_io_hub.yaml` | Room and web server |
 
 Paths resolve relative to their owning YAML. Restart after configuration edits.

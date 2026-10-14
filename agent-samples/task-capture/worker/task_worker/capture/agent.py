@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Voice-controlled SOP boundaries, independent of camera and media capture."""
+"""Ordered owner of recording commands, narration, and participant departures."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from xr_ai_hub import ParticipantEvent
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceOutput
 
-from .recorder import RecorderAgent
+from .recorder import _Recorder
 
-_COMMAND = re.compile(r"\s*(start|stop)\s+recording[.!?]*\s*", re.IGNORECASE)
-SOP_INPUT_TOPIC = Topic("sop.narration", UserQuery)
+_COMMAND = re.compile(r"\s*(start|stop)\s+capture[.!?]*\s*", re.IGNORECASE)
+CAPTURE_INPUT_TOPIC = Topic("task.capture.input", UserQuery)
 
 
 @dataclass
@@ -34,8 +34,14 @@ class _Recording:
     connection: _Connection
 
 
-class CaptureRecording(Agent):
-    def __init__(self, recorder: RecorderAgent) -> None:
+class CaptureAgent(Agent):
+    """Admit input per connection and serialize each participant's recording work.
+
+    Pending command identity and the recorder's physical session are distinct:
+    a new start can be queued while the previous packet is still finalizing.
+    Connection invalidation is immediate so departure cancels queued starts.
+    """
+    def __init__(self, recorder: _Recorder) -> None:
         super().__init__()
         self._recorder = recorder
         self._sessions: dict[str, _Recording] = {}
@@ -52,7 +58,7 @@ class CaptureRecording(Agent):
             try:
                 await action()
             except Exception:
-                logger.exception("SOP recording action failed pid={!r}", pid)
+                logger.exception("task recording action failed pid={!r}", pid)
 
         task = None if self._closed else asyncio.create_task(apply())
         if task is not None:
@@ -68,7 +74,7 @@ class CaptureRecording(Agent):
         except (Exception, BaseExceptionGroup):
             # Runtime shutdown wraps cancelled output deliveries in a group.
             # Announcement delivery is best effort, not a prerequisite for saving.
-            logger.exception("SOP recording announcement failed pid={!r}", pid)
+            logger.exception("task recording announcement failed pid={!r}", pid)
 
     def _forget(self, pid: str, recording: _Recording) -> None:
         # A later start may already be queued on this connection.
@@ -113,10 +119,13 @@ class CaptureRecording(Agent):
 
         return wait()
 
-    @subscribe(SOP_INPUT_TOPIC)
+    @subscribe(CAPTURE_INPUT_TOPIC)
     async def on_input(self, transcript: UserQuery, ctx: RuntimeContext) -> None:
         # VoiceAgent dispatches accepted input after cancelling prior output.
         # Responding to the earlier raw-transcript event races that cancellation.
+        # Input ordering relies on this handler enqueueing without awaiting and
+        # acknowledgements remaining finite text. Streamed replies can delay
+        # cancellation cleanup, letting a later utterance overtake an earlier one.
         pid = ctx.metadata.participant_id
         connection = self._connections.get(pid)
         if (
@@ -142,7 +151,7 @@ class CaptureRecording(Agent):
                         pid, cancelled=connection.cancelled, timestamp_us=transcript.timestamp_us,
                     )
                     if self._recorder.is_recording(pid):
-                        await self._say(pid, connection, ctx, "Recording started.")
+                        await self._say(pid, connection, ctx, "Capture started.")
                 finally:
                     if not self._recorder.is_recording(pid):
                         self._forget(pid, recording)
@@ -153,7 +162,7 @@ class CaptureRecording(Agent):
 
             async def finish() -> None:
                 if recording is not None and self._sessions.get(pid) is recording:
-                    await self._say(pid, connection, ctx, "Recording stopped.")
+                    await self._say(pid, connection, ctx, "Capture stopped.")
                     try:
                         await self._recorder.finish_recording(
                             pid,
@@ -180,7 +189,7 @@ class CaptureRecording(Agent):
             results = await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
             for (pid, _), result in zip(pending, results):
                 if isinstance(result, BaseException):
-                    logger.opt(exception=result).error("SOP recording action failed during shutdown pid={!r}", pid)
+                    logger.opt(exception=result).error("task recording action failed during shutdown pid={!r}", pid)
         finally:
             try:
                 await self._recorder.stop()
