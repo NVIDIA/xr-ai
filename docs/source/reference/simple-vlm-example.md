@@ -6,10 +6,11 @@
 # Simple VLM example
 
 The simple VLM example is the smallest complete voice-and-vision application in
-the repository. It answers ordinary spoken or typed questions with an LLM and
-routes questions about each participant's current camera view to its VLM. The
-reusable `xr_ai_conversation.Conversation` component streams both paths to
-Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
+the repository. It uses a Clef decision service to route ordinary spoken or
+typed questions to a text-only conversation destination and current-camera
+questions to a separate visual destination. Both use the reusable
+`xr_ai_conversation.Conversation` component and stream through the same voice
+output path to Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
 
@@ -18,17 +19,20 @@ sample's design and operational details.
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures client adapters and shared endpoints for
-Parakeet STT, Nemotron-3 Nano Omni (LLM), Cosmos3 Nano Reasoner (VLM), and Pocket
-TTS. The LLM adapter enables Omni reasoning with a 4096-token soft reasoning
-hint and a 4608-token total output limit. Start those endpoints together with
+Parakeet STT, Nemotron-3 Nano Omni (answering), Cosmos3 Nano Reasoner (VLM),
+Pocket TTS, and the sample's pinned Clef decision endpoint. The LLM adapter
+enables Omni reasoning with a 4096-token soft reasoning hint and a 4608-token
+total output limit. Start those endpoints together with
 the sample's local model-server stack. The worker checks LLM health during
-readiness and performs an image warmup through the VLM.
+readiness, checks Clef health, and performs an image warmup through the VLM.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` delegates each turn to
-`xr_ai_conversation.Conversation`, which streams ordinary responses from one LLM
-request and routes visual requests to the frame and VLM tools. Visual tool calls
+`xr_ai_conversation.ConversationFrontEnd`. Clef selects either the text-only
+conversation destination or the visual destination from their routing aids and
+the current request/history. The general destination has no frame or VLM tools;
+the visual destination owns the frame and VLM tools. Visual tool calls
 include a standalone query with follow-up references resolved by the LLM. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
@@ -45,10 +49,11 @@ The voice query therefore determines when a still is needed. A spoken “what is
 this?” does not require an always-on video publication, while clients that are
 already streaming do not receive a redundant capture request.
 
-A newer participant turn cancels the superseded vision request and interrupts
-its voice response. Participant departure releases the sample agent's cached
-frames, conversation history, and source-context tasks. This is the reference
-composition for streamed conversation and current-view visual questions.
+A newer participant turn cancels superseded routing, answer, and vision work and
+interrupts its voice response. Participant departure releases cached frames,
+both destinations' conversation state, front-end history, and source-context
+tasks. This is the reference composition for streamed conversation and
+current-view visual questions.
 
 The worker can also subscribe to named runtime context topics configured in
 `yaml/simple_vlm_example_worker.yaml`. Publishers use the public
@@ -66,12 +71,13 @@ The worker package is under
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
 | `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
-| `agent.py` | Owns participant-scoped vision turns, cancellation, and cleanup |
+| `agent.py` | Owns participant-scoped routed turns, voice streaming, cancellation, and cleanup |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `xr_ai_conversation.Conversation` | Streams general answers or delegates standalone visual questions to the frame/VLM tools |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
-| `eval/conversation-cases.yaml` | Direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
+| `prompts/vision.txt` | Application instructions for the visual destination |
+| `eval/conversation-cases.yaml` | Clef routing, direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
 
 ## Readiness and warmup
 
@@ -95,10 +101,11 @@ layout works without command-line configuration arguments.
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics and byte budgets, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | LLM/VLM/STT/TTS adapters, endpoints, and conversation generation defaults |
+| `yaml/models.json` | LLM/VLM/STT/TTS/Clef adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
+| `worker/simple_vlm_example_worker/prompts/vision.txt` | Visual destination instructions |
 
 Edit the owning file, preserve the field's YAML type, and restart
 `simple_vlm_example`; configuration is loaded only at process startup. For

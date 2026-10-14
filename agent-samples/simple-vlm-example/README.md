@@ -6,17 +6,19 @@
 # Simple VLM example
 
 This sample is the smallest complete voice-and-vision application in the
-repository. Its reusable `xr_ai_conversation.Conversation` component answers
-general questions directly and routes visual questions to the current-view
-tools. The worker uses an existing live video frame when the client is
-streaming; otherwise it asks the client to take one picture for that turn.
+repository. Its reusable `xr_ai_conversation.ConversationFrontEnd` routes each
+turn through Clef to separate conversation and visual destinations. The visual
+destination uses the current-view tools. The worker uses an existing live video
+frame when the client is streaming; otherwise it asks the client to take one
+picture for that turn.
 Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
 session recording. It reuses the shared speaker-conditioned multi-talker STT
-service, Cosmos3 Nano Reasoner, and Pocket TTS from the sample's local model
+service, Nemotron-3 Nano Omni for conversation, Clef for routing, Cosmos3 Nano
+Reasoner for visual questions, and Pocket TTS from the sample's local model
 stack. Before the agent reports ready, the worker sends a representative image
-request through the VLM so the first user query does not pay the multimodal
+request through the VLM so the first visual query does not pay the multimodal
 warmup cost.
 
 ## Configure
@@ -28,7 +30,7 @@ files before starting the sample:
 |---|---|
 | `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
-| `yaml/models.json` | Reused model adapters, endpoint addresses, and conversation generation defaults |
+| `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 

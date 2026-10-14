@@ -12,6 +12,7 @@ import sys
 import time
 import tomllib
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -53,6 +54,8 @@ sys.path.insert(0, str(_REPO_ROOT / "agent-sdk" / "xr-ai-conversation"))
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _CONVERSATION_INSTRUCTIONS,
+    _VISION_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -262,6 +265,77 @@ async def _ignore_status(_status: str, _participant_id: str) -> None:
     pass
 
 
+class _RouteDecisions:
+    def __init__(self, destination: str | tuple[str, ...] = "vision") -> None:
+        self.destinations = list(destination) if isinstance(destination, tuple) else [destination]
+        self.health_calls = 0
+        self.close_calls = 0
+        self.states = []
+
+    async def health(self) -> bool:
+        self.health_calls += 1
+        return True
+
+    async def close(self) -> None:
+        self.close_calls += 1
+
+    async def decide(self, state, _questions, *, timeout=None):
+        self.states.append(state)
+        destination = self.destinations.pop(0) if len(self.destinations) > 1 else self.destinations[0]
+        return DecisionResponse(
+            answers={
+                "destination": DecisionAnswer(
+                    destination,
+                    1.0,
+                    {
+                        "conversation": float(destination == "conversation"),
+                        "vision": float(destination == "vision"),
+                    },
+                )
+            },
+            model="fake",
+            usage={},
+            raw={},
+        )
+
+
+def _make_front_end(llm, frames, vision, *, destination: str = "vision", include_vision: bool = True):
+    conversation = Conversation(llm, instructions=_CONVERSATION_INSTRUCTIONS)  # type: ignore[arg-type]
+    destinations = {"conversation": conversation}
+    conversations = [conversation]
+    if include_vision:
+        visual = Conversation(
+            llm,  # type: ignore[arg-type]
+            instructions=_VISION_INSTRUCTIONS,
+            routing=RoutingAid(
+                name="vision",
+                description="Questions requiring evidence from the current camera view.",
+            ),
+            frames=frames,  # type: ignore[arg-type]
+            vision=vision,  # type: ignore[arg-type]
+        )
+        destinations["vision"] = visual
+        conversations.append(visual)
+    front_end = ConversationFrontEnd(destinations, _RouteDecisions(destination))  # type: ignore[arg-type]
+    return front_end, tuple(conversations)
+
+
+def _make_agent(llm, frames, vision, *, destination: str = "vision", include_vision: bool = True):
+    front_end, conversations = _make_front_end(
+        llm,
+        frames,
+        vision,
+        destination=destination,
+        include_vision=include_vision,
+    )
+    return SimpleVlmAgent(
+        _ignore_status,
+        front_end=front_end,
+        conversations=conversations,
+        frames=frames,  # type: ignore[arg-type]
+    )
+
+
 async def test_conversation_delegates_native_current_view_without_speaking_preamble() -> None:
     llm = _ConversationService(visual_query="Read the label on the bottle on the left.")
     frames = _ConversationFrames()
@@ -399,6 +473,75 @@ async def test_domain_visual_request_routes_to_configured_conversation_destinati
     )
 
 
+async def test_sample_destinations_share_cross_route_history_and_output_source() -> None:
+    class LLM:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def stream_events(self, messages, *, tools=None, **_kwargs):
+            self.requests.append((messages, tools))
+            call = len(self.requests)
+
+            async def events():
+                if call == 1:
+                    yield ChatStreamEvent(kind="text", text="Lisbon.")
+                    yield ChatStreamEvent(kind="finish", finish_reason="stop")
+                else:
+                    yield ChatStreamEvent(
+                        kind="tool_call",
+                        tool_call=ToolCall(
+                            "call-1",
+                            "current_view",
+                            json.dumps({"query": "What color is the sign?"}),
+                        ),
+                    )
+                    yield ChatStreamEvent(kind="finish", finish_reason="tool_calls")
+
+            return events()
+
+    llm = LLM()
+    frames = _ConversationFrames()
+    vision = _StreamingImageQueryTool()
+    general = Conversation(
+        llm,  # type: ignore[arg-type]
+        instructions=_CONVERSATION_INSTRUCTIONS,
+        routing=RoutingAid("conversation", "General conversation and recall"),
+    )
+    visual = Conversation(
+        llm,  # type: ignore[arg-type]
+        instructions=_VISION_INSTRUCTIONS,
+        routing=RoutingAid("vision", "Questions requiring current-camera evidence"),
+        frames=frames,  # type: ignore[arg-type]
+        vision=vision,  # type: ignore[arg-type]
+    )
+    decisions = _RouteDecisions(("conversation", "vision"))
+    front_end = ConversationFrontEnd(
+        {"conversation": general, "vision": visual},
+        decisions,  # type: ignore[arg-type]
+    )
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    first = await front_end.handle(
+        ConversationTurn("alice", "turn-1", "What is the capital of Portugal?"),
+        emit=emit,
+    )
+    second = await front_end.handle(
+        ConversationTurn("alice", "turn-2", "What color is the sign?"),
+        emit=emit,
+    )
+
+    assert first.text == "Lisbon."
+    assert second.text == "a blue square"
+    assert llm.requests[0][1] == ()
+    assert [tool.name for tool in llm.requests[1][1]] == ["current_view"]
+    assert "Turn 1: user asked: What is the capital of Portugal?" in llm.requests[1][0][1].content
+    assert frames.requests[0].participant_id == "alice"
+    assert [source for source, _text in output] == ["conversation", "vision", "vision"]
+
+
 def test_conversation_rejects_half_configured_vision_tools() -> None:
     with pytest.raises(ValueError, match="configured together"):
         Conversation(_ConversationService(), frames=_ConversationFrames())  # type: ignore[arg-type]
@@ -452,10 +595,11 @@ async def test_simple_vlm_agent_publishes_one_safe_fallback_on_llm_failure() -> 
             published.append((topic, output))
 
     llm = _ConversationService(error=RuntimeError("offline"))
-    agent = SimpleVlmAgent(
-        lambda: (_ConversationFrames(), _StreamingImageQueryTool()),  # type: ignore[arg-type]
-        _ignore_status,
-        llm=llm,  # type: ignore[arg-type]
+    agent = _make_agent(
+        llm,
+        _ConversationFrames(),
+        _StreamingImageQueryTool(),
+        destination="conversation",
     )
 
     await agent._stream(  # noqa: SLF001
@@ -612,10 +756,11 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.models_config == _SAMPLE_DIR / "yaml" / "models.json"
     assert config.voice_gate_yaml == _SAMPLE_DIR / "yaml" / "voice_gate.yaml"
     assert config.system_prompt == prompt
-    assert "Speak directly to me in second person" in prompt
-    assert 'Never refer to "the user" in the third person.' in prompt
-    assert "when the user" not in prompt
-    assert "If the user" not in prompt
+    assert "only evidence visible in the image" in prompt
+    assert "Do not infer facts that are not visible" in prompt
+    vision_prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "vision.txt").read_text()
+    assert "current camera view" in vision_prompt
+    assert "Do not answer general knowledge" in vision_prompt
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
     assert config.idle_timeout_secs is None
@@ -632,44 +777,56 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
         "enable_thinking": True,
         "reasoning_budget": 4096,
     }
+    router = models.decision("router")
+    assert router.kind == "systemone"
+    assert router.model_name == "Cloudflare/clef-flash"
+    assert router.base_url == "http://localhost:8120"
 
 
 def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> None:
     cases = yaml.safe_load((_SAMPLE_DIR / "eval" / "conversation-cases.yaml").read_text(encoding="utf-8"))
     by_name = {case["name"]: case for case in cases}
 
+    assert by_name["general_question_without_camera"]["destination"] == "conversation"
     assert by_name["general_question_without_camera"]["route"] == "direct"
     assert by_name["general_question_without_camera"]["image"] == "blank"
     unavailable_action = by_name["unavailable_external_action"]
     assert unavailable_action["route"] == "direct"
     assert unavailable_action["any_of"] == ["can't", "cannot", "unable"]
     assert by_name["read_visible_sign_text"]["route"] == "current_view"
+    assert by_name["read_visible_sign_text"]["destination"] == "vision"
     followup = by_name["resolve_visual_followup_referent"]
     assert followup["route"] == "current_view"
+    assert followup["destination"] == "vision"
     assert followup["history"]
     assert followup["any_of"] == ["red"]
     stale_clarification = by_name["new_question_after_stale_clarification"]
     assert stale_clarification["route"] == "direct"
+    assert stale_clarification["destination"] == "conversation"
     assert stale_clarification["image"] == "blank"
     assert stale_clarification["history"][0]["assistant"].startswith("Could you clarify")
     assert stale_clarification["any_of"] == ["63", "sixty-three"]
     explicit_recall = by_name["explicit_recall_uses_completed_answer"]
     assert explicit_recall["route"] == "direct"
+    assert explicit_recall["destination"] == "conversation"
     assert explicit_recall["image"] == "blank"
     assert explicit_recall["history"]
     assert explicit_recall["any_of"] == ["Lisbon"]
     pasta_loop = by_name["direct_howto_after_repeated_visual_clarifications"]
     assert pasta_loop["route"] == "direct"
+    assert pasta_loop["destination"] == "conversation"
     assert pasta_loop["image"] == "blank"
     assert len(pasta_loop["history"]) == 4
     assert pasta_loop["any_of"] == ["add the pasta", "cook according to the package directions"]
     assert "pasta" not in pasta_loop["any_of"]
     bowline = by_name["direct_howto_after_visual_clarification"]
     assert bowline["route"] == "direct"
+    assert bowline["destination"] == "conversation"
     assert bowline["image"] == "blank"
     assert bowline["any_of"] == ["rope", "loop"]
     domain_visual = by_name["domain_scoped_visual_question"]
     assert domain_visual["route"] == "current_view"
+    assert domain_visual["destination"] == "vision"
     assert domain_visual["any_of"] == ["blue"]
 
 
@@ -745,11 +902,7 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         async def publish(self, *_args, **_kwargs) -> None:
             raise RuntimeError("runtime stopped")
 
-    agent = SimpleVlmAgent(
-        lambda: (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
-        _ignore_status,
-        llm=_ConversationService(),  # type: ignore[arg-type]
-    )
+    agent = _make_agent(_ConversationService(), _SelectedFrameTool(), Vision())
     with pytest.raises(RuntimeError, match="runtime stopped"):
         await agent._stream(  # noqa: SLF001
             UserQuery(text="What is shown?", timestamp_us=123),
@@ -788,11 +941,7 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
         async def publish(self, _topic, output) -> None:
             published.append(output)
 
-    agent = SimpleVlmAgent(
-        lambda: (missing_frame_tool, _StreamingImageQueryTool()),  # type: ignore[return-value]
-        _ignore_status,
-        llm=_ConversationService(),  # type: ignore[arg-type]
-    )
+    agent = _make_agent(_ConversationService(), missing_frame_tool, _StreamingImageQueryTool())
 
     await agent._stream(  # noqa: SLF001
         UserQuery(text="What is shown?", timestamp_us=123),
@@ -844,13 +993,7 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
         async def publish(self, _topic, output) -> None:
             published.append(output)
 
-    factory_calls: list[None] = []
-    agent = SimpleVlmAgent(
-        lambda: factory_calls.append(None) or (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
-        _ignore_status,
-        llm=_ConversationService(),  # type: ignore[arg-type]
-    )
-    assert factory_calls == []
+    agent = _make_agent(_ConversationService(), _SelectedFrameTool(), Vision())
 
     task = asyncio.create_task(
         agent._stream(  # noqa: SLF001
@@ -862,7 +1005,6 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 
-    assert factory_calls == [None]
     assert closed.is_set()
     assert len(published) == 1
     assert published[0].final is False
@@ -886,20 +1028,19 @@ async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
 @pytest.mark.asyncio
 async def test_participant_rejoin_reopens_context_before_topic_updates() -> None:
     llm = _ConversationService()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
+    front_end, conversations = _make_front_end(llm, None, None, destination="conversation")
+    conversation, visual_conversation = conversations
 
     async def set_status(_status: str, _participant_id: str) -> None:
         return None
 
     agent = SimpleVlmAgent(
-        lambda: (None, None),
-        set_status,
-        llm=llm,
-        conversation=conversation,
-    )  # type: ignore[arg-type]
+        set_status, front_end=front_end, conversations=conversations
+    )
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
     runtime.register("conversation-context", conversation.context_subscriber((context_topic,)))
+    runtime.register("vision-context", visual_conversation.context_subscriber((context_topic,)))
     runtime.register("simple-vlm", agent)
 
     async with runtime:
@@ -914,6 +1055,7 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
             participant_id="alice",
         )
         assert conversation._context.sections("alice") == (("tea.status", "Timer is at 4 minutes."),)
+        assert visual_conversation._context.sections("alice") == (("tea.status", "Timer is at 4 minutes."),)
 
         await runtime.publish(
             PARTICIPANT_LEFT_TOPIC,
@@ -921,6 +1063,7 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
             participant_id="alice",
         )
         assert conversation._context.sections("alice") == ()
+        assert visual_conversation._context.sections("alice") == ()
         await runtime.publish(
             PARTICIPANT_JOINED_TOPIC,
             VoiceParticipantJoined(),
@@ -939,18 +1082,30 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch,
     tmp_path,
 ) -> None:
-    config = load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml")
+    config = replace(
+        load_config(_SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml"),
+        context_topics=("tea.status",),
+    )
     ready_file = tmp_path / "ready"
     stt = _Service()
     llm = _ConversationService()
     vlm = _Service()
     tts = _Service()
+    router = _RouteDecisions()
     transport = _Transport()
     sessions: list[VoiceSession] = []
     run_options = {}
     responses = []
     response_tasks: list[asyncio.Task[None]] = []
     response_complete = asyncio.Event()
+    runtimes = []
+
+    class RecordingRuntime(AgentRuntime):
+        def __init__(self) -> None:
+            super().__init__()
+            runtimes.append(self)
+
+    monkeypatch.setattr(app, "AgentRuntime", RecordingRuntime)
 
     worker_log = tmp_path / "logs" / "worker.log"
     worker_log.parent.mkdir()
@@ -959,6 +1114,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
+    monkeypatch.setattr(app, "make_decision", lambda _models, _name: router)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)
@@ -1031,6 +1187,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 0
     assert llm.health_calls >= 1
+    assert router.health_calls >= 1
     assert len(vlm.stream_calls) == 1
     warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
     assert len(warmup_images) == 1
@@ -1041,10 +1198,11 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert system_prompt == "Answer with one word."
     assert max_tokens == 4
     assert timeout == 120.0
-    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == 1
+    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == router.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
+    assert {"conversation-context", "vision-context"} <= runtimes[0]._agents.keys()
     assert _CurrentFrameTool.instances[0].kwargs["frame_max_age_s"] == (config.frame_max_age_s)
     assert _CurrentFrameTool.instances[0].kwargs["frame_timeout_s"] == (config.frame_timeout_s)
     assert _CurrentFrameTool.instances[0].released == ["alice"]
@@ -1349,11 +1507,7 @@ async def test_sample_runtime_streams_vision_through_voice_agent(monkeypatch) ->
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
-        SimpleVlmAgent(
-            lambda: (frames, vision),
-            endpoint.set_status,
-            llm=_ConversationService(),  # type: ignore[arg-type]
-        ),
+        _make_agent(_ConversationService(), frames, vision),
     )
     runtime.register(
         "voice",
@@ -1454,11 +1608,7 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
-        SimpleVlmAgent(
-            lambda: (_SelectedFrameTool(), BlockingVision()),  # type: ignore[return-value]
-            _ignore_status,
-            llm=_ConversationService(),  # type: ignore[arg-type]
-        ),
+        _make_agent(_ConversationService(), _SelectedFrameTool(), BlockingVision()),
     )
 
     async with runtime:

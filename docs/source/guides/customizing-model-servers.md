@@ -16,7 +16,7 @@ Refer to {doc}`deploying-with-nim` for external NIM endpoints.
 
 | Sample | Servers |
 |---|---|
-| Simple VLM | speaker ASR, Pocket TTS, Cosmos VLM |
+| Simple VLM | speaker ASR, Pocket TTS, Nemotron Omni, Cosmos VLM, Clef router |
 | Lab instrument monitoring | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |
 | Tea making | Speaker ASR, TTS, Nemotron Omni, Nemotron embedding |
 | XR render demo | Speaker ASR, TTS, Nemotron Omni, Cosmos VLM |

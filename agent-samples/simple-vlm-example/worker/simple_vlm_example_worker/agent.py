@@ -12,8 +12,7 @@ from pathlib import Path
 
 import nemo_relay
 from loguru import logger
-from xr_ai_conversation import Conversation, ConversationExchange
-from xr_ai_models import LLMService
+from xr_ai_conversation import Conversation, ConversationFrontEnd, ConversationTurn
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -22,7 +21,6 @@ from xr_ai_runtime import (
     subscribe,
 )
 from xr_ai_tools.current_frame import CurrentFrameTool
-from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
@@ -39,9 +37,9 @@ PARTICIPANT_LEFT_TOPIC = Topic(
 )
 INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
 PARTICIPANT_JOINED_TOPIC = Topic("simple-vlm.participant-joined", VoiceParticipantJoined)
-_CONVERSATION_INSTRUCTIONS = (
-    (Path(__file__).parent / "prompts" / "conversation.txt").read_text(encoding="utf-8").strip()
-)
+_PROMPTS = Path(__file__).parent / "prompts"
+_CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
+_VISION_INSTRUCTIONS = (_PROMPTS / "vision.txt").read_text(encoding="utf-8").strip()
 
 
 class SimpleVlmAgent(Agent):
@@ -49,24 +47,19 @@ class SimpleVlmAgent(Agent):
 
     def __init__(
         self,
-        vision_factory: Callable[
-            [],
-            tuple[CurrentFrameTool, StreamingImageQueryTool],
-        ],
         set_status: Callable[[str, str], Awaitable[None]],
         *,
-        llm: LLMService,
-        conversation: Conversation | None = None,
+        front_end: ConversationFrontEnd,
+        conversations: tuple[Conversation, ...],
+        frames: CurrentFrameTool | None = None,
     ) -> None:
         super().__init__()
-        self._vision_factory = vision_factory
-        self._llm = llm
         self._set_status = set_status
-        self._frames: CurrentFrameTool | None = None
-        self._vision: StreamingImageQueryTool | None = None
-        self._conversation: Conversation | None = conversation
+        self._front_end = front_end
+        self._conversations = conversations
+        self._frames = frames
         self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._history: dict[str, list[ConversationExchange]] = {}
+        self._participants: set[str] = set()
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer_user(self, request: UserQuery, ctx: RuntimeContext) -> None:
@@ -75,8 +68,7 @@ class SimpleVlmAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("simple VLM queries require a participant")
-        if self._conversation is not None:
-            self._conversation.activate_participant(participant_id)
+        self._participants.add(participant_id)
         await self._cancel(participant_id)
         task = asyncio.create_task(
             self._stream(request, ctx),
@@ -98,11 +90,12 @@ class SimpleVlmAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel(participant_id)
+        await self._front_end.participant_left(participant_id)
+        for conversation in self._conversations:
+            await conversation.participant_left(participant_id)
+        self._participants.discard(participant_id)
         if self._frames is not None:
             self._frames.release(participant_id)
-        self._history.pop(participant_id, None)
-        if self._conversation is not None:
-            await self._conversation.participant_left(participant_id)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
@@ -115,8 +108,9 @@ class SimpleVlmAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("participant-joined events require a participant")
-        if self._conversation is not None:
-            self._conversation.activate_participant(participant_id)
+        for conversation in self._conversations:
+            conversation.activate_participant(participant_id)
+        self._participants.add(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
@@ -152,7 +146,7 @@ class SimpleVlmAgent(Agent):
         request: UserQuery,
         ctx: RuntimeContext,
     ) -> None:
-        response_id = ctx.metadata.message_id
+        response_id = ctx.metadata.message_id or ctx.metadata.correlation_id
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("simple VLM queries require a participant")
@@ -160,67 +154,61 @@ class SimpleVlmAgent(Agent):
         opened = False
         cancelled = False
         processing = False
-        generation_failed = False
+        output_failure: Exception | None = None
         try:
-            if self._vision is None or self._frames is None:
-                self._frames, self._vision = self._vision_factory()
-            if self._conversation is None:
-                self._conversation = Conversation(
-                    self._llm,
-                    instructions=_CONVERSATION_INSTRUCTIONS,
-                    frames=self._frames,
-                    vision=self._vision,
-                )
             await self._set_status("processing", participant_id)
             processing = True
             fragments: list[str] = []
-            stream = self._conversation.stream(
-                request.text,
-                participant_id,
-                history=tuple(self._history.get(participant_id, ())),
-            )
+
+            async def emit(source: str, text: str) -> None:
+                nonlocal first, opened, output_failure
+                fragments.append(text)
+                try:
+                    with nemo_relay.scope.scope(
+                        "simple-vlm.destination-output",
+                        nemo_relay.ScopeType.Agent,
+                        metadata={"destination": source},
+                    ):
+                        await ctx.publish(
+                            VOICE_OUTPUT_TOPIC,
+                            VoiceOutput(
+                                text=text,
+                                response_id=response_id,
+                                final=False,
+                                interrupt=first,
+                                timestamp_us=request.timestamp_us,
+                            ),
+                        )
+                except Exception as error:
+                    output_failure = error
+                    raise
+                first = False
+                opened = True
+
             try:
-                while True:
-                    try:
-                        text = await anext(stream)
-                    except StopAsyncIteration:
-                        break
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception:
-                        generation_failed = True
-                        logger.exception("conversation generation failed participant={!r}", participant_id)
-                        if not fragments:
-                            with suppress(RuntimeClosedError):
-                                await ctx.publish(
-                                    VOICE_OUTPUT_TOPIC,
-                                    VoiceOutput(
-                                        text="I couldn't complete that request. Please try again.",
-                                        timestamp_us=request.timestamp_us,
-                                    ),
-                                )
-                        break
-                    fragments.append(text)
-                    await ctx.publish(
-                        VOICE_OUTPUT_TOPIC,
-                        VoiceOutput(
-                            text=text,
-                            response_id=response_id,
-                            final=False,
-                            interrupt=first,
-                            timestamp_us=request.timestamp_us,
-                        ),
-                    )
-                    first = False
-                    opened = True
-                answer = "".join(fragments).strip()
-                if answer and not generation_failed:
-                    exchanges = self._history.setdefault(participant_id, [])
-                    exchanges.append(ConversationExchange(request.text, answer))
-            finally:
-                close = getattr(stream, "aclose", None)
-                if close is not None:
-                    await close()
+                await self._front_end.handle(
+                    ConversationTurn(
+                        participant_id=participant_id,
+                        turn_id=response_id,
+                        query=request.text,
+                    ),
+                    emit=emit,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                if output_failure is not None:
+                    raise output_failure
+                logger.exception("conversation routing or generation failed participant={!r}", participant_id)
+                if not fragments:
+                    with suppress(RuntimeClosedError):
+                        await ctx.publish(
+                            VOICE_OUTPUT_TOPIC,
+                            VoiceOutput(
+                                text="I couldn't complete that request. Please try again.",
+                                timestamp_us=request.timestamp_us,
+                            ),
+                        )
         except asyncio.CancelledError:
             cancelled = True
             raise
@@ -238,6 +226,7 @@ class SimpleVlmAgent(Agent):
                     )
 
     async def _cancel(self, participant_id: str) -> None:
+        await self._front_end.interrupt(participant_id)
         task = self._tasks.pop(participant_id, None)
         if task is None:
             return
@@ -245,6 +234,7 @@ class SimpleVlmAgent(Agent):
         await asyncio.gather(task, return_exceptions=True)
 
     async def _cancel_all(self) -> None:
+        await self._front_end.interrupt()
         tasks = tuple(self._tasks.values())
         self._tasks.clear()
         for task in tasks:
@@ -256,15 +246,14 @@ class SimpleVlmAgent(Agent):
         """Cancel turns and release participant history owned by this agent."""
 
         await self._cancel_all()
-        participants = tuple(self._history)
-        self._history.clear()
-        if self._conversation is not None:
-            await asyncio.gather(
-                *(self._conversation.participant_left(participant) for participant in participants)
-            )
+        await self._front_end.stop()
+        participants = tuple(self._participants)
+        self._participants.clear()
+        for conversation in self._conversations:
+            await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
         if self._frames is not None:
-            for participant in participants:
-                self._frames.release(participant)
+            for participant_id in participants:
+                self._frames.release(participant_id)
 
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:

@@ -183,7 +183,11 @@ def stop_persistent_servers(
     success = True
     found = False
     for label, port in services:
-        container_name, container_checked = _docker.container_on_port_checked(port)
+        if label == "clef":
+            # Clef owns a re-executed in-process service, not an xr-ai-vllm container.
+            container_name, container_checked = None, True
+        else:
+            container_name, container_checked = _docker.container_on_port_checked(port)
         if not container_checked:
             print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
             success = False

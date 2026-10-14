@@ -21,6 +21,7 @@ _SERVICES = {
     "tts": ("pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "omni": ("nemotron-omni-llm", "nemotron_omni_llm_server", "nemotron_omni_llm_server"),
     "vlm": ("vlm-server", "vlm_server", "vlm_server"),
+    "clef": ("clef-server", "clef_server", "clef_server"),
     "embedding": ("embedding-server", "embedding_server", "embedding_server"),
 }
 
@@ -103,10 +104,10 @@ def run_model_stack(
     resolved against the current working directory. Service projects are
     resolved under that repository's ``services/`` directory.
 
-    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``, and
-    ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
+    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``,
+    ``clef``, and ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
     exactly those server mappings. Each mapping overrides the corresponding
-    shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
+    shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, Clef, then embedding,
     omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``

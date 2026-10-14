@@ -3,24 +3,28 @@
 
 - name: general_question_without_camera
   image: blank
+  destination: conversation
   route: direct
   query: What is twice eleven?
   any_of: ["22", twenty-two]
 
 - name: unavailable_external_action
   image: blank
+  destination: conversation
   route: direct
   query: Book me a flight to Denver.
   any_of: ["can't", "cannot", "unable"]
 
 - name: read_visible_sign_text
   image: closed_sign
+  destination: vision
   route: current_view
   query: Read the large word on the sign.
   any_of: [closed]
 
 - name: resolve_visual_followup_referent
   image: red_left_blue_right
+  destination: vision
   route: current_view
   history:
     - user: Which shape is on the right?
@@ -30,6 +34,7 @@
 
 - name: new_question_after_stale_clarification
   image: blank
+  destination: conversation
   route: direct
   history:
     - user: What do you see in front of me?
@@ -39,6 +44,7 @@
 
 - name: explicit_recall_uses_completed_answer
   image: blank
+  destination: conversation
   route: direct
   history:
     - user: What is the capital of Portugal?
@@ -48,6 +54,7 @@
 
 - name: direct_howto_after_repeated_visual_clarifications
   image: blank
+  destination: conversation
   route: direct
   history:
     - user: What's the capital of France?
@@ -63,6 +70,7 @@
 
 - name: direct_howto_after_visual_clarification
   image: blank
+  destination: conversation
   route: direct
   history:
     - user: What do you see in front of me?
@@ -72,6 +80,7 @@
 
 - name: domain_scoped_visual_question
   image: red_left_blue_right
+  destination: vision
   route: current_view
   query: For my exhibit notes, what color is the circle on the right?
   any_of: [blue]

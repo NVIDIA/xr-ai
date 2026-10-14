@@ -25,7 +25,7 @@ def isolate_stack_logging(monkeypatch, tmp_path):
 
 
 _SAMPLES = {
-    "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
+    "simple-vlm-example": ("speaker-stt", "tts", "omni", "vlm", "clef"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
     "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
     "xr-render-demo": ("speaker-stt", "tts", "omni", "vlm"),

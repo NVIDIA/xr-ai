@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared defaults used only by stacks that explicitly select the Clef role.
+model_name: Cloudflare/clef-flash
+model_revision: 17f0b0ad64efb65d273590632833508766b2aae6
+model_cache: ../../../models
+host: 127.0.0.1
+port: 8120
+device: cuda:0
+dtype: bfloat16
+max_length: 4096
+max_body_bytes: 1048576

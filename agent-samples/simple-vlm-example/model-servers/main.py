@@ -10,7 +10,7 @@ from pathlib import Path
 from xr_ai_model_server_stack import run_model_stack
 
 _BASE = Path(__file__).resolve().parent
-_SERVICES = ('speaker-stt', 'tts', 'omni', 'vlm')
+_SERVICES = ('speaker-stt', 'tts', 'omni', 'vlm', 'clef')
 
 
 def run() -> None:
