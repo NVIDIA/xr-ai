@@ -107,6 +107,10 @@ result = await decision.decide(
 )
 ```
 
+When upgrading a running text-only service, stop it and start the updated
+service before sending images. Model and configuration identity do not identify
+the running application code version.
+
 The client embeds local inputs into data URLs and rejects remote URLs. It omits
 `images` for text-only calls, preserving compatibility with older servers. Image
 requests require an upgraded endpoint; errors are surfaced without a text-only
