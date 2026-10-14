@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from ._config import ServerConfig, identity
+from ._images import decode_images, validate_images
 
 
 def _resolve_model_directory(config: ServerConfig) -> Path:
@@ -184,8 +185,7 @@ def create_app(
         async with app.state.inference_lock:
             # The executor has one worker, and shielding keeps the request lock
             # held until a CUDA call finishes even if the client disconnects.
-            await _await_without_abandoning(loop.run_in_executor(instance.executor, instance.validate_length, body))
-            future = loop.run_in_executor(instance.executor, instance.answer, body)
+            future = loop.run_in_executor(instance.executor, _infer, instance, body)
             result = await _await_without_abandoning(future)
         try:
             result = _normalize_response(result, body)
@@ -199,6 +199,18 @@ def create_app(
         return result
 
     return app
+
+
+def _infer(backend: ClefBackend, body: dict[str, Any]) -> dict[str, Any]:
+    # Decode and release media on the same serialized worker as GPU inference.
+    images = decode_images(body.get("images", []), max_length=backend.config.max_length)
+    native_body = {**body, "images": images} if "images" in body else body
+    try:
+        backend.validate_length(native_body)
+        return backend.answer(native_body)
+    finally:
+        for image in images:
+            image.close()
 
 
 async def _await_without_abandoning(future):
@@ -315,8 +327,10 @@ def _validate_request(body: Any, config: ServerConfig) -> None:
         raise ValueError(f"model must be {config.model_name!r}")
     if "state" not in body or not isinstance(body["state"], (str, dict)):
         raise ValueError("state must be text or a JSON object")
-    if "images" in body or "videos" in body:
-        raise ValueError("this endpoint accepts text-only choice requests")
+    if "videos" in body:
+        raise ValueError("videos are not supported")
+    if "images" in body:
+        validate_images(body["images"])
     questions = body.get("questions")
     if not isinstance(questions, dict) or not questions:
         raise ValueError("at least one question is required")

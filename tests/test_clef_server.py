@@ -157,7 +157,7 @@ def test_empty_instructions_follow_systemone_fallback(tmp_path: Path) -> None:
     ("overrides", "detail"),
     [
         ({"model": "other"}, "model must be"),
-        ({"images": ["unsupported"]}, "text-only"),
+        ({"images": ["unsupported"]}, "inline JPEG"),
         ({"questions": {"activate": {"type": "noul"}}}, "only choice"),
         (
             {"questions": {"activate": {"type": "choice", "instructions": "Choose", "criteria": {"yes": "Yes"}}}},
@@ -608,3 +608,143 @@ def test_malformed_vendor_response_returns_bad_gateway(tmp_path: Path) -> None:
 
     assert response.status_code == 502
     assert "positive total" in response.json()["detail"]
+
+
+def _image_url(mode="RGB", size=(8, 8), format="PNG"):
+    import base64
+    import io
+
+    from PIL import Image
+
+    with Image.new(mode, size, color=0) as image, io.BytesIO() as buffer:
+        image.save(buffer, format=format)
+        mime = "image/jpeg" if format == "JPEG" else "image/png"
+        return f"data:{mime};base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
+@pytest.mark.parametrize("format,mode", [("PNG", "RGBA"), ("JPEG", "RGB")])
+def test_images_reach_native_backend_in_order_as_rgb(tmp_path, format, mode):
+    from PIL import Image
+
+    config = _config(tmp_path, max_body_bytes=4096)
+    observed = []
+
+    class Backend(_Backend):
+        def validate_length(self, body):
+            for image in body.get("images", []):
+                assert isinstance(image, Image.Image)
+                assert image.mode == "RGB"
+                observed.append(image.size)
+            super().validate_length(body)
+
+        def answer(self, body):
+            for image in body.get("images", []):
+                assert image.getpixel((0, 0)) == (0, 0, 0)
+            return super().answer(body)
+
+    backend = Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[
+            _image_url(mode=mode, format=format), _image_url(size=(9, 7)),
+        ]))
+    assert response.status_code == 200
+    assert observed == [(8, 8), (9, 7)]
+    # Native images are released even though the fake retains its request.
+    with pytest.raises(ValueError):
+        backend.calls[-1]["images"][0].getpixel((0, 0))
+
+
+@pytest.mark.parametrize("images", [
+    None, {}, "data:image/png;base64,abc", ["https://example.com/photo.png"],
+    ["/tmp/photo.png"], ["data:image/gif;base64,R0lGODlh"],
+    ["data:image/png;base64,%%%%"], ["data:image/png;base64,YWJj"],
+    [_image_url(format="JPEG").replace("image/jpeg", "image/png")],
+    [_image_url(), "data:image/png;base64,YWJj"],
+])
+def test_bad_images_fail_before_native_inference(tmp_path, images):
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=images))
+    assert response.status_code == 422
+    assert len(backend.calls) == 1
+
+
+def test_aggregate_source_pixels_rejected_before_rgb_decode(tmp_path, monkeypatch):
+    from PIL import Image
+
+    config = replace(_config(tmp_path, max_body_bytes=16384), max_length=256)
+    # Each image fits 256*32*32; together they exceed that budget.
+    image = _image_url(size=(400, 400))
+    original = Image.Image.convert
+    converted = []
+
+    def convert(source, *args, **kwargs):
+        converted.append(source.size)
+        return original(source, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", convert)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[image, image]))
+    assert response.status_code == 422
+    assert "source-pixel budget" in response.json()["detail"]
+    assert converted == [(400, 400)]
+    assert len(backend.calls) == 1
+
+
+def test_image_token_limit_failure_releases_images(tmp_path):
+    config = _config(tmp_path)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(state="too long", images=[_image_url()]))
+    assert response.status_code == 422
+    assert len(backend.calls) == 1
+
+
+def test_videos_still_rejected(tmp_path):
+    config = _config(tmp_path)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(videos=[]))
+    assert response.status_code == 422
+    assert "videos" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_typed_image_client_round_trip_to_server(tmp_path):
+    import base64
+
+    import httpx
+    from xr_ai_models import DecisionQuestion
+    from xr_ai_models._systemone import _SystemOneDecision
+
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    transport = httpx.ASGITransport(app=create_app(config, backend))
+    try:
+        async with httpx.AsyncClient(transport=transport) as client:
+            service = _SystemOneDecision(
+                base_url="http://clef.test", model_name=config.model_name, api_key_env=None,
+                timeout=9, health_check=False, health_path="/health", client=client,
+            )
+            raw_image = base64.b64decode(_image_url().split(",", 1)[1])
+            result = await service.decide("target image", {
+                "q": DecisionQuestion(instructions="Choose", criteria={"yes": "Yes", "no": "No"}),
+            }, images=[raw_image])
+            assert result.answers["q"].choice == "yes"
+            assert result.raw["model_revision"] == REVISION
+    finally:
+        await backend.close()
+    assert len(backend.calls) == 1
+    assert backend.calls[0]["images"][0].mode == "RGB"
+
+
+def test_image_count_budget_accounts_for_processor_upscaling(tmp_path):
+    config = replace(_config(tmp_path, max_body_bytes=4096), max_length=256)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[_image_url()] * 5))
+    assert response.status_code == 422
+    assert "too many images" in response.json()["detail"]
+    assert len(backend.calls) == 1

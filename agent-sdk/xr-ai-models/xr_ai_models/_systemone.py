@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import httpx
 
-from ._openai_compat import _auth_headers, _http_health, _warn_if_cleartext_key
-from ._protocols import DecisionAnswer, DecisionQuestion, DecisionResponse
+from ._openai_compat import _auth_headers, _http_health, _normalize_image, _warn_if_cleartext_key
+from ._protocols import DecisionAnswer, DecisionQuestion, DecisionResponse, ImageInput
 
 
 class _SystemOneDecision:
@@ -46,6 +46,7 @@ class _SystemOneDecision:
         state: str | Mapping[str, Any],
         questions: Mapping[str, DecisionQuestion],
         *,
+        images: Sequence[ImageInput] = (),
         timeout: float | None = None,
     ) -> DecisionResponse:
         """Submit choice questions and validate every answer before returning."""
@@ -81,9 +82,18 @@ class _SystemOneDecision:
 
         effective_timeout = self._bounded_timeout(timeout)
         state_payload = dict(state) if isinstance(state, Mapping) else state
+        payload = {"model": self.model_name, "state": state_payload, "questions": payload_questions}
+        if isinstance(images, (str, bytes, bytearray, memoryview)):
+            raise TypeError("images must be a sequence of image inputs")
+        if images:
+            inline_images = [_normalize_image(image) for image in images]
+            prefixes = ("data:image/jpeg;base64,", "data:image/png;base64,")
+            if any(not image.startswith(prefixes) for image in inline_images):
+                raise ValueError("decision images must be inline JPEG/PNG data URLs, bytes, or local paths")
+            payload["images"] = inline_images
         response = await self._client.post(
             self.url,
-            json={"model": self.model_name, "state": state_payload, "questions": payload_questions},
+            json=payload,
             headers=_auth_headers(self._api_key),
             timeout=effective_timeout,
         )

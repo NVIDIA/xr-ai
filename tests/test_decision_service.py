@@ -206,3 +206,40 @@ def test_systemone_kind_is_restricted_to_decision_category() -> None:
         load_models_config_from_dict(
             {"decision": {"category": "decision", "kind": "openai_compat", "base_url": "http://clef.test"}}
         )
+
+
+@pytest.mark.asyncio
+async def test_decision_images_use_inline_wire_data_and_preserve_order(tmp_path):
+    import base64
+    import json
+
+    png = b"\x89PNG\r\n\x1a\nexample"
+    jpeg = b"\xff\xd8\xffexample"
+    path = tmp_path / "example.jpg"
+    path.write_bytes(jpeg)
+    png_url = "data:image/png;base64," + base64.b64encode(png).decode()
+    jpeg_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
+    bodies = []
+
+    def handle(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "model": "clef", "usage": {},
+            "answers": {"q": {"type": "choice", "choice": "yes", "confidence": 1.,
+                              "probabilities": {"yes": 1., "no": 0.}}},
+        })
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        service = _systemone._SystemOneDecision(
+            base_url="http://clef.test", model_name="clef", api_key_env=None,
+            timeout=9, health_check=False, health_path="/health", client=client,
+        )
+        questions = {"q": DecisionQuestion(instructions="Choose", criteria={"yes": "Yes", "no": "No"})}
+        await service.decide("target then references", questions, images=[png, path, png_url])
+        await service.decide("text only", questions)
+        for invalid in [["https://example.com/image.png"], ["/server/path.png"], png_url, png]:
+            with pytest.raises((ValueError, TypeError)):
+                await service.decide("invalid", questions, images=invalid)
+    assert bodies[0]["images"] == [png_url, jpeg_url, png_url]
+    assert "images" not in bodies[1]
+    assert len(bodies) == 2

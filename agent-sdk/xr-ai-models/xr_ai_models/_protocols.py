@@ -239,9 +239,16 @@ class DecisionService(Protocol):
         state: str | Mapping[str, Any],
         questions: Mapping[str, DecisionQuestion],
         *,
+        images: Sequence[ImageInput] = (),
         timeout: float | None = None,
     ) -> DecisionResponse:
         """Evaluate all questions against text or a JSON-compatible state mapping.
+
+        Optional images are ordered JPEG/PNG bytes, local paths, or inline
+        base64 data URLs. Remote URLs are rejected; the server never fetches
+        images. Describe image roles and ordering in state or instructions.
+        Empty images preserve the text-only wire contract. Older text-only
+        endpoints reject image requests; there is no silent fallback.
 
         Return one choice and a complete probability map for each question.
         No free-form text or reasoning is generated. A per-call timeout must be
