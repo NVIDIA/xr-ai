@@ -15,6 +15,7 @@ from xr_ai_vllm import stop_persistent_servers
 _COMMON = Path(__file__).resolve().parents[1] / "yaml"
 # The explicit order leaves Omni's compilation ahead of Cosmos initialization.
 _SERVICES = {
+    "speaker-stt": ("speaker-stt", "speaker_stt", "speaker_stt"),
     "stt": ("stt-server", "stt_server", "stt_server"),
     "tts": ("pocket-tts", "pocket_tts_server", "pocket_tts_server"),
     "omni": ("nemotron-omni-llm", "nemotron_omni_llm_server", "nemotron_omni_llm_server"),
@@ -98,10 +99,10 @@ def run_model_stack(
     resolved against the current working directory. Service projects are
     resolved under that repository's ``services/`` directory.
 
-    ``services`` selects from ``stt``, ``tts``, ``omni``, ``vlm``, and
+    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``, and
     ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
     exactly those server mappings. Each mapping overrides the corresponding
-    shared server YAML. Launch order is STT, TTS, Omni, VLM, then embedding,
+    shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, then embedding,
     omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``

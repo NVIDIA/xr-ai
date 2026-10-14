@@ -119,8 +119,8 @@ shutdown behavior.
 
 ## Shared model-stack speaker filtering
 
-The default shared model profile starts Nemotron 3 Diarization with Multitalker
-Parakeet through its private `services` declaration and reuses matching warm
+Each sample-local model stack starts Nemotron 3 Diarization with Multitalker
+Parakeet through its explicit service list and reuses matching warm
 speaker-ASR instances. Samples with
 `speaker.backend: required` wait for the speaker service before worker readiness.
 The four shipped voice samples no longer declare a batch-STT endpoint on 8103;
@@ -128,14 +128,15 @@ the default stack does not serve that port. Ordinary STT remains an explicit
 choice configured in both the server deployment and consuming worker.
 Native NIM speech uses external Riva endpoint profiles, not a managed NIM sample.
 The local default contains no batch-STT model entry. Before updating an existing
-checkout, stop its running stack with that checkout's `model_servers --stop`
-and the deployment profile it started (`--models PATH` for a custom profile).
+checkout, stop its running stack with that checkout's model command and `--stop`
+and the configuration it started (`--models PATH` where that old command supports it).
 The new default stop plan does not include batch STT on 8103. Also stop the
 selected stack before changing its deployment configuration. Replace
 unconditional worker `make_stt` calls with `VoiceAgent.from_models`, passing
-the loaded models and voice-gate settings. To serve batch STT, explicitly add its
-managed model entry and configure the consuming worker's batch adapter;
-for batch-only speech omit `services.speaker-stt` and disable speaker enrollment.
+the loaded models and voice-gate settings. To serve batch STT, explicitly select
+`stt` in the sample's launcher and hardware overrides and configure the consuming
+worker's batch adapter. For batch-only speech omit `speaker-stt` from that
+selection and disable speaker enrollment.
 Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
 
 ## Voice sample conversation defaults

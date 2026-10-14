@@ -194,7 +194,7 @@ uv --config-file ../../uv.toml sync --project worker
 
 The model launcher requires `HF_TOKEN`. Configure it through one of the
 sources in {doc}`/getting_started/credentials` before starting the application.
-The copied application reuses STT, VLM, and TTS services. Start those shared
+The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
 services first and wait for the launcher to report that all processes are
 ready:
 

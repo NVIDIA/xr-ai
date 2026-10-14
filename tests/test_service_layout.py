@@ -422,7 +422,7 @@ def test_sample_process_projects_resolve(tmp_path, monkeypatch) -> None:
             model_servers._processes(
                 model_servers._configs(
                     _ROOT / "agent-samples/lab-instrument-monitoring/model-servers",
-                    ("stt", "tts", "omni", "vlm"), "spark",
+                    ("speaker-stt", "tts", "omni", "vlm"), "spark",
                 ), tmp_path, _ROOT,
             ),
         ),

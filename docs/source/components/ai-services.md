@@ -354,11 +354,11 @@ Either way vLLM keeps running after the orchestrator exits.
 
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
-that survived a previous stack run, and is stopped by the same
-the sample's model command with `--stop` cleanup.
+that survived a previous stack run, and is stopped by the sample's model
+command with `--stop` when selected in that stack.
 
-The default model profile starts speaker ASR through its private `services`
-declaration. The launcher waits for model loading, decoder warmup and HTTP readiness
+Each sample's model-server list selects speaker ASR. The launcher waits for
+model loading, decoder warmup and HTTP readiness
 before reporting readiness, and reuses warm instances with matching configuration.
 Configuration changes require stopping and restarting the service. `--stop`
 stops only managed services in the selected deployment, using their configured

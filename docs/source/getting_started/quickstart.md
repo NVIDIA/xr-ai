@@ -66,7 +66,7 @@ Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
 {doc}`AI services </components/ai-services>` for runtime-selection details.
 
 The sample always reuses model services and never starts or stops them. Its
-fixed `yaml/models.json` expects Parakeet STT on port 8103, Cosmos3-Nano on
+fixed `yaml/models.json` expects speaker ASR on port 8102, Cosmos3-Nano on
 port 8100, and Pocket TTS on port 8105. From the sample directory, start the
 repository defaults first:
 
@@ -270,10 +270,9 @@ dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, typed
 capability processes, and the worker alongside the reused model endpoints. The
-worker calls those processes through Relay-managed native tools. The voice
-runtime runs quick-acks and a Nemotron-3-Nano-Omni-30B-A3B-Reasoning agentic
-tool-calling loop over scene, tracking, spatial math, vision, and video-memory
-tools. Refer to the
+worker calls those processes through Relay-managed native tools. The render
+agent runs a Nemotron-3-Nano-Omni-30B-A3B-Reasoning tool-calling loop over
+scene, tracking, spatial math, vision, and video-memory tools. Refer to the
 {doc}`xr-render-demo reference </reference/xr-render-demo>` for the full process
 map, agentic-loop details, and XR session lifecycle.
 

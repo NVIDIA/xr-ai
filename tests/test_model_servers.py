@@ -275,10 +275,10 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
 
 
 _SAMPLES = {
-    "simple-vlm-example": ("stt", "tts", "vlm"),
-    "lab-instrument-monitoring": ("stt", "tts", "omni", "vlm"),
-    "tea-making-sample": ("stt", "tts", "omni", "embedding"),
-    "xr-render-demo": ("stt", "tts", "omni", "vlm"),
+    "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
+    "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
+    "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
+    "xr-render-demo": ("speaker-stt", "tts", "omni", "vlm"),
 }
 
 
@@ -318,7 +318,7 @@ def test_start_materializes_configs_through_readiness_and_does_not_stop(monkeypa
     def launch(processes, root, *, exit_after_ready):
         assert root == base
         assert exit_after_ready is True
-        assert [p.name for p in processes] == ["stt", "tts", "vlm"]
+        assert [p.name for p in processes] == ["speaker-stt", "tts", "vlm"]
         for process in processes:
             assert Path(process.config).is_file()
             launched.append(Path(process.config))

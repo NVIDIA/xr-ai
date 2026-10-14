@@ -270,7 +270,7 @@ def test_model_deployment_has_launcher_sdk_parity(tmp_path) -> None:
     _write_profile(profile)
     deployment = load_deployment_profile(profile)
     models = load_models_config(profile)
-    assert set(models.entries) == {"llm", "tts", "vlm", "embedding"}
+    assert set(models.entries) == {"vision"}
     expected_services = {
         spec.deployment.service: (
             "own" if spec.deployment.ownership == "managed" else "reuse"
