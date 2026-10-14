@@ -38,6 +38,7 @@ from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
+from .admission import ClefAdmissionDestination
 from .agent import (
     _CONVERSATION_INSTRUCTIONS,
     _VISION_INSTRUCTIONS,
@@ -204,7 +205,10 @@ async def run_app(
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
     front_end = ConversationFrontEnd(
-        {"conversation": conversation, "vision": visual_conversation},
+        {
+            "conversation": ClefAdmissionDestination(conversation, router),
+            "vision": ClefAdmissionDestination(visual_conversation, router),
+        },
         router,
     )
     if config.context_topics:

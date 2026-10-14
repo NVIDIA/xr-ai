@@ -266,8 +266,13 @@ async def _ignore_status(_status: str, _participant_id: str) -> None:
 
 
 class _RouteDecisions:
-    def __init__(self, destination: str | tuple[str, ...] = "vision") -> None:
+    def __init__(
+        self,
+        destination: str | tuple[str, ...] = "vision",
+        admission: str | tuple[str, ...] = "accept",
+    ) -> None:
         self.destinations = list(destination) if isinstance(destination, tuple) else [destination]
+        self.admissions = list(admission) if isinstance(admission, tuple) else [admission]
         self.health_calls = 0
         self.close_calls = 0
         self.states = []
@@ -281,16 +286,22 @@ class _RouteDecisions:
 
     async def decide(self, state, _questions, *, timeout=None):
         self.states.append(state)
-        destination = self.destinations.pop(0) if len(self.destinations) > 1 else self.destinations[0]
+        if "admission" in _questions:
+            choice = self.admissions.pop(0) if len(self.admissions) > 1 else self.admissions[0]
+            answer_name = "admission"
+        else:
+            choice = self.destinations.pop(0) if len(self.destinations) > 1 else self.destinations[0]
+            answer_name = "destination"
+        probability_names = ("accept", "decline", "clarify") if answer_name == "admission" else (
+            "conversation",
+            "vision",
+        )
         return DecisionResponse(
             answers={
-                "destination": DecisionAnswer(
-                    destination,
+                answer_name: DecisionAnswer(
+                    choice,
                     1.0,
-                    {
-                        "conversation": float(destination == "conversation"),
-                        "vision": float(destination == "vision"),
-                    },
+                    {name: float(name == choice) for name in probability_names},
                 )
             },
             model="fake",
@@ -299,7 +310,15 @@ class _RouteDecisions:
         )
 
 
-def _make_front_end(llm, frames, vision, *, destination: str = "vision", include_vision: bool = True):
+def _make_front_end(
+    llm,
+    frames,
+    vision,
+    *,
+    destination: str | tuple[str, ...] = "vision",
+    admission: str | tuple[str, ...] = "accept",
+    include_vision: bool = True,
+):
     conversation = Conversation(llm, instructions=_CONVERSATION_INSTRUCTIONS)  # type: ignore[arg-type]
     destinations = {"conversation": conversation}
     conversations = [conversation]
@@ -316,16 +335,32 @@ def _make_front_end(llm, frames, vision, *, destination: str = "vision", include
         )
         destinations["vision"] = visual
         conversations.append(visual)
-    front_end = ConversationFrontEnd(destinations, _RouteDecisions(destination))  # type: ignore[arg-type]
+    decisions = _RouteDecisions(destination, admission)
+    front_end = ConversationFrontEnd(
+        {
+            name: app.ClefAdmissionDestination(item, decisions)
+            for name, item in destinations.items()
+        },
+        decisions,  # type: ignore[arg-type]
+    )
     return front_end, tuple(conversations)
 
 
-def _make_agent(llm, frames, vision, *, destination: str = "vision", include_vision: bool = True):
+def _make_agent(
+    llm,
+    frames,
+    vision,
+    *,
+    destination: str | tuple[str, ...] = "vision",
+    admission: str | tuple[str, ...] = "accept",
+    include_vision: bool = True,
+):
     front_end, conversations = _make_front_end(
         llm,
         frames,
         vision,
         destination=destination,
+        admission=admission,
         include_vision=include_vision,
     )
     return SimpleVlmAgent(
@@ -540,6 +575,226 @@ async def test_sample_destinations_share_cross_route_history_and_output_source()
     assert "Turn 1: user asked: What is the capital of Portugal?" in llm.requests[1][0][1].content
     assert frames.requests[0].participant_id == "alice"
     assert [source for source, _text in output] == ["conversation", "vision", "vision"]
+
+
+@pytest.mark.parametrize(
+    ("first_choice", "query", "with_history", "expected_destination"),
+    [
+        ("vision", "What was the capital again?", True, "conversation"),
+        ("conversation", "What text is visible on the sign?", False, "vision"),
+    ],
+)
+async def test_clef_admission_rejects_wrong_route_before_answer(
+    first_choice: str,
+    query: str,
+    with_history: bool,
+    expected_destination: str,
+) -> None:
+    llm = _ConversationService(visual=expected_destination == "vision")
+    frames = _ConversationFrames()
+    vision = _StreamingImageQueryTool()
+    front_end, _conversations = _make_front_end(
+        llm,
+        frames,
+        vision,
+        destination=(first_choice, expected_destination),
+        admission=("decline", "accept"),
+    )
+    emitted = []
+
+    async def emit(source, text):
+        emitted.append((source, text))
+
+    history = (ConversationExchange("What is the capital of Portugal?", "Lisbon."),) if with_history else ()
+    result = await front_end.handle(
+        ConversationTurn("alice", "turn-1", query, history=history),
+        emit=emit,
+    )
+
+    assert result.disposition == "answer"
+    assert emitted
+    assert {source for source, _text in emitted} == {expected_destination}
+    assert len(llm.requests) == 1
+    assert [exchange.user for exchange in front_end._history["alice"]] == [query]
+    if expected_destination == "conversation":
+        assert llm.requests[0][1] == ()
+        assert "Lisbon." in llm.requests[0][0][1].content
+        assert frames.requests == []
+    else:
+        assert [tool.name for tool in llm.requests[0][1]] == ["current_view"]
+        assert frames.requests
+
+
+async def test_declining_route_preserves_its_context_until_participant_leaves() -> None:
+    llm = _ConversationService(visual=False)
+    front_end, conversations = _make_front_end(
+        llm,
+        _ConversationFrames(),
+        _StreamingImageQueryTool(),
+        destination=("vision", "conversation", "conversation"),
+        admission=("decline", "accept", "accept"),
+    )
+    general, _vision = conversations
+    await general._update_context(  # noqa: SLF001
+        "alice",
+        "tea.status",
+        ConversationContextUpdate(mode="summary", text="The timer is at 4 minutes."),
+    )
+
+    async def emit(_source: str, _text: str) -> None:
+        return None
+
+    first = await front_end.handle(
+        ConversationTurn("alice", "turn-1", "What is the capital of France?"),
+        emit=emit,
+    )
+    second = await front_end.handle(
+        ConversationTurn("alice", "turn-2", "And what is the capital of Italy?"),
+        emit=emit,
+    )
+
+    assert first.disposition == second.disposition == "answer"
+    assert general._context.sections("alice") == (  # noqa: SLF001
+        ("tea.status", "The timer is at 4 minutes."),
+    )
+    assert "The timer is at 4 minutes." in "\n".join(
+        str(message.content) for message in llm.requests[1][0]
+    )
+
+    agent = SimpleVlmAgent(_ignore_status, front_end=front_end, conversations=conversations)
+    await agent.participant_left(
+        VoiceParticipantLeft(),
+        SimpleNamespace(metadata=SimpleNamespace(participant_id="alice")),
+    )
+    assert general._context.sections("alice") == ()  # noqa: SLF001
+
+
+async def test_clef_admission_clarifies_without_answering_or_using_camera() -> None:
+    llm = _ConversationService()
+    frames = _ConversationFrames()
+    front_end, _conversations = _make_front_end(
+        llm,
+        frames,
+        _StreamingImageQueryTool(),
+        destination="vision",
+        admission="clarify",
+    )
+    emitted = []
+
+    async def emit(source, text):
+        emitted.append((source, text))
+
+    result = await front_end.handle(
+        ConversationTurn("alice", "turn-ambiguous", "Could you check that one?"),
+        emit=emit,
+    )
+
+    assert result.disposition == "clarify"
+    assert emitted == [
+        (
+            "vision",
+            "Would you like a general answer, or help with what is visible in your camera view?",
+        )
+    ]
+    assert llm.requests == []
+    assert frames.requests == []
+
+
+async def test_clef_admission_all_declines_emit_one_clarification_without_history() -> None:
+    llm = _ConversationService(visual=False)
+    front_end, _conversations = _make_front_end(
+        llm,
+        _ConversationFrames(),
+        _StreamingImageQueryTool(),
+        destination=("vision", "conversation"),
+        admission=("decline", "decline"),
+    )
+    emitted = []
+
+    async def emit(source, text):
+        emitted.append((source, text))
+
+    result = await front_end.handle(
+        ConversationTurn("alice", "turn-unmatched", "Please do the thing."),
+        emit=emit,
+    )
+
+    assert result.disposition == "clarify"
+    assert len(emitted) == 1
+    assert emitted[0][1] == "Would you like a general answer, or help with what is visible in your camera view?"
+    assert llm.requests == []
+    assert front_end._history.get("alice", []) == []
+
+
+async def test_interruption_during_clef_admission_emits_nothing() -> None:
+    admission_started = asyncio.Event()
+    release_admission = asyncio.Event()
+
+    class BlockingDecisions:
+        async def decide(self, _state, questions, *, timeout=None):
+            if "destination" in questions:
+                return DecisionResponse(
+                    answers={
+                        "destination": DecisionAnswer(
+                            "conversation",
+                            1.0,
+                            {"conversation": 1.0, "vision": 0.0},
+                        )
+                    },
+                    model="fake",
+                    usage={},
+                    raw={},
+                )
+            admission_started.set()
+            await release_admission.wait()
+            return DecisionResponse(
+                answers={
+                    "admission": DecisionAnswer("accept", 1.0, {"accept": 1.0, "decline": 0.0, "clarify": 0.0})
+                },
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    llm = _ConversationService(visual=False)
+    decisions = BlockingDecisions()
+    conversation = Conversation(
+        llm,  # type: ignore[arg-type]
+        instructions=_CONVERSATION_INSTRUCTIONS,
+        routing=RoutingAid("conversation", "General conversation and recall"),
+    )
+    visual = Conversation(
+        llm,  # type: ignore[arg-type]
+        instructions=_VISION_INSTRUCTIONS,
+        routing=RoutingAid("vision", "Current-camera evidence"),
+        frames=_ConversationFrames(),  # type: ignore[arg-type]
+        vision=_StreamingImageQueryTool(),  # type: ignore[arg-type]
+    )
+    front_end = ConversationFrontEnd(
+        {
+            "conversation": app.ClefAdmissionDestination(conversation, decisions),
+            "vision": app.ClefAdmissionDestination(visual, decisions),
+        },
+        decisions,  # type: ignore[arg-type]
+    )
+    emitted = []
+
+    async def emit(source, text):
+        emitted.append((source, text))
+
+    task = asyncio.create_task(
+        front_end.handle(
+            ConversationTurn("alice", "turn-cancel", "Explain why the sky is blue."),
+            emit=emit,
+        )
+    )
+    await asyncio.wait_for(admission_started.wait(), 1.0)
+    await front_end.interrupt("alice")
+    release_admission.set()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert emitted == []
+    assert llm.requests == []
 
 
 def test_conversation_rejects_half_configured_vision_tools() -> None:
@@ -788,6 +1043,8 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     by_name = {case["name"]: case for case in cases}
 
     assert by_name["general_question_without_camera"]["destination"] == "conversation"
+    assert by_name["general_question_without_camera"]["admission"] == "accept"
+    assert by_name["general_question_without_camera"]["declined_alternative"] == "vision"
     assert by_name["general_question_without_camera"]["route"] == "direct"
     assert by_name["general_question_without_camera"]["image"] == "blank"
     unavailable_action = by_name["unavailable_external_action"]
@@ -795,6 +1052,8 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert unavailable_action["any_of"] == ["can't", "cannot", "unable"]
     assert by_name["read_visible_sign_text"]["route"] == "current_view"
     assert by_name["read_visible_sign_text"]["destination"] == "vision"
+    assert by_name["read_visible_sign_text"]["admission"] == "accept"
+    assert by_name["read_visible_sign_text"]["declined_alternative"] == "conversation"
     followup = by_name["resolve_visual_followup_referent"]
     assert followup["route"] == "current_view"
     assert followup["destination"] == "vision"
@@ -822,12 +1081,19 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     bowline = by_name["direct_howto_after_visual_clarification"]
     assert bowline["route"] == "direct"
     assert bowline["destination"] == "conversation"
+    assert bowline["admission"] == "accept"
+    assert bowline["declined_alternative"] == "vision"
     assert bowline["image"] == "blank"
     assert bowline["any_of"] == ["rope", "loop"]
     domain_visual = by_name["domain_scoped_visual_question"]
     assert domain_visual["route"] == "current_view"
     assert domain_visual["destination"] == "vision"
     assert domain_visual["any_of"] == ["blue"]
+    ambiguous = by_name["ambiguous_reference_clarifies_before_camera_access"]
+    assert ambiguous["route"] == "clarify"
+    assert ambiguous["admission"] == "clarify"
+    assert ambiguous["destination"] == "vision"
+    assert ambiguous["any_of"] == ["general answer", "visible"]
 
 
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:

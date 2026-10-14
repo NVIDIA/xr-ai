@@ -4,6 +4,8 @@
 - name: general_question_without_camera
   image: blank
   destination: conversation
+  admission: accept
+  declined_alternative: vision
   route: direct
   query: What is twice eleven?
   any_of: ["22", twenty-two]
@@ -18,6 +20,8 @@
 - name: read_visible_sign_text
   image: closed_sign
   destination: vision
+  admission: accept
+  declined_alternative: conversation
   route: current_view
   query: Read the large word on the sign.
   any_of: [closed]
@@ -67,6 +71,8 @@
       assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
   query: Stop repeating, just show me how to make pasta.
   any_of: ["add the pasta", "cook according to the package directions"]
+  admission: accept
+  declined_alternative: vision
 
 - name: direct_howto_after_visual_clarification
   image: blank
@@ -77,6 +83,19 @@
       assistant: Could you clarify what you would like me to check in the scene?
   query: How do I tie a bowline knot?
   any_of: [rope, loop]
+  admission: accept
+  declined_alternative: vision
+
+- name: ambiguous_reference_clarifies_before_camera_access
+  image: red_left_blue_right
+  destination: vision
+  admission: clarify
+  route: clarify
+  history:
+    - user: I am trying to compare these with the earlier example.
+      assistant: Which item do you mean?
+  query: Can you check that one?
+  any_of: [general answer, visible]
 
 - name: domain_scoped_visual_question
   image: red_left_blue_right

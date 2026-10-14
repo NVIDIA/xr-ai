@@ -31,8 +31,12 @@ and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` delegates each turn to
 `xr_ai_conversation.ConversationFrontEnd`. Clef selects either the text-only
 conversation destination or the visual destination from their routing aids and
-the current request/history. The general destination has no frame or VLM tools;
-the visual destination owns the frame and VLM tools. Visual tool calls
+the current request/history. Each selected destination asks Clef to accept,
+decline, or clarify before it starts answering. A decline produces no spoken
+output and gives the front end one bounded reroute; ambiguity produces one
+clarifying question. The general destination has no frame or VLM tools; the
+visual destination owns the frame and VLM tools. Scope admission is based on
+the request, not whether the camera will return a usable frame. Visual tool calls
 include a standalone query with follow-up references resolved by the LLM. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
@@ -72,12 +76,13 @@ The worker package is under
 | `__main__.py` | Parses launcher arguments and starts the worker |
 | `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
 | `agent.py` | Owns participant-scoped routed turns, voice streaming, cancellation, and cleanup |
+| `admission.py` | Applies Clef accept/decline/clarify checks before a destination answers |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `xr_ai_conversation.Conversation` | Streams general answers or delegates standalone visual questions to the frame/VLM tools |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 | `prompts/vision.txt` | Application instructions for the visual destination |
-| `eval/conversation-cases.yaml` | Clef routing, direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
+| `eval/conversation-cases.yaml` | Clef routing and admission, direct-answer, visible-text, follow-up, and domain-visual evaluation inputs |
 
 ## Readiness and warmup
 
