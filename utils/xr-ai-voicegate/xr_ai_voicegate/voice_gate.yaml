@@ -46,6 +46,10 @@ speaker:
   # required fails closed instead; choose required for a speaker-only stack.
   # VoiceAgent.from_models needs a batch STT role unless required is enabled.
   backend: auto
+  # Extra candidate/ignored-speaker display; never authorizes agent queries.
+  # After enrollment this adds decoding work and temporary non-owner ASR caches.
+  # Accepted-query display does not depend on diagnostics being enabled.
+  diagnostics: false
   timeout_s: 10.0                 # Positive finite HTTP timeout, in seconds.
   activity_threshold: 0.7          # Speaker activity threshold, strictly (0, 1).
   silence_duration: 0.6            # Per-speaker silence before finalization (s).
