@@ -83,7 +83,7 @@ class VoiceGateProcessor(FrameProcessor):
         """
         super().__init__()
         self._conversation_cfg = cfg._conversation
-        self._mode = cfg._mode or ("conversation" if cfg._conversation is not None else ("wake_only" if cfg.magic_phrases else "always_on"))
+        self._mode = cfg._mode
         self._wake_phrase = max(cfg.magic_phrases, key=len, default="")
         self._conversation_active: set[str] = set()
         self._controls: dict[str, _ControlMatcher] = {}
@@ -181,10 +181,6 @@ class VoiceGateProcessor(FrameProcessor):
                 elif self._gate._matches_stop(frame.text):
                     await self._on_gate_stop(frame.participant_id)
                 else:
-                    # Candidate decoding has no early wake probe. A complete
-                    # addressed turn acknowledges here, once, before dispatch.
-                    if frame.fresh_match and self._mode != "always_on":
-                        await self._emit_chime(frame.participant_id, early=False)
                     await self._on_gate_query(frame.participant_id, frame.text, frame.fresh_match)
             finally:
                 self._feeding_pts_us = None
@@ -214,6 +210,7 @@ class VoiceGateProcessor(FrameProcessor):
 
         if isinstance(frame, _UnrecognizedSpeechFrame):
             self._controls.pop(frame.participant_id, None)
+            self._gate.forget(frame.participant_id)
             return
 
         if isinstance(frame, TranscriptionFrame):
@@ -289,6 +286,8 @@ class VoiceGateProcessor(FrameProcessor):
         matcher = self._controls.setdefault(pid, _ControlMatcher(cfg))
         at_s = self._feeding_pts_us / 1_000_000 if self._feeding_pts_us is not None else time.monotonic()
         action = matcher._feed(frame.text, key=pid, at_s=at_s)
+        if action in {"start", "stop"}:
+            self._gate.forget(pid)
         if action == "start":
             if not active:
                 await self._set_conversation_active(pid, True)
@@ -315,6 +314,9 @@ class VoiceGateProcessor(FrameProcessor):
     async def _handle_pending_control(self, pid: str, text: str) -> None:
         cfg = self._conversation_cfg
         assert cfg is not None
+        # A withheld control is still the next utterance. Its phrase fragments
+        # live in the control matcher, not in the temporary query permission.
+        self._gate.forget(pid)
         # A standalone wake phrase can also start a control. Preserve its
         # follow-up window while withholding the possible control prefix.
         if (((pid in self._conversation_active and cfg.require_wake_phrase)
@@ -362,7 +364,13 @@ class VoiceGateProcessor(FrameProcessor):
             await self._on_conversation_transcript(
                 pid, text, self._feeding_pts_us if self._feeding_pts_us is not None else time.time_ns() // 1_000,
             )
-        if fresh_match and not self._feeding_speech_transcript:
+        # Closed hybrid speech and speaker one-shots have no early wake probe.
+        # The existing acknowledgement guard deduplicates any earlier probe.
+        if fresh_match and (
+            not self._feeding_speech_transcript
+            or (self._mode == "hybrid" and pid not in self._conversation_active)
+            or (self._mode == "wake_only" and self._use_speaker_asr)
+        ):
             await self._emit_chime(pid, early=False)
         await self.push_frame(GatedQueryFrame(
             participant_id = pid,

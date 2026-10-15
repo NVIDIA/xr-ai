@@ -166,7 +166,8 @@ once against the packaged baseline.
 (voice-conversation-controls)=
 ## Conversation controls
 
-The shipped voice samples start with their microphone conversation closed.
+The Simple VLM, Tea making, lab monitoring and XR render samples start with
+their microphone conversation closed.
 After connecting, say `Hey agent, let's start talking`, then speak naturally
 without a wake phrase. Say `Hey agent, let's stop talking` to close the
 conversation and interrupt the current response. A short `stop` interrupts the
@@ -182,8 +183,9 @@ Choose a mode in each sample's voice-gate YAML:
 | `always_on` | All recognized speech | No persistent conversation | No persistent owner |
 
 `wake_only` and `hybrid` require non-empty `magic_phrases`. The packaged default
-is `always_on`, preserving the existing ungated fallback; all shipped voice
-samples explicitly select `conversation`. Change the sample's `mode` field to
+is `always_on`, preserving the existing ungated fallback; the four conversation
+samples explicitly select `conversation`. Procedure capture instead uses
+ungated narration with STOP disabled. Change the sample's `mode` field to
 choose another interaction policy without maintaining a separate preset copy.
 
 ```yaml
@@ -198,9 +200,13 @@ existing `followup_grace_s` window; its onset must be in the window, but it may
 finish later. Speaker ASR binds that permission to the same recognized speaker.
 This temporary permission is not speaker registration or an idle conversation
 timeout. A control prefix such as `Hey agent, let's` is withheld, never sent
-as a question; the complete start phrase opens the conversation.
+as a question, and consumes an earlier bare-wake permission; it does not preserve
+that permission for a third utterance. The complete start phrase opens the conversation.
 
 Tune conversation controls separately:
+
+With explicit `mode`, put all session controls in `conversation`, not `speaker`;
+misplaced controls are rejected instead of silently replaced by defaults.
 
 ```yaml
 conversation:

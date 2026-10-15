@@ -39,7 +39,7 @@ updated service; there is no silent text-only fallback.
 
 Choose `mode: conversation`, `hybrid`, `wake_only`, or `always_on` at the top of
 the selected voice-gate YAML. Remove `conversation.enabled` when setting mode.
-The shipped samples select `conversation` to preserve their closed-until-start
+The four conversation samples select `conversation` to preserve their closed-until-start
 workflow. Tea's redundant alternate preset is removed; change `mode` in its
 normal `voice_gate.yaml` to choose another interaction policy.
 `hybrid` adds one-off addressed questions without persistent enrollment before
@@ -48,7 +48,10 @@ starting a natural conversation. `wake_only` and `hybrid` require non-empty
 
 Existing mode-less inputs normalize their present conversation and phrase
 settings at the loader boundary, but new configurations must use the explicit
-mode rather than combining old activation flags. Advanced
+mode rather than combining old activation flags. Speaker-only controls must
+move to the `conversation` mapping when adding an
+explicit mode; otherwise the loader reports an error rather than replacing
+custom phrases. The advanced setting
 `conversation.require_wake_phrase` applies only after a conversation opens.
 Speaker backend selection is now independent: disabling conversation controls
 does not disable a configured speaker backend. To use batch STT, explicitly set

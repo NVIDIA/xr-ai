@@ -75,7 +75,11 @@ class VoiceGateConfig:
 
     _speaker: _SpeakerConfig | None = field(default=None, init=False, repr=False)
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
-    _mode: str | None = field(default=None, init=False, repr=False, compare=False)
+    _mode: str = field(default="always_on", init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # Direct construction still opts in through its existing phrase field.
+        object.__setattr__(self, "_mode", "wake_only" if self.magic_phrases else "always_on")
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
@@ -144,6 +148,9 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     if isinstance(raw.get("speaker"), dict) and raw["speaker"].keys() & policy_keys:
         raise ValueError("interaction policy settings belong at the top level, not under speaker")
     explicit_mode = "mode" in raw
+    control_keys = {f.name for f in fields(_ConversationConfig)}
+    if explicit_mode and isinstance(raw.get("speaker"), dict) and raw["speaker"].keys() & control_keys:
+        raise ValueError("with explicit mode, move conversation controls from speaker to conversation")
     if explicit_mode and isinstance(raw.get("conversation"), dict) and "enabled" in raw["conversation"]:
         raise ValueError("mode replaces conversation.enabled; remove enabled from the conversation mapping")
     speaker = _SpeakerConfig._from_yaml(values.get("speaker"))

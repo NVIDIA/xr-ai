@@ -32,6 +32,9 @@ class _Selection:
             return []
         matches, turns, wakes = [], [], []
         for speaker, text, pts_us, truncated in completed:
+            # Every completed utterance consumes the prior one-turn permission,
+            # including a withheld control. A fresh bare wake can renew it below.
+            until = self._wake_until.pop(speaker, None)
             matcher = self._enrollment_controls.setdefault(speaker, _ControlMatcher(self.cfg))
             if truncated:
                 matcher._reset()
@@ -52,7 +55,6 @@ class _Selection:
             tail = strip_magic(self._wake_pattern, text)
             if self.cfg.mode == "hybrid" and action == "pending" and tail != "":
                 continue
-            until = self._wake_until.pop(speaker, None)
             followup = until is not None and pts_us < until
             global_stop = self.cfg.mode == "wake_only" and self.cfg.stop_commands_enabled and STOP_RE.match(text)
             if tail == "" and self.cfg.mode != "always_on":

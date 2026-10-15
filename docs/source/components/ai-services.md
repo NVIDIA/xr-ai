@@ -126,8 +126,12 @@ proxy alive.
 
 Each session owns one diarization cache and at most eight temporary ASR caches
 before enrollment, bounded by the model's speaker-label capacity. Features and
-model weights are shared. After enrollment only the owner's ASR cache is needed
-unless the dependent diagnostics layer requests other transcripts. With the
+model weights are shared. Always-on and wake-only keep candidate decoding as their
+steady state; hybrid uses it whenever no owner conversation is open. Every
+candidate remains required, so a decoder failure resets that session rather
+than silently ignoring a competing speaker. After enrollment only the owner's
+ASR cache is needed, unless the dependent diagnostics layer requests other
+transcripts. With the
 default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
 GPU memory and latency at that bound have not been qualified. Candidate-decoding
 failure revokes the session because dropping a candidate could conceal a phrase

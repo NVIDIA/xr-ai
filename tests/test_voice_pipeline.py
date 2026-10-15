@@ -688,6 +688,7 @@ async def test_stop_policy_with_probes_and_final_transcripts(
     )
     if conversation != "off":
         object.__setattr__(cfg, "_conversation", _ConversationConfig(require_wake_phrase=False))
+        object.__setattr__(cfg, "_mode", "conversation")
     stt = _StagedStt(texts=[], default="stop")
     transcripts = AsyncMock()
     transport = HubVoiceTransport()
