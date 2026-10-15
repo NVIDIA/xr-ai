@@ -29,7 +29,7 @@ recorded video, and document retrieval.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
-| `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -617,10 +617,13 @@ cleanup.
   `x-audio-sample-rate` and `x-audio-channels` headers describe the signed
   16-bit interleaved samples. Streaming with another response format returns
   HTTP 400.
-- **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
-  `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
-  truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
-  configuration reserves 20% of a GPU and uses Docker.
+- **embedding-server** serves `nvidia/Nemotron-3-Embed-1B-BF16` through
+  `/v1/embeddings` under the served name `embed`. It emits 2048-dimensional
+  vectors. Retrieval inputs use `query: ` for queries and `passage: ` for
+  documents, as specified in the
+  [model card](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16).
+  The standalone configuration reserves 20% of a GPU and uses Docker;
+  the tea sample applies its own memory budget and indexes all 2048 dimensions.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at

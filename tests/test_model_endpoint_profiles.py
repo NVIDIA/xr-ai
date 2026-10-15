@@ -12,6 +12,7 @@ from runpy import run_path
 
 import httpx
 import pytest
+import yaml
 from xr_ai_models import load_models_config, load_models_config_from_dict, make_embedding
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,12 +135,49 @@ def test_endpoint_profile_and_sample_environments_use_existing_contract():
     assert all(spec.deployment.ownership == "external" for spec in config.entries.values())
     assert config.required_credentials == ("NIM_ENDPOINT_API_KEY",)
     assert config.embedding("embedding").kind == "openai_compat"
+    assert config.embedding("embedding").model_name == "nvidia/nemotron-3-embed-1b"
     assert config.embedding("embedding").default_extras == {"input_type": "passage"}
     assert config.stt("stt").kind == config.tts("tts").kind == "riva_grpc"
     for path in ROOT.glob("agent-samples/*/worker/pyproject.toml"):
         project = tomllib.loads(path.read_text())["project"]
         if any(dep.startswith("xr-ai-models") for dep in project["dependencies"]):
             assert "xr-ai-models[riva]" in project["dependencies"]
+
+
+@pytest.mark.parametrize("native_nim", [False, True])
+async def test_tea_embedding_profiles_use_native_dimensions_and_retrieval_inputs(monkeypatch, native_nim):
+    sample = ROOT / "agent-samples/tea-making-sample/yaml"
+    rag = yaml.safe_load((sample / "rag_service.yaml").read_text())
+    assert rag["embedding_dim"] == 2048
+    profile = ROOT / "deployment/nim/models.yaml" if native_nim else sample / rag["models_config"]
+    calls = []
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        assert request.url.path == "/v1/embeddings"
+        payload = json.loads(request.content)
+        calls.append(payload)
+        return httpx.Response(200, json={"data": [
+            {"index": index, "embedding": [0.1] * 2048}
+            for index, _ in enumerate(payload["input"])
+        ]})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    async with make_embedding(load_models_config(profile), rag["embedding_role"]) as client:
+        vectors = await client.embed(["query: How long should tea steep?", "passage: Steep tea for three minutes."])
+    assert [len(vector) for vector in vectors] == [rag["embedding_dim"]] * 2
+    if native_nim:
+        assert calls == [
+            {"model": "nvidia/nemotron-3-embed-1b", "input": ["How long should tea steep?"], "input_type": "query"},
+            {"model": "nvidia/nemotron-3-embed-1b", "input": ["Steep tea for three minutes."], "input_type": "passage"},
+        ]
+    else:
+        assert calls == [{
+            "model": "embed",
+            "input": ["query: How long should tea steep?", "passage: Steep tea for three minutes."],
+        }]
 
 
 @pytest.mark.parametrize("names, message", [

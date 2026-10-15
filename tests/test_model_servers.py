@@ -223,6 +223,7 @@ def test_embedding_default_cache_tracks_service_depth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     resolved: list[Path] = []
+    captured: dict[str, object] = {}
     project = _REPO_ROOT / "services/embedding-server"
 
     def resolve_cache(_cfg: dict, yaml_dir: Path, *, default: str) -> Path:
@@ -234,18 +235,23 @@ def test_embedding_default_cache_tracks_service_depth(
     monkeypatch.setattr(_embedding, "load_config", lambda: ({}, project, None))
     monkeypatch.setattr(_embedding, "resolve_model_cache", resolve_cache)
     monkeypatch.setattr(_embedding, "setup_hf_env", lambda *_a, **_k: None)
-    monkeypatch.setattr(_embedding, "serve", lambda **_kwargs: None)
+    monkeypatch.setattr(_embedding, "serve", lambda **kwargs: captured.update(kwargs))
 
     _embedding.run()
 
     assert resolved == [_REPO_ROOT / "models"]
+    assert captured["model"] == "nvidia/Nemotron-3-Embed-1B-BF16"
 
 
-def test_spark_embedding_enables_uma_cold_start_safeguards(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("profile", ["spark", "96G_blackwell", "dual_48G_ada", "standalone"])
+def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
+    monkeypatch: pytest.MonkeyPatch, profile: str,
 ) -> None:
     captured: dict[str, object] = {}
-    config_path = profile_config("embedding_server", "spark")
+    config_path = (
+        _REPO_ROOT / "services/embedding-server/embedding_server.yaml"
+        if profile == "standalone" else profile_config("embedding_server", profile)
+    )
     config = yaml.safe_load(config_path.read_text())
     monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(
@@ -263,7 +269,11 @@ def test_spark_embedding_enables_uma_cold_start_safeguards(
 
     _embedding.run()
 
-    assert captured["spark_uma"] is True
+    assert captured["model"] == "nvidia/Nemotron-3-Embed-1B-BF16"
+    assert captured["port"] == 8109
+    assert captured["spark_uma"] is (profile == "spark")
+    args = captured["extra_serve_args"]
+    assert args[args.index("--served-model-name") + 1] == "embed"
 
 
 def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:

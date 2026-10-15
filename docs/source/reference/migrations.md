@@ -5,6 +5,20 @@
 
 # Release migration
 
+## Nemotron 3 embedding model
+
+The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
+consumer profile selects `nvidia/nemotron-3-embed-1b`. Stop the tea sample's model
+stack before updating, then restart it to load the new weights. The local
+endpoint remains on port 8109 with the served name `embed`.
+
+For copied tea configurations, change `embedding_dim` from `768` to `2048` in
+`rag_service.yaml` and restart the agent stack. The dimension change invalidates
+the cached index automatically. If retaining a custom dimension while replacing
+the model behind an unchanged endpoint profile, also change `cache_key` to
+rebuild its embeddings. Independently deployed NIM endpoints must serve the new
+model before using the updated NIM profile.
+
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for

@@ -89,6 +89,10 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
     await DenseIndex.build(documents, reused, cache_dir=cache, embedding_dim=3)
     assert reused.calls == []
 
+    changed_dimension = _Embedding()
+    await DenseIndex.build(documents, changed_dimension, cache_dir=cache, embedding_dim=2)
+    assert changed_dimension.calls
+
     document.write_text("Count objects carefully from left to right.")
     changed_document = _Embedding()
     await DenseIndex.build(

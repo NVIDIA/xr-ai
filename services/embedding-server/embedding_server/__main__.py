@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-embedding_server — vLLM launcher for nvidia/llama-nemotron-embed-1b-v2.
+embedding_server — vLLM launcher for nvidia/Nemotron-3-Embed-1B-BF16.
 
 Reads config and dispatches through ``xr_ai_vllm.serve`` to either the
 pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker container
@@ -43,7 +43,7 @@ from xr_ai_vllm import (
 )
 from xr_ai_vllm._config import parse_config_bool
 
-_DEFAULT_MODEL       = "nvidia/llama-nemotron-embed-1b-v2"
+_DEFAULT_MODEL       = "nvidia/Nemotron-3-Embed-1B-BF16"
 _DEFAULT_PORT        = 8109
 _DEFAULT_HOST        = "0.0.0.0"
 _DEFAULT_SERVED_NAME = "embed"
