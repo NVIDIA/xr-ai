@@ -155,7 +155,7 @@ def test_corrupt_packaged_voice_defaults_fail_clearly(tmp_path, monkeypatch):
 def test_voice_reference_diagnostics_uses_real_enabled_speaker_parser(tmp_path, diagnostics):
     raw = yaml.safe_load(_VOICE_REFERENCE.read_text())
     assert raw["speaker"]["diagnostics"] is False
-    raw["conversation"]["enabled"] = True
+    raw["mode"] = "conversation"
     raw["speaker"].update(enabled=True, backend="required", diagnostics=diagnostics)
     path = tmp_path / "voice_gate.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -174,7 +174,7 @@ def test_packaged_diagnostics_default_is_used_by_partial_override(tmp_path, monk
     (package / "voice_gate.yaml").write_text(yaml.safe_dump(defaults))
     monkeypatch.setattr(voice_config, "files", lambda _package: package)
     path = tmp_path / "override.yaml"
-    path.write_text("conversation: {enabled: true}\nspeaker: {enabled: true, backend: required}\n")
+    path.write_text("mode: conversation\nspeaker: {enabled: true, backend: required}\n")
     assert load_voice_gate_config(path)._speaker.diagnostics is True
-    path.write_text("conversation: {enabled: true}\nspeaker: {enabled: true, backend: required, diagnostics: false}\n")
+    path.write_text("mode: conversation\nspeaker: {enabled: true, backend: required, diagnostics: false}\n")
     assert load_voice_gate_config(path)._speaker.diagnostics is False

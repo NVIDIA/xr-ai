@@ -57,8 +57,9 @@ Speaker backend selection is now independent: disabling conversation controls
 does not disable a configured speaker backend. To use batch STT, explicitly set
 `speaker.enabled: false` and supply the batch STT model client/service.
 
-Speaker streaming protocol 4 carries explicit interaction policy and attributed
-one-turn events. Restart/update the service and client together; old peers fail
+Speaker streaming protocol 5 carries explicit diagnostics configuration alongside
+protocol 4's interaction policy and attributed one-turn events. Restart/update
+the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.

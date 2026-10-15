@@ -176,6 +176,7 @@ class VoiceGateProcessor(FrameProcessor):
             if self._mode not in {"always_on", "wake_only", "hybrid"} or frame.participant_id in self._conversation_active:
                 raise ValueError("speaker turn conflicts with conversation state")
             self._feeding_pts_us = frame.pts_us
+            self._feeding_speaker_id = frame.speaker_id
             self._feeding_speech_transcript = True
             try:
                 if not frame.text:
@@ -186,6 +187,7 @@ class VoiceGateProcessor(FrameProcessor):
                     await self._on_gate_query(frame.participant_id, frame.text, frame.fresh_match)
             finally:
                 self._feeding_pts_us = None
+                self._feeding_speaker_id = None
                 self._feeding_speech_transcript = False
             return
 
