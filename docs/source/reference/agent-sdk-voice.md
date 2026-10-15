@@ -144,6 +144,18 @@ Applications call `release(participant_id)` on departure and `stop()` before
 runtime shutdown. The aggregator logs accepted contributions discarded during
 release or shutdown.
 
+## Voice-gate configuration reference
+
+Each sample selects its own `voice_gate_yaml`; there is no shared runtime YAML
+or inheritance between sample files. Omitted settings use the code defaults.
+Refer to this annotated reference when copying or customizing a configuration.
+Its optional conversation and speaker sections are disabled to preserve those
+defaults; enable them explicitly for the speech path your application uses.
+
+```{literalinclude} ../../../utils/xr-ai-voicegate/voice_gate.yaml
+:language: yaml
+```
+
 (voice-conversation-controls)=
 ## Conversation controls
 

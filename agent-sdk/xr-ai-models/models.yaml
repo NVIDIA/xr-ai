@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Model consumer reference: copy only the roles your application uses.
+# load_models_config accepts YAML or JSON; it does not auto-discover this file,
+# start services, expand environment variables, or resolve URLs as file paths.
+# These local endpoints are examples, not loader defaults or a launch profile.
+# A sample's own models.json remains authoritative for that sample.
+# YAML is supported by the worker-side SDK; launcher deployment profiles must
+# remain JSON. Do not replace a launcher's models.json with this file.
+# Speaker-conditioned ASR is configured separately in voice_gate.yaml; the stt
+# role below is ordinary batch STT, needed only when the application uses it.
+
+models:
+  # Logical role names are application-defined; use the same names in make_*.
+  llm:
+    adapter:
+      # Presets supply category, model identifier, capabilities, and wire quirks.
+      # Explicit settings override the preset. Do not also set adapter.kind.
+      preset: nemotron_omni
+      # Optional overrides (must match the serving model's real contract):
+      # model_name: llm
+      # reasoning_field: reasoning_content
+      # capabilities: {streaming: true, tool_calls: true}
+      # default_extras: {chat_template_kwargs: {enable_thinking: false}}
+    endpoint:
+      base_url: http://127.0.0.1:8108 # HTTP origin, without /v1 routes.
+      timeout: 60.0                  # Positive seconds; speech defaults to 30.
+      readiness: health             # Explicit health() calls only, not polling.
+      health_path: /health          # HTTP health route; NIM: /v1/health/ready.
+      # Name an environment variable, never put the actual token in this file.
+      # api_key_env: MODEL_ENDPOINT_API_KEY
+    # Omission means external ownership: consumers never stop this endpoint.
+    # Managed JSON launch profiles additionally name the service and server-side
+    # credentials (environment-variable names, not endpoint bearer tokens):
+    # deployment:
+    #   ownership: managed
+    #   service: nemotron_omni_llm_server
+    #   credentials: []
+  vlm:
+    adapter:
+      preset: cosmos3_nano_reasoner
+    endpoint:
+      base_url: http://127.0.0.1:8100
+  stt:
+    adapter:
+      preset: parakeet_stt
+    endpoint:
+      base_url: http://127.0.0.1:8103
+  tts:
+    adapter:
+      preset: pocket_tts
+    endpoint:
+      base_url: http://127.0.0.1:8105
+  embedding:
+    adapter:
+      preset: nemotron_embedding
+    endpoint:
+      base_url: http://127.0.0.1:8109
+  # A decision role without a preset declares category and the SystemOne adapter.
+  decision:
+    category: decision
+    adapter:
+      kind: systemone
+      model_name: Cloudflare/clef-flash
+    endpoint:
+      base_url: http://127.0.0.1:8120
+
+# For Riva speech, including TLS, language, voice, sample rate, function IDs,
+# endpoint credentials, and independently deployed NIM examples, refer to
+# docs/source/reference/agent-sdk-models.md and deployment/nim/models.yaml.
