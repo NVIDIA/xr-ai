@@ -40,12 +40,15 @@ and finalization.
 
 To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
 
-To replay a locally reviewed guide under `guides/`, use its exact name or ID:
+To test replay with the included green-tea example:
 
 ```bash
-uv run main.py --mode replay "Guide Name"
+uv run main.py --mode replay "Tea Making"
 ```
 
+Use green tea suitable for 80°C water and a three-minute steep, and a kettle
+or thermometer that shows the current water temperature. For another locally
+reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
 The guide must have `task.status: approved`. Replay uses the same model servers;
 say **start replay** to begin and **stop replay** to cancel. Say **start replay**
 again to begin a fresh run of the same command-line-selected guide.
