@@ -164,6 +164,7 @@ class SimpleVlmAgent(Agent):
             async def emit(source: str, text: str) -> None:
                 nonlocal first, opened, output_failure
                 fragments.append(text)
+                interrupt = first
                 try:
                     with nemo_relay.scope.scope(
                         "simple-vlm.destination-output",
@@ -176,13 +177,14 @@ class SimpleVlmAgent(Agent):
                                 text=text,
                                 response_id=response_id,
                                 final=False,
-                                interrupt=first,
+                                interrupt=interrupt,
                                 timestamp_us=request.timestamp_us,
                             ),
                         )
                 except Exception as error:
                     output_failure = error
                     raise
+                # The front end drains a committed emission before allowing another first chunk.
                 first = False
                 opened = True
 

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ class WorkerConfig:
     context_topics: tuple[str, ...]
     context_budget_bytes: int
     compaction_input_budget_bytes: int
+    acknowledgment_delay_secs: float | None = None
 
 
 def _resolve(config_path: Path | None, raw: str) -> Path:
@@ -53,11 +55,7 @@ def _load_system_prompt(data: dict[str, Any], config_path: Path | None) -> str:
     if data.get("system_prompt") is not None:
         return str(data["system_prompt"])
     prompt_name = data.get("system_prompt_file")
-    prompt_path = (
-        _resolve(config_path, str(prompt_name))
-        if prompt_name is not None
-        else _DEFAULT_PROMPT
-    )
+    prompt_path = _resolve(config_path, str(prompt_name)) if prompt_name is not None else _DEFAULT_PROMPT
     return prompt_path.read_text(encoding="utf-8")
 
 
@@ -66,6 +64,12 @@ def load_config(path: Path | None) -> WorkerConfig:
 
     data = _read_config(path)
     idle_timeout = data.get("idle_timeout_secs")
+    acknowledgment_delay = data.get("acknowledgment_delay_secs")
+    acknowledgment_delay_secs = float(acknowledgment_delay) if acknowledgment_delay is not None else None
+    if acknowledgment_delay_secs is not None and (
+        not math.isfinite(acknowledgment_delay_secs) or acknowledgment_delay_secs <= 0
+    ):
+        raise ValueError("acknowledgment_delay_secs must be finite and positive")
 
     return WorkerConfig(
         models_config=_resolve(path, "models.json"),
@@ -83,4 +87,5 @@ def load_config(path: Path | None) -> WorkerConfig:
         context_topics=tuple(str(name) for name in data.get("context_topics", ())),
         context_budget_bytes=int(data.get("context_budget_bytes", 12_000)),
         compaction_input_budget_bytes=int(data.get("compaction_input_budget_bytes", 12_000)),
+        acknowledgment_delay_secs=acknowledgment_delay_secs,
     )

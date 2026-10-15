@@ -126,7 +126,7 @@ layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
-| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics and byte budgets, and prompt overrides |
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics and byte budgets, route-aware acknowledgment delay, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | LLM/VLM/STT/TTS/Clef adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
@@ -141,6 +141,19 @@ missed, or change `conversation.start_phrase` and `conversation.stop_phrase`
 in the voice-gate YAML. Set `conversation.require_wake_phrase: true` to require
 its configured `magic_phrases` during an active conversation. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
+
+The optional `acknowledgment_delay_secs` setting enables route-aware intention
+acknowledgments when set to a positive number; it is disabled when omitted.
+The delay is measured from accepted destination execution until its first
+nonblank answer text is ready for emission, excluding routing, admission, and
+any acknowledgment-output serialization. Confident predictions of a slower
+answer can trigger an acknowledgment earlier; uncertain predictions use the
+configured delay as a fallback. Acknowledgments are best-effort and do not
+guarantee that downstream audio has not already been queued or played. The
+sample uses a separate typed client for acknowledgments, with reasoning disabled
+and a 64-token output limit; the conversation model settings are unchanged.
+Acknowledgment text is restricted to a short “Let me think through …” goal
+restatement. Nonconforming generated text is dropped without retrying.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.

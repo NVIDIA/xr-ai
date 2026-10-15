@@ -35,3 +35,9 @@ idle_timeout_secs: 0
 context_topics: []
 context_budget_bytes: 12000
 compaction_input_budget_bytes: 12000
+
+# Optional route-aware intention acknowledgment. When omitted, prediction and
+# acknowledgment are disabled. Set a positive delay in seconds to enable it.
+# The selected destination starts immediately; a confident slow prediction can
+# speak an acknowledgment early, otherwise the delay is the fallback threshold.
+# acknowledgment_delay_secs: 2.0

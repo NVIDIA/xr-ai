@@ -9,6 +9,7 @@ import io
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from threading import Lock
 
@@ -24,6 +25,7 @@ from xr_ai_conversation import (
 from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,
+    ModelsConfig,
     VLMService,
     load_models_config,
     make_decision,
@@ -68,6 +70,21 @@ def _vlm_warmup_jpeg() -> bytes:
 
 
 _VLM_WARMUP_IMAGE = _vlm_warmup_jpeg()
+
+
+def _acknowledgment_models(models: ModelsConfig) -> ModelsConfig:
+    """Clone the configured LLM role with reasoning disabled for brief acks."""
+
+    spec = models.llm("llm")
+    extras = dict(spec.adapter.default_extras)
+    extras.pop("max_tokens", None)
+    template = dict(extras.get("chat_template_kwargs", {}))
+    template.pop("reasoning_budget", None)
+    template.pop("thinking_budget", None)
+    template["enable_thinking"] = False
+    extras["chat_template_kwargs"] = template
+    acknowledgment_spec = replace(spec, adapter=replace(spec.adapter, default_extras=extras))
+    return ModelsConfig({**models.entries, "acknowledgment_llm": acknowledgment_spec})
 
 
 async def _warm_vlm(vlm: VLMService) -> bool:
@@ -144,6 +161,11 @@ async def run_app(
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
 
     llm = make_llm(models, "llm")
+    acknowledgment_llm = (
+        make_llm(_acknowledgment_models(models), "acknowledgment_llm")
+        if config.acknowledgment_delay_secs is not None
+        else None
+    )
     router: DecisionService = make_decision(models, "router")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
@@ -236,6 +258,8 @@ async def run_app(
             "environment": ClefAdmissionDestination(environment, router),
         },
         router,
+        acknowledgment_llm=acknowledgment_llm,
+        acknowledgment_delay_secs=config.acknowledgment_delay_secs,
     )
     configured_topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
     if configured_topics:
@@ -270,5 +294,7 @@ async def run_app(
     finally:
         await conversation.close()
         await environment_conversation.close()
+        if acknowledgment_llm is not None:
+            await acknowledgment_llm.close()
         await llm.close()
     logger.info("simple-vlm-example stopped")

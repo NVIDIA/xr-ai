@@ -60,15 +60,18 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
+    VOICE_OUTPUT_TOPIC,
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    Admission,
     Conversation,
     ConversationContextUpdate,
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,
+    DestinationResult,
     RoutingAid,
 )
 from xr_ai_tools import Tool  # noqa: E402
@@ -1076,6 +1079,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.context_topics == ()
     assert config.context_budget_bytes == 12_000
     assert config.compaction_input_budget_bytes == 12_000
+    assert config.acknowledgment_delay_secs is None
     assert "system_prompt_file" not in raw
 
     models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
@@ -1090,6 +1094,47 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert router.kind == "systemone"
     assert router.model_name == "Cloudflare/clef-flash"
     assert router.base_url == "http://localhost:8120"
+
+
+@pytest.mark.asyncio
+async def test_acknowledgment_client_builds_nonreasoning_bounded_payload() -> None:
+    models = load_models_config(_SAMPLE_DIR / "yaml" / "models.json")
+    main_spec = models.llm("llm")
+    extras = dict(main_spec.default_extras)
+    extras["chat_template_kwargs"] = {
+        "enable_thinking": True,
+        "reasoning_budget": 4096,
+        "thinking_budget": 2048,
+    }
+    customized_main_spec = replace(main_spec, adapter=replace(main_spec.adapter, default_extras=extras))
+    customized_models = replace(models, entries={**models.entries, "llm": customized_main_spec})
+    acknowledgment_models = app._acknowledgment_models(customized_models)
+    acknowledgment_spec = acknowledgment_models.llm("acknowledgment_llm")
+    assert acknowledgment_spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
+    assert "max_tokens" not in acknowledgment_spec.default_extras
+
+    client = app.make_llm(acknowledgment_models, "acknowledgment_llm")
+    try:
+        payload = client._build_payload(
+            [],
+            tools=None,
+            max_tokens=64,
+            temperature=None,
+            enable_thinking=False,
+            thinking_budget=None,
+            stream=False,
+        )
+    finally:
+        await client.close()
+
+    assert payload["max_tokens"] == 64
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+    assert "reasoning_budget" not in payload["chat_template_kwargs"]
+    assert customized_models.llm("llm").default_extras["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "reasoning_budget": 4096,
+        "thinking_budget": 2048,
+    }
 
 
 def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> None:
@@ -1201,6 +1246,22 @@ def test_config_keeps_inline_prompt_compatibility(tmp_path) -> None:
     assert config.voice_gate_yaml == tmp_path / "gate.yaml"
     assert config.system_prompt == "custom prompt"
     assert config.idle_timeout_secs == 30.0
+
+
+@pytest.mark.parametrize("delay", [0, -1, "nan", ".inf"])
+def test_config_rejects_invalid_acknowledgment_delay(tmp_path, delay) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text(f"acknowledgment_delay_secs: {delay}\n")
+
+    with pytest.raises(ValueError, match="acknowledgment_delay_secs"):
+        load_config(config_path)
+
+
+def test_config_accepts_positive_acknowledgment_delay(tmp_path) -> None:
+    config_path = tmp_path / "worker.yaml"
+    config_path.write_text("acknowledgment_delay_secs: 2.5\n")
+
+    assert load_config(config_path).acknowledgment_delay_secs == 2.5
 
 
 def test_config_rejects_a_non_mapping_yaml_document(tmp_path) -> None:
@@ -1417,6 +1478,99 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
         )
         assert conversation._context.sections("alice") == (("tea.status", "Timer is at 6 minutes."),)
     await conversation.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_acknowledgment_publish", [False, True])
+async def test_acknowledgment_publish_preserves_interrupt_slot(
+    fail_acknowledgment_publish: bool,
+) -> None:
+    class Prediction:
+        async def decide(self, *_args, **_kwargs):
+            return DecisionResponse(
+                answers={
+                    "first_answer_timing": DecisionAnswer(
+                        "slow",
+                        0.9,
+                        {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05},
+                    )
+                },
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    class AckLLM:
+        async def chat(self, *_args, **_kwargs):
+            return ChatResponse("Let me think through that.", None, None, "stop", {})
+
+    class Destination:
+        def __init__(self):
+            self.release_answer = asyncio.Event()
+            self.answer_emit_started = asyncio.Event()
+
+        def routing_aid(self, _participant_id):
+            return RoutingAid("conversation", "Answers general questions.")
+
+        async def admit(self, _turn, *, focused):
+            return Admission("accept")
+
+        async def answer(self, _turn, *, emit):
+            await self.release_answer.wait()
+            self.answer_emit_started.set()
+            await emit("conversation", "Here is the answer.")
+            return DestinationResult("answer", "Here is the answer.")
+
+        async def release(self, _participant_id):
+            return None
+
+    destination = Destination()
+    front_end = ConversationFrontEnd(
+        {"conversation": destination},  # type: ignore[arg-type]
+        Prediction(),  # type: ignore[arg-type]
+        acknowledgment_llm=AckLLM(),  # type: ignore[arg-type]
+        acknowledgment_delay_secs=10.0,
+    )
+    agent = SimpleVlmAgent(_ignore_status, front_end=front_end, conversations=())
+
+    class Context:
+        metadata = SimpleNamespace(message_id="response-1", correlation_id=None, participant_id="alice")
+
+        def __init__(self):
+            self.outputs = []
+            self.acknowledgment_started = asyncio.Event()
+            self.release_acknowledgment = asyncio.Event()
+
+        async def publish(self, topic, message):
+            if topic == VOICE_OUTPUT_TOPIC:
+                if message.text == "Let me think through that. ":
+                    self.acknowledgment_started.set()
+                    if fail_acknowledgment_publish:
+                        raise RuntimeError("voice output rejected before delivery")
+                self.outputs.append(message)
+                if message.text == "Let me think through that. ":
+                    await self.release_acknowledgment.wait()
+
+    context = Context()
+    task = asyncio.create_task(
+        agent._stream_response(UserQuery(text="Explain this request.", timestamp_us=123), context)  # type: ignore[arg-type]
+    )
+    await asyncio.wait_for(context.acknowledgment_started.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(destination.answer_emit_started.wait(), timeout=1)
+    context.release_acknowledgment.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    chunks = [message for message in context.outputs if message.text]
+    if fail_acknowledgment_publish:
+        assert [(message.text, message.interrupt) for message in chunks] == [
+            ("Here is the answer.", True),
+        ]
+    else:
+        assert [(message.text, message.interrupt) for message in chunks] == [
+            ("Let me think through that. ", True),
+            ("Here is the answer.", False),
+        ]
 
 
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
