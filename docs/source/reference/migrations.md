@@ -51,21 +51,6 @@ cannot stop services omitted from its selection. Refer to
 {doc}`/components/ai-services` for the existing service identity guards and
 their configuration-scoped limitations.
 
-## Procedure capture and replay sample name
-
-The `task-capture` sample is renamed to `procedure-capture-replay`. Run it from
-`agent-samples/procedure-capture-replay/` with `uv run main.py` or
-`uv run procedure_capture_replay`. The model-server command is now
-`uv run --project model-servers procedure_capture_replay_model_servers`.
-Update scripts and worker imports to use `procedure_capture_replay_worker`
-instead of `task_worker`.
-
-Capture behavior and the spoken commands **start capture** and **stop capture**
-are unchanged. The rename does not add replay functionality. Local evidence
-remains untracked; if retained in the old sample directory after updating,
-move it to the new sample's `artifacts/` directory or use `--output-root` to
-continue using its existing location.
-
 ## Clef model cache configuration
 
 Remove `model_path` from Clef server YAML files. Clef first resolves the
