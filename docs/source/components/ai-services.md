@@ -104,9 +104,10 @@ or incomplete PCM samples are protocol errors. The server's standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.
 
-The private identity is protocol 4. Worker and speaker service must be restarted
-together after updating: protocol-3 endpoints fail admission rather than
-silently selecting batch STT or accepting incompatible interaction settings.
+The private identity is protocol 5, adding the explicit diagnostics setting to
+protocol 4's interaction policy. Worker and speaker service must be restarted
+together after updating: earlier endpoints fail admission rather than silently
+selecting batch STT or accepting incompatible interaction settings.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is

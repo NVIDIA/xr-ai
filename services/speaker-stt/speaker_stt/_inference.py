@@ -283,8 +283,9 @@ class _Session:
         owner_before: int | None, pts_us: int,
     ) -> list[dict]:
         owner = self.selection.owner
+        waiting = "waiting for enrollment" if self.selection.cfg.mode == "conversation" else "listening"
         statuses = {
-            speaker: "enrolled" if speaker == owner else "ignored" if owner is not None else "waiting for enrollment"
+            speaker: "enrolled" if speaker == owner else "ignored" if owner is not None else waiting
             for speaker in active
         }
         events = [
@@ -301,7 +302,7 @@ class _Session:
         for speaker, stream in completed:
             if speaker in {owner_before, owner} or not stream.text.strip():
                 continue
-            status = "ignored" if owner is not None else "ignored; waiting for enrollment"
+            status = "ignored" if owner is not None else f"ignored; {waiting}"
             if stream.duration >= self.selection.cfg.max_utterance_s:
                 status += "; truncated"
             events.append({"kind": "diagnostic", "speaker_id": speaker, "status": status,
@@ -350,9 +351,13 @@ class _Session:
                     self.step * self.models.hop_samples * 1_000_000 / 16000
                 )
                 if self.selection.owner is None:
-                    events.extend(self._candidate_step(features, lengths, preds, drop, active, chunk_pts))
+                    candidate_events = self._candidate_step(features, lengths, preds, drop, active, chunk_pts)
+                    events.extend(candidate_events)
                     if self.selection.cfg.diagnostics:
-                        events.extend(self._diagnostic_events(active, self._candidate_completed, None, chunk_pts))
+                        accepted = {event["speaker_id"] for event in candidate_events if event["kind"] == "one_shot"}
+                        completed = [(speaker, stream) for speaker, stream in self._candidate_completed
+                                     if speaker not in accepted]
+                        events.extend(self._diagnostic_events(active, completed, None, chunk_pts))
                     self.step += 1
                     continue
                 selected, edges, started = self.selection._activity(

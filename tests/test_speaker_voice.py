@@ -234,7 +234,7 @@ async def test_cancelled_request_closes_connection_and_releases_session(cancel_o
             if cancel_op == "open":
                 allocated.set()
                 await release_reply.wait()
-            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
             await socket.recv()
             if cancel_op == "audio":
                 allocated.set()
@@ -427,7 +427,7 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
         opening = json.loads(await socket.recv())
         assert socket.request.path == "/v1/audio/transcriptions/stream"
         sessions[socket] = opening["audio_origin_us"]
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
         count, samples = 0, 0
         try:
             async for audio in socket:
