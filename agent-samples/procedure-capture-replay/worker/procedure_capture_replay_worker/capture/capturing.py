@@ -144,6 +144,10 @@ class _Capture:
     CaptureAgent starts and stops this private helper. It owns the background
     sampling and captioning tasks, saved evidence, and derived packet summaries.
 
+    Callers serialize control and narration operations per participant. Each
+    session has one sampler and one captioner; locks coordinate these tasks
+    with finalization, not arbitrary concurrent frame producers.
+
     Sampling and caption tasks can outlive a cancelled caller. Finalization
     retains those tasks and drains filesystem writes before sealing the packet.
     """
@@ -430,6 +434,8 @@ class _Capture:
 
     @staticmethod
     def _update_hierarchy(state: _Session, caption: dict[str, Any]) -> None:
+        # Group contiguous matching labels. A phase's summary keeps its latest
+        # caption, not an accumulated summary of all captions in that phase.
         timestamp_us = int(caption["frame_timestamp_us"])
         activity_name = str(caption["activity"])
         phase_name = str(caption["phase"])

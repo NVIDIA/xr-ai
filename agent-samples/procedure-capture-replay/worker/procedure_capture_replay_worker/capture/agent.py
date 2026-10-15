@@ -31,6 +31,8 @@ class _Connection:
     session_id: str
     joined_at_us: int
     cancelled: asyncio.Event = field(default_factory=asyncio.Event)
+    # Accepted input identity, including a start still queued behind finalization.
+    # It can differ from CaptureAgent._sessions, which tracks backend ownership.
     recording: _Recording | None = None
 
 
@@ -48,6 +50,8 @@ class CaptureAgent(Agent):
     def __init__(self, capture_backend: _Capture) -> None:
         super().__init__()
         self._capture_backend = capture_backend
+        # Recording ownership applied to the backend by queued actions. Keep this
+        # separate from connection.recording: newer input may already be accepted.
         self._sessions: dict[str, _Recording] = {}
         self._tails: dict[str, asyncio.Task[None]] = {}
         self._connections: dict[str, _Connection] = {}

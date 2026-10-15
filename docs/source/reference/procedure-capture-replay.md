@@ -24,7 +24,9 @@ The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. The launcher combines shared server defaults with
+or generate guides automatically. Omni is included for future voice guidance and
+conversational assistance during replay; that integration is not implemented in
+this capture-only sample. The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
 profile explicitly. The worker's `yaml/models.json` configures its client
 adapters and endpoints, not server deployment. Keep those endpoints aligned
