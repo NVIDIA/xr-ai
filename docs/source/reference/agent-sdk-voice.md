@@ -146,13 +146,17 @@ release or shutdown.
 
 ## Voice-gate configuration reference
 
-Each sample selects its own `voice_gate_yaml`; there is no shared runtime YAML
-or inheritance between sample files. Omitted settings use the code defaults.
-Refer to this annotated reference when copying or customizing a configuration.
-Its optional conversation and speaker sections are disabled to preserve those
-defaults; enable them explicitly for the speech path your application uses.
+`xr-ai-voicegate` ships the annotated `voice_gate.yaml` below as its actual
+packaged default. Each sample selects its own `voice_gate_yaml`; that file's
+fields override the packaged baseline. Missing or empty files use the baseline.
+There is no new discovery rule, public loader parameter, or inheritance between
+sample files. Conversation controls and speaker ASR remain disabled unless
+selected by a sample. An explicit conversation mapping enables controls by
+default; `enabled: false` or `null` disables them. Speaker-only configurations
+retain their existing implicit conversation controls. Lists replace rather than
+append to default values.
 
-```{literalinclude} ../../../utils/xr-ai-voicegate/voice_gate.yaml
+```{literalinclude} ../../../utils/xr-ai-voicegate/xr_ai_voicegate/voice_gate.yaml
 :language: yaml
 ```
 

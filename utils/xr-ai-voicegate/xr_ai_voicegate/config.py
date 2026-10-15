@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pathlib
 from dataclasses import dataclass, field, fields, replace
+from importlib.resources import files
 from typing import Protocol
 
 import yaml
@@ -84,33 +85,53 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     Optional ``conversation`` and ``speaker`` mappings configure session
     controls and speech-backend selection for the unified voice pipeline.
     Their settings remain private to that path.
-    Missing file or empty file → returns the dataclass defaults (gate
-    disabled / always-on). ``magic_phrases: null`` and trailing whitespace
+    The package's annotated ``voice_gate.yaml`` supplies defaults; the selected
+    file overrides individual top-level and section fields. Missing or empty
+    files use the packaged baseline (gate disabled / always-on). An explicit
+    ``conversation`` mapping enables controls unless ``enabled: false`` is set;
+    omitted sections remain disabled. ``magic_phrases: null`` and trailing whitespace
     in phrases are normalized the same way the inline-block parser did.
     """
-    if not path.exists():
-        return VoiceGateConfig()
-    raw = yaml.safe_load(path.read_text()) or {}
+    defaults = yaml.safe_load(files(__package__).joinpath("voice_gate.yaml").read_text(encoding="utf-8"))
+    if not isinstance(defaults, dict):
+        raise ValueError("packaged voice_gate.yaml: top-level must be a mapping")
+    raw = (yaml.safe_load(path.read_text()) or {}) if path.exists() else {}
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: top-level must be a mapping")
 
-    phrases_raw = raw.get("magic_phrases") or []
+    values = {**defaults, **raw}
+    for section in ("conversation", "speaker"):
+        if section not in raw or not isinstance(raw[section], dict):
+            continue
+        section_defaults = dict(defaults[section])
+        if section == "conversation":
+            # Presence, not the disabled baseline, enables an explicit mapping.
+            section_defaults.pop("enabled", None)
+        else:
+            # Legacy speaker-only files also carry the conversation controls.
+            section_defaults = {
+                **{k: v for k, v in defaults["conversation"].items() if k != "enabled"},
+                **section_defaults,
+            }
+        values[section] = {**section_defaults, **raw[section]}
+
+    phrases_raw = values.get("magic_phrases") or []
     if isinstance(phrases_raw, str):
         phrases_raw = [phrases_raw]
     phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
 
     cfg = VoiceGateConfig(
         magic_phrases    = phrases,
-        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
+        followup_grace_s = float(values["followup_grace_s"]),
         listening_chime  = _parse_config_bool(
-            raw.get("listening_chime", True), "listening_chime"
+            values["listening_chime"], "listening_chime"
         ),
         stop_commands_enabled = _parse_config_bool(
-            raw.get("stop_commands_enabled", True), "stop_commands_enabled"
+            values["stop_commands_enabled"], "stop_commands_enabled"
         ),
     )
-    speaker = _SpeakerConfig._from_yaml(raw.get("speaker"))
-    conversation = _ConversationConfig._from_yaml(raw.get("conversation"))
+    speaker = _SpeakerConfig._from_yaml(values.get("speaker"))
+    conversation = _ConversationConfig._from_yaml(values.get("conversation"))
     if "conversation" not in raw and speaker is not None:
         # Preserve existing speaker-only YAML while separating the two concerns
         # for newly configured workers.

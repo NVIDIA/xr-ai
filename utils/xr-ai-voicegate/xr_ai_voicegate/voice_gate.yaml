@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Voice-gate reference: copy into your sample and select it with voice_gate_yaml
-# in the worker configuration. load_voice_gate_config(Path(...)) parses it;
-# this file is not discovered automatically or inherited by sample YAMLs.
-# Values below preserve the loader's behavior when settings are omitted.
+# Packaged voice-gate defaults, read by load_voice_gate_config(Path(...)).
+# Sample-owned voice_gate.yaml files override these values. Missing or empty
+# sample files use this baseline. No CWD discovery or extra loader is needed.
 # No environment-variable substitution or relative file paths are used here.
 
 # Empty means every non-STOP transcript is eligible in wake-only mode.
@@ -19,10 +18,9 @@ listening_chime: true
 # This does not disable conversation start/stop controls below.
 stop_commands_enabled: true
 
-# Optional conversation controls. Omission disables them. This explicit false
-# preserves that behavior; change to true for a closed-until-start conversation.
-# When enabled, these are the field defaults (enabled itself defaults to true
-# when a conversation mapping is supplied).
+# Optional conversation controls are disabled in the baseline. A sample's
+# conversation mapping enables them unless enabled: false is explicit; null
+# disables the section too. Omitted fields retain the defaults below.
 conversation:
   enabled: false
   start_phrase: "Hey agent, let's start talking"
@@ -33,9 +31,8 @@ conversation:
   # Maximum onset window for joining exact control-phrase fragments.
   phrase_window_s: 6.0
 
-# Optional speaker-conditioned streaming ASR. In this reference both
-# conversation.enabled and speaker.enabled must be true to use this path.
-# The base defaults remain off. Older speaker-only files implicitly enable
+# Optional speaker-conditioned streaming ASR. Set speaker.enabled: true in a
+# sample to enable it. The baseline remains off. Speaker-only files implicitly enable
 # conversation controls; an explicit disabled conversation overrides that.
 # Keep conversation controls in the mapping above, not duplicated under speaker.
 speaker:

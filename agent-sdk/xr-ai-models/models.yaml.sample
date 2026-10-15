@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Model consumer reference: copy only the roles your application uses.
+# Copy-only model consumer reference: copy to models.yaml, keeping only the
+# roles your application uses, then select that working file explicitly.
 # load_models_config accepts YAML or JSON; it does not auto-discover this file,
 # start services, expand environment variables, or resolve URLs as file paths.
 # These local endpoints are examples, not loader defaults or a launch profile.
