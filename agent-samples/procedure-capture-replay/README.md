@@ -47,7 +47,8 @@ uv run main.py --mode replay "Guide Name"
 ```
 
 The guide must have `task.status: approved`. Replay uses the same model servers;
-it starts on connection and resets after a completed run for another replay.
+say **start replay** to begin and **stop replay** to cancel. Say **start replay**
+again to begin a fresh run of the same command-line-selected guide.
 Refer to the [replay reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#replay-an-approved-guide)
 for verification and step-advance controls. Capture and replay run separately.
 

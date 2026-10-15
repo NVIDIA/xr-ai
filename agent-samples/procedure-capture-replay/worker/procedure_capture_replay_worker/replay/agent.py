@@ -14,17 +14,14 @@ import asyncio
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 import nemo_relay
 from loguru import logger
-from pydantic import BaseModel, Field
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolDef
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContext, subscribe
-from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import run_tool_loop
-from xr_ai_tools.types import EmptyRequest, StrictRequest
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -38,21 +35,13 @@ from xr_ai_voice import (
 
 from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
-from .replaying import _cancel, _discard, _Replay, _Session
+from .replaying import _cancel, _discard, _Replay
 
 _MAX_TOOL_ROUNDS = 3
 _FOREGROUND_MODEL_OPTIONS = {"max_tokens": 1536, "enable_thinking": True, "thinking_budget": 1024}
 _FOREGROUND_PROMPT = (Path(__file__).with_name("prompts") / "replay_conversation.txt").read_text(
     encoding="utf-8",
 ).strip()
-
-
-class _AdvanceGuideRequest(StrictRequest):
-    skip: bool = Field(default=False, strict=True)
-
-
-class _GuideResult(BaseModel):
-    message: str
 
 
 class ReplayAgent(Agent):
@@ -108,9 +97,8 @@ class ReplayAgent(Agent):
             if self._stopping or participant_id in self._connected:
                 return
             self._connected.add(participant_id)
-            message = self._backend._start(participant_id)
-            self._backend._start_monitor(participant_id)
-            await self._say(participant_id, f"{self._backend._guide.workflow.name}. {message}")
+            message = self._backend.join(participant_id)
+            await self._say(participant_id, message)
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -208,124 +196,20 @@ class ReplayAgent(Agent):
             return
 
     async def _route(self, text: str, participant_id: str) -> str:
-        session = self._backend._sessions.get(participant_id)
-        if session is None:
+        guidance = await self._backend.guidance(participant_id)
+        if guidance is None:
             return ""
-        return await self._answer_step_question(session, text)
-
-    def _guide_tools(self, participant_id: str) -> tuple[ToolSet, list[str]]:
-        """Expose application-owned controls, never recording or evidence commits."""
-        session = self._backend._sessions.get(participant_id)
-        revision = session.revision if session else None
-        results: list[str] = []
-
-        async def control(action) -> _GuideResult:
-            async with self._controls.setdefault(participant_id, asyncio.Lock()):
-                current = self._backend._sessions.get(participant_id)
-                if participant_id not in self._connected:
-                    message = "Guide controls are unavailable while disconnected."
-                elif current is not session or (session is not None and session.revision != revision):
-                    message = "The guide changed while I was answering. Ask again for the current step."
-                else:
-                    message = await action()
-                results.append(message)
-                return _GuideResult(message=message)
-
-        async def status(_request: EmptyRequest) -> _GuideResult:
-            return await control(lambda: self._backend._status(participant_id))
-
-        async def advance(request: _AdvanceGuideRequest) -> _GuideResult:
-            return await control(lambda: self._backend._advance(participant_id, skip=request.skip))
-
-        async def reset(_request: EmptyRequest) -> _GuideResult:
-            return await control(lambda: self._backend._reset(participant_id))
-
-        async def restart(_request: EmptyRequest) -> _GuideResult:
-            return await control(lambda: self._backend._restart(participant_id))
-
-        def tool(name, description, request_type, handler):
-            return Tool(
-                name, description, request_type, _GuideResult, handler,
-                render_result=lambda result: result.message, return_direct=True,
+        tools = _tools_for_query(guidance.tools, text)
+        system = f"{_FOREGROUND_PROMPT}\n\n{guidance.instructions}"
+        if tools.get("workflow__reset") is None:
+            system += (
+                "\nThis turn is informational, not authorization to change guide state. "
+                "Explain or clarify briefly using only exposed tools for requested live facts. "
+                "Do not claim to advance, skip, reset, restart, or record."
             )
-
-        tools = [
-            tool("workflow__status", "Report guide status when requested; do not substitute for a live visual check.",
-                 EmptyRequest, status),
-        ]
-        if session is not None:
-            tools.extend((
-                tool("workflow__advance",
-                     "USE WHEN: the user directly commands the active guide to move forward now; "
-                     "always call even when supplied state looks incomplete because the tool alone decides readiness. "
-                     "Set skip=false for continue/next/move-on/proceed commands and "
-                     "skip=true only for bypass/skip-this-step commands. DO NOT USE WHEN: a question, "
-                     "quotation, hypothetical, deliberation, negation, report, or unrelated wording.",
-                     _AdvanceGuideRequest, advance),
-                tool("workflow__reset",
-                     "Reset the selected guide to step one only for a direct present request to stop or reset it. "
-                     "Not for questions, quotations, hypotheticals, reports, or negations. "
-                     "Does not select another guide.",
-                     EmptyRequest, reset),
-                tool("workflow__restart",
-                     "Restart from step one only when directly requested now; not for questions, quotations, "
-                     "reports, hypotheticals, or negations.", EmptyRequest, restart),
-            ))
-        return ToolSet(tools), results
-
-    async def _answer_step_question(self, session: _Session, query: str) -> str:
-        async with session.lock:
-            step = session.step
-            revision = session.revision
-            state = session.workflow.project(step, session.state)
-            active_trigger: dict[str, Any] | None = None
-            if step.trigger.function == "clock__timer":
-                active_trigger = {"function": step.trigger.function}
-                if session.timer is None:
-                    active_trigger["unavailable_reason"] = session.timer_error or "No active timer"
-                else:
-                    active_trigger["duration_s"] = session.timer.duration_s
-                    active_trigger["status"] = session.timer.read().model_dump()
-            guide_order = []
-            step_id = session.workflow.start_step
-            while step_id is not None:
-                ordered_step = session.workflow.steps[step_id]
-                guide_order.append(ordered_step.title)
-                step_id = ordered_step.next_step
-            tools = self._backend._named_tools(session.participant_id, step.voice.tools)
-            controls, control_results = self._guide_tools(session.participant_id)
-            tools = _tools_for_query(ToolSet({**dict(tools.items()), **dict(controls.items())}), query)
-            policy = _FOREGROUND_PROMPT if tools.get("workflow__advance") is not None else (
-                "This turn is informational, not authorization to change guide state. "
-                "Explain or clarify briefly. Do not execute quoted, reported, hypothetical, or negated actions. "
-                "Do not claim to advance, skip, reset, restart, or record. "
-                "Recording is unsupported in replay mode. Use only the tools actually exposed in this turn "
-                "for requested live facts; if none can obtain the requested evidence, say it is unavailable."
-            )
-            system = (
-                f"You are the active {session.workflow.name} SOP guide for this replay connection. "
-                "Answer guide questions from the supplied state and guide_order. "
-                "Decline unrelated requests without revealing their answer or exiting the guide. "
-                "Unqualified visual checks refer to the current step: use current_view for a requested "
-                "check of whether this looks correct. Procedural explanations use supplied context.\n\n"
-                "For fresh elapsed or remaining time, call clock__timer with no arguments. "
-                "The runtime starts the timer on step entry; you cannot set or backdate it. "
-                "If the active timer is unavailable, explain why.\n\n"
-                f"{session.workflow.foreground_prompt}\n"
-                f"Current step: {step.title}.\n{step.voice.prompt}\n\n{policy}"
-            )
-            user = json.dumps(
-                {"request": query, "guide_order": guide_order,
-                 "state": state, "active_trigger": active_trigger},
-                ensure_ascii=False,
-            )
+        user = json.dumps({"request": text, **guidance.context}, ensure_ascii=False)
         result = await self._tool_loop(system, user, tools, foreground=True)
-        if control_results:
-            return control_results[-1]
-        async with session.lock:
-            if session.revision != revision or self._backend._sessions.get(session.participant_id) is not session:
-                return "The guide changed while I was answering. Ask again for the current step."
-        return result
+        return await guidance.finish(result)
 
     async def _tool_loop(self, system: str, user: str, tools: ToolSet, *, foreground: bool = False) -> str:
         options = _FOREGROUND_MODEL_OPTIONS if foreground else {"max_tokens": 512, "enable_thinking": False}

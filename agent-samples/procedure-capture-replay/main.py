@@ -11,7 +11,8 @@ runs inside its own process and launches procedure_capture_replay_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
 Choose --mode capture or --mode replay. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
-Replay requires a guide name after --mode replay.
+Replay requires a guide name after --mode replay. Say "start replay" to begin
+that guide and "stop replay" to cancel; connecting alone does not start it.
 """
 
 from __future__ import annotations

@@ -41,6 +41,10 @@ def pytest_configure(config):
         "markers",
         "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     )
+    config.addinivalue_line(
+        "markers",
+        "external_models: uses existing model services without owning their lifecycle",
+    )
 
 
 # ── between-test container cleanup ──────────────────────────────────────────
@@ -80,14 +84,16 @@ def _purge_xr_ai_vllm_containers() -> None:
 def _purge_xr_ai_vllm_between_gpu_tests(request):
     """Belt-and-suspenders for `gpu` tests: scrub xr-ai-vllm containers
     around each one so a flaky test's leftover container can't OOM the
-    next test on the same persistent GPU runner.
+    next test on the same persistent GPU runner. Evaluations marked
+    external_models query an existing deployment and must not tear it down.
 
     Test-level `finally` blocks already call `stop_persistent_servers`,
     but they don't run if pytest itself is killed or a fixture errors
     out — this fixture closes that gap. No-op for non-GPU tests so the
     laptop-friendly IPC suite doesn't pay the docker round-trip.
     """
-    if request.node.get_closest_marker("gpu") is None:
+    if (request.node.get_closest_marker("gpu") is None
+            or request.node.get_closest_marker("external_models") is not None):
         yield
         return
     _purge_xr_ai_vllm_containers()
