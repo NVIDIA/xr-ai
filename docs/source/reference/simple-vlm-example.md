@@ -20,9 +20,11 @@ sample's design and operational details.
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
-`yaml/models.json` profile configures client adapters and shared endpoints for
-Parakeet STT, Nemotron-3 Nano Omni (answering), Cosmos3 Nano Reasoner (VLM),
-Pocket TTS, and the sample's pinned Clef decision endpoint. The LLM adapter
+`yaml/models.json` profile configures client adapters and endpoints for
+Nemotron-3 Nano Omni (answering), Cosmos3 Nano Reasoner (VLM), Pocket TTS, and
+the sample's pinned Clef decision endpoint. `yaml/voice_gate.yaml` requires the
+speaker-conditioned multi-talker STT service at `127.0.0.1:8102`; the local
+model-server stack configures that service's models and GPU placement. The LLM adapter
 enables Omni reasoning with a 4096-token soft reasoning hint and a 4608-token
 total output limit. Start those endpoints together with
 the sample's local model-server stack. The worker checks LLM health during

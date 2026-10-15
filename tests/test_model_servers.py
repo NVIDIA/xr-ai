@@ -366,7 +366,15 @@ def test_default_stop_needs_no_gpu_or_credentials(monkeypatch, sample, services)
     stopped = []
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
     run_model_stack(base, services, stop=True)
-    expected_ports = {"stt": 8103, "speaker-stt": 8102, "tts": 8105, "omni": 8108, "vlm": 8100, "embedding": 8109}
+    expected_ports = {
+        "stt": 8103,
+        "speaker-stt": 8102,
+        "tts": 8105,
+        "omni": 8108,
+        "vlm": 8100,
+        "clef": 8120,
+        "embedding": 8109,
+    }
     assert stopped == [(service, expected_ports[service]) for service in services]
 
 
@@ -385,7 +393,7 @@ def test_failed_readiness_retains_private_merged_configs_without_credentials(mon
     captured = []
     def fail(processes, *_a, **_kw):
         captured.extend(Path(process.config) for process in processes)
-        vlm = processes[-1]
+        vlm = next(process for process in processes if process.name == "vlm")
         path = Path(vlm.config)
         assert yaml.safe_load(path.read_text())["hf_token"] == "inline-credential"
         emit_failure_summary(FailureContext(vlm.name, ("server", "--config", str(path)),
@@ -395,6 +403,7 @@ def test_failed_readiness_retains_private_merged_configs_without_credentials(mon
     with pytest.raises(SystemExit, match="1"):
         run_model_stack(base, _SAMPLES["simple-vlm-example"], gpu_profile="spark")
     assert captured
+    vlm_path = next(path for path in captured if path.name == "vlm_server.yaml")
     for path in captured:
         assert path.is_file()
         assert path.parent.parent.name == "logs"
@@ -403,8 +412,8 @@ def test_failed_readiness_retains_private_merged_configs_without_credentials(mon
         text = path.read_text()
         assert "credential" not in text
         config = yaml.safe_load(text)
-        assert config["port"] in {8100, 8102, 8105}
-    assert str(captured[-1]) in capsys.readouterr().err
+        assert config["port"] in {8100, 8102, 8105, 8108, 8120}
+    assert str(vlm_path) in capsys.readouterr().err
 
 
 def test_override_paths_and_ports_are_used_for_stop(monkeypatch, tmp_path):

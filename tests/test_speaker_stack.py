@@ -45,7 +45,7 @@ def test_sample_stack_matches_required_worker_speech(sample, services, hardware,
     cfg = yaml.safe_load(Path(speaker.config).read_text())
     assert cfg["host"] == "127.0.0.1"
     assert cfg["cuda_visible_devices"] == ("1" if hardware == "dual_48G_ada" else "0")
-    assert Path(cfg["model_cache"]) == _ROOT / "models"
+    assert Path(cfg["model_cache"]) == (_ROOT / "models").resolve()
     model_file = "models.local.json" if sample == "tea-making-sample" else "models.json"
     assert "stt" not in load_models_config(base / "yaml" / model_file).entries
     for gate_file in (base / "yaml").glob("voice_gate*.yaml"):
