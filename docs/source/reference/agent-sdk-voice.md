@@ -367,7 +367,9 @@ tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
 do not establish capture continuity, and delivery jitter does not trigger guessed
 resets. Explicit same-track capture epochs are outside this integration.
 
-Optional `speaker.diagnostics: true` displays candidate transcripts before
+The annotated voice-gate configuration reference above documents
+`speaker.diagnostics`, which defaults to `false`. Setting it to `true` displays
+candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
 returns activity and ignored text on `voice.speaker-diagnostic` through the
 existing participant-routed data channel. These messages cannot invoke or
