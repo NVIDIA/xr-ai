@@ -65,7 +65,6 @@ class _CurrentViewRequest(StrictRequest):
 
 class _TimerRequest(StrictRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
-    started_at_us: int = Field(gt=0)
     duration_s: int = Field(gt=0)
 
 

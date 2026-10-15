@@ -294,18 +294,26 @@ even when their `task.status` is `approved`.
   observations directly apply that bounded patch without an observation LLM.
   Without `commit`, the observation LLM proposes state changes and the evidence
   count gates completion. Use a precise closed-set VLM answer contract if a
-  regex is used. Unavailable observations never provide positive evidence.
+  regex is used. Visual evidence counts distinct source frames, identified by
+  participant, track, timestamp, and sequence. Repeated or older frames do not
+  increment the count or run another observation-model update. Unavailable
+  observations reset the consecutive evidence count.
 - Optional `state_on_skip` writes only declared step fields;
   `complete_on_skip: true` ends the run when explicitly skipped.
 
 `current_view` triggers require `arguments.question` (1–500 characters), a
 positive `interval_s`, and optionally `result_field: text`. Timer triggers use
-`function: clock__timer` with `arguments.started_at_us` (positive Unix
-microseconds) and `arguments.duration_s` (positive integer seconds). They may
+`function: clock__timer` with `arguments.duration_s` (positive integer seconds). They may
 select `elapsed_s`, `remaining_s`, or `expired` as `result_field`.
 Arguments can reference declared readable or writable fields using
-`$state.field_name`. A preceding observation can call `clock__now` and commit
-the start timestamp; replay does not invent a timestamp if it is missing.
+`$state.field_name`. On entering a timer step, replay resolves and freezes its
+duration and starts a monotonic runtime clock. Missing or invalid durations
+leave the step blocked. Start timestamps are not writable timer state;
+`started_at_us` in timer trigger arguments is rejected. Model commits and
+wall-clock changes cannot backdate the timer or shorten an active wait.
+The foreground `clock__timer` tool takes no arguments and reads the active
+runtime timer. Restarting the guide starts a fresh timer on the next timer-step
+entry; `clock__now` is informational and cannot start or modify timers.
 Timer-only steps use elapsed-time evidence, not a visual substitute. Completion
 commits for timer triggers are rejected until their configured duration expires.
 
@@ -330,9 +338,16 @@ and shared settings in `config.py`. The sibling `capture/` and `replay/` package
 own their capability-specific agents, settings, and helpers. Only the selected
 agent is registered. With no mode flag, capture remains the default.
 
-`replay/agent.py` owns guide progress, foreground questions, and background
-verification. It uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools,
-and the shared tool loop. Guide loading and validation live in `replay/guides.py`
+`replay/agent.py` handles connection events, foreground questions, and conversational
+controls. Its `_Replay` backend in `replay/replaying.py` owns guide progress,
+runtime timers, frame evidence, and background verification. Transitions clear
+both local notices and pending voice-aggregation output under the session lock,
+so obsolete completion notices cannot follow the new step's instruction.
+Replay uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
+shared tool loop. The conversation prompt governs intent; an English wording
+filter is only a conservative routing heuristic, not an authorization boundary.
+State-changing tools independently check session freshness and completion.
+Guide loading and validation live in `replay/guides.py`
 and `replay/_workflow_spec.py`. Replay never constructs the capture backend or
 writes demonstration packets. Both modes start the same hub and worker processes
 and use the same separately launched model stack and `yaml/models.json`.
