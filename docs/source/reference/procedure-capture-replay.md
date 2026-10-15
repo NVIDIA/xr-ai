@@ -73,7 +73,35 @@ does not relocate model or voice configuration and does not edit the YAML.
 The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
 captions use the configured VLM, and recording acknowledgements use TTS. Refer to
 {doc}`/getting_started/requirements` for model and hub deployment. The sample
-does not launch a raw audio/video recorder or require NVENC for its snapshots.
+does not require NVENC for its snapshots. Session recording is a separate opt-in
+feature described below.
+
+## Session recording
+
+To record the whole participant connection, run:
+
+```bash
+uv run procedure_capture_replay --session-recording
+```
+
+The shared recorder starts immediately after DeviceIOHub and records participant
+video, device and agent audio, and data-channel traffic from join to leave.
+Recording continues before, during, and after procedure capture, including when
+no procedure is captured. **start capture** and **stop capture** control only
+procedure packets; they do not start or stop session recording. Disconnecting or
+stopping the stack finalizes the session recording.
+
+`yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
+profile. It saves recordings under
+`~/.local/share/xr-ai/captures/procedure-capture-replay/`, retaining raw media and
+producing a captioned MP4. This option requires an NVIDIA GPU with NVENC support
+and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
+recorder's output and encoding contract.
+
+The flag does not enable the client camera or microphone. Enable live video for
+continuous camera recording. `--output-root` can be combined with this flag and
+changes only the procedure-packet destination; configure session recording output
+through `out_dir` in `yaml/media_capture.yaml`.
 
 ## Recording boundaries
 
@@ -94,7 +122,7 @@ does not launch a raw audio/video recorder or require NVENC for its snapshots.
 Commands take effect after speech recognition finishes. Keep the microphone
 enabled and pause after the final narration before saying **stop capture** or
 disconnecting. A late transcript can miss the recording boundary; source audio
-is not retained by this sample.
+is retained only when session recording is enabled.
 
 A new recording waits for the preceding packet to finish saving. Narration after
 its start command is queued in order, but snapshots during this brief restart
@@ -450,7 +478,8 @@ commits for timer triggers are rejected until their configured duration expires.
 
 ## Composition and configuration
 
-The outer `main.py` launches the hub and worker. The worker's `__main__.py`
+The outer `main.py` launches the hub and worker, plus the shared recorder when
+`--session-recording` is enabled. The worker's `__main__.py`
 accepts configuration and readiness arguments; `procedure_capture_replay_worker/app.py` constructs
 the hub endpoint, model clients, voice runtime, and frame/image tools.
 The worker uses `VoiceAgent` for transcripts, `CurrentFrameTool` for snapshots,
@@ -506,6 +535,7 @@ cannot cancel its own response.
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
 | `yaml/replay-agent-config.yaml` | Local guide directory and visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
+| `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
 | `yaml/voice_gate.replay.yaml` | Wake-word-free replay questions and guide controls |
 | `yaml/device_io_hub.yaml` | Room and web server |

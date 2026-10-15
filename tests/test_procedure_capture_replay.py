@@ -34,7 +34,8 @@ from procedure_capture_replay_worker.capture.capturing import _Capture  # noqa: 
 from procedure_capture_replay_worker.config import load_config  # noqa: E402
 
 
-def test_config_and_cli(monkeypatch, tmp_path):
+@pytest.mark.parametrize("session_recording", [False, True])
+def test_config_and_cli(monkeypatch, tmp_path, session_recording):
     worker = load_config(_SAMPLE / "yaml/worker.yaml")
     assert not hasattr(worker, "media_capture_dir")
     assert (worker.capture.capture_fps, worker.capture.caption_interval_s) == (2, 5)
@@ -43,24 +44,30 @@ def test_config_and_cli(monkeypatch, tmp_path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module._parser().parse_args([]).output_root is None
+    assert module._parser().parse_args([]).session_recording is False
     with pytest.raises(SystemExit) as error:
         module._parser().parse_args(["--capture"])
     assert error.value.code == 2
     assert [p.name for p in module.PROCESSES] == ["hub", "worker"]
     stack = Mock()
     monkeypatch.setattr(module, "run_stack", stack)
-    module.run([])
-    assert [p.name for p in stack.call_args.args[0]] == ["hub", "worker"]
-    assert stack.call_args.args[0][1].config == "yaml/worker.yaml"
-    assert stack.call_args.args[0][1].command == "procedure_capture_replay_worker"
+    args = ["--session-recording"] if session_recording else []
+    expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
+    module.run(args)
+    assert [p.name for p in stack.call_args.args[0]] == expected
+    worker_process = next(p for p in stack.call_args.args[0] if p.name == "worker")
+    assert worker_process.config == "yaml/worker.yaml"
+    assert worker_process.command == "procedure_capture_replay_worker"
+    recording_processes = [p for p in stack.call_args.args[0] if p.name == "capture"]
 
     monkeypatch.chdir(tmp_path)
     requests = []
 
     def launch(processes, base):
-        assert [p.name for p in processes] == ["hub", "worker"]
+        assert [p.name for p in processes] == expected
+        assert [p for p in processes if p.name == "capture"] == recording_processes
         assert base == _SAMPLE
-        request = processes[1].config
+        request = next(p.config for p in processes if p.name == "worker")
         assert request.is_file()
         requests.append(request)
         config = load_config(request)
@@ -73,8 +80,8 @@ def test_config_and_cli(monkeypatch, tmp_path):
     original_yaml = (_SAMPLE / "yaml/worker.yaml").read_bytes()
     original_capture_yaml = (_SAMPLE / "yaml/capture-agent-config.yaml").read_bytes()
     monkeypatch.setattr(module, "run_stack", launch)
-    module.run(["--output-root", "my evidence"])
-    module.run(["--output-root", str(tmp_path / "my evidence")])
+    module.run([*args, "--output-root", "my evidence"])
+    module.run([*args, "--output-root", str(tmp_path / "my evidence")])
     assert all(not path.exists() for path in requests)
     assert (_SAMPLE / "yaml/worker.yaml").read_bytes() == original_yaml
     assert (_SAMPLE / "yaml/capture-agent-config.yaml").read_bytes() == original_capture_yaml

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Session recording covers the whole participant connection, independently of
+# spoken start capture and stop capture commands. Other settings use shared defaults.
+out_dir: ~/.local/share/xr-ai/captures/procedure-capture-replay
+profile: demo
+session_mode: participant

@@ -56,6 +56,17 @@ again to begin a fresh run of the same command-line-selected guide.
 Refer to the [replay reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#replay-an-approved-guide)
 for verification and step-advance controls. Capture and replay run separately.
 
+To also record the whole participant session, independently of **start capture**
+and **stop capture**, use:
+
+```bash
+uv run procedure_capture_replay --session-recording
+```
+
+This flag can be combined with `--output-root PATH`. Refer to the
+[session recording guide](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#session-recording)
+for output locations and encoding requirements.
+
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
@@ -69,6 +80,7 @@ uv run --project model-servers procedure_capture_replay_model_servers --stop
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
 | `yaml/replay-agent-config.yaml` | Local guide directory and verification timeout |
+| `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |

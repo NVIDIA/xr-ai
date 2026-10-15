@@ -455,7 +455,8 @@ def test_simple_vlm_declares_only_its_hub_and_worker() -> None:
 
 @pytest.mark.parametrize(
     "sample_name",
-    ["simple-vlm-example", "xr-render-demo", "tea-making-sample", "lab-instrument-monitoring"],
+    ["simple-vlm-example", "xr-render-demo", "tea-making-sample", "lab-instrument-monitoring",
+     "procedure-capture-replay"],
 )
 def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
     sample_name: str,
