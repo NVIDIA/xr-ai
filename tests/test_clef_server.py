@@ -19,6 +19,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +29,9 @@ sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
 
 import clef_server.__main__ as clef_main  # noqa: E402
 from clef_server._config import ServerConfig, identity, load_config  # noqa: E402
+from clef_server._images import _ImageLimits  # noqa: E402
 from clef_server._service import (  # noqa: E402
+    ClefBackend,
     _await_without_abandoning,
     _normalize_response,
     create_app,
@@ -50,6 +53,9 @@ class _Backend:
         self.config = config
         self.revision = REVISION
         self.model = object()
+        self.image_limits = _ImageLimits.from_processor(SimpleNamespace(image_processor=SimpleNamespace(
+            patch_size=16, merge_size=2, size={"shortest_edge": 65536},
+        )))
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.calls: list[dict] = []
         self.closed = False
@@ -157,7 +163,7 @@ def test_empty_instructions_follow_systemone_fallback(tmp_path: Path) -> None:
     ("overrides", "detail"),
     [
         ({"model": "other"}, "model must be"),
-        ({"images": ["unsupported"]}, "text-only"),
+        ({"images": ["unsupported"]}, "inline JPEG"),
         ({"questions": {"activate": {"type": "noul"}}}, "only choice"),
         (
             {"questions": {"activate": {"type": "choice", "instructions": "Choose", "criteria": {"yes": "Yes"}}}},
@@ -608,3 +614,289 @@ def test_malformed_vendor_response_returns_bad_gateway(tmp_path: Path) -> None:
 
     assert response.status_code == 502
     assert "positive total" in response.json()["detail"]
+
+
+def _image_url(mode="RGB", size=(8, 8), format="PNG"):
+    import base64
+    import io
+
+    from PIL import Image
+
+    with Image.new(mode, size, color=0) as image, io.BytesIO() as buffer:
+        image.save(buffer, format=format)
+        mime = "image/jpeg" if format == "JPEG" else "image/png"
+        return f"data:{mime};base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
+@pytest.mark.parametrize("format,mode", [("PNG", "RGBA"), ("JPEG", "RGB")])
+def test_images_reach_native_backend_in_order_as_rgb(tmp_path, format, mode):
+    from PIL import Image
+
+    config = _config(tmp_path, max_body_bytes=4096)
+    observed = []
+
+    class Backend(_Backend):
+        def validate_length(self, body):
+            for image in body.get("images", []):
+                assert isinstance(image, Image.Image)
+                assert image.mode == "RGB"
+                observed.append(image.size)
+            super().validate_length(body)
+
+        def answer(self, body):
+            for image in body.get("images", []):
+                assert image.getpixel((0, 0)) == (0, 0, 0)
+            return super().answer(body)
+
+    backend = Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[
+            _image_url(mode=mode, format=format), _image_url(size=(9, 7)),
+        ]))
+    assert response.status_code == 200
+    assert observed == [(8, 8), (9, 7)]
+    # Native images are released even though the fake retains its request.
+    with pytest.raises(ValueError):
+        backend.calls[-1]["images"][0].getpixel((0, 0))
+
+
+@pytest.mark.parametrize("images", [
+    None, {}, "data:image/png;base64,abc", ["https://example.com/photo.png"],
+    ["/tmp/photo.png"], ["data:image/gif;base64,R0lGODlh"],
+    ["data:image/png;base64,%%%%"], ["data:image/png;base64,YWJj"],
+    [_image_url(format="JPEG").replace("image/jpeg", "image/png")],
+    [_image_url(), "data:image/png;base64,YWJj"],
+])
+def test_bad_images_fail_before_native_inference(tmp_path, images):
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=images))
+    assert response.status_code == 422
+    assert len(backend.calls) == 1
+
+
+def test_aggregate_source_pixels_rejected_before_rgb_decode(tmp_path, monkeypatch):
+    from PIL import Image
+
+    config = replace(_config(tmp_path, max_body_bytes=16384), max_length=256)
+    # Each image fits 256*32*32; together they exceed that budget.
+    image = _image_url(size=(400, 400))
+    original = Image.Image.convert
+    converted = []
+
+    def convert(source, *args, **kwargs):
+        converted.append(source.size)
+        return original(source, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", convert)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[image, image]))
+    assert response.status_code == 422
+    assert "source-pixel budget" in response.json()["detail"]
+    assert converted == [(400, 400)]
+    assert len(backend.calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["validate_length", "answer"])
+def test_image_native_failure_releases_images(tmp_path, failure):
+    config = _config(tmp_path)
+    retained = []
+
+    class Backend(_Backend):
+        def validate_length(self, body):
+            retained.extend(body.get("images", []))
+            if failure == "validate_length":
+                raise ValueError("too many tokens")
+
+        def answer(self, body):
+            if failure == "answer" and body["state"] != "warmup":
+                raise ValueError("native answer failed")
+            return super().answer(body)
+
+    backend = Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[_image_url(), _image_url()]))
+    assert response.status_code == 422
+    assert len(backend.calls) == 1
+    assert len(retained) == 2
+    for image in retained:
+        with pytest.raises(ValueError, match="closed image"):
+            image.getpixel((0, 0))
+
+
+def _broken_png_url():
+    import base64
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data) & 0xffffffff)
+
+    raw = base64.b64decode(_image_url().split(",", 1)[1])
+    index = raw.index(b"IDAT")
+    length = struct.unpack("!I", raw[index - 4:index])[0]
+    broken = raw[:index - 4] + chunk(b"IDAT", raw[index + 4:index + 4 + length // 2])
+    broken += chunk(b"\x00\x01\x02\x03", b"") + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(broken).decode()
+
+
+@pytest.mark.parametrize("error", [None, RuntimeError("unexpected conversion failure")])
+def test_partial_image_decode_failure_always_releases_images(tmp_path, monkeypatch, error):
+    from PIL import Image
+
+    converted = []
+    original = Image.Image.convert
+
+    def convert(source, *args, **kwargs):
+        if converted and error is not None:
+            raise error
+        image = original(source, *args, **kwargs)
+        converted.append(image)
+        return image
+
+    monkeypatch.setattr(Image.Image, "convert", convert)
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend), raise_server_exceptions=False) as client:
+        response = client.post("/v1/systemone", json=_request(images=[
+            _image_url(), _broken_png_url() if error is None else _image_url(),
+        ]))
+    assert response.status_code == (422 if error is None else 500)
+    if error is None:
+        assert "broken PNG" in response.json()["detail"]
+    assert len(backend.calls) == 1
+    assert len(converted) == 1
+    with pytest.raises(ValueError, match="closed image"):
+        converted[0].getpixel((0, 0))
+
+
+@pytest.mark.parametrize("options", [None, {}, {
+    "images_kwargs": {"size": {"shortest_edge": 1073741824, "longest_edge": 1073741824}},
+}])
+def test_processor_overrides_rejected_before_decode_or_native_work(tmp_path, monkeypatch, options):
+    import clef_server._service as service
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("unsupported preprocessing options reached image decoding")
+
+    monkeypatch.setattr(service, "decode_images", unexpected)
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[_image_url()], media_kwargs=options))
+    assert response.status_code == 422
+    assert "server-owned" in response.json()["detail"]
+    assert len(backend.calls) == 1
+
+
+def test_native_body_contains_only_the_service_owned_contract(tmp_path):
+    config = _config(tmp_path)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(future_native_option={"enabled": True}))
+    assert response.status_code == 200
+    assert backend.calls[-1].keys() == {"model", "state", "questions"}
+
+
+def test_image_admission_uses_loaded_processor_geometry(tmp_path, monkeypatch):
+    from PIL import Image
+
+    config = replace(_config(tmp_path, max_body_bytes=16384), max_length=256)
+    backend = _Backend(config)
+    backend.image_limits = _ImageLimits.from_processor(SimpleNamespace(image_processor=SimpleNamespace(
+        patch_size=8, merge_size=2, size={"shortest_edge": 32768},
+    )))
+    converted = []
+    original = Image.Image.convert
+
+    def convert(source, *args, **kwargs):
+        converted.append(source.size)
+        return original(source, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", convert)
+    with TestClient(create_app(config, backend)) as client:
+        # This fits the old pinned geometry, but exceeds the actual pixel budget.
+        response = client.post("/v1/systemone", json=_request(images=[_image_url(size=(300, 300))]))
+        assert response.status_code == 422
+        assert "source-pixel budget" in response.json()["detail"]
+        # The processor minimum is now 128 tokens per image, not 64.
+        response = client.post("/v1/systemone", json=_request(images=[_image_url()] * 3))
+        assert response.status_code == 422
+        assert "too many images" in response.json()["detail"]
+    assert converted == []
+    assert len(backend.calls) == 1
+
+
+@pytest.mark.parametrize("actual_length", [32767, 32768, 32769, 40000])
+def test_length_admission_detects_native_truncation(tmp_path, actual_length):
+    config = replace(_config(tmp_path), max_length=32768)
+    backend = ClefBackend(config)
+    backend.processor = SimpleNamespace(tokenizer=object())
+    caps = []
+
+    def encode(tokenizer, body, *, max_length, processor):
+        # The native encoder truncates state to fit its cap after adding media
+        # and schema tokens. Exercise both sides of our own admission boundary.
+        caps.append(max_length)
+        return SimpleNamespace(input_ids=range(min(actual_length, max_length)))
+
+    backend.encode_record = encode
+    try:
+        if actual_length > config.max_length:
+            with pytest.raises(ValueError, match="maximum is 32768"):
+                backend.validate_length(_request(images=[_image_url()]))
+        else:
+            backend.validate_length(_request(images=[_image_url()]))
+        assert caps == [config.max_length + 1]
+    finally:
+        backend.executor.shutdown(wait=True)
+
+
+def test_videos_still_rejected(tmp_path):
+    config = _config(tmp_path)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(videos=[]))
+    assert response.status_code == 422
+    assert "videos" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_typed_image_client_round_trip_to_server(tmp_path):
+    import base64
+
+    import httpx
+    from xr_ai_models import DecisionQuestion
+    from xr_ai_models._systemone import _SystemOneDecision
+
+    config = _config(tmp_path, max_body_bytes=4096)
+    backend = _Backend(config)
+    transport = httpx.ASGITransport(app=create_app(config, backend))
+    try:
+        async with httpx.AsyncClient(transport=transport) as client:
+            service = _SystemOneDecision(
+                base_url="http://clef.test", model_name=config.model_name, api_key_env=None,
+                timeout=9, health_check=False, health_path="/health", client=client,
+            )
+            raw_image = base64.b64decode(_image_url().split(",", 1)[1])
+            result = await service.decide("target image", {
+                "q": DecisionQuestion(instructions="Choose", criteria={"yes": "Yes", "no": "No"}),
+            }, images=[raw_image])
+            assert result.answers["q"].choice == "yes"
+            assert result.raw["model_revision"] == REVISION
+    finally:
+        await backend.close()
+    assert len(backend.calls) == 1
+    assert backend.calls[0]["images"][0].mode == "RGB"
+
+
+def test_image_count_budget_accounts_for_processor_upscaling(tmp_path):
+    config = replace(_config(tmp_path, max_body_bytes=4096), max_length=256)
+    backend = _Backend(config)
+    with TestClient(create_app(config, backend)) as client:
+        response = client.post("/v1/systemone", json=_request(images=[_image_url()] * 5))
+    assert response.status_code == 422
+    assert "too many images" in response.json()["detail"]
+    assert len(backend.calls) == 1

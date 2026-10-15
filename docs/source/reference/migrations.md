@@ -13,6 +13,28 @@ Replace `--capture` with `--session-recording` in saved launch commands for
 `uv run simple_vlm_example --capture` becomes
 `uv run simple_vlm_example --session-recording`.
 
+(clef-image-input-migration)=
+## Clef image decision inputs
+
+`DecisionService.decide` now accepts optional ordered `images` containing JPEG
+or PNG bytes, local `pathlib.Path` objects, or inline data URL strings. Custom
+decision adapters that implement this capability must accept the optional
+`images` keyword. Text-only calls omit images from the wire request and remain
+unchanged. Refer to {doc}`clef-flash` for input and resource-limit details.
+
+Before updating a running Clef service, stop it from the old checkout in
+`model-server-samples/clef-flash/`:
+
+```bash
+export UV_CONFIG_FILE=../../uv.toml
+uv run clef_flash_model --stop
+```
+
+Update the checkout, then start the sample again. Model and configuration
+identity do not identify the running application code version: an already
+running text-only listener cannot accept images. Image requests require the
+updated service; there is no silent text-only fallback.
+
 ## Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.

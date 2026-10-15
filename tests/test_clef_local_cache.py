@@ -19,8 +19,12 @@ from clef_server._config import DEFAULT_MODEL, DEFAULT_REVISION, ServerConfig  #
 from clef_server._service import ClefBackend  # noqa: E402
 
 _LOADER = """
+from types import SimpleNamespace
 def load_release_model(directory, *, device, dtype):
-    return {"directory": directory, "device": device, "dtype": dtype}, object()
+    processor = SimpleNamespace(image_processor=SimpleNamespace(
+        patch_size=8, merge_size=2, size={"shortest_edge": 4096},
+    ))
+    return {"directory": directory, "device": device, "dtype": dtype}, processor
 def systemone(*args, **kwargs):
     return {}
 def encode_record(*args, **kwargs):
@@ -81,6 +85,8 @@ def test_cache_resolution_through_backend(backend, monkeypatch, tmp_path, cached
         backend.load()
         assert backend.model["directory"] == directory
         assert backend.model["device"] == "cpu"
+        assert backend.image_limits.pixels_per_token == 256
+        assert backend.image_limits.min_image_tokens == 16
     if cached or offline:
         online.assert_not_called()
     else:
