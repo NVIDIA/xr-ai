@@ -5,6 +5,7 @@
 for the voice gate."""
 from __future__ import annotations
 
+import math
 import pathlib
 from dataclasses import dataclass, field, fields, replace
 from importlib.resources import files
@@ -74,12 +75,14 @@ class VoiceGateConfig:
 
     _speaker: _SpeakerConfig | None = field(default=None, init=False, repr=False)
     _conversation: _ConversationConfig | None = field(default=None, init=False, repr=False)
+    _mode: str | None = field(default=None, init=False, repr=False, compare=False)
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
-    Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
+    Schema: a top-level mapping with ``mode`` (``always_on``, ``wake_only``,
+    ``conversation`` or ``hybrid``), ``magic_phrases`` (list[str] or
     bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
     ``stop_commands_enabled`` (bool, default true).
     Optional ``conversation`` and ``speaker`` mappings configure session
@@ -87,10 +90,12 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     Their settings remain private to that path.
     The package's annotated ``voice_gate.yaml`` supplies defaults; the selected
     file overrides individual top-level and section fields. Missing or empty
-    files use the packaged baseline (gate disabled / always-on). An explicit
-    ``conversation`` mapping enables controls unless ``enabled: false`` is set;
-    omitted sections remain disabled. ``magic_phrases: null`` and trailing whitespace
-    in phrases are normalized the same way the inline-block parser did.
+    files use the packaged ``always_on`` baseline. Mode chooses activation;
+    the optional mappings tune controls and choose ASR independently. Addressed
+    modes require non-empty phrases. Current mode-less configurations normalize
+    once using their conversation and phrase settings; explicit mode must not be
+    mixed with ``conversation.enabled``. ``magic_phrases: null`` and trailing
+    whitespace are normalized before validation.
     """
     defaults = yaml.safe_load(files(__package__).joinpath("voice_gate.yaml").read_text(encoding="utf-8"))
     if not isinstance(defaults, dict):
@@ -105,7 +110,7 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
             continue
         section_defaults = dict(defaults[section])
         if section == "conversation":
-            # Presence, not the disabled baseline, enables an explicit mapping.
+            # Legacy mapping presence enables controls unless explicitly disabled.
             section_defaults.pop("enabled", None)
         else:
             # Legacy speaker-only files also carry the conversation controls.
@@ -130,16 +135,56 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
             values["stop_commands_enabled"], "stop_commands_enabled"
         ),
     )
+    if (
+        isinstance(values["followup_grace_s"], bool)
+        or not math.isfinite(cfg.followup_grace_s) or cfg.followup_grace_s < 0
+    ):
+        raise ValueError("followup_grace_s must be finite and non-negative")
+    policy_keys = {"mode", "magic_phrases", "followup_grace_s", "stop_commands_enabled"}
+    if isinstance(raw.get("speaker"), dict) and raw["speaker"].keys() & policy_keys:
+        raise ValueError("interaction policy settings belong at the top level, not under speaker")
+    explicit_mode = "mode" in raw
+    if explicit_mode and isinstance(raw.get("conversation"), dict) and "enabled" in raw["conversation"]:
+        raise ValueError("mode replaces conversation.enabled; remove enabled from the conversation mapping")
     speaker = _SpeakerConfig._from_yaml(values.get("speaker"))
-    conversation = _ConversationConfig._from_yaml(values.get("conversation"))
-    if "conversation" not in raw and speaker is not None:
+    conversation_values = values.get("conversation")
+    if isinstance(conversation_values, dict) and explicit_mode:
+        conversation_values = {k: v for k, v in conversation_values.items() if k != "enabled"}
+    conversation = _ConversationConfig._from_yaml(conversation_values)
+    if not explicit_mode and "conversation" not in raw and speaker is not None:
         # Preserve existing speaker-only YAML while separating the two concerns
         # for newly configured workers.
         conversation = _ConversationConfig(**{f.name: getattr(speaker, f.name) for f in fields(_ConversationConfig)})
-    if conversation is None:
-        speaker = None
-    elif speaker is not None:
-        speaker = replace(speaker, **{f.name: getattr(conversation, f.name) for f in fields(_ConversationConfig)})
+    if explicit_mode:
+        mode = raw["mode"]
+    elif "conversation" in raw or ("speaker" in raw and speaker is not None):
+        mode = "conversation" if conversation is not None else ("wake_only" if phrases else "always_on")
+    elif "magic_phrases" in raw:
+        mode = "wake_only" if phrases else "always_on"
+    else:
+        mode = defaults["mode"]
+    if not isinstance(mode, str) or mode not in {"always_on", "wake_only", "conversation", "hybrid"}:
+        raise ValueError("mode must be always_on, wake_only, conversation, or hybrid")
+    if mode in {"wake_only", "hybrid"} and not phrases:
+        raise ValueError(f"mode {mode} requires non-empty magic_phrases; use always_on for ungated speech")
+    if mode in {"conversation", "hybrid"}:
+        if conversation is None:
+            if explicit_mode and "conversation" in raw:
+                raise ValueError("conversation settings must be a mapping for conversation or hybrid mode")
+            conversation = _ConversationConfig()
+        if conversation.require_wake_phrase and not phrases:
+            raise ValueError("conversation.require_wake_phrase requires non-empty magic_phrases")
+    else:
+        conversation = None
+    if speaker is not None:
+        controls = conversation or _ConversationConfig()
+        speaker = replace(speaker, **{f.name: getattr(controls, f.name) for f in fields(_ConversationConfig)})
+        speaker = replace(
+            speaker, mode=mode, magic_phrases=phrases, followup_grace_s=cfg.followup_grace_s,
+            stop_commands_enabled=cfg.stop_commands_enabled,
+        )
+        speaker._validate_interaction()
+    object.__setattr__(cfg, "_mode", mode)
     object.__setattr__(cfg, "_speaker", speaker)
     object.__setattr__(cfg, "_conversation", conversation)
     return cfg

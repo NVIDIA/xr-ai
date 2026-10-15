@@ -227,7 +227,9 @@ samples. No sample launcher option or model-serving process is needed.
 
 Use the worker's selected `voice_gate_yaml` path for `gate_path`. Tea making can
 select `voice_gate.always-on.yaml` instead of `voice_gate.yaml`; disable speaker
-ASR in the selected preset, and back up and restore that same file. Use a
+ASR in the selected preset, and back up and restore that same file. Interaction
+mode does not select the ASR backend: keep the selected conversation mode, or
+choose another mode independently. Use a
 different backup directory when adapting another sample. If the directory
 already exists, this procedure fails without overwriting its original local
 configuration or changing the active files. Do not rerun the switch to replace

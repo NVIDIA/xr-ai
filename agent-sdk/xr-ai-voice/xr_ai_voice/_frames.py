@@ -40,6 +40,21 @@ class _SpeakerEnrollmentFrame(DataFrame, UninterruptibleFrame):
 
 
 @dataclass
+class _SpeakerTurnFrame(DataFrame):
+    """A service-authorized turn, distinct from persistent speaker enrollment.
+
+    Empty text acknowledges a bare wake phrase, not a query. The service owns
+    same-speaker follow-up authorization using the captured audio timeline.
+    """
+
+    participant_id: str
+    speaker_id: int
+    text: str
+    pts_us: int
+    fresh_match: bool
+
+
+@dataclass
 class _UnrecognizedSpeechFrame(DataFrame):
     """A final utterance produced no transcript; discard pending controls."""
 

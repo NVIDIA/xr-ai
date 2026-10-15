@@ -45,7 +45,7 @@ the exact layout per launch style is below.
 `services/speaker-stt` is a private local inference process. It shares
 Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
 while keeping each session's diarization history, enrollment and ASR caches
-separate. A session enrolls one speaker with the configured start phrase and
+separate. In conversation and hybrid modes, a session enrolls one speaker with the configured start phrase and
 releases that identity with the stop phrase. Background voices do not reach
 the transcript as separate speakers after enrollment: the decoder receives the
 mixed audio with owner and interference masks and is conditioned on the owner.
@@ -64,17 +64,26 @@ a guarantee of distinguishing all acoustically simultaneous requests. Speaker
 labels are session-local identities; actual attribution and interference
 suppression require qualification on the intended microphones.
 
+Interaction mode is independent of the selected ASR backend. While closed,
+`wake_only` and `hybrid` can authorize an attributed, wake-addressed one-off
+without enrolling its speaker. A unique exact start takes priority in hybrid
+mode; ambiguous same-step requests authorize nobody. A bare wake permits only
+that recognized speaker's next utterance whose onset precedes the configured
+grace deadline. `always_on` accepts all recognized speakers without enrollment.
+Candidate transcripts themselves are not query authorization or diagnostics.
+
 The process follows the model-service HTTP pattern and exposes health and model
 identity endpoints. A private WebSocket carries mono signed 16-bit PCM
-at 16 kHz and returns enrollment and transcription events. It serializes
+at 16 kHz and returns enrollment, authorized one-turn, and transcription events. It serializes
 inference because model conditioning is mutable.
 Opening a session establishes the capture timestamp of its first sample.
 Subsequent audio requests form one ordered, contiguous PCM stream; the service
 derives all later timestamps from the number of samples it has accepted. The
 caller must close and reopen the session if its capture or transport layer drops
 audio, because that layer owns the information needed to detect the loss.
-Utterances forced to end at the configured duration limit cannot enroll or
-release a speaker; an enrolled owner's forced segment is still transcribed.
+Utterances forced to end at the configured duration limit cannot authorize a
+closed-state turn, enroll, or release a speaker; an enrolled owner's forced
+segment is still transcribed.
 Start and stop phrases can span utterances within the conversation phrase
 window, retaining separate enrollment fragments for each speaker. A truncated
 candidate cannot enroll from the tail of the same continuing speech episode;
@@ -91,6 +100,10 @@ complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
 or incomplete PCM samples are protocol errors. The server's standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.
+
+The private identity is protocol 4. Worker and speaker service must be restarted
+together after updating: protocol-3 endpoints fail admission rather than
+silently selecting batch STT or accepting incompatible interaction settings.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is

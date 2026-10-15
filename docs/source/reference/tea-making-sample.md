@@ -76,9 +76,13 @@ Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
 Both presets now require `Hey agent, let's start talking` after connecting,
 then accept speech without a wake phrase until `Hey agent, let's stop talking`.
-Set `conversation.require_wake_phrase: true` in the normal preset to require its
-configured wake phrases. Disable conversation controls in the always-on preset
-to restore immediate speech dispatch. Refer to {ref}`voice-conversation-controls`.
+Set `mode: hybrid` to also accept wake-addressed one-off questions before a
+conversation starts, or `mode: always_on` for immediate, ungated speech dispatch.
+The file named `voice_gate.always-on.yaml` retains conversation mode: its speech
+is continuous only after the start phrase. The advanced
+`conversation.require_wake_phrase: true` policy applies only inside an open
+conversation. Backend selection is independent of these modes. Refer to
+{ref}`voice-conversation-controls`.
 
 The live event viewer is available at `http://127.0.0.1:8092` on the XR-AI
 host. With `--expose-web-events`, use `http://<xr-host>:8092` from a trusted

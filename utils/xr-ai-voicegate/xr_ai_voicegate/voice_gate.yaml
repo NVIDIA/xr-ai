@@ -6,11 +6,17 @@
 # sample files use this baseline. No CWD discovery or extra loader is needed.
 # No environment-variable substitution or relative file paths are used here.
 
-# Empty means every non-STOP transcript is eligible in wake-only mode.
-# To require a wake phrase, use e.g. ["hey agent"]. Matches start a sentence.
+# always_on: every utterance; wake_only: wake-addressed turns only;
+# conversation: exact start/stop controls; hybrid: wake-addressed one-offs
+# while closed, natural conversation after start. Backend choice is separate.
+mode: always_on
+
+# Required and non-empty in wake_only and hybrid modes, e.g. ["hey agent"].
+# Ignored by always_on. Matches start a sentence, not a mid-sentence mention.
 magic_phrases: []
-# A follow-up utterance may begin this many seconds after a phrase match
+# After a bare wake phrase, the next utterance may begin this many seconds later
 # without repeating it, even if the utterance finishes after that window.
+# Speaker ASR scopes this permission to that same recognized speaker; 0 disables.
 followup_grace_s: 5.0
 # Available only with magic_phrases; the consumer must call play_chime.
 listening_chime: true
@@ -18,22 +24,19 @@ listening_chime: true
 # This does not disable conversation start/stop controls below.
 stop_commands_enabled: true
 
-# Optional conversation controls are disabled in the baseline. A sample's
-# conversation mapping enables them unless enabled: false is explicit; null
-# disables the section too. Omitted fields retain the defaults below.
+# Conversation controls apply in conversation and hybrid modes. Mode selects
+# activation; these fields only tune controls and the active-session policy.
 conversation:
-  enabled: false
   start_phrase: "Hey agent, let's start talking"
   stop_phrase: "Hey agent, let's stop talking"
-  # false permits natural speech while the conversation is open; true also
-  # requires magic_phrases (and permits the follow-up window) for queries.
+  # Advanced: true requires addressing even after the conversation opens.
+  # This does not enable wake-addressed queries while closed; hybrid does that.
   require_wake_phrase: false
   # Maximum onset window for joining exact control-phrase fragments.
   phrase_window_s: 6.0
 
 # Optional speaker-conditioned streaming ASR. Set speaker.enabled: true in a
-# sample to enable it. The baseline remains off. Speaker-only files implicitly enable
-# conversation controls; an explicit disabled conversation overrides that.
+# sample to enable it, independently of mode. The baseline remains off.
 # Keep conversation controls in the mapping above, not duplicated under speaker.
 speaker:
   enabled: false

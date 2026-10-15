@@ -22,7 +22,13 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_voicegate._phrases import STOP_RE
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
-from .._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+from .._frames import (
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+    _SpeakerEnrollmentFrame,
+    _SpeakerTranscriptionFrame,
+    _SpeakerTurnFrame,
+)
 from .._speaker_client import _SpeakerClient
 
 
@@ -124,6 +130,8 @@ class _SpeakerSttProcessor(FrameProcessor):
                 audio, pts_us = await queue.get()
                 self._queued_bytes[pid] -= len(audio)
                 for event in await self._client._feed(pid, audio, pts_us):
+                    if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
+                        return
                     await self._event(pid, event)
         except asyncio.CancelledError:
             raise
@@ -162,6 +170,22 @@ class _SpeakerSttProcessor(FrameProcessor):
 
     async def _event(self, pid: str, event: dict) -> None:
         kind = event["kind"]
+        if kind in {"one_shot", "wake_ready"}:
+            if self._cfg.mode not in {"always_on", "wake_only", "hybrid"} or pid in self._enrolled:
+                raise ValueError("one-turn authorization is invalid for the current speaker state")
+            speaker, pts = event.get("speaker_id"), event.get("pts_us")
+            text = event.get("text") if kind == "one_shot" else ""
+            fresh = event.get("fresh_match") if kind == "one_shot" else True
+            if (
+                type(speaker) is not int or speaker < 0 or type(pts) is not int or pts < 0
+                or not isinstance(text, str) or (kind == "one_shot" and not text.strip())
+                or not isinstance(fresh, bool)
+            ):
+                raise ValueError("malformed speaker one-turn authorization")
+            if text and self._on_final is not None:
+                await self._on_final(pid, text, pts)
+            await self.push_frame(_SpeakerTurnFrame(pid, speaker, text, pts, fresh))
+            return
         if kind in {"enrolled", "released", "reset"}:
             if kind == "enrolled":
                 self._enrolled.add(pid)

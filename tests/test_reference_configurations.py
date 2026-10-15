@@ -29,15 +29,18 @@ def test_voice_reference_preserves_omitted_configuration_defaults():
     raw = yaml.safe_load(_VOICE_REFERENCE.read_text())
     assert set(raw) == {
         field.name for field in fields(VoiceGateConfig) if not field.name.startswith("_")
-    } | {"conversation", "speaker"}
-    assert set(raw["conversation"]) == set(asdict(_ConversationConfig())) | {"enabled"}
+    } | {"conversation", "speaker", "mode"}
+    assert set(raw["conversation"]) == set(asdict(_ConversationConfig()))
     # Conversation controls are documented only once, not under both mappings.
-    assert set(raw["speaker"]) == set(asdict(_SpeakerConfig())) - set(asdict(_ConversationConfig())) | {"enabled"}
+    assert set(raw["speaker"]) == (
+        set(asdict(_SpeakerConfig())) - set(asdict(_ConversationConfig()))
+        - {"mode", "magic_phrases", "followup_grace_s", "stop_commands_enabled"}
+    ) | {"enabled"}
 
 
 def test_voice_reference_optional_sections_use_real_parser(tmp_path):
     raw = yaml.safe_load(_VOICE_REFERENCE.read_text())
-    raw["conversation"]["enabled"] = True
+    raw["mode"] = "conversation"
     raw["speaker"]["enabled"] = True
     path = tmp_path / "voice_gate.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -50,10 +53,10 @@ def test_voice_reference_optional_sections_use_real_parser(tmp_path):
     config = load_voice_gate_config(path)
     assert config._speaker.backend == "required"
 
-    # Explicitly disabling conversation also disables speaker ASR.
-    raw["conversation"]["enabled"] = False
+    # Backend and interaction policy are separate.
+    raw["mode"] = "always_on"
     path.write_text(yaml.safe_dump(raw))
-    assert load_voice_gate_config(path)._speaker is None
+    assert load_voice_gate_config(path)._speaker.mode == "always_on"
 
 
 def test_models_reference_loads_consumer_roles_with_existing_local_ports(tmp_path):
@@ -99,7 +102,7 @@ def test_optional_voice_activation_preserves_explicit_controls(tmp_path, convers
     config = load_voice_gate_config(path)
     enabled = isinstance(conversation, dict) and conversation.get("enabled", True)
     assert (config._conversation is not None) is enabled
-    assert (config._speaker is not None) is enabled
+    assert config._speaker is not None
 
 
 def test_packaged_defaults_are_used_by_partial_overrides(tmp_path, monkeypatch):
