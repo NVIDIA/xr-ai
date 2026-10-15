@@ -237,7 +237,7 @@ uv run main.py
 Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
 development certificate on first use, allow camera and microphone access, and
 connect. Say “Hey agent, let's start talking” to open the conversation, then
-speak naturally; say “Hey agent, let's stop talking” to close it. Both checked-in
+speak naturally; say “Hey agent, let's stop talking” to close it.
 The Tea sample uses this `conversation` workflow. Set `mode: hybrid` with a wake
 phrase to also ask addressed one-off questions while closed, or `always_on`
 for an explicitly ungated microphone.
