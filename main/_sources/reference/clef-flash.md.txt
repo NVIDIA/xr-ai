@@ -11,14 +11,14 @@ release's `joint_schema_model.py` directly from the model directory and calls
 its native `load_release_model` and `systemone` functions. The service does not
 route decisions through a generation endpoint.
 
-The service supports text-only choice questions. A request must name the
-configured model, include state, and provide at least one question with a
+The service supports choice questions about text and ordered images. A request
+must name the configured model, include state, and provide at least one question with a
 string instruction and two or more named choices. An empty instruction uses
-the upstream question-ID fallback. The service rejects
-multimodal fields, unsupported question types, model-name mismatches, oversized
-bodies, and tokenized inputs above `max_length`. This length check uses the
-release tokenizer before inference so state is never silently truncated by the
-upstream encoder.
+the upstream question-ID fallback. The service rejects videos, invalid image
+data, unsupported question types, model-name mismatches, oversized bodies, and
+tokenized inputs above `max_length`. This length check uses the release
+multimodal processor before inference so state is never silently truncated by
+the upstream encoder.
 
 The server loads weights once, runs a two-choice warmup, and signals launcher
 readiness only after the model and HTTP listener are ready. Inference executes
@@ -72,7 +72,10 @@ limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 `POST /v1/systemone` accepts the SystemOne request fields `model`, `state`,
 and `questions`. The response contains the configured model name, one choice
 answer per question, input-token usage, and the pinned revision. The service
-does not accept images, videos, `noul`, or `score` questions. The pinned model
+accepts an optional `images` array of inline JPEG or PNG base64 data URLs.
+Image ordering is preserved; describe target and reference roles in `state` or
+question instructions. URLs and paths are never fetched or opened by the server.
+Videos, `noul`, and `score` questions remain unsupported. The pinned model
 rounds native probabilities to four decimal places. Before returning them, the
 service validates their shape and values, normalizes them to a complete
 distribution, and derives confidence from the selected normalized probability.
@@ -83,3 +86,58 @@ that complete identity only to decide whether an owned listener is reusable.
 
 Workers use `xr_ai_models.make_decision` and the model profile's SystemOne
 adapter. They do not call this HTTP endpoint directly.
+
+## Image decisions
+
+Use the typed decision client for local image files as `pathlib.Path` objects,
+encoded bytes, or inline JPEG and PNG data URL strings. Files must match their
+JPEG or PNG suffix; filesystem path strings are not accepted. For example, with
+an existing configured `decision` service:
+
+```python
+from pathlib import Path
+from xr_ai_models import DecisionQuestion
+
+result = await decision.decide(
+    "Image 1 is the target piece; image 2 is a labeled reference: white bishop.",
+    {"piece": DecisionQuestion(
+        instructions="Classify the target piece.",
+        criteria={"pawn": "Pawn", "bishop": "Bishop", "other": "Another piece"},
+    )},
+    images=[Path("target.jpg"), Path("bishop-reference.png")],
+)
+```
+
+Before updating a running text-only service, stop it using the old checkout,
+then start the updated service before sending images. Refer to
+{ref}`clef-image-input-migration` for the upgrade procedure.
+
+The client embeds local inputs into data URLs and rejects remote URLs. It omits
+`images` for text-only calls, preserving compatibility with older servers. Image
+requests require an upgraded endpoint; errors are surfaced without a text-only
+fallback. Other `DecisionService` implementations need to accept the optional
+`images` keyword when supporting this capability.
+
+The existing body-size limit includes base64 media. Before allocating RGB
+buffers, the server derives image-count and aggregate source-pixel budgets from
+the loaded processor's patch size, spatial merge size, and minimum resized
+pixel area. With the pinned processor, image count is bounded to
+`max_length // 64` and aggregate source pixels to `max_length * 32 * 32`,
+using 16-pixel patches and a two-by-two spatial merge. This
+conservative admission limit applies to original dimensions even if the model
+would resize them. Resize large source photos on the client before submitting
+crops. The processor then checks the actual combined text, image, and question
+token count against `max_length`; invalid images or excess tokens receive HTTP
+422, and excess body bytes receive HTTP 413.
+Request-controlled preprocessing options (`media_kwargs`) are rejected with
+HTTP 422: resize settings belong to the server's loaded processor.
+
+Inputs use Pillow's RGB conversion without EXIF rotation, alpha compositing,
+or high-bit-depth normalization. Prepare upright, opaque, 8-bit images on the
+client when those distinctions matter.
+
+Image decoding, processing, and inference share the existing serialized worker.
+Decoded images are released on completion or failure. Requests reuse the loaded
+model weights; each request still processes its images, including references.
+There is no cross-request reference cache. Adding references increases input
+processing and does not itself guarantee better decisions.
