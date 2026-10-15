@@ -3,6 +3,7 @@
 
 # Shared frame and voice settings. Configuration paths are relative to this YAML.
 capture_config: capture-agent-config.yaml
+replay_config: replay-agent-config.yaml
 frame_max_age_s: 2.0
 frame_timeout_s: 3.0
 silence_duration: 0.6

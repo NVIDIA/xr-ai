@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-local execution engine for approved declarative SOP guides."""
+"""Guide participants through an approved procedure and verify their progress.
+
+ReplayAgent handles speech and connection events, owns each participant's guide
+state, and runs background observations. It uses the guide's tools and evidence
+rules to verify steps and resets completed runs for another demonstration.
+"""
 
 from __future__ import annotations
 
@@ -38,8 +43,8 @@ from xr_ai_voice import (
 )
 
 from ._workflow_spec import Step, Workflow, _CurrentViewRequest, _TimerRequest, _TimerResult
+from .events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guides import SelectedGuide
-from .replay_events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 
 _POLL_INTERVAL_S = 0.25
 _MAX_TOOL_ROUNDS = 3

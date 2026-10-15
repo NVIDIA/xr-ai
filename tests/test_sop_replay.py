@@ -30,17 +30,24 @@ from xr_ai_voice import (
     VoiceParticipantLeft,
 )
 
-_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/sop-sample"
+_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-replay"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from sop_sample_worker._workflow_spec import parse_workflow  # noqa: E402
-from sop_sample_worker.guides import SelectedGuide, select_guide  # noqa: E402
-from sop_sample_worker.replay import ReplayAgent, _AdvanceGuideRequest, _CommitRequest, _tools_for_query  # noqa: E402
-from sop_sample_worker.replay_events import (  # noqa: E402
+from procedure_capture_replay_worker.config import WorkerConfig, load_config  # noqa: E402
+from procedure_capture_replay_worker.replay._workflow_spec import parse_workflow  # noqa: E402
+from procedure_capture_replay_worker.replay.agent import (  # noqa: E402
+    ReplayAgent,
+    _AdvanceGuideRequest,
+    _CommitRequest,
+    _tools_for_query,
+)
+from procedure_capture_replay_worker.replay.config import ReplayConfig  # noqa: E402
+from procedure_capture_replay_worker.replay.events import (  # noqa: E402
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
 )
+from procedure_capture_replay_worker.replay.guides import SelectedGuide, select_guide  # noqa: E402
 
 
 @pytest.fixture
@@ -311,7 +318,7 @@ async def test_departure_while_input_cleanup_awaits_does_not_restart_turn(engine
 
 async def test_timer_cannot_complete_early_and_does_not_use_camera(engine, document, monkeypatch):
     now = time.time_ns()
-    monkeypatch.setattr("sop_sample_worker.replay.time.time_ns", lambda: now)
+    monkeypatch.setattr("procedure_capture_replay_worker.replay.agent.time.time_ns", lambda: now)
     step = document["steps"][0]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
                        "arguments": {"started_at_us": now // 1000, "duration_s": 10}}
@@ -406,7 +413,9 @@ async def test_read_only_filter_does_not_grant_undeclared_tools(engine, document
 async def test_timer_question_uses_configured_arguments(engine, document, monkeypatch, state_references):
     started = 1_800_000_000_000_000
     arguments = {"started_at_us": started, "duration_s": 25}
-    monkeypatch.setattr("sop_sample_worker.replay.time.time_ns", lambda: (started + 7_000_000) * 1000)
+    monkeypatch.setattr(
+        "procedure_capture_replay_worker.replay.agent.time.time_ns", lambda: (started + 7_000_000) * 1000,
+    )
     step = document["steps"][0]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
                        "arguments": dict(arguments)}
@@ -498,29 +507,106 @@ def test_cli_selects_replay_without_capture_and_quotes_name(monkeypatch):
 
     def launch(processes, base):
         assert [p.name for p in processes] == ["hub", "worker"]
-        assert processes[-1].command == "sop_sample_replay"
+        assert processes[-1].command == "procedure_capture_replay_worker"
         requests.append(json.loads(processes[-1].config.read_text()))
         assert base == _SAMPLE
 
     monkeypatch.setattr(main, "run_stack", launch)
-    main.run(["--replay", "Align Parts"])
-    assert requests == [{"settings": str(_SAMPLE / "yaml/replay.yaml"), "guide_name": "Align Parts"}]
-    with pytest.raises(SystemExit):
-        main.run(["--replay", " "])
+    main.run(["--mode", "replay", "Align Parts"])
+    assert requests == [{"worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "replay",
+                         "guide_name": "Align Parts", "output_root": None}]
+    for arguments in (["--mode", "replay"], ["--mode", "replay", " "],
+                      ["--mode", "capture", "Align Parts"], ["--mode", "unknown"],
+                      ["--mode", "replay", "Align Parts", "--output-root", "output"]):
+        with pytest.raises(SystemExit):
+            main.run(arguments)
+    assert len(requests) == 1
 
 
 async def test_unapproved_selection_fails_before_model_construction(tmp_path, document, monkeypatch):
-    from sop_sample_worker import replay_app
+    from procedure_capture_replay_worker import app
 
     document["task"]["status"] = "draft"
     write_guide(tmp_path, document)
-    settings = tmp_path / "replay.yaml"
-    settings.write_text("guides_dir: .\n")
     models = Mock()
-    monkeypatch.setattr(replay_app, "load_models_config", models)
+    monkeypatch.setattr(app, "load_models_config", models)
     with pytest.raises(ValueError, match="draft"):
-        await replay_app.run_replay(settings, "Align Parts")
+        await app.run_app(WorkerConfig(
+            mode="replay", models_config=_SAMPLE / "yaml/models.json",
+            voice_gate_yaml=_SAMPLE / "yaml/voice_gate.replay.yaml",
+            replay=ReplayConfig(tmp_path, "Align Parts"),
+        ))
     models.assert_not_called()
+
+
+def test_mode_configuration_is_isolated_and_models_are_shared(tmp_path):
+    capture = load_config(_SAMPLE / "yaml/worker.yaml")
+    assert capture.mode == "capture" and capture.replay is None
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({
+        "worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "replay", "guide_name": "Align Parts",
+    }))
+    replay = load_config(request)
+    assert replay.mode == "replay" and replay.capture is None
+    assert replay.models_config == capture.models_config
+    assert replay.replay.guide_name == "Align Parts"
+    assert replay.replay.guides_dir.resolve() == _SAMPLE / "guides"
+    assert replay.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.replay.yaml"
+
+
+@pytest.mark.parametrize("mode", ["capture", "replay"])
+def test_config_does_not_load_inactive_capability(tmp_path, mode):
+    settings = tmp_path / "worker.yaml"
+    settings.write_text("capture_config: capture.yaml\nreplay_config: replay.yaml\n")
+    # Only the selected capability's file exists.
+    (tmp_path / f"{mode}.yaml").write_text("{}")
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({
+        "worker_config": str(settings), "mode": mode,
+        "guide_name": "Align Parts" if mode == "replay" else None,
+    }))
+    config = load_config(request)
+    assert (config.capture is not None) == (mode == "capture")
+    assert (config.replay is not None) == (mode == "replay")
+
+
+async def test_capture_composition_does_not_construct_replay_or_llm(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from procedure_capture_replay_worker import app
+
+    config = load_config(_SAMPLE / "yaml/worker.yaml")
+    config = replace(config, capture=replace(config.capture, artifacts_dir=tmp_path))
+    model = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
+    for name in ("make_vlm", "make_stt", "make_tts"):
+        monkeypatch.setattr(app, name, lambda *_args: model)
+    forbidden = Mock(side_effect=AssertionError("Capture must not construct replay or LLM"))
+    for name in ("make_llm", "ReplayAgent", "VoiceAggregationAgent", "select_guide"):
+        monkeypatch.setattr(app, name, forbidden)
+
+    async def receive():
+        await asyncio.Future()
+
+    endpoint = Mock(run=receive, wait_until_running=AsyncMock())
+    monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: endpoint)
+
+    class Voice(Agent):
+        def __init__(self, **kwargs):
+            super().__init__()
+            assert set(kwargs["probes"]) == {"stt", "tts", "vlm"}
+            assert kwargs["query_topic"].name == app.CAPTURE_INPUT_TOPIC.name
+            assert not kwargs["text_input"]
+
+        async def run(self, runtime):
+            pass
+
+    monkeypatch.setattr(app, "VoiceAgent", Voice)
+    await app.run_app(config)
+    forbidden.assert_not_called()
+    handlers = [call.args[0] for call in endpoint.on_participant.call_args_list]
+    assert any(isinstance(handler.__self__, app.CaptureAgent) for handler in handlers)
+    endpoint.close.assert_called_once()
+    model.close.assert_awaited_once()
 
 
 async def test_skip_to_end_resets_without_claiming_verified_success(engine):
@@ -531,7 +617,7 @@ async def test_skip_to_end_resets_without_claiming_verified_success(engine):
 
 
 def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, monkeypatch):
-    import sop_sample_worker.guides as guides
+    import procedure_capture_replay_worker.replay.guides as guides
 
     path = write_guide(tmp_path, document)
     approved = path.read_bytes()
@@ -551,18 +637,22 @@ def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, mon
 
 
 async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, monkeypatch):
-    from sop_sample_worker import replay_app
+    from procedure_capture_replay_worker import app
 
     write_guide(tmp_path, document)
-    config = yaml.safe_load((_SAMPLE / "yaml/replay.yaml").read_text())
-    config.update(guides_dir=str(tmp_path), models_config=str(_SAMPLE / "yaml/models.replay.json"),
-                  voice_gate_yaml=str(_SAMPLE / "yaml/voice_gate.replay.yaml"))
-    settings = tmp_path / "replay.yaml"
-    settings.write_text(yaml.safe_dump(config))
+    config = WorkerConfig(
+        mode="replay", models_config=_SAMPLE / "yaml/models.json",
+        voice_gate_yaml=_SAMPLE / "yaml/voice_gate.replay.yaml", replay=ReplayConfig(tmp_path, "Align Parts"),
+    )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
     for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
-        monkeypatch.setattr(replay_app, name, lambda *_args: llm)
-    monkeypatch.setattr(replay_app, "HubVoiceTransport", lambda: SimpleNamespace(endpoint=Mock()))
+        monkeypatch.setattr(app, name, lambda *_args: llm)
+    async def receive():
+        await asyncio.Future()
+    endpoint = Mock(run=receive, wait_until_running=AsyncMock())
+    monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: endpoint)
+    capture = Mock(side_effect=AssertionError("Replay must not create a capture backend"))
+    monkeypatch.setattr(app, "_Capture", capture)
     monkeypatch.setattr(ReplayAgent, "_start_monitor", Mock())
     agents = []
 
@@ -583,11 +673,13 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
             assert agents[0]._sessions["alice"].step_id == "base"
             # Simulate worker shutdown while the participant is still connected.
 
-    monkeypatch.setattr(replay_app, "ReplayAgent", replay)
-    monkeypatch.setattr(replay_app, "VoiceAgent", Voice)
-    await replay_app.run_replay(settings, "Align Parts")
+    monkeypatch.setattr(app, "ReplayAgent", replay)
+    monkeypatch.setattr(app, "VoiceAgent", Voice)
+    await app.run_app(config)
     assert not agents[0]._sessions and not agents[0]._connected
     assert agents[0]._aggregation._stopping
+    capture.assert_not_called()
+    endpoint.close.assert_called_once()
 
 
 async def test_actual_runtime_and_aggregation_deliver_replay_and_release(document):
@@ -646,7 +738,7 @@ async def test_actual_runtime_and_aggregation_deliver_replay_and_release(documen
 ])
 async def test_live_replay_prompt_routes_intent(engine, query, expected, skip):
     """Opt-in evaluation against the configured local model; no camera or media writes."""
-    model = make_llm(load_models_config(_SAMPLE / "yaml/models.replay.json"), "llm")
+    model = make_llm(load_models_config(_SAMPLE / "yaml/models.json"), "llm")
     engine._current_frame.execute.return_value = SimpleNamespace(image=ImageReference(uri="xr-image://test"))
     engine._image_query.execute.return_value = ImageQueryResult(text="The lid is blue; three bolts are attached.")
     calls = []
@@ -677,7 +769,7 @@ async def test_live_timer_question_uses_trigger_inputs(engine, document):
     step["voice"] = {"prompt": "Answer questions about this waiting step.", "tools": ["clock__timer"]}
     engine._guide = selected(document)
     engine._start("alice")
-    model = make_llm(load_models_config(_SAMPLE / "yaml/models.replay.json"), "llm")
+    model = make_llm(load_models_config(_SAMPLE / "yaml/models.json"), "llm")
     calls = []
 
     async def chat(*args, **kwargs):

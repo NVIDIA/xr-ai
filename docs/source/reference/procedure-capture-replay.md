@@ -8,8 +8,8 @@
 
 The procedure-capture-replay sample records narrated demonstrations between
 spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
-processing. This sample currently implements capture only; guided replay is not
-yet available.
+processing. Replay mode guides participants through a locally approved procedure
+and verifies progress with visual observations and elapsed-time checks.
 
 ## Run a demonstration
 
@@ -17,16 +17,16 @@ Run commands from `agent-samples/procedure-capture-replay/`:
 
 ```bash
 uv run --project model-servers procedure_capture_replay_model_servers
-uv run main.py
+uv run main.py --mode capture
 ```
 
 The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. Omni is included for future voice guidance and
-conversational assistance during replay; that integration is not implemented in
-this capture-only sample. The launcher combines shared server defaults with
+or generate guides automatically. Replay uses Omni for guide questions and
+model-driven observations, alongside the same STT, TTS, and Cosmos services.
+The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
 profile explicitly. The worker's `yaml/models.json` configures its client
 adapters and endpoints, not server deployment. Keep those endpoints aligned
@@ -62,7 +62,7 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 Choose an output root at launch without editing configuration:
 
 ```bash
-uv run main.py --output-root /path/to/task-evidence
+uv run main.py --mode capture --output-root /path/to/task-evidence
 ```
 
 Packets are saved under `PATH/sessions/<session-id>/`. Relative command-line
@@ -208,6 +208,107 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.
 
+## Replay an approved guide
+
+Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the
+sample directory. Guides remain local and ignored by Git. Set `task.status` to
+`approved` only after reviewing the instructions, completion checks, timers,
+and safety constraints. The CLI matches an exact, case-insensitive `task.name`
+or `task.id`; it rejects missing, draft, invalid, and ambiguous selections.
+Quote names containing spaces:
+
+```bash
+uv run main.py --mode replay "Guide Name"
+```
+
+Start the shared models first, as for capture. Replay uses the LLM, VLM, STT,
+and TTS endpoints in `yaml/models.json`. Connect using the hub's web
+client URL and enable microphone and camera access. Each participant starts at
+step one with independent progress. No wake phrase or spoken start command is
+required. Turning off live video does not reset the guide. The shared current
+frame tool may request a still image from clients that support on-demand capture;
+if no fresh image is available, visual verification waits. Timer checks continue
+without a camera. Disconnect releases
+that participant's progress and pending work; reconnect starts a fresh run.
+
+Like {doc}`tea-making-sample`, replay separates foreground conversation from
+background verification. The foreground answers guide questions using the
+current step and its allowed tools. It cannot directly commit completion.
+Periodic observations use a fresh camera view or a deterministic elapsed-time
+check. The observer can commit only declared writable fields, with any required
+consecutive evidence. Late observations from a previous step or run cannot
+change current progress. The agent announces step completion once, without
+requiring a user question, but does not automatically advance to the next step.
+
+| Request | Behavior |
+|---|---|
+| “What should I do?” | Explain the current step |
+| “Does this look right?” | Use the current step's visual tool if available |
+| “How much time remains?” | Use the current step's timer tool if available |
+| “Next” or “continue” | Advance only if the current step is verified complete |
+| “Skip” | Explicitly bypass the current step; this is not evidence of success |
+| “Status” | Report current progress |
+| “Restart,” “reset guide,” or “stop guide” | Clear progress and return to step one of the selected guide |
+
+After “next” on the completed final step, the agent announces workflow
+completion, restores the guide's initial state and timer values, and presents step one again.
+No relaunch or reconnect is needed. Explicitly skipping to the end also resets
+the run, with an explicit skipped-steps message rather than a verified-completion
+claim. Disconnect to stop receiving guidance. Recording commands and selecting
+another guide are not supported inside replay mode.
+
+The worker pins the validated guide and SHA-256 from the same captured bytes at
+startup. File edits do not change a running replay; restart the sample to use a
+new version or revoke approval. Approval is a local review convention, not a
+cryptographic signature. Model-based visual checks can be wrong; reviewers must
+describe observable evidence, including orientation and count where relevant.
+This demo is not a safety interlock. A still image cannot prove a hidden action.
+
+### Guide structure
+
+The declarative shape follows the tea-making workflow: a task, typed sparse
+state, and ordered steps with separate observation and voice policies. Existing
+schema-version-1 guides from the workflow-recorder sample are supported.
+
+Text fields must be actual strings. Duplicate mapping keys are rejected at
+every level, including overrides introduced through YAML merges, instead of
+silently replacing earlier requirements. Invalid guides cannot start replay,
+even when their `task.status` is `approved`.
+
+- `schema_version` must be `1`.
+- `task` declares `id`, `name`, positive `version`, `status` (`draft` or
+  `approved`), `source_session`, `start_step`, `foreground_prompt`, and
+  `complete_message`.
+- Each `state` field declares a type (`boolean`, `integer`, `number`, or
+  `string`), a description, and optionally an initial value.
+- Each step declares `id`, `title`, `reads`, `writes`, `trigger`, `agent`,
+  `voice`, a non-empty `complete_when` mapping, `next`, and `messages` containing
+  `enter`, `complete`, and `skip`. The `next` chain must visit every step once
+  and end with `null`.
+- `agent` and `voice` each contain a prompt and a tool list. Allowed step tools
+  are `current_view`, `clock__now`, and `clock__timer`. Only the observer receives
+  `workflow__commit`. Foreground workflow controls are supplied by the runner,
+  not listed in the guide's step tools.
+- Optional `evidence` contains a full-match regex `pattern`, positive
+  `consecutive` count, and optional `commit` mapping. With `commit`, matching
+  observations directly apply that bounded patch without an observation LLM.
+  Without `commit`, the observation LLM proposes state changes and the evidence
+  count gates completion. Use a precise closed-set VLM answer contract if a
+  regex is used. Unavailable observations never provide positive evidence.
+- Optional `state_on_skip` writes only declared step fields;
+  `complete_on_skip: true` ends the run when explicitly skipped.
+
+`current_view` triggers require `arguments.question` (1–500 characters), a
+positive `interval_s`, and optionally `result_field: text`. Timer triggers use
+`function: clock__timer` with `arguments.started_at_us` (positive Unix
+microseconds) and `arguments.duration_s` (positive integer seconds). They may
+select `elapsed_s`, `remaining_s`, or `expired` as `result_field`.
+Arguments can reference declared readable or writable fields using
+`$state.field_name`. A preceding observation can call `clock__now` and commit
+the start timestamp; replay does not invent a timestamp if it is missing.
+Timer-only steps use elapsed-time evidence, not a visual substitute. Completion
+commits for timer triggers are rejected until their configured duration expires.
+
 ## Composition and configuration
 
 The outer `main.py` launches the hub and worker. The worker's `__main__.py`
@@ -224,9 +325,17 @@ persistence, and finalization.
 recording and evaluation. Application cleanup explicitly drains capture work
 before closing its frame endpoint and VLM client.
 
-The worker keeps shared wiring outside the capture subpackage. A future replay
-capability can reuse that infrastructure with its own state; this sample
-currently registers only voice I/O and capture.
+The worker keeps shared model, voice, image, and lifecycle wiring in `app.py`
+and shared settings in `config.py`. The sibling `capture/` and `replay/` packages
+own their capability-specific agents, settings, and helpers. Only the selected
+agent is registered. With no mode flag, capture remains the default.
+
+`replay/agent.py` owns guide progress, foreground questions, and background
+verification. It uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools,
+and the shared tool loop. Guide loading and validation live in `replay/guides.py`
+and `replay/_workflow_spec.py`. Replay never constructs the capture backend or
+writes demonstration packets. Both modes start the same hub and worker processes
+and use the same separately launched model stack and `yaml/models.json`.
 
 The always-on voice gate passes commands and narration through the same accepted
 input path. Recording acknowledgements follow voice-input handling, so a command
@@ -234,10 +343,12 @@ cannot cancel its own response.
 
 | Configuration | Settings |
 |---|---|
-| `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
+| `yaml/worker.yaml` | Shared frame and speech detection settings; capability configuration paths |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
-| `yaml/models.json` | Managed batch STT, VLM, and acknowledgement TTS services and endpoints |
+| `yaml/replay-agent-config.yaml` | Local guide directory and visual verification timeout |
+| `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
+| `yaml/voice_gate.replay.yaml` | Wake-word-free replay questions and guide controls |
 | `yaml/device_io_hub.yaml` | Room and web server |
 
 `worker.yaml` selects the capture YAML through `capture_config`, resolved relative
@@ -246,5 +357,24 @@ YAML, even when it is in another directory. Model and voice configuration remain
 beside the worker YAML. Absolute configuration and output paths are also supported.
 The worker loads shared settings into `WorkerConfig` and capture-specific settings
 into `CaptureConfig` under `capture/config.py`; `app.py` supplies each to its
-owning component. Restart after configuration edits.
+owning component. Replay selects its YAML through `replay_config` and loads
+`ReplayConfig` from `replay/config.py`; its guide directory resolves relative to
+that YAML. The required positional `GUIDE_NAME` selects `task.name` or `task.id`,
+not a filesystem path. `--output-root` applies only to capture. Restart after
+configuration edits.
 Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI options.
+
+## Replay regression tests
+
+From the repository root:
+
+```bash
+uv --config-file uv.toml run --project tests pytest -q \
+  tests/test_procedure_capture_replay.py tests/test_sop_replay.py -m "not gpu"
+```
+
+These tests cover mode isolation, approval, guide validation, participant-local
+progress, repeated runs, stale observations, timers, and runtime-to-voice delivery.
+They use synthetic guide fixtures, not committed user guides. Opt-in tests in
+`test_sop_replay.py` with `-m gpu` exercise the configured local LLM's tool routing;
+they do not measure visual accuracy or verify a physical assembly.
