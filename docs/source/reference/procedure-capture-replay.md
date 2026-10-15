@@ -211,7 +211,8 @@ recorded demonstrations.
 ## Replay an approved guide
 
 Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the
-sample directory. Guides remain local and ignored by Git. Set `task.status` to
+sample directory. User-created guides remain local and ignored by Git; the
+maintained tea-making example is the only checked-in exception. Set `task.status` to
 `approved` only after reviewing the instructions, completion checks, timers,
 and safety constraints. The CLI matches an exact, case-insensitive `task.name`
 or `task.id`; it rejects missing, draft, invalid, and ambiguous selections.
@@ -270,6 +271,54 @@ new version or revoke approval. Approval is a local review convention, not a
 cryptographic signature. Model-based visual checks can be wrong; reviewers must
 describe observable evidence, including orientation and count where relevant.
 This demo is not a safety interlock. A still image cannot prove a hidden action.
+
+### Included tea-making guide
+
+`guides/tea-making.guide.yaml` is a hand-authored, approved example with task
+name **Tea Making** and ID `tea_making`. It follows the five stages of
+{doc}`tea-making-sample`: identify tea, fill the heating vessel, heat water,
+immerse the tea, and wait for steeping. It is not generated from a user recording.
+
+Start the sample's shared models, then run:
+
+```bash
+uv run main.py --mode replay "Tea Making"
+```
+
+Connect and say **start replay**. Say **next** after each verified step and
+**stop replay** to cancel. After completion, say **start replay** to repeat.
+
+Use green tea with compatible package instructions, a stable heat-safe vessel,
+and a kettle or thermometer with a readable **current** water-temperature
+display. The example uses 80°C (176°F) water and a three-minute steep, within
+the green-tea ranges in the tea sample's brewing reference. Its visual target
+check accepts 78–82°C or 172–180°F. If the package requires a different recipe,
+stop and adapt a local copy before using it. Do not tilt or lift hot vessels
+to satisfy a camera check.
+
+The example is adapted to replay's existing tools, not a drop-in copy of the
+tea sample's workflow YAML:
+
+- It uses a fixed green-tea recipe, not package-dependent settings or RAG lookup.
+- Its four visual steps require two distinct fresh frames whose VLM responses
+  exactly match `YES`. `NO`, `UNKNOWN`, missing frames, and malformed responses
+  cannot complete a step. These bounded evidence commits do not use an
+  observation LLM; the foreground LLM still handles questions and controls.
+- The heating check verifies a displayed current temperature in the recipe
+  range, rather than the tea sample's “heating underway” threshold. Replay
+  does not expose the tea sample's typed temperature tools: this is a VLM
+  judgment, not a deterministic temperature measurement or safety guarantee.
+- Immersion detection does not start the timer. Say **next** promptly after
+  immersion is confirmed to enter the timer step. The runtime then measures a
+  full 180 seconds; time spent waiting at the immersion step is not subtracted.
+  Timer verification does not inspect images or prove continued immersion.
+- Skipping a visual prerequisite ends the run as skipped instead of assuming
+  the prerequisite was satisfied. Skipping the timer also cannot produce a
+  verified-completion announcement.
+
+Regression tests load this exact example and exercise its state transitions,
+distinct-frame evidence, skip behavior, and timer with simulated observations.
+Those tests do not establish accuracy on real tea-making images or appliances.
 
 ### Guide structure
 

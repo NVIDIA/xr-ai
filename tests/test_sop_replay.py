@@ -123,6 +123,106 @@ def write_guide(directory, document, name="test.guide.yaml"):
     return path
 
 
+@pytest.mark.parametrize("name", ["Tea Making", "tea making", "tea_making"])
+def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
+    guide = select_guide(_SAMPLE / "guides", name)
+    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    assert guide.workflow.runnable
+    original = yaml.safe_load((_SAMPLE.parent / "tea-making-sample/yaml/workflow.yaml").read_text())
+    workflow = guide.workflow
+    chain = []
+    step_id = workflow.start_step
+    while step_id is not None:
+        chain.append(step_id)
+        step_id = workflow.steps[step_id].next_step
+    assert chain == [step["id"] for step in original["steps"]]
+    for step in workflow.steps.values():
+        assert not step.agent.tools
+        assert not step.is_complete(workflow.initial_state())
+        assert "{{" not in step.enter_message  # Replay messages are not Jinja templates.
+        if step.trigger.function == "current_view":
+            assert step.evidence.pattern == "^YES$" and step.evidence.consecutive == 2
+            assert step.voice.tools == ("current_view",)
+            assert step.complete_on_skip  # Do not silently bypass a brewing prerequisite.
+        else:
+            assert step.trigger.arguments == {"duration_s": 180}
+            assert step.trigger.result_field == "expired"
+            assert step.evidence.pattern == "^true$"
+            assert step.voice.tools == ("clock__timer",)
+
+
+async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch):
+    from procedure_capture_replay_worker.replay import replaying
+
+    now = 1000.0
+    monkeypatch.setattr(replaying, "time", SimpleNamespace(monotonic=lambda: now))
+    backend = engine._backend
+    backend._guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    await engine.participant_left(None, context())
+    await engine.participant_joined(None, context())
+    session = backend._sessions["alice"]
+    assert not session.active and session.timer is None
+    await control(backend, "restart")
+    sequence = 0
+
+    async def observe(answer, *, repeat_frame=False):
+        nonlocal sequence
+        if not repeat_frame:
+            sequence += 1
+        backend._current_frame.execute.return_value = camera_frame(sequence)
+        backend._image_query.execute.return_value = ImageQueryResult(text=answer)
+        session.next_tick = 0
+        await backend._tick(session)
+
+    for step_id in ("identify", "fill_water", "heat_water", "start_steeping"):
+        assert session.step_id == step_id and session.timer is None
+        for answer in ("NO", "UNKNOWN", "YES"):
+            await observe(answer)
+            assert not backend._is_complete(session)
+        await observe("YES", repeat_frame=True)
+        assert session.evidence_hits == 1 and not backend._is_complete(session)
+        await observe("YES")
+        assert backend._is_complete(session)
+        assert session.timer is None  # Even confirmed immersion does not start a timer.
+        now += 10
+        await control(backend, "advance", skip=False)
+
+    assert session.step_id == "steep_timer" and session.timer.started == now
+    backend._current_frame.execute.reset_mock()
+    backend._image_query.execute.reset_mock()
+    timer = backend._timer_tool("alice")
+    assert (await timer.execute(EmptyRequest())).remaining_s == 180
+    now += 179
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not backend._is_complete(session)
+    assert "not complete" in await control(backend, "advance", skip=False)
+    now += 1
+    session.next_tick = 0
+    await backend._tick(session)
+    assert backend._is_complete(session)
+    backend._current_frame.execute.assert_not_awaited()
+    backend._image_query.execute.assert_not_awaited()
+    engine._llm.chat.assert_not_called()
+    assert "Tea guidance complete" in await control(backend, "advance", skip=False)
+    assert not session.active and session.timer is None
+    await control(backend, "restart")
+    assert session.step_id == "identify" and not any(session.state.values())
+
+
+@pytest.mark.parametrize("step_id", ["identify", "fill_water", "heat_water", "start_steeping", "steep_timer"])
+async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, step_id):
+    backend = engine._backend
+    backend._guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    session.step_id = step_id
+    backend._enter_step(session)
+    response = await control(backend, "advance", skip=True)
+    assert "skipped steps" in response and "Tea guidance complete" not in response
+    assert not session.active and session.timer is None
+
+
 def test_approved_exact_name_and_id_are_pinned(tmp_path, document):
     path = write_guide(tmp_path, document)
     original = path.read_bytes()
