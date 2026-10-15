@@ -623,6 +623,15 @@ def test_tracked_text_has_no_retired_service_paths() -> None:
             for line_number, line in enumerate(text.splitlines(), start=1)
             for legacy in _LEGACY_PROJECTS
             if legacy in line
+            # The deployment adapter deliberately supports released layouts.
+            if not (
+                legacy == "agent-samples/model-servers"
+                and relative in {
+                    Path("deployments/brev/compat.py"),
+                    Path("tests/brev/test_deployment.py"),
+                    Path("tests/brev/test_release_layout.py"),
+                }
+            )
         )
         stale.extend(
             (f"{relative}:{line_number}", "server-runtime/")

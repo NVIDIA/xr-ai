@@ -45,7 +45,8 @@ through scaffolding, startup, and hardware-free verification.
 | Sample | Purpose |
 |---|---|
 | Model servers beside each agent sample | Convenience launchers for each sample’s required local models; refer to the [workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html) |
-| [NIM endpoints](deployment/nim/README.md) | Configure and validate independently deployed models |
+| [NIM endpoints](deployments/nim/README.md) | Configure and validate independently deployed models |
+| [XR AI Experiences](deployments/brev/README.md) | Choose and deploy samples on Brev or a local GPU host |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
 | [`procedure-capture-replay`](agent-samples/procedure-capture-replay/README.md) | Voice-controlled demonstration recording with snapshots, captions, and narration |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |

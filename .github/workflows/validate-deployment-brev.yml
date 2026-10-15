@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: validate-deployment-brev
+on:
+  pull_request:
+    paths: &deployment_paths
+      - 'deployments/brev/**'
+      - 'tests/brev/**'
+      - 'agent-samples/**'
+      - 'model-server-samples/**'
+      - 'utils/xr-ai-launcher/**'
+      - 'utils/xr-ai-model-server-stack/**'
+      - 'services/device-io-hub/**'
+      - 'client-samples/web*/**'
+      - '.github/workflows/validate-deployment-brev.yml'
+  push:
+    branches: [main]
+    paths: *deployment_paths
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    name: Mocked runtime compatibility (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [v0.2.0-beta.2, v0.3.0-beta, current]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/checkout@v4
+        if: matrix.runtime != 'current'
+        with:
+          repository: NVIDIA/xr-ai
+          ref: refs/tags/${{ matrix.runtime }}
+          path: runtime
+          persist-credentials: false
+      - name: Validate deployment and release adapter
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          export XR_AI_DEPLOYMENT_PYTHON="$(command -v python3)"
+          if [ "$RUNTIME" = current ]; then
+            export XR_AI_TEST_ROOT="$GITHUB_WORKSPACE"
+          else
+            export XR_AI_TEST_ROOT="$GITHUB_WORKSPACE/runtime"
+          fi
+          bash -n deployments/brev/launch.sh
+          python3 -m unittest discover -s tests/brev -v

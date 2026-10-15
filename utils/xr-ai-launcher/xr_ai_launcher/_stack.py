@@ -50,6 +50,7 @@ from typing import Sequence, Union
 
 from ._credentials import load_credentials
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
+from .deployment import stack_readiness
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -234,7 +235,7 @@ def _spawn(
         config_path=config_path,
     )
 
-    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "XR_AI_STACK_READY_FILE"}}
     # The child can record this launcher's dedicated session without creating
     # a nested session that would escape _shutdown's SIGKILL escalation.
     env[_PROCESS_GROUP_OWNER_ENV] = proc.command
@@ -539,6 +540,11 @@ def run_stack(
     is printed every five seconds so model-loading or CloudXR start-up
     remains visible.
 
+    For a supervising deployment, ``XR_AI_STACK_READY_FILE`` publishes aggregate
+    readiness independently of log output. Refer to :mod:`xr_ai_launcher.deployment`
+    for its lifetime and content. Persistent model convenience stacks do not
+    publish aggregate readiness.
+
     After all processes are ready the launcher monitors them: if any exits,
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
@@ -592,7 +598,7 @@ def run_stack(
     aborted = False
     failure_status: int | None = None
 
-    with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
+    with stack_readiness(not exit_after_ready) as mark_ready, tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
         tmpdir = Path(_tmpdir)
         try:
             for item in processes:
@@ -640,6 +646,7 @@ def run_stack(
                     )
                     _wait_ready(item.name, ready_file, launched[item.name])
 
+            mark_ready()
             log.info("All processes ready.")
             _print_ready_banner(list(launched.keys()))
             if exit_after_ready:

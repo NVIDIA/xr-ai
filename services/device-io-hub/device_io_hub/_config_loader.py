@@ -22,6 +22,7 @@ from pathlib import Path
 import yaml
 from loguru import logger
 
+from device_io_hub.deployment import apply_network_overrides
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 from device_io_hub.video import VideoRecorderConfig
 
@@ -78,6 +79,9 @@ def load_config() -> LiveKitConnectorConfig:
     device_io_hub.yaml in CWD uses configuration defaults. An empty YAML
     document also uses defaults. Unknown top-level and video_recording keys
     are ignored with a warning.
+
+    ``DEVICE_IO_HUB_NETWORK`` supplies JSON host network overrides after YAML.
+    Refer to :mod:`device_io_hub.deployment` for accepted fields and validation.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
@@ -90,6 +94,7 @@ def load_config() -> LiveKitConnectorConfig:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         logger.info("No {} found; using defaults. Supply --config <path> to load a configuration", config_path)
         data: dict = {"enable_web_server": False, "web_client_dir": ""}
+        apply_network_overrides(data)
         _apply_env_credentials(data)
         return LiveKitConnectorConfig(**data)
 
@@ -106,6 +111,7 @@ def load_config() -> LiveKitConnectorConfig:
         data = {}
     if not isinstance(data, dict):
         raise ValueError(f"{config_path}: top-level configuration must be a YAML mapping")
+    apply_network_overrides(data)
 
     valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
     _warn_unknown_keys(data, valid, config_path, "top-level")
