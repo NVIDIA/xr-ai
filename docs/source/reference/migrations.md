@@ -40,7 +40,8 @@ updated service; there is no silent text-only fallback.
 Choose `mode: conversation`, `hybrid`, `wake_only`, or `always_on` at the top of
 the selected voice-gate YAML. Remove `conversation.enabled` when setting mode.
 The shipped samples select `conversation` to preserve their closed-until-start
-workflow; Tea's alternate "always-on" preset remains continuous after start.
+workflow. Tea's redundant alternate preset is removed; change `mode` in its
+normal `voice_gate.yaml` to choose another interaction policy.
 `hybrid` adds one-off addressed questions without persistent enrollment before
 starting a natural conversation. `wake_only` and `hybrid` require non-empty
 `magic_phrases`. `always_on` explicitly preserves the ungated baseline.
