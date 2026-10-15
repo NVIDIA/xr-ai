@@ -32,10 +32,10 @@ Ask the user, then tailor the pointers below to the answers.
      `https://nvidia.github.io/xr-ai/<ref>/getting_started/requirements.html`,
      including the VRAM table. Replace `<ref>` with `main` or the selected
      release tag.
-   - **Remote/hosted:** the LLM and VLM can run on hosted endpoints, and no
-     local GPU is needed for the agent or hub. STT and TTS stay local. Read
-     `docs/source/components/ai-services.md` (section "Hosting models on
-     NVIDIA NIM") and `docs/source/getting_started/credentials.md`.
+   - **Remote/hosted:** read `docs/source/components/ai-services.md`,
+     `docs/source/guides/deploying-with-nim.md`, and
+     `docs/source/getting_started/credentials.md` for external model
+     endpoints, including speech, and their client dependencies.
 
 ## Where everything is
 
@@ -58,8 +58,11 @@ Ask the user, then tailor the pointers below to the answers.
   full repository boilerplate templates.
 - **Quickstart order:** follow
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
-  `<ref>` replaced as above. Start `agent-samples/simple-vlm-example/model-servers` and
+  `<ref>` replaced as above. For local models, start
+  `agent-samples/simple-vlm-example/model-servers` and
   wait for it to report readiness before starting
   `agent-samples/simple-vlm-example`. For another sample, start that sample’s
   own `model-servers/` project instead. Stop the current model stack before
   switching samples, editing its server settings, or updating the checkout.
+  For external endpoints, follow `docs/source/guides/deploying-with-nim.md`
+  for the sample startup path.
