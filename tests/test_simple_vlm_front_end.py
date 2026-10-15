@@ -68,6 +68,7 @@ class _Destination:
         self.eligible = eligible
         self.calls = []
         self.releases = []
+        self.answer_turns = []
 
     def routing_aid(self, _participant_id):
         return RoutingAid(
@@ -83,6 +84,7 @@ class _Destination:
 
     async def answer(self, turn, *, emit):
         self.calls.append(("answer", turn.query))
+        self.answer_turns.append(turn)
         result = self.results.popleft() if self.results else DestinationResult()
         if result.text:
             await emit(self.name, result.text)
@@ -332,35 +334,37 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_or_invalid_route_clarifies_without_admitting_a_destination():
+async def test_unresolved_or_invalid_route_uses_default_without_admitting_candidate():
     for choice in ("clarify", "not-registered"):
         decisions = _Decisions(choice)
-        conversation = _Destination("conversation")
+        conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help."),))
         xr = _Destination("xr")
         front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
 
         result, output = await _run(front_end, query="Help me with this.")
 
-        assert result.disposition == "clarify"
-        assert output == [("conversation", "Which part would you like help with?")]
-        assert conversation.calls == []
+        assert result.disposition == "answer"
+        assert output == [("conversation", "I can help.")]
+        assert conversation.calls == [("answer", "Help me with this.")]
         assert xr.calls == []
 
 
 @pytest.mark.asyncio
 async def test_route_prompt_exposes_unavailable_destination_eligibility():
     decisions = _Decisions("xr")
-    conversation = _Destination("conversation")
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help generally."),))
     xr = _Destination("xr", eligibility="unavailable", eligible=False)
     front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
 
-    result, _output = await _run(front_end, query="Change the virtual scene.")
+    result, output = await _run(front_end, query="Change the virtual scene.")
 
-    assert result.disposition == "clarify"
+    assert result.disposition == "answer"
+    assert output == [("conversation", "I can help generally.")]
     routed_destinations = decisions.calls[0][0]["destinations"]
     assert next(item for item in routed_destinations if item["name"] == "xr")["eligibility"] == "unavailable"
     assert next(item for item in routed_destinations if item["name"] == "xr")["eligible"] is False
     assert xr.calls == []
+    assert conversation.calls == [("answer", "Change the virtual scene.")]
 
 
 @pytest.mark.asyncio
@@ -373,6 +377,111 @@ async def test_single_ineligible_destination_is_not_admitted():
     assert result.disposition == "clarify"
     assert output == [("conversation", "Which part would you like help with?")]
     assert destination.calls == []
+
+
+@pytest.mark.asyncio
+async def test_exhausted_declines_answer_once_with_default_and_shared_history():
+    decisions = _Decisions("specialist", "visual")
+    history = (ConversationExchange("Earlier request", "Earlier response"),)
+    default = _Destination(
+        "conversation",
+        admissions=(Admission("decline", text="must not be spoken"),),
+        results=(DestinationResult("answer", "I can still help."),),
+    )
+    specialist = _Destination("specialist", admissions=(Admission("decline"),))
+    visual = _Destination("visual", admissions=(Admission("decline"),))
+    front_end = ConversationFrontEnd(
+        {"conversation": default, "specialist": specialist, "visual": visual},
+        decisions,
+        default_destination="conversation",
+    )
+
+    result, output = await _run(front_end, query="Continue that.", history=history)
+
+    assert result == DestinationResult("answer", "I can still help.")
+    assert output == [("conversation", "I can still help.")]
+    assert [call[0] for call in specialist.calls] == ["admit"]
+    assert [call[0] for call in visual.calls] == ["admit"]
+    assert default.calls == [("answer", "Continue that.")]
+    assert default.answer_turns[0].history == history
+    assert len(decisions.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_no_eligible_route_uses_eligible_default_without_admission():
+    decisions = _Decisions("specialist")
+    default = _Destination("conversation", results=(DestinationResult("answer", "General help."),))
+    specialist = _Destination("specialist", eligible=False)
+    front_end = ConversationFrontEnd(
+        {"conversation": default, "specialist": specialist},
+        decisions,
+        default_destination="conversation",
+    )
+
+    result, output = await _run(front_end, query="Help me.")
+
+    assert result.disposition == "answer"
+    assert output == [("conversation", "General help.")]
+    assert default.calls == [("answer", "Help me.")]
+    assert specialist.calls == []
+
+
+@pytest.mark.asyncio
+async def test_default_fallback_records_route_reason(monkeypatch):
+    default = _Destination("conversation", results=(DestinationResult("answer", "General help."),))
+    specialist = _Destination("specialist")
+    front_end = ConversationFrontEnd(
+        {"conversation": default, "specialist": specialist},
+        _Decisions("clarify"),
+        default_destination="conversation",
+    )
+    reasons = []
+    monkeypatch.setattr(
+        front_end,
+        "_trace_default_fallback",
+        lambda _turn, reason, *, eligible: reasons.append((reason, eligible)),
+    )
+
+    result, _output = await _run(front_end, query="Help me.")
+
+    assert result.disposition == "answer"
+    assert reasons == [("no_route", True)]
+
+
+@pytest.mark.asyncio
+async def test_exhausted_declines_clarify_when_default_is_unavailable():
+    specialist = _Destination("specialist", admissions=(Admission("decline"),))
+    default = _Destination("conversation", eligible=False)
+    front_end = ConversationFrontEnd(
+        {"conversation": default, "specialist": specialist},
+        _Decisions("specialist"),
+        default_destination="conversation",
+    )
+
+    result, output = await _run(front_end, query="Help me.")
+
+    assert result.disposition == "clarify"
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert specialist.releases == ["alice"]
+    assert default.calls == []
+
+
+@pytest.mark.asyncio
+async def test_destination_admission_clarification_does_not_trigger_default_answer():
+    default = _Destination("conversation", results=(DestinationResult("answer", "Should not run."),))
+    specialist = _Destination("specialist", admissions=(Admission("clarify", text="Which one?"),))
+    front_end = ConversationFrontEnd(
+        {"conversation": default, "specialist": specialist},
+        _Decisions("specialist"),
+        default_destination="conversation",
+    )
+
+    result, output = await _run(front_end, query="Please handle that.")
+
+    assert result == DestinationResult("clarify", "Which one?")
+    assert output == [("specialist", "Which one?")]
+    assert specialist.calls == [("admit", "Please handle that.", False)]
+    assert default.calls == []
 
 
 @pytest.mark.asyncio

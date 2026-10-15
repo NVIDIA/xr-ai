@@ -108,13 +108,14 @@ conversation, alongside domain destinations such as a scene editor or a
 foreground guide. `ConversationFrontEnd` uses the typed `DecisionService` to
 select among real destinations, lets an explicitly focused destination receive
 the next turn first, and returns to route selection when it releases or declines.
-A declined route is excluded from one reroute; uncertain or unavailable work
-ends with a clarification instead of invoking a guessed destination. Routing
-descriptions and priority are selection hints; application policy belongs in
-the destination's instructions and admission check. Destinations decline or
-clarify in `admit()` before work begins; after work, `answer()` returns only
-`answer`, `focus`, or `release`. The front end may return `clarify` when no route
-can proceed.
+A declined route is excluded from one bounded reroute. If routing selects no
+eligible destination or those attempts end in declines, the configured eligible
+default receives one final answer attempt without another admission check.
+Explicit destination clarifications remain final; if the default is unavailable,
+the front end asks for clarification. Routing descriptions and priority are
+selection hints; application policy belongs in the destination's instructions
+and admission check. Destinations decline or clarify in `admit()` before work
+begins; after work, `answer()` returns only `answer`, `focus`, or `release`.
 
 The front end owns per-participant reply tasks and focus assignment. Each
 destination owns its persistent application state and cleanup. `interrupt()`

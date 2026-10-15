@@ -106,7 +106,7 @@ Emit = Callable[[str, str], Awaitable[None]]
 
 
 class ConversationDestination(Protocol):
-    """A destination that owns its state and can answer one admitted turn."""
+    """A destination that owns its state and handles admitted or fallback turns."""
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
         """Describe this participant's current eligibility and route scope."""
@@ -115,11 +115,17 @@ class ConversationDestination(Protocol):
         """Accept, decline, clarify, or release before producing spoken output."""
 
     async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
-        """Answer an admitted turn, streaming chunks; return answer, focus, or release.
+        """Answer a turn after admission or as the configured default fallback.
+
+        Stream chunks and return answer, focus, or release. The front end may
+        call an eligible configured default once without ``admit()`` after no
+        route accepts; destinations must support that standalone answer path.
 
         Destinations decline or clarify in ``admit()``, before output or work begins.
-        The front end itself uses ``DestinationResult("clarify", ...)`` when no
-        eligible route can proceed.
+        If no eligible destination accepts, the front end gives its configured
+        eligible default one final answer attempt without another admission check.
+        It uses ``DestinationResult("clarify", ...)`` when that default is
+        unavailable.
         """
 
     async def release(self, participant_id: str) -> None:

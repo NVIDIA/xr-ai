@@ -18,6 +18,7 @@ from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMServ
 
 from ._context import _active_history_timestamps, _format_minute
 from .contracts import (
+    Admission,
     ConversationDestination,
     ConversationExchange,
     ConversationTurn,
@@ -46,7 +47,9 @@ class ConversationFrontEnd:
     A focused destination receives the participant's next turn first. It can
     answer, release focus, or decline and return control to ordinary routing.
     Route choices use the typed decision service; a declined route is excluded
-    from one bounded reroute. Destinations own their model and application state.
+    from one bounded reroute. When no destination accepts, the configured
+    default gets one final answer attempt without another admission check, if it
+    is eligible. Destinations own their model and application state.
 
     ``acknowledgment_llm`` and ``acknowledgment_delay_secs`` opt into a brief,
     route-aware intention acknowledgment. Both must be supplied together. A
@@ -185,7 +188,6 @@ class ConversationFrontEnd:
             raise ExceptionGroup("failed to release conversation destinations", errors)
 
     async def _handle(self, turn: ConversationTurn, *, emit: Emit, generation: object) -> DestinationResult:
-
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
         if focused is not None:
@@ -202,16 +204,27 @@ class ConversationFrontEnd:
             name = candidates[0] if focused and attempt == 0 else await self._select(turn, candidates)
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
+            bypass_admission = name is None
             if name is None:
-                text = "Which part would you like help with?"
-                await emit(self._default_destination, text)
-                self._remember(turn, text)
-                return DestinationResult("clarify", text)
+                name = self._default_destination
             destination = self._destinations[name]
-            self._destinations_used.setdefault(turn.participant_id, set()).add(name)
-            admission = await destination.admit(turn, focused=(name == focused))
-            if self._generation.get(turn.participant_id) is not generation:
-                raise asyncio.CancelledError()
+            if bypass_admission:
+                aid = destination.routing_aid(turn.participant_id)
+                if aid.name != name:
+                    raise ValueError(f"routing aid name {aid.name!r} does not match destination {name!r}")
+                self._trace_default_fallback(turn, "no_route", eligible=aid.eligible)
+                if not aid.eligible:
+                    text = "Which part would you like help with?"
+                    await emit(name, text)
+                    self._remember(turn, text)
+                    return DestinationResult("clarify", text)
+                self._destinations_used.setdefault(turn.participant_id, set()).add(name)
+                admission = Admission("accept")
+            else:
+                self._destinations_used.setdefault(turn.participant_id, set()).add(name)
+                admission = await destination.admit(turn, focused=(name == focused))
+                if self._generation.get(turn.participant_id) is not generation:
+                    raise asyncio.CancelledError()
             if admission.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
@@ -232,20 +245,45 @@ class ConversationFrontEnd:
                     self._remember(turn, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
-                await destination.release(turn.participant_id)
-                if self._generation.get(turn.participant_id) is not generation:
-                    raise asyncio.CancelledError()
-                self._forget_destination(turn.participant_id, name)
+                declined_name = name
                 if name == focused:
                     self._focus.pop(turn.participant_id, None)
                     focused = None
                 candidates = [item for item in candidates if item != name]
                 if not candidates or attempt == 1:
-                    text = admission.text or "Which part would you like help with?"
-                    await emit(self._default_destination, text)
-                    self._remember(turn, text)
-                    return DestinationResult("clarify", text)
-                continue
+                    name = self._default_destination
+                    destination = self._destinations[name]
+                    aid = destination.routing_aid(turn.participant_id)
+                    if aid.name != name:
+                        raise ValueError(f"routing aid name {aid.name!r} does not match destination {name!r}")
+                    self._trace_default_fallback(turn, "exhausted_declines", eligible=aid.eligible)
+                    if not aid.eligible:
+                        declined_destination = self._destinations[declined_name]
+                        await declined_destination.release(turn.participant_id)
+                        if self._generation.get(turn.participant_id) is not generation:
+                            raise asyncio.CancelledError()
+                        self._forget_destination(turn.participant_id, declined_name)
+                        text = admission.text or "Which part would you like help with?"
+                        await emit(self._default_destination, text)
+                        self._remember(turn, text)
+                        return DestinationResult("clarify", text)
+                    # The default is about to answer; releasing it here could
+                    # clear context needed by that final attempt.
+                    if declined_name != self._default_destination:
+                        declined_destination = self._destinations[declined_name]
+                        await declined_destination.release(turn.participant_id)
+                        if self._generation.get(turn.participant_id) is not generation:
+                            raise asyncio.CancelledError()
+                        self._forget_destination(turn.participant_id, declined_name)
+                    self._destinations_used.setdefault(turn.participant_id, set()).add(name)
+                    focused = None
+                    admission = Admission("accept")
+                else:
+                    await destination.release(turn.participant_id)
+                    if self._generation.get(turn.participant_id) is not generation:
+                        raise asyncio.CancelledError()
+                    self._forget_destination(turn.participant_id, name)
+                    continue
 
             if admission.preamble:
                 await emit(name, admission.preamble)
@@ -400,6 +438,20 @@ class ConversationFrontEnd:
             used.discard(destination)
             if not used:
                 self._destinations_used.pop(participant_id, None)
+
+    def _trace_default_fallback(self, turn: ConversationTurn, reason: str, *, eligible: bool) -> None:
+        with nemo_relay.scope.scope(
+            "conversation.default-destination-fallback",
+            nemo_relay.ScopeType.Agent,
+            input={"query": turn.query},
+            metadata={
+                "participant_id": turn.participant_id,
+                "destination": self._default_destination,
+                "reason": reason,
+                "eligible": eligible,
+            },
+        ):
+            pass
 
     def _remember(self, turn: ConversationTurn, answer: str) -> None:
         history = self._history.setdefault(turn.participant_id, [])
