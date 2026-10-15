@@ -210,7 +210,7 @@ class _Capture:
                 (
                     asyncio.create_task(
                         self._capture_loop(state),
-                        name=f"task-capture:{participant_id}",
+                        name=f"procedure-capture-replay:{participant_id}",
                         context=nemo_relay.fork_asyncio_context(),
                     ),
                     asyncio.create_task(

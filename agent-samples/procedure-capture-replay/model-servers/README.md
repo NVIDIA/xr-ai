@@ -3,10 +3,10 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Task capture model servers
+# Procedure capture and replay model servers
 
-This directory contains the convenience launcher and GPU profiles for task
-capture's batch STT, TTS, Nemotron Omni LLM, and Cosmos VLM. Refer to the
+This directory contains the sample's convenience launcher and GPU profiles for
+batch STT, TTS, Nemotron Omni LLM, and Cosmos VLM. Refer to the
 [model-server workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html)
 for startup, shutdown, and configuration composition.
 
@@ -20,11 +20,11 @@ for the checked-in settings.
 
 ## Run
 
-Run all commands from `agent-samples/task-capture/model-servers/`:
+Run all commands from `agent-samples/procedure-capture-replay/model-servers/`:
 
 ```bash
 uv sync
-uv run task_capture_model_servers
+uv run procedure_capture_replay_model_servers
 ```
 
 After synchronization, the source entry point also works:
@@ -36,5 +36,5 @@ uv run main.py
 Stop the configured servers before switching samples or editing server settings:
 
 ```bash
-uv run task_capture_model_servers --stop
+uv run procedure_capture_replay_model_servers --stop
 ```

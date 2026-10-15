@@ -3,18 +3,19 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Task capture
+# Procedure capture and replay
 
 Record narrated demonstrations with spoken start and stop commands. The sample
 saves sampled frames, visual captions, and narration as local evidence packets.
+This sample currently implements capture only; guided replay is not yet available.
 
 ## Run
 
-Run all commands from `agent-samples/task-capture/`. Start the sample's model
+Run all commands from `agent-samples/procedure-capture-replay/`. Start the sample's model
 servers and wait for them to report ready:
 
 ```bash
-uv run --project model-servers task_capture_model_servers
+uv run --project model-servers procedure_capture_replay_model_servers
 ```
 
 Then start the sample from the same terminal:
@@ -27,7 +28,7 @@ uv run main.py
 Alternatively, use the installed entry point:
 
 ```bash
-uv run task_capture
+uv run procedure_capture_replay
 ```
 
 Open the authenticated web-client URL printed by the hub and connect. Enable
@@ -42,7 +43,7 @@ To choose where packets are saved, launch with `uv run main.py --output-root PAT
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
-uv run --project model-servers task_capture_model_servers --stop
+uv run --project model-servers procedure_capture_replay_model_servers --stop
 ```
 
 ## Configure
@@ -63,7 +64,7 @@ caption_interval_s: 8.0
 ```
 
 Restart the sample after configuration changes. Refer to the
-[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/task-capture.html#composition-and-configuration)
+[sample configuration guide](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#composition-and-configuration)
 for recording boundaries, output files, prerequisites, and limitations.
 Refer to the generated
 [configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)

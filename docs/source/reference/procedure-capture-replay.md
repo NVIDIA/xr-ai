@@ -3,18 +3,20 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Task capture
+(task-capture)=
+# Procedure capture and replay
 
-Task capture records narrated demonstrations between spoken commands. It saves
-snapshots, visual captions, and transcribed narration for review and downstream
-processing.
+The procedure-capture-replay sample records narrated demonstrations between
+spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
+processing. This sample currently implements capture only; guided replay is not
+yet available.
 
 ## Run a demonstration
 
-Run commands from `agent-samples/task-capture/`:
+Run commands from `agent-samples/procedure-capture-replay/`:
 
 ```bash
-uv run --project model-servers task_capture_model_servers
+uv run --project model-servers procedure_capture_replay_model_servers
 uv run main.py
 ```
 
@@ -46,7 +48,7 @@ To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample's deployment:
 
 ```bash
-uv run --project model-servers task_capture_model_servers --stop
+uv run --project model-servers procedure_capture_replay_model_servers --stop
 ```
 
 Stop the model stack before changing server settings, switching samples, or
@@ -207,12 +209,12 @@ recorded demonstrations.
 ## Composition and configuration
 
 The outer `main.py` launches the hub and worker. The worker's `__main__.py`
-accepts configuration and readiness arguments; `task_worker/app.py` constructs
+accepts configuration and readiness arguments; `procedure_capture_replay_worker/app.py` constructs
 the hub endpoint, model clients, voice runtime, and frame/image tools.
 The worker uses `VoiceAgent` for transcripts, `CurrentFrameTool` for snapshots,
 and `MultiImageQueryTool` for captions.
 
-The registered `CaptureAgent` in `task_worker/capture/agent.py` owns commands,
+The registered `CaptureAgent` in `procedure_capture_replay_worker/capture/agent.py` owns commands,
 narration admission, participant generations, and acknowledgements. Its private
 `_Capture` helper in `capture/capturing.py` owns sampling, caption tasks,
 persistence, and finalization.

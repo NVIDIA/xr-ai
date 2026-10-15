@@ -9,7 +9,7 @@ the configured VLM using the same prompt and captioning helpers as capture.
 
 The script checks response format and saves the images, responses, and expected
 observations for human review of visual accuracy. Refer to
-docs/source/reference/task-capture.md for usage and interpretation of results.
+docs/source/reference/procedure-capture-replay.md for usage and interpretation of results.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from pathlib import Path
 
 import yaml
 from PIL import Image, ImageDraw
-from task_worker.capture.captioning import caption_query, parse_caption
-from task_worker.config import load_config
+from procedure_capture_replay_worker.capture.captioning import caption_query, parse_caption
+from procedure_capture_replay_worker.config import load_config
 from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import MultiImageQueryRequest, MultiImageQueryTool

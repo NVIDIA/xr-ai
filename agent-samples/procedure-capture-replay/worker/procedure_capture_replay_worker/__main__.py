@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Launch the task capture application defined in app.py.
+"""Launch the procedure capture and replay application defined in app.py.
 
 The sample's outer main.py starts this worker alongside the hub. This entry
 point reads the worker configuration and readiness-file arguments, loads settings

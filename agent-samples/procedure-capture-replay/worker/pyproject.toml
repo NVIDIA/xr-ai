@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "task-capture-worker"
+name = "procedure-capture-replay-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
@@ -32,7 +32,7 @@ xr-ai-voice     = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
 xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
-task_capture_worker = "task_worker.__main__:run"
+procedure_capture_replay_worker = "procedure_capture_replay_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["task_worker"]
+packages = ["procedure_capture_replay_worker"]

@@ -7,8 +7,8 @@ This sample saves evidence for creating a reusable procedure guide. Guided
 replay is planned but is not implemented in this sample yet.
 
 This is the user-facing process-stack entry point. The worker's __main__ module
-runs inside its own process and launches task_worker/app.py. This launcher
-supervises the hub and worker; model services must already be available.
+runs inside its own process and launches procedure_capture_replay_worker/app.py.
+This launcher supervises the hub and worker; model services must already be available.
 After connecting, say "start capture" to begin and "stop capture" to finish.
 Use --output-root to choose where evidence packets are saved.
 """
@@ -29,7 +29,7 @@ _BASE = Path(__file__).resolve().parent
 def _build_processes(*, worker_config: str | Path = "yaml/worker.yaml") -> list[Process]:
     return [
         Process("hub", "../../services/device-io-hub", "device_io_hub", config="yaml/device_io_hub.yaml"),
-        Process("worker", "worker", "task_capture_worker", config=worker_config),
+        Process("worker", "worker", "procedure_capture_replay_worker", config=worker_config),
     ]
 
 
@@ -49,13 +49,13 @@ def _parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
-    setup_logging("orchestrator", namespace="task-capture")
+    setup_logging("orchestrator", namespace="procedure-capture-replay")
     if args.output_root is None:
         run_stack(PROCESSES, _BASE)
         return
     # Pass the override without rewriting the user's YAML or relocating its
     # relative model and voice configuration paths. Keep it until workers exit.
-    with tempfile.TemporaryDirectory(prefix="task-capture-") as directory:
+    with tempfile.TemporaryDirectory(prefix="procedure-capture-replay-") as directory:
         request = Path(directory) / "worker.json"
         request.write_text(json.dumps({
             "worker_config": str(_BASE / "yaml/worker.yaml"),

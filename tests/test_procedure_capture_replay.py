@@ -25,13 +25,13 @@ from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery
 
-_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/task-capture"
+_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-replay"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from task_worker.capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent  # noqa: E402
-from task_worker.capture.captioning import caption_query  # noqa: E402
-from task_worker.capture.capturing import _Capture  # noqa: E402
-from task_worker.config import load_config  # noqa: E402
+from procedure_capture_replay_worker.capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent  # noqa: E402
+from procedure_capture_replay_worker.capture.captioning import caption_query  # noqa: E402
+from procedure_capture_replay_worker.capture.capturing import _Capture  # noqa: E402
+from procedure_capture_replay_worker.config import load_config  # noqa: E402
 
 
 def test_config_and_cli(monkeypatch, tmp_path):
@@ -52,7 +52,7 @@ def test_config_and_cli(monkeypatch, tmp_path):
     module.run([])
     assert [p.name for p in stack.call_args.args[0]] == ["hub", "worker"]
     assert stack.call_args.args[0][1].config == "yaml/worker.yaml"
-    assert stack.call_args.args[0][1].command == "task_capture_worker"
+    assert stack.call_args.args[0][1].command == "procedure_capture_replay_worker"
 
     monkeypatch.chdir(tmp_path)
     requests = []
@@ -121,7 +121,7 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     from xr_ai_voicegate import load_voice_gate_config
 
     server_main = _SAMPLE / "model-servers/main.py"
-    spec = importlib.util.spec_from_file_location("task_capture_model_servers", server_main)
+    spec = importlib.util.spec_from_file_location("procedure_capture_replay_model_servers", server_main)
     launcher = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(launcher)
     monkeypatch.chdir(_SAMPLE)
@@ -168,14 +168,14 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
 
 @pytest.mark.parametrize("document", [
     _SAMPLE / "README.md",
-    _SAMPLE.parents[1] / "docs/source/reference/task-capture.md",
+    _SAMPLE.parents[1] / "docs/source/reference/procedure-capture-replay.md",
 ])
 def test_documented_model_commands_select_sample_deployment(document):
     commands = [line for line in document.read_text().splitlines()
-                if line.startswith("uv run --project ") and "task_capture_model_servers" in line]
+                if line.startswith("uv run --project ") and "procedure_capture_replay_model_servers" in line]
     assert commands == [
-        "uv run --project model-servers task_capture_model_servers",
-        "uv run --project model-servers task_capture_model_servers --stop",
+        "uv run --project model-servers procedure_capture_replay_model_servers",
+        "uv run --project model-servers procedure_capture_replay_model_servers --stop",
     ]
 
 
@@ -467,7 +467,7 @@ async def test_disconnect_and_old_events_cannot_stop_new_recording(demo):
 async def test_app_drains_voice_transcripts_and_recordings_before_endpoint_closes(demo, monkeypatch, stop_command):
     from dataclasses import replace
 
-    from task_worker import app
+    from procedure_capture_replay_worker import app
     from xr_ai_voice._session import _VoiceSession
     from xr_ai_voice._types import VoiceQuery
 
@@ -750,7 +750,7 @@ async def test_only_standalone_commands_control_recording(demo, text):
 
 
 async def test_failed_narration_write_cannot_seal_a_complete_packet(demo, monkeypatch):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     await demo.capture.receive(joined())
     await speak(demo, "start capture")
@@ -884,7 +884,7 @@ async def manual_caption_demo(demo, monkeypatch):
 async def test_effective_end_preserves_frames_after_stop_utterance(manual_caption_demo, monkeypatch, boundary):
     from datetime import datetime
 
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     demo = manual_caption_demo
     await speak(demo, "start capture", timestamp_us=1_000_000)
@@ -1030,7 +1030,7 @@ async def test_failed_caption_does_not_advance_pair_anchor(manual_caption_demo, 
 
 
 async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monkeypatch):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     entered, release = threading.Event(), threading.Event()
     original = module._append_jsonl
@@ -1072,7 +1072,7 @@ async def test_stop_during_caption_append_seals_consistent_hierarchy(demo, monke
 
 
 async def test_shutdown_drains_inflight_writes_before_final_packet(demo, monkeypatch):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     await demo.capture.receive(joined())
     await speak(demo, 'start capture')
@@ -1180,7 +1180,7 @@ async def test_caption_grouping_uses_labels_only_and_preserves_transitions(manua
 @pytest.mark.parametrize("stage", ["start", "stop"])
 @pytest.mark.parametrize("target", ["transcript.jsonl", "packet.json", "summary.md"])
 async def test_storage_failure_releases_packet_and_allows_fresh_start(manual_caption_demo, monkeypatch, stage, target):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     demo = manual_caption_demo
     if stage == "stop":
@@ -1221,7 +1221,7 @@ async def test_storage_failure_releases_packet_and_allows_fresh_start(manual_cap
 
 @pytest.mark.parametrize("failing_file", ["index.jsonl", "captions.jsonl", "errors.jsonl"])
 async def test_background_write_failures_are_incomplete_and_loops_survive(demo, monkeypatch, failing_file):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     original = module._append_jsonl
     attempted = threading.Event()
@@ -1292,14 +1292,14 @@ async def test_departure_during_start_directory_write_drains_without_narration_e
 
 @pytest.mark.parametrize("wrapper", ["{}", "```json\n{}\n```", "```\n{}\n```"])
 def test_caption_parser_accepts_only_complete_structured_observations(wrapper):
-    from task_worker.capture.captioning import parse_caption
+    from procedure_capture_replay_worker.capture.captioning import parse_caption
 
     value = {"activity": "Setup", "phase": "Align", "caption": "A cup", "delta": "Initial observation"}
     assert parse_caption(wrapper.format(json.dumps(value))) == value
 
 
 async def test_failed_pending_caption_write_cannot_seal_complete(demo, monkeypatch):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     original = module._append_jsonl
     entered, release = threading.Event(), threading.Event()
@@ -1331,7 +1331,7 @@ async def test_failed_pending_caption_write_cannot_seal_complete(demo, monkeypat
 
 
 async def test_failed_stop_does_not_clear_queued_restart(manual_caption_demo, monkeypatch):
-    import task_worker.capture.capturing as module
+    import procedure_capture_replay_worker.capture.capturing as module
 
     demo = manual_caption_demo
     await speak(demo, "start capture")
