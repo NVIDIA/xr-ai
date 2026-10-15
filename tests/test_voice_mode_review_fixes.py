@@ -158,17 +158,18 @@ async def test_batch_hybrid_acknowledges_complete_turn_once(tmp_path, partials, 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("replacement", ["rejoin", "track", "overload"])
 @pytest.mark.parametrize("late", ["one_shot", "enrolled", "transcript", "error"])
-async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, replacement, late):
+async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path, monkeypatch, replacement, late):
     cfg = hybrid(tmp_path)
     processor = _SpeakerSttProcessor(cfg=cfg._speaker)
     entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     frames = []
+    fresh_received = asyncio.Event()
     requests = 0
     async def feed(*_args):
         nonlocal requests
         requests += 1
         if requests > 1:
-            return []  # A replacement's audio is not the old response.
+            return [{"kind": "one_shot", "speaker_id": 7, "text": "fresh", "pts_us": 1000, "fresh_match": True}]
         entered.set()
         try:
             await release.wait()
@@ -179,7 +180,11 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
             raise RuntimeError("old request failed during cancellation")
         return [{"kind": late, "speaker_id": 7, "text": "stale", "pts_us": 100, "fresh_match": True}]
     processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
-    processor.push_frame = AsyncMock(side_effect=lambda frame, *_args: frames.append(frame))
+    def capture(frame, *_args):
+        frames.append(frame)
+        if getattr(frame, "text", None) == "fresh":
+            fresh_received.set()
+    processor.push_frame = AsyncMock(side_effect=capture)
     await processor.process_frame(ParticipantJoinedFrame("a"), D)
     if late == "transcript":
         processor._enrolled.add("a")
@@ -203,6 +208,18 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     assert not [f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "enrolled"]
     assert not [f for f in frames if getattr(f, "text", None) == "stale"]
     assert len([f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "reset"]) == 1
+    if replacement == "overload":
+        import time
+        # Advance this module's clock to its existing retry deadline, not a
+        # new delay or policy. Other event-loop clocks remain untouched.
+        deadline = processor._retry_after["a"]
+        monkeypatch.setattr("xr_ai_voice._processors.speaker_stt.time", SimpleNamespace(
+            monotonic=lambda: deadline, time_ns=time.time_ns,
+        ))
+    if replacement != "track":
+        await processor.process_frame(audio(), D)
+    await asyncio.wait_for(fresh_received.wait(), 2)
+    assert len([f for f in frames if getattr(f, "text", None) == "fresh"]) == 1
     await processor.cleanup()
     await processor.process_frame(ParticipantJoinedFrame("a"), D)
     assert not processor._tasks and not processor._queues and not processor._lifecycles

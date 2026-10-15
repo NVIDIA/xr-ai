@@ -515,8 +515,8 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         await asyncio.Future()
     processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
-    processor._enrolled.add("web-client")
     await processor.process_frame(ParticipantJoinedFrame("web-client"), FrameDirection.DOWNSTREAM)
+    processor._enrolled.add("web-client")
     def audio():
         frame = InputAudioRawFrame(audio=bytes(320), sample_rate=16000, num_channels=1)
         frame.transport_source = "web-client"
