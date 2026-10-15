@@ -72,6 +72,8 @@ class _SpeakerSttProcessor(FrameProcessor):
         if isinstance(frame, (EndFrame, CancelFrame)):
             await self._shutdown()
         elif isinstance(frame, ParticipantJoinedFrame):
+            if self._closed:
+                return
             pid = frame.participant_id
             replacing = pid in self._lifecycles
             self._lifecycles[pid] = object()

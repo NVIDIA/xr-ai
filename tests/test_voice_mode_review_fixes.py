@@ -204,6 +204,7 @@ async def test_replacement_revokes_old_response_before_drain_and_resets(tmp_path
     assert not [f for f in frames if getattr(f, "text", None) == "stale"]
     assert len([f for f in frames if isinstance(f, _SpeakerEnrollmentFrame) and f.state == "reset"]) == 1
     await processor.cleanup()
+    await processor.process_frame(ParticipantJoinedFrame("a"), D)
     assert not processor._tasks and not processor._queues and not processor._lifecycles
 
 
