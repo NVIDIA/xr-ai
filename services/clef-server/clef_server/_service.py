@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from ._config import ServerConfig, identity
-from ._images import decode_images, validate_images
+from ._images import _ImageLimits, decode_images, validate_images
 
 
 def _resolve_model_directory(config: ServerConfig) -> Path:
@@ -54,6 +54,7 @@ class ClefBackend:
         self.revision = config.model_revision
         self.model: Any = None
         self.processor: Any = None
+        self.image_limits: _ImageLimits | None = None
         self.systemone: Callable[..., dict[str, Any]] | None = None
         self.encode_record: Callable[..., Any] | None = None
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clef-inference")
@@ -82,6 +83,7 @@ class ClefBackend:
         )
         self.systemone = module.systemone
         self.encode_record = module.encode_record
+        self.image_limits = _ImageLimits.from_processor(self.processor)
         logger.info(
             "Loaded Clef model {} at revision {} from {}",
             self.config.model_name,
@@ -96,9 +98,9 @@ class ClefBackend:
             encoded = self.encode_record(
                 self.processor.tokenizer,
                 body,
-                # A token needs at least one UTF-8 byte, so the request-size
-                # limit bounds token count. Leave room for fixed prompt text.
-                max_length=max(self.config.max_length, self.config.max_body_bytes + 4096),
+                # The native encoder truncates state at its cap. One extra
+                # token keeps every truncated overflow above our admission limit.
+                max_length=self.config.max_length + 1,
                 processor=self.processor,
             )
         except ValueError as exc:
@@ -203,9 +205,16 @@ def create_app(
 
 def _infer(backend: ClefBackend, body: dict[str, Any]) -> dict[str, Any]:
     # Decode and release media on the same serialized worker as GPU inference.
-    images = decode_images(body.get("images", []), max_length=backend.config.max_length)
-    native_body = {**body, "images": images} if "images" in body else body
+    images = []
+    if body.get("images"):
+        if backend.image_limits is None:
+            raise RuntimeError("Clef image processor is not loaded")
+        images = decode_images(body["images"], max_length=backend.config.max_length, limits=backend.image_limits)
     try:
+        # Native preprocessing options are server-owned, never request passthrough.
+        native_body = {key: body[key] for key in ("model", "state", "questions")}
+        if "images" in body:
+            native_body["images"] = images
         backend.validate_length(native_body)
         return backend.answer(native_body)
     finally:
@@ -327,6 +336,8 @@ def _validate_request(body: Any, config: ServerConfig) -> None:
         raise ValueError(f"model must be {config.model_name!r}")
     if "state" not in body or not isinstance(body["state"], (str, dict)):
         raise ValueError("state must be text or a JSON object")
+    if "media_kwargs" in body:
+        raise ValueError("media_kwargs are not supported; image preprocessing is server-owned")
     if "videos" in body:
         raise ValueError("videos are not supported")
     if "images" in body:

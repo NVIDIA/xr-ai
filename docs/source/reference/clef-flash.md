@@ -89,9 +89,10 @@ adapter. They do not call this HTTP endpoint directly.
 
 ## Image decisions
 
-Use the typed decision client for local image files, encoded bytes, or inline
-JPEG and PNG data URLs. For example, with an existing configured `decision`
-service:
+Use the typed decision client for local image files as `pathlib.Path` objects,
+encoded bytes, or inline JPEG and PNG data URL strings. Files must match their
+JPEG or PNG suffix; filesystem path strings are not accepted. For example, with
+an existing configured `decision` service:
 
 ```python
 from pathlib import Path
@@ -107,9 +108,9 @@ result = await decision.decide(
 )
 ```
 
-When upgrading a running text-only service, stop it and start the updated
-service before sending images. Model and configuration identity do not identify
-the running application code version.
+Before updating a running text-only service, stop it using the old checkout,
+then start the updated service before sending images. Refer to
+{ref}`clef-image-input-migration` for the upgrade procedure.
 
 The client embeds local inputs into data URLs and rejects remote URLs. It omits
 `images` for text-only calls, preserving compatibility with older servers. Image
@@ -118,14 +119,22 @@ fallback. Other `DecisionService` implementations need to accept the optional
 `images` keyword when supporting this capability.
 
 The existing body-size limit includes base64 media. Before allocating RGB
-buffers, the server bounds image count to `max_length // 64` (the pinned
-processor's minimum image-token count) and aggregate source pixels to `max_length * 32 * 32`,
-using the pinned processor's 16-pixel patches and two-by-two spatial merge. This
+buffers, the server derives image-count and aggregate source-pixel budgets from
+the loaded processor's patch size, spatial merge size, and minimum resized
+pixel area. With the pinned processor, image count is bounded to
+`max_length // 64` and aggregate source pixels to `max_length * 32 * 32`,
+using 16-pixel patches and a two-by-two spatial merge. This
 conservative admission limit applies to original dimensions even if the model
 would resize them. Resize large source photos on the client before submitting
 crops. The processor then checks the actual combined text, image, and question
 token count against `max_length`; invalid images or excess tokens receive HTTP
 422, and excess body bytes receive HTTP 413.
+Request-controlled preprocessing options (`media_kwargs`) are rejected with
+HTTP 422: resize settings belong to the server's loaded processor.
+
+Inputs use Pillow's RGB conversion without EXIF rotation, alpha compositing,
+or high-bit-depth normalization. Prepare upright, opaque, 8-bit images on the
+client when those distinctions matter.
 
 Image decoding, processing, and inference share the existing serialized worker.
 Decoded images are released on completion or failure. Requests reuse the loaded

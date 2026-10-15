@@ -244,9 +244,10 @@ class DecisionService(Protocol):
     ) -> DecisionResponse:
         """Evaluate all questions against text or a JSON-compatible state mapping.
 
-        Optional images are ordered JPEG/PNG bytes, local paths, or inline
-        base64 data URLs. Remote URLs are rejected; the server never fetches
-        images. Describe image roles and ordering in state or instructions.
+        Optional images are ordered JPEG/PNG bytes, local pathlib.Path objects,
+        or inline base64 data URL strings. Files must match their JPEG or PNG
+        suffix. Filesystem path strings and remote URLs are rejected; the server
+        never fetches images. Describe image roles and ordering in state or instructions.
         Empty images preserve the text-only wire contract. Older text-only
         endpoints reject image requests; there is no silent fallback.
 

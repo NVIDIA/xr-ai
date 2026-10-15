@@ -89,7 +89,7 @@ class _SystemOneDecision:
             inline_images = [_normalize_image(image) for image in images]
             prefixes = ("data:image/jpeg;base64,", "data:image/png;base64,")
             if any(not image.startswith(prefixes) for image in inline_images):
-                raise ValueError("decision images must be inline JPEG/PNG data URLs, bytes, or local paths")
+                raise ValueError("decision images must be inline JPEG/PNG data URLs, bytes, or pathlib.Path objects")
             payload["images"] = inline_images
         response = await self._client.post(
             self.url,
