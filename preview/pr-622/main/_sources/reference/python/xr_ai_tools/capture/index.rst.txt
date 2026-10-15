@@ -5,7 +5,7 @@ xr_ai_tools.capture
 
 .. autoapi-nested-parse::
 
-   Participant-bound tools for agent-controlled session recording.
+   Participant-bound tools for agent-controlled media capture.
 
 
 

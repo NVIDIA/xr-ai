@@ -458,7 +458,7 @@ shared model services.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">device_io_hub</span></code></p></td>
 <td><p>8080 (HTTPS and <code class="docutils literal notranslate"><span class="pre">/rtc</span></code> WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted)</p></td>
 </tr>
-<tr class="row-odd"><td><p>session-recording</p></td>
+<tr class="row-odd"><td><p>capture</p></td>
 <td><p>sample, opt-in</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/device-io-hub/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code></p></td>
@@ -613,7 +613,7 @@ restart <code class="docutils literal notranslate"><span class="pre">xr_render_d
 <td><p>LiveKit, web and token servers, networking, and video recording</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code></p></td>
-<td><p>Opt-in session recording, NVENC output, caption layout, and retention</p></td>
+<td><p>Opt-in media-hub capture, NVENC output, caption layout, and retention</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/video_memory_service.yaml</span></code></p></td>
 <td><p>Recorded-query endpoint, output directory, and GPU</p></td>
@@ -644,12 +644,11 @@ server-side model, port, GPU, or memory changes, then restart the persistent
 model stack.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
-<p><a id="opt-in-session-capture"></a></p>
 </section>
-<section id="opt-in-session-recording">
-<h2>Opt-in session recording<a class="headerlink" href="#opt-in-session-recording" title="Link to this heading">#</a></h2>
-<p>Session recording is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--session-recording</span></code> to start
-<code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub. Session recording subscribes to
+<section id="opt-in-session-capture">
+<h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--session-recording</span></code> to start
+<code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub. Capture subscribes to
 normalized media-hub IPC rather than LiveKit, so the recording contract stays
 the same if the device transport changes. It requests video pixels through the
 hub’s on-demand frame path and observes already-routed return audio and data on
@@ -673,10 +672,10 @@ the same clock, plus <code class="docutils literal notranslate"><span class="pre
 <li><p><code class="docutils literal notranslate"><span class="pre">events.jsonl</span></code>, retaining inbound and outbound data with direction, topic,
 absolute and relative timestamps, and either UTF-8 text or base64 for binary
 payloads.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, recording the session recording profile, session policy, shared clock,
-file roles, counts, source track metadata, audio layout, and session recording drops.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, recording the capture profile, session policy, shared clock,
+file roles, counts, source track metadata, audio layout, and capture drops.</p></li>
 </ul>
-<p>NVENC work runs behind a bounded queue in the session recording process. When session recording is
+<p>NVENC work runs behind a bounded queue in the capture process. When capture is
 slower than the live stream, it replaces old pending frame requests and records
 the drop count rather than adding latency to DeviceIOHub or the agent. The
 process uses DeviceIOHub’s existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
@@ -685,11 +684,11 @@ stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
 normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
 ahead of media data for fast-start playback. Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> when recording is
 prohibited, and treat the output as sensitive device data.</p>
-<p>The session recording service itself also supports a <code class="docutils literal notranslate"><span class="pre">raw</span></code> projection and explicit
+<p>The media-capture service itself also supports a <code class="docutils literal notranslate"><span class="pre">raw</span></code> projection and explicit
 agent-controlled session boundaries. Those modes reuse the same audio,
 transcript, observation, timing, manifest, retention, and encoder
 infrastructure. In explicit mode, a background wrapper fixes the relative
-session recording namespace and metadata before exposing parameterless start and stop
+capture namespace and metadata before exposing parameterless start and stop
 actions; every start creates a timestamped child bundle. The XR render demo
 intentionally selects <code class="docutils literal notranslate"><span class="pre">demo</span></code> plus participant-lifetime recording.</p>
 </section>
@@ -1202,7 +1201,7 @@ turns from different participants queue rather than interleave.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selecting-the-client-type-webrtc-vs-native">Selecting the client type (WebRTC vs native)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-recording">Opt-in session recording</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opt-in-session-capture">Opt-in session capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-nano-omni-30b-a3b-reasoning-port-8108">Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108</a></li>
 </ul>

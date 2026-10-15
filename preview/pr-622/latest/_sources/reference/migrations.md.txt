@@ -5,25 +5,6 @@
 
 # Release migration
 
-## Session recording flag
-
-All four agent samples now use `--session-recording` in place of `--capture`.
-Update launch scripts and saved commands; the old flag is no longer accepted.
-For example, from `agent-samples/simple-vlm-example/`:
-
-```bash
-uv run simple_vlm_example --session-recording
-```
-
-Session recording remains disabled by default. Enabling it records participant
-video, bidirectional audio, and data-channel traffic through the same service;
-it does not enable the client camera or change its mode. The launcher labels
-the optional process `session-recording`.
-
-Existing `media_capture.yaml` configuration files, `device_io_capture` service
-commands, SDK identifiers, recording formats, and output directories under
-`~/.local/share/xr-ai/captures/` are unchanged.
-
 ## Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.

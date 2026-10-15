@@ -430,22 +430,6 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
-<section id="session-recording-flag">
-<h2>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h2>
-<p>All four agent samples now use <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> in place of <code class="docutils literal notranslate"><span class="pre">--capture</span></code>.
-Update launch scripts and saved commands; the old flag is no longer accepted.
-For example, from <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example<span class="w"> </span>--session-recording
-</pre></div>
-</div>
-<p>Session recording remains disabled by default. Enabling it records participant
-video, bidirectional audio, and data-channel traffic through the same service;
-it does not enable the client camera or change its mode. The launcher labels
-the optional process <code class="docutils literal notranslate"><span class="pre">session-recording</span></code>.</p>
-<p>Existing <code class="docutils literal notranslate"><span class="pre">media_capture.yaml</span></code> configuration files, <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> service
-commands, SDK identifiers, recording formats, and output directories under
-<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/</span></code> are unchanged.</p>
-</section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
 <p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
@@ -857,7 +841,6 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>
