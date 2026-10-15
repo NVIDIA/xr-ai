@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""H.264/AAC MP4 finalization for participant session recording bundles."""
+"""H.264/AAC MP4 finalization for participant capture bundles."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ _MP4_AUDIO_CHANNELS = 2
 
 
 def find_ffmpeg() -> str:
-    """Return the FFmpeg executable required to finalize session recording MP4s."""
+    """Return the FFmpeg executable required to finalize capture MP4s."""
 
     executable = shutil.which("ffmpeg")
     if executable is None:
         raise RuntimeError(
-            "FFmpeg is required for session recording finalization. Install FFmpeg "
+            "FFmpeg is required for media capture finalization. Install FFmpeg "
             "with the native AAC encoder and make `ffmpeg` available on PATH."
         )
     result = subprocess.run(
@@ -35,7 +35,7 @@ def find_ffmpeg() -> str:
     )
     if result.returncode != 0 or not has_aac:
         raise RuntimeError(
-            "FFmpeg session recording finalization requires the native AAC encoder."
+            "FFmpeg media capture finalization requires the native AAC encoder."
         )
     return executable
 

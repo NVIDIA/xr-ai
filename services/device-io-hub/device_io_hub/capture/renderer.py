@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Render a presentation-ready video from a completed raw session recording bundle."""
+"""Render a presentation-ready video from a completed raw capture bundle."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _load_nvc() -> object:
     try:
         import PyNvVideoCodec as nvc
     except (ImportError, RuntimeError, OSError) as exc:
-        raise RuntimeError(f"PyNvVideoCodec is required for session recording rendering: {exc}") from exc
+        raise RuntimeError(f"PyNvVideoCodec is required for capture rendering: {exc}") from exc
     return nvc
 
 
@@ -48,13 +48,13 @@ def _read_json_lines(path: Path) -> list[dict[str, Any]]:
 
 def _bundle_file(root: Path, relative: object, *, label: str) -> Path:
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise ValueError(f"session recording manifest {label} must be a relative path")
+        raise ValueError(f"capture manifest {label} must be a relative path")
     root = root.resolve()
     path = (root / relative).resolve()
     if path == root or root not in path.parents:
-        raise ValueError(f"session recording manifest {label} escapes the bundle")
+        raise ValueError(f"capture manifest {label} escapes the bundle")
     if not path.is_file():
-        raise ValueError(f"session recording manifest {label} does not exist: {relative}")
+        raise ValueError(f"capture manifest {label} does not exist: {relative}")
     return path
 
 
@@ -205,7 +205,7 @@ def _presentation_frames(
 
 
 class CaptureRenderer:
-    """Create a captioned H.264/AAC MP4 from a completed session recording bundle."""
+    """Create a captioned H.264/AAC MP4 from a completed capture bundle."""
 
     def __init__(
         self,
@@ -233,13 +233,13 @@ class CaptureRenderer:
         root = bundle.expanduser().resolve()
         manifest_path = root / "manifest.json"
         if not manifest_path.is_file():
-            raise ValueError(f"session recording bundle has no manifest: {root}")
+            raise ValueError(f"capture bundle has no manifest: {root}")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
-            raise ValueError("session recording manifest must be an object")
+            raise ValueError("capture manifest must be an object")
         tracks = manifest.get("video_tracks")
         if not isinstance(tracks, dict):
-            raise ValueError("session recording manifest has no video tracks")
+            raise ValueError("capture manifest has no video tracks")
         segments = [
             segment
             for track in tracks.values()
@@ -248,7 +248,7 @@ class CaptureRenderer:
             if isinstance(segment, dict)
         ]
         if len(segments) != 1:
-            raise ValueError("session recording renderer requires one combined raw video segment")
+            raise ValueError("capture renderer requires one combined raw video segment")
         segment = segments[0]
         raw_path = _bundle_file(root, segment.get("raw_path"), label="raw video")
         packet_index_path = _bundle_file(
@@ -258,16 +258,16 @@ class CaptureRenderer:
         )
         audio = manifest.get("audio")
         if not isinstance(audio, dict):
-            raise ValueError("session recording manifest has no audio description")
+            raise ValueError("capture manifest has no audio description")
         wave_path = _bundle_file(root, audio.get("conversation"), label="conversation audio")
         events_path = _bundle_file(root, manifest.get("events"), label="event timeline")
         packet_rows = _read_json_lines(packet_index_path)
         if not packet_rows:
-            raise ValueError("session recording video packet index is empty")
+            raise ValueError("capture video packet index is empty")
 
         fps = float(segment.get("fps", 0))
         if fps <= 0:
-            raise ValueError("session recording video frame rate must be positive")
+            raise ValueError("capture video frame rate must be positive")
         self._config = CaptureConfig(
             profile="demo",
             sample_fps=fps,
@@ -279,7 +279,7 @@ class CaptureRenderer:
         )
         dimensions = segment.get("source_dimensions")
         if not isinstance(dimensions, list) or not dimensions:
-            raise ValueError("session recording manifest has no source video dimensions")
+            raise ValueError("capture manifest has no source video dimensions")
         max_width = max(int(item["width"]) for item in dimensions)
         max_height = max(int(item["height"]) for item in dimensions)
         timeline = _OverlayTimeline(
@@ -345,7 +345,7 @@ class CaptureRenderer:
                 writer.close()
             sources = _video_sources(writers)
             if not sources:
-                raise RuntimeError("session recording renderer decoded no video frames")
+                raise RuntimeError("capture renderer decoded no video frames")
             projection_path = video_root / "rendering.264"
             indexed_packets = _join_sources(root, sources, projection_path)
             packets = [indexed.packet for indexed in indexed_packets]
@@ -384,7 +384,7 @@ class CaptureRenderer:
 
         renderings = manifest.setdefault("renderings", {})
         if not isinstance(renderings, dict):
-            raise ValueError("session recording manifest renderings must be an object")
+            raise ValueError("capture manifest renderings must be an object")
         renderings["captioned_mp4"] = {
             "path": artifact.path,
             "size_bytes": artifact.size_bytes,
@@ -433,7 +433,7 @@ class CaptureRenderer:
                 offset = int(row.get("offset", -1))
                 size = int(row.get("size_bytes", 0))
                 if offset < 0 or size <= 0 or offset + size > file_size:
-                    raise ValueError("session recording video packet index contains an invalid byte range")
+                    raise ValueError("capture video packet index contains an invalid byte range")
                 stream.seek(offset)
                 source = np.frombuffer(stream.read(size), dtype=np.uint8)
                 packet = self._nvc.PacketData()

@@ -65,10 +65,10 @@ def compose_caption(
 ) -> tuple[np.ndarray, int, int]:
     """Add a primary caption below the sensor and a scrolling data panel."""
     if frame.width % 2 or frame.height % 2:
-        raise ValueError("NV12 session recording requires even video dimensions")
+        raise ValueError("NV12 capture requires even video dimensions")
     source = _to_nv12(frame.data, frame.width, frame.height, frame.fmt)
     if source is None:
-        raise ValueError(f"unsupported session recording pixel format: {frame.fmt!r}")
+        raise ValueError(f"unsupported capture pixel format: {frame.fmt!r}")
 
     main_scale = max(2, min(4, frame.width // 480 + 1))
     main_padding = 4 * main_scale

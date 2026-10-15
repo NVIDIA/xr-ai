@@ -72,7 +72,7 @@ To record a demo session, use:
 uv run lab_instrument_monitoring --session-recording
 ```
 
-Refer to the [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#opt-in-session-recording)
+Refer to the [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#opt-in-session-capture)
 for output and encoding requirements.
 
 To make the unauthenticated event viewer reachable from a trusted private

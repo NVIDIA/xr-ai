@@ -75,7 +75,7 @@ To record a demo session, use:
 uv run tea_making_sample --session-recording
 ```
 
-Refer to the [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html#opt-in-session-recording)
+Refer to the [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/tea-making-sample.html#opt-in-session-capture)
 for output and encoding requirements.
 
 To make the unauthenticated event viewer reachable from a trusted private

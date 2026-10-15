@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private session recording topics shared by voice workers and DeviceIOHub."""
+"""Private media-capture topics shared by voice workers and DeviceIOHub."""
 
 CAPTURE_PUBLISH_PREFIX = b"capture_data."
 CAPTURE_START_TOPIC = "_capture.control.start"

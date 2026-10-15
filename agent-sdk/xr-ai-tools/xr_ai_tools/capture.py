@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-bound tools for agent-controlled session recording."""
+"""Participant-bound tools for agent-controlled media capture."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ _MAX_TARGET_COMPONENT = 96
 
 def _validate_target(target: str) -> str:
     if not isinstance(target, str) or not target or target.startswith("/"):
-        raise ValueError("session recording target must be a non-empty relative path")
+        raise ValueError("capture target must be a non-empty relative path")
     parts = target.split("/")
     if any(
         not part
@@ -31,7 +31,7 @@ def _validate_target(target: str) -> str:
         for part in parts
     ):
         raise ValueError(
-            "session recording target components may contain only letters, numbers, '.', '-', and '_'"
+            "capture target components may contain only letters, numbers, '.', '-', and '_'"
         )
     return "/".join(parts)
 
@@ -61,7 +61,7 @@ class CaptureTools:
                 separators=(",", ":"),
             ).encode("utf-8")
         except (TypeError, ValueError) as exc:
-            raise ValueError("session recording metadata must be JSON-serializable") from exc
+            raise ValueError("capture metadata must be JSON-serializable") from exc
 
     def participant_tools(self, participant_id: str) -> ToolSet:
         """Return start and stop tools bound to one participant."""

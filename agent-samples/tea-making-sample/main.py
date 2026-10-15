@@ -19,8 +19,8 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml/tea_making_worker.yaml"
 
-_SESSION_RECORDING_PROCESS = Process(
-    "session-recording",
+_CAPTURE_PROCESS = Process(
+    "capture",
     "../../services/device-io-hub",
     "device_io_capture",
     config="yaml/media_capture.yaml",
@@ -55,7 +55,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _build_processes(
-    worker_config: Path, *, session_recording: bool = False
+    worker_config: Path, *, capture: bool = False
 ) -> list[Process]:
     processes = [
         Process(
@@ -77,8 +77,8 @@ def _build_processes(
             config=worker_config,
         ),
     ]
-    if session_recording:
-        processes.insert(1, _SESSION_RECORDING_PROCESS)
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
     return processes
 
 
@@ -144,10 +144,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(
-            _build_processes(worker_config, session_recording=args.session_recording),
-            _BASE,
-        )
+        run_stack(_build_processes(worker_config, capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

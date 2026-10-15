@@ -25,7 +25,7 @@ FlushCallback = Callable[[ReturnAudioFlush], Awaitable[None]]
 
 
 class ReturnTrafficSubscriber:
-    """Session recording outbound hub traffic without changing the agent SDK surface."""
+    """Capture outbound hub traffic without changing the agent SDK surface."""
 
     def __init__(self, sub_addr: str) -> None:
         self._socket: zmq.asyncio.Socket = zmq.asyncio.Context.instance().socket(zmq.SUB)

@@ -131,7 +131,7 @@ class _H264TrackWriter:
             # Live source frames are filtered by the recorder. A derived
             # rendering outside these limits is an error, not a frame drop.
             raise ValueError(
-                f"session recording {self._stream_name} frame {width}x{height} cannot be encoded; "
+                f"capture {self._stream_name} frame {width}x{height} cannot be encoded; "
                 f"NVENC H.264 requires even dimensions within "
                 f"{caps['width_min']}x{caps['height_min']}..{caps['width_max']}x{caps['height_max']} "
                 f"on GPU {self._config.gpu_id}"
@@ -215,7 +215,7 @@ class _H264TrackWriter:
                     f"NVENC omitted {len(self._submitted_pts)} submitted frames"
                 )
         except Exception as exc:
-            logger.warning("session recording NVENC flush failed track={!r}: {}", self._track_id, exc)
+            logger.warning("media capture NVENC flush failed track={!r}: {}", self._track_id, exc)
         finally:
             self._stream.close()
             self._encoder = None

@@ -61,7 +61,7 @@ async def test_capture_tools_bind_configuration_outside_model_arguments() -> Non
     ["", "/absolute", "../escape", "safe/../escape", "double//slash", "bad target"],
 )
 def test_capture_tools_reject_unsafe_targets(target: str) -> None:
-    with pytest.raises(ValueError, match="session recording target"):
+    with pytest.raises(ValueError, match="capture target"):
         CaptureTools(endpoint=_Endpoint(), target=target)
 
 

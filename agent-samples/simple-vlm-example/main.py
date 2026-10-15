@@ -32,8 +32,8 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
-_SESSION_RECORDING_PROCESS = Process(
-    "session-recording",
+_CAPTURE_PROCESS = Process(
+    "capture",
     "../../services/device-io-hub",
     "device_io_capture",
     config="yaml/media_capture.yaml",
@@ -59,7 +59,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return _parser().parse_args(sys.argv[1:] if argv is None else argv)
 
 
-def _build_processes(*, session_recording: bool = False) -> list[Process]:
+def _build_processes(*, capture: bool = False) -> list[Process]:
     processes = [
         Process(
             "hub",
@@ -74,8 +74,8 @@ def _build_processes(*, session_recording: bool = False) -> list[Process]:
             config="yaml/simple_vlm_example_worker.yaml",
         ),
     ]
-    if session_recording:
-        processes.insert(1, _SESSION_RECORDING_PROCESS)
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
     return processes
 
 
@@ -85,7 +85,7 @@ PROCESSES = _build_processes()
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="simple-vlm-example")
-    run_stack(_build_processes(session_recording=args.session_recording), _BASE)
+    run_stack(_build_processes(capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

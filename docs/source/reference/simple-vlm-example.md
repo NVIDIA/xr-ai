@@ -15,7 +15,7 @@ sample's design and operational details.
 ## Composition
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
-starts passive session recording; session recording is disabled by default. The
+starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures the Cosmos3 Nano and Pocket TTS client
 adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
 endpoint. Start those endpoints together with
@@ -78,7 +78,7 @@ layout works without command-line configuration arguments.
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Model adapters and shared endpoints |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
-| `yaml/media_capture.yaml` | Opt-in session recording, NVENC output, caption layout, and retention |
+| `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
 
 Edit the owning file, preserve the field's YAML type, and restart
@@ -103,11 +103,9 @@ without a wake phrase. Say `Hey agent, let's stop talking` to finish. These
 controls work with the sample's existing STT endpoint, including NIM. Refer to
 {ref}`voice-conversation-controls` for paused phrases and the legacy wake mode.
 
-<a id="opt-in-session-capture"></a>
+## Opt-in session capture
 
-## Opt-in session recording
-
-Session recording is disabled by default. Run `uv run simple_vlm_example --session-recording` to
+Capture is disabled by default. Run `uv run simple_vlm_example --session-recording` to
 start `device_io_capture` immediately after DeviceIOHub and record normalized
 hub media without joining the LiveKit room. Each participant connection then
 creates a bundle under
@@ -118,11 +116,11 @@ chunks, frame/audio timestamp indexes, a dedicated transcript, optional
 frame-linked observations, inbound and outbound data, and a manifest. Text
 returned on `vlm.response` appears in the scrolling data panel; final STT and
 text sent to TTS use the larger primary caption. This sample explicitly selects
-the `demo` profile, which invokes the separate session recording renderer after the raw
+the `demo` profile, which invokes the separate capture renderer after the raw
 participant-lifetime bundle closes.
 
-Encoding and file writes run in the separate session recording process behind bounded
-queues. If recording falls behind, it drops pending session recording frames rather than
+Encoding and file writes run in the separate capture process behind bounded
+queues. If recording falls behind, it drops pending capture frames rather than
 backpressuring the hub or worker. MP4 finalization requires `ffmpeg` on `PATH`.
 Omit `--session-recording` when a deployment must not retain device media.
 

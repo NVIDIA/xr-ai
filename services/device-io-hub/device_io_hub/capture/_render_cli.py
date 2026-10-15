@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command-line entry point for derived session recording rendering."""
+"""Command-line entry point for derived capture rendering."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .renderer import CaptureRenderer
 
 def run() -> None:
     parser = argparse.ArgumentParser(
-        description="Render a captioned H.264/AAC MP4 from a raw session recording bundle",
+        description="Render a captioned H.264/AAC MP4 from a raw capture bundle",
     )
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--gpu-id", type=int, default=0)
@@ -31,7 +31,7 @@ def run() -> None:
         overlay_seconds=args.overlay_seconds,
         overlay_lines=args.overlay_lines,
     ).render(args.bundle)
-    logger.info("session recording rendering completed path={}", output)
+    logger.info("capture rendering completed path={}", output)
 
 
 if __name__ == "__main__":

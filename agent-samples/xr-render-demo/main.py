@@ -76,8 +76,8 @@ _NO_WEB_CLIENT_ENV = "DEVICE_IO_HUB_NO_WEB_CLIENT"
 
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
-_SESSION_RECORDING_PROCESS = Process(
-    "session-recording",
+_CAPTURE_PROCESS = Process(
+    "capture",
     "../../services/device-io-hub",
     "device_io_capture",
     config="yaml/media_capture.yaml",
@@ -103,7 +103,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return _parser().parse_args(sys.argv[1:] if argv is None else argv)
 
 
-def _build_processes(*, session_recording: bool = False) -> list[Process]:
+def _build_processes(*, capture: bool = False) -> list[Process]:
     processes = [
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
                 config="yaml/device_io_hub.yaml"),
@@ -119,11 +119,11 @@ def _build_processes(*, session_recording: bool = False) -> list[Process]:
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
     ]
-    if session_recording:
+    if capture:
         hub_index = next(
             index for index, process in enumerate(processes) if process.name == "hub"
         )
-        processes.insert(hub_index + 1, _SESSION_RECORDING_PROCESS)
+        processes.insert(hub_index + 1, _CAPTURE_PROCESS)
     return processes
 
 
@@ -325,7 +325,7 @@ def run(argv: Sequence[str] | None = None) -> None:
     else:
         _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(session_recording=args.session_recording), _BASE)
+    run_stack(_build_processes(capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

@@ -173,11 +173,9 @@ Refer to the generated {doc}`configuration <configuration>` and
 {doc}`command-line <command-line>` references for configuration fields and
 command syntax.
 
-<a id="opt-in-session-capture"></a>
+## Opt-in session capture
 
-## Opt-in session recording
-
-Session recording is disabled by default. Run `uv run tea_making_sample --session-recording`
+Capture is disabled by default. Run `uv run tea_making_sample --session-recording`
 from `agent-samples/tea-making-sample/` to start `device_io_capture`
 immediately after DeviceIOHub. It records participant video, device and agent
 audio, and inbound and outbound data in a separate process. The option can be
@@ -186,14 +184,14 @@ combined with `--expose-web-events`.
 `yaml/media_capture.yaml` selects the `demo` profile and participant-lifetime
 sessions. Each connection creates a raw bundle under
 `~/.local/share/xr-ai/captures/tea-making-sample/`. When the session closes,
-the session recording renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
+the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
 AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
 requires an NVIDIA GPU with NVENC support and `ffmpeg` on `PATH`.
 
-Session recording uses bounded queues and drops pending session recording frames if encoding falls
+Capture uses bounded queues and drops pending capture frames if encoding falls
 behind, so recording does not backpressure the hub or worker. Omit `--session-recording`
 when the deployment must not retain device media. Refer to
-{doc}`../components/server-runtime` for the session recording bundle and renderer contract.
+{doc}`../components/server-runtime` for the capture bundle and renderer contract.
 
 ## Configuration
 

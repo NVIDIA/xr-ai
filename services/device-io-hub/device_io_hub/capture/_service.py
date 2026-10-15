@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Transport-independent session recording process over normalized media-hub IPC."""
+"""Transport-independent capture process over normalized media-hub IPC."""
 from __future__ import annotations
 
 import asyncio
@@ -71,16 +71,16 @@ class _StartRequest:
 
 
 def _start_request(data: bytes) -> _StartRequest:
-    value = _json_object(data, label="session recording start command", allow_empty=True)
+    value = _json_object(data, label="capture start command", allow_empty=True)
     unknown = set(value) - {"target", "metadata"}
     if unknown:
-        raise ValueError(f"session recording start command has unknown fields: {sorted(unknown)}")
+        raise ValueError(f"capture start command has unknown fields: {sorted(unknown)}")
     target = value.get("target")
     if target is not None and (not isinstance(target, str) or not target):
-        raise ValueError("session recording start target must be a non-empty string")
+        raise ValueError("capture start target must be a non-empty string")
     metadata = value.get("metadata", {})
     if not isinstance(metadata, dict):
-        raise ValueError("session recording start metadata must be a JSON object")
+        raise ValueError("capture start metadata must be a JSON object")
     return _StartRequest(target=target, metadata=metadata)
 
 
@@ -159,7 +159,7 @@ class _FrameWorker:
 
 
 class CaptureService:
-    """Coordinate hub subscriptions and the disk/NVENC session recording workers."""
+    """Coordinate hub subscriptions and the disk/NVENC capture workers."""
 
     def __init__(self, config: CaptureConfig) -> None:
         self._config = config
@@ -258,11 +258,11 @@ class CaptureService:
         # connected while the subscription was settling.
         await asyncio.sleep(0.1)
         await self._endpoint.request_roster()
-        logger.info("session recording ready out_dir={}", self._config.out_dir)
+        logger.info("media capture ready out_dir={}", self._config.out_dir)
 
     async def run(self) -> None:
         if self._failure is None:
-            raise RuntimeError("session recording service has not been started")
+            raise RuntimeError("capture service has not been started")
         await self._failure
 
     def _task_failed(self, task: asyncio.Task) -> None:
@@ -270,7 +270,7 @@ class CaptureService:
             return
         error = task.exception()
         if error is None:
-            error = RuntimeError(f"session recording task {task.get_name()} stopped unexpectedly")
+            error = RuntimeError(f"capture task {task.get_name()} stopped unexpectedly")
         self._failure.set_exception(error)
 
     async def _write(self, function, *args) -> Any:
@@ -301,7 +301,7 @@ class CaptureService:
         except TimeoutError:
             incomplete_reason = _RETURN_TRAFFIC_DRAIN_TIMEOUT_REASON
             logger.warning(
-                "session recording timed out draining return traffic pid={!r}; "
+                "media capture timed out draining return traffic pid={!r}; "
                 "finalizing an incomplete bundle",
                 event.participant_id,
             )
@@ -368,7 +368,7 @@ class CaptureService:
         metadata: dict[str, Any],
     ) -> None:
         if self._config.session_mode != "explicit":
-            logger.warning("session recording ignored explicit start in participant session mode")
+            logger.warning("media capture ignored explicit start in participant session mode")
             return
         self._closing_participants.discard(participant_id)
         await self._write(
@@ -382,7 +382,7 @@ class CaptureService:
 
     def _stop_recording(self, participant_id: str, pts_us: int) -> None:
         if self._config.session_mode != "explicit":
-            logger.warning("session recording ignored explicit stop in participant session mode")
+            logger.warning("media capture ignored explicit stop in participant session mode")
             return
         if participant_id in self._closing_participants:
             return
@@ -398,7 +398,7 @@ class CaptureService:
         try:
             self._renderer.render(bundle)
         except Exception as exc:
-            logger.warning("session recording rendering failed path={}: {}", bundle, exc)
+            logger.warning("media capture rendering failed path={}: {}", bundle, exc)
 
     async def _render(self, bundle: Path) -> None:
         if self._renderer_executor is None:
@@ -464,7 +464,7 @@ class CaptureService:
         reason = _invalid_audio_reason(chunk)
         if reason is not None:
             logger.warning(
-                "session recording dropped invalid {} audio pid={!r}: {}",
+                "media capture dropped invalid {} audio pid={!r}: {}",
                 direction,
                 chunk.participant_id,
                 reason,
@@ -499,7 +499,7 @@ class CaptureService:
                     request.metadata,
                 )
             except ValueError as exc:
-                logger.warning("session recording ignored invalid start command: {}", exc)
+                logger.warning("media capture ignored invalid start command: {}", exc)
             return
         if message.topic == CAPTURE_STOP_TOPIC:
             self._stop_recording(message.participant_id, message.pts_us)
@@ -508,9 +508,9 @@ class CaptureService:
             return
         if message.topic == CAPTURE_OBSERVATION_TOPIC:
             try:
-                observation = _json_object(message.data, label="session recording observation")
+                observation = _json_object(message.data, label="capture observation")
             except ValueError as exc:
-                logger.warning("session recording ignored invalid observation: {}", exc)
+                logger.warning("media capture ignored invalid observation: {}", exc)
                 return
             await self._write(self._recorder.record_observation, message, observation)
             return
@@ -572,7 +572,7 @@ class CaptureService:
             *(worker.close() for worker in workers),
             return_exceptions=True,
         )
-        # Raw bundles are the durable session recording product. Commit every active
+        # Raw bundles are the durable capture product. Commit every active
         # session before waiting for any already-running derived rendering.
         _ = await self._write(self._recorder.close)
         await self._drain_callbacks()
