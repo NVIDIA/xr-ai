@@ -430,6 +430,14 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="session-recording-flag">
+<h2>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h2>
+<p>Replace <code class="docutils literal notranslate"><span class="pre">--capture</span></code> with <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> in saved launch commands for
+<code class="docutils literal notranslate"><span class="pre">simple_vlm_example</span></code>, <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, <code class="docutils literal notranslate"><span class="pre">tea_making_sample</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">lab_instrument_monitoring</span></code>. The old flag is no longer accepted. For example,
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--capture</span></code> becomes
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--session-recording</span></code>.</p>
+</section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
 <p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
@@ -841,6 +849,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>

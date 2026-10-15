@@ -5,6 +5,14 @@
 
 # Release migration
 
+## Session recording flag
+
+Replace `--capture` with `--session-recording` in saved launch commands for
+`simple_vlm_example`, `xr_render_demo`, `tea_making_sample`, and
+`lab_instrument_monitoring`. The old flag is no longer accepted. For example,
+`uv run simple_vlm_example --capture` becomes
+`uv run simple_vlm_example --session-recording`.
+
 ## Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.
