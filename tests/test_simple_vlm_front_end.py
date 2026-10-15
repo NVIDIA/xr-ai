@@ -334,19 +334,71 @@ async def test_destination_error_after_preamble_propagates_to_turn_caller():
 
 
 @pytest.mark.asyncio
-async def test_unresolved_or_invalid_route_uses_default_without_admitting_candidate():
+async def test_unresolved_or_invalid_route_clarifies_without_answering_default():
     for choice in ("clarify", "not-registered"):
         decisions = _Decisions(choice)
         conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help."),))
         xr = _Destination("xr")
         front_end = ConversationFrontEnd({"conversation": conversation, "xr": xr}, decisions)
 
-        result, output = await _run(front_end, query="Help me with this.")
+        result, output = await _run(
+            front_end,
+            query=(
+                "Can you tell me how I can rearrange the tasks behind me so "
+                "that I can climb on them and remove the lights"
+            ),
+        )
 
-        assert result.disposition == "answer"
-        assert output == [("conversation", "I can help.")]
-        assert conversation.calls == [("answer", "Help me with this.")]
+        assert result == DestinationResult("clarify", "Which part would you like help with?")
+        assert output == [("conversation", "Which part would you like help with?")]
+        assert conversation.calls == []
         assert xr.calls == []
+
+
+@pytest.mark.asyncio
+async def test_route_scope_records_choice_probabilities_and_eligible_candidates(monkeypatch):
+    class _RouteDecisions(_Decisions):
+        async def decide(self, state, questions, *, timeout=None):
+            self.calls.append((state, questions, timeout))
+            return DecisionResponse(
+                answers={
+                    "destination": DecisionAnswer(
+                        "clarify",
+                        0.61,
+                        {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
+                    )
+                },
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    events = []
+    monkeypatch.setattr(
+        "xr_ai_conversation.front_end.nemo_relay.scope.event",
+        lambda name, **kwargs: events.append((name, kwargs["data"])),
+    )
+    decisions = _RouteDecisions()
+    conversation = _Destination("conversation")
+    observation = _Destination("observation", description="Questions about the current camera view")
+    front_end = ConversationFrontEnd({"conversation": conversation, "observation": observation}, decisions)
+
+    result, output = await _run(front_end, query="How can I move the objects behind me?")
+
+    assert result.disposition == "clarify"
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert events == [
+        (
+            "conversation.destination-route-choice",
+            {
+                "choice": "clarify",
+                "confidence": 0.61,
+                "probabilities": {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
+                "selected_destination": None,
+                "eligible_destinations": ["conversation", "observation"],
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -358,13 +410,13 @@ async def test_route_prompt_exposes_unavailable_destination_eligibility():
 
     result, output = await _run(front_end, query="Change the virtual scene.")
 
-    assert result.disposition == "answer"
-    assert output == [("conversation", "I can help generally.")]
+    assert result == DestinationResult("clarify", "Which part would you like help with?")
+    assert output == [("conversation", "Which part would you like help with?")]
     routed_destinations = decisions.calls[0][0]["destinations"]
     assert next(item for item in routed_destinations if item["name"] == "xr")["eligibility"] == "unavailable"
     assert next(item for item in routed_destinations if item["name"] == "xr")["eligible"] is False
     assert xr.calls == []
-    assert conversation.calls == [("answer", "Change the virtual scene.")]
+    assert conversation.calls == []
 
 
 @pytest.mark.asyncio
@@ -408,7 +460,7 @@ async def test_exhausted_declines_answer_once_with_default_and_shared_history():
 
 
 @pytest.mark.asyncio
-async def test_no_eligible_route_uses_eligible_default_without_admission():
+async def test_ineligible_route_clarifies_instead_of_answering_default():
     decisions = _Decisions("specialist")
     default = _Destination("conversation", results=(DestinationResult("answer", "General help."),))
     specialist = _Destination("specialist", eligible=False)
@@ -420,19 +472,23 @@ async def test_no_eligible_route_uses_eligible_default_without_admission():
 
     result, output = await _run(front_end, query="Help me.")
 
-    assert result.disposition == "answer"
-    assert output == [("conversation", "General help.")]
-    assert default.calls == [("answer", "Help me.")]
+    assert result == DestinationResult("clarify", "Which part would you like help with?")
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert default.calls == []
     assert specialist.calls == []
 
 
 @pytest.mark.asyncio
 async def test_default_fallback_records_route_reason(monkeypatch):
-    default = _Destination("conversation", results=(DestinationResult("answer", "General help."),))
-    specialist = _Destination("specialist")
+    default = _Destination(
+        "conversation",
+        admissions=(Admission("decline"),),
+        results=(DestinationResult("answer", "General help."),),
+    )
+    specialist = _Destination("specialist", admissions=(Admission("decline"),))
     front_end = ConversationFrontEnd(
         {"conversation": default, "specialist": specialist},
-        _Decisions("clarify"),
+        _Decisions("specialist", "conversation"),
         default_destination="conversation",
     )
     reasons = []
@@ -445,7 +501,7 @@ async def test_default_fallback_records_route_reason(monkeypatch):
     result, _output = await _run(front_end, query="Help me.")
 
     assert result.disposition == "answer"
-    assert reasons == [("no_route", True)]
+    assert reasons == [("exhausted_declines", True)]
 
 
 @pytest.mark.asyncio

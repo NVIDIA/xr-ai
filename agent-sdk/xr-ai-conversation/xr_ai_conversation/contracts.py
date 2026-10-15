@@ -117,15 +117,15 @@ class ConversationDestination(Protocol):
     async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
-        Stream chunks and return answer, focus, or release. The front end may
-        call an eligible configured default once without ``admit()`` after no
-        route accepts; destinations must support that standalone answer path.
+        Stream chunks and return answer, focus, or release. After selected
+        destinations decline through the bounded routing attempts, the front
+        end may call an eligible configured default once without ``admit()``;
+        destinations must support that standalone answer path.
 
         Destinations decline or clarify in ``admit()``, before output or work begins.
-        If no eligible destination accepts, the front end gives its configured
-        eligible default one final answer attempt without another admission check.
-        It uses ``DestinationResult("clarify", ...)`` when that default is
-        unavailable.
+        If routing cannot select an eligible destination, the front end asks for
+        clarification without starting an answer. It also asks for clarification
+        after exhausted declines when the configured default is unavailable.
         """
 
     async def release(self, participant_id: str) -> None:

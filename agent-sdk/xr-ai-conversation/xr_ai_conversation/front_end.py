@@ -47,9 +47,11 @@ class ConversationFrontEnd:
     A focused destination receives the participant's next turn first. It can
     answer, release focus, or decline and return control to ordinary routing.
     Route choices use the typed decision service; a declined route is excluded
-    from one bounded reroute. When no destination accepts, the configured
-    default gets one final answer attempt without another admission check, if it
-    is eligible. Destinations own their model and application state.
+    from one bounded reroute. If selected destinations decline through those
+    attempts, the configured eligible default gets one final answer attempt
+    without another admission check. If routing cannot select an eligible
+    destination, the front end asks for clarification. Destinations own their
+    model and application state.
 
     ``acknowledgment_llm`` and ``acknowledgment_delay_secs`` opt into a brief,
     route-aware intention acknowledgment. Both must be supplied together. A
@@ -204,27 +206,16 @@ class ConversationFrontEnd:
             name = candidates[0] if focused and attempt == 0 else await self._select(turn, candidates)
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
-            bypass_admission = name is None
             if name is None:
-                name = self._default_destination
+                text = "Which part would you like help with?"
+                await emit(self._default_destination, text)
+                self._remember(turn, text)
+                return DestinationResult("clarify", text)
             destination = self._destinations[name]
-            if bypass_admission:
-                aid = destination.routing_aid(turn.participant_id)
-                if aid.name != name:
-                    raise ValueError(f"routing aid name {aid.name!r} does not match destination {name!r}")
-                self._trace_default_fallback(turn, "no_route", eligible=aid.eligible)
-                if not aid.eligible:
-                    text = "Which part would you like help with?"
-                    await emit(name, text)
-                    self._remember(turn, text)
-                    return DestinationResult("clarify", text)
-                self._destinations_used.setdefault(turn.participant_id, set()).add(name)
-                admission = Admission("accept")
-            else:
-                self._destinations_used.setdefault(turn.participant_id, set()).add(name)
-                admission = await destination.admit(turn, focused=(name == focused))
-                if self._generation.get(turn.participant_id) is not generation:
-                    raise asyncio.CancelledError()
+            self._destinations_used.setdefault(turn.participant_id, set()).add(name)
+            admission = await destination.admit(turn, focused=(name == focused))
+            if self._generation.get(turn.participant_id) is not generation:
+                raise asyncio.CancelledError()
             if admission.disposition == "release":
                 await destination.release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
@@ -668,24 +659,38 @@ class ConversationFrontEnd:
                 for aid in aids
             ],
         }
-        response = await self._decisions.decide(
-            state,
-            {
-                "destination": DecisionQuestion(
-                    instructions=(
-                        "Choose the best eligible destination using its description and routing hints. "
-                        "Descriptions are hints for routing, not access controls or guarantees that a "
-                        "destination can enforce its application policy. Use priority only "
-                        "to break ties after relevance; never select an ineligible destination. Choose "
-                        "clarify when no eligible destination is a suitable match."
-                    ),
-                    criteria=criteria,
-                )
-            },
+        question = DecisionQuestion(
+            instructions=(
+                "Choose the best eligible destination using its description and routing hints. "
+                "Descriptions are hints for routing, not access controls or guarantees that a "
+                "destination can enforce its application policy. Use priority only "
+                "to break ties after relevance; never select an ineligible destination. Choose "
+                "clarify when no eligible destination is a suitable match."
+            ),
+            criteria=criteria,
         )
-        selected = response.answers["destination"].choice
         eligible = {aid.name for aid in aids if aid.eligible}
-        return selected if selected in eligible else None
+        with nemo_relay.scope.scope(
+            "conversation.destination-route",
+            nemo_relay.ScopeType.Agent,
+            input={"state": state, "question": {"instructions": question.instructions, "criteria": criteria}},
+            metadata={"participant_id": turn.participant_id},
+        ) as route_scope:
+            response = await self._decisions.decide(state, {"destination": question})
+            answer = response.answers["destination"]
+            selected = answer.choice if answer.choice in eligible else None
+            nemo_relay.scope.event(
+                "conversation.destination-route-choice",
+                handle=route_scope,
+                data={
+                    "choice": answer.choice,
+                    "confidence": answer.confidence,
+                    "probabilities": dict(answer.probabilities),
+                    "selected_destination": selected,
+                    "eligible_destinations": sorted(eligible),
+                },
+            )
+        return selected
 
 
 async def _emit_from(emit: Emit, destination: str, _source: str, text: str) -> None:
