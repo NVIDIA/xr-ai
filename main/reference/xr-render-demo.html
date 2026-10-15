@@ -673,7 +673,7 @@ fields, checked-in values, and adjacent YAML comments.</p>
 </section>
 <section id="opt-in-session-capture">
 <h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
-<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--capture</span></code> to start
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--session-recording</span></code> to start
 <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code> immediately after DeviceIOHub. Capture subscribes to
 normalized media-hub IPC rather than LiveKit, so the recording contract stays
 the same if the device transport changes. It requests video pixels through the
@@ -708,7 +708,7 @@ process uses DeviceIOHub’s existing NumPy, ZMQ, and PyNvVideoCodec dependencie
 Finalization additionally requires <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>; it copies the H.264
 stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
 normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
-ahead of media data for fast-start playback. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code> when recording is
+ahead of media data for fast-start playback. Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> when recording is
 prohibited, and treat the output as sensitive device data.</p>
 <p>The media-capture service itself also supports a <code class="docutils literal notranslate"><span class="pre">raw</span></code> projection and explicit
 agent-controlled session boundaries. Those modes reuse the same audio,

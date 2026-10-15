@@ -145,7 +145,7 @@ fields, checked-in values, and adjacent YAML comments.
 
 ## Opt-in session capture
 
-Capture is disabled by default. Run `uv run xr_render_demo --capture` to start
+Capture is disabled by default. Run `uv run xr_render_demo --session-recording` to start
 `device_io_capture` immediately after DeviceIOHub. Capture subscribes to
 normalized media-hub IPC rather than LiveKit, so the recording contract stays
 the same if the device transport changes. It requests video pixels through the
@@ -181,7 +181,7 @@ process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
 Finalization additionally requires `ffmpeg` on `PATH`; it copies the H.264
 stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
 normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
-ahead of media data for fast-start playback. Omit `--capture` when recording is
+ahead of media data for fast-start playback. Omit `--session-recording` when recording is
 prohibited, and treat the output as sensitive device data.
 
 The media-capture service itself also supports a `raw` projection and explicit

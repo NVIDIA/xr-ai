@@ -14,7 +14,7 @@ sample's design and operational details.
 
 ## Composition
 
-The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
+The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
 `yaml/models.json` profile configures the Cosmos3 Nano and Pocket TTS client
 adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
@@ -105,7 +105,7 @@ controls work with the sample's existing STT endpoint, including NIM. Refer to
 
 ## Opt-in session capture
 
-Capture is disabled by default. Run `uv run simple_vlm_example --capture` to
+Capture is disabled by default. Run `uv run simple_vlm_example --session-recording` to
 start `device_io_capture` immediately after DeviceIOHub and record normalized
 hub media without joining the LiveKit room. Each participant connection then
 creates a bundle under
@@ -122,7 +122,7 @@ participant-lifetime bundle closes.
 Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than
 backpressuring the hub or worker. MP4 finalization requires `ffmpeg` on `PATH`.
-Omit `--capture` when a deployment must not retain device media.
+Omit `--session-recording` when a deployment must not retain device media.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text
