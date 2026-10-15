@@ -46,10 +46,11 @@ ask before switching the documentation, skill, and checkout to `main`.
 Read `AGENTS.md`, then review the
 {doc}`system requirements </getting_started/requirements>` and
 {doc}`credential sources </getting_started/credentials>` before resolving the
-application. The copied reference application uses local model services by
-default. When configuring hosted LLM or VLM endpoints, refer to the "Hosting
-models on NVIDIA NIM" section of {doc}`AI services
-</components/ai-services>`.
+application. Choose local model services or hosted endpoints, keeping a choice
+already made during setup. The copied reference application uses local model
+services by default. For hosted inference, refer to
+{doc}`/guides/deploying-with-nim`; the hub still needs NVENC and NVDEC on its
+host as described in the system requirements.
 
 ## Choose the layers your application needs
 
@@ -158,13 +159,13 @@ Use this map to separate reusable scaffolding from the VLM example:
 | Files | Reuse | Replace or adapt |
 |---|---|---|
 | `main.py` and the root `pyproject.toml` | Keep the `run_stack` entry point, DeviceIOHub process, worker process, and launcher source entries. | Rename the project, command, logging namespace, worker command, and worker YAML path. Add only application-owned service processes. |
-| `yaml/device_io_hub.yaml` | Keep the typed DeviceIOHub configuration shape. | Set the room, ports, web client, and network behavior. |
+| `yaml/device_io_hub.yaml` | Keep the typed DeviceIOHub configuration shape. | Set the room, ports, web client, and network behavior. Refer to the [DeviceIOHub reference YAML](https://github.com/NVIDIA/xr-ai/blob/main/services/device-io-hub/device_io_hub.yaml) for coupled port and URL changes. |
 | `worker/pyproject.toml`, `__init__.py`, and `__main__.py` | Keep the named-package layout, console entry point, argument parsing, and delegation to `run_app()`. | Rename the distribution, package, and entry point. Remove dependencies only after their imports and features are gone. |
 | `worker/.../config.py` and `yaml/*_worker.yaml` | Keep typed loading and paths resolved relative to the YAML file. | Replace the prompt, frame, model, voice, and application-specific settings with the fields the application consumes. |
 | `worker/.../app.py` | Keep the `AgentRuntime` composition and the `VoiceAgent` lifecycle when the application uses voice. | Replace the VLM warmup, model roles, and paired `CurrentFrameTool` and `StreamingImageQueryTool` composition with the application's services and agents. |
 | `worker/.../agent.py` and `worker/.../prompts/system.txt` | Keep the participant-scoped task ownership, detached-task context and scope, and cancellation patterns. Refer to {doc}`/reference/agent-sdk-runtime`. | Replace the vision question-and-answer workflow, topics, tool calls, and prompt. |
 | `yaml/models.json` | Keep the adapter and endpoint separation. | Declare only the logical model roles, client adapters, and shared endpoints the application needs. Do not add model-server deployment or readiness settings. |
-| `yaml/voice_gate.yaml` | Keep it when speech input needs wake phrases and follow-up turns. | Tune the behavior or remove it with the voice runtime. |
+| `yaml/voice_gate.yaml` | Keep it when the application uses voice. | Choose conversation controls or direct speech using {ref}`voice-conversation-controls`, and test the application's first spoken request. |
 | `README.md` | Keep a short configure and run path. | Describe the application, its owned and reused processes, settings, and exact start commands. |
 
 Rewrite the copied README as application-owned documentation. Replace its title
@@ -192,6 +193,8 @@ uv --config-file ../../uv.toml sync
 uv --config-file ../../uv.toml sync --project worker
 ```
 
+### Local model services
+
 The model launcher requires `HF_TOKEN`. Configure it through one of the
 sources in {doc}`/getting_started/credentials` before starting the application.
 The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
@@ -203,14 +206,39 @@ uv --config-file ../../uv.toml run \
   --project ../../agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
 ```
 
-Then start the application from the same directory:
+### Hosted endpoints
+
+Follow {doc}`/guides/deploying-with-nim` to configure and validate the STT, VLM,
+and TTS roles in the application's `yaml/models.json`. Keep a copy of the local
+profile before replacing its entries. The copied worker includes the `riva`
+extra for hosted speech; retain it when selecting a Riva endpoint. Start only
+the application after endpoint validation. The local `model_servers` command
+is not part of this path.
+
+### Start the application
+
+After the selected model environment is ready, start the application from
+`apps/my-app/`:
 
 ```bash
 uv --config-file ../../uv.toml run my_app
 ```
 
-Open the authenticated web-client URL printed by DeviceIOHub, grant the media
-permissions the application needs, and connect.
+Open the full authenticated web-client URL printed by DeviceIOHub, including
+its scheme and port. HTTPS is enabled by default. Refer to
+{ref}`tls-for-the-web-client` for certificate trust on the client device and
+{ref}`web-client-empty-response` if the browser reports an empty response.
+
+For the copied voice-and-vision application, select **Connect**, grant camera
+and microphone access, choose **On-demand images** or **Live video** under
+**Camera Mode**, then select **Start Microphone**. Use the conversation controls
+configured in `yaml/voice_gate.yaml` before speaking the application's request.
+The web client's generic **Send** control sends a data-channel message; it is
+not the spoken-request control.
+
+Write the application's README with its intended client, exact connection
+steps, voice mode, and an example request. Check the adapted commands and link
+targets before handing the application to its user.
 
 The application launcher owns only DeviceIOHub, the worker, and any other
 application processes. The separate model-server launcher owns shared model
@@ -219,9 +247,19 @@ health endpoints; it explicitly exercises VLM inference as an application
 warmup before announcing readiness. Keep or replace that probe according to the
 capabilities the application must warm or verify. When a model role changes,
 update `yaml/models.json` and the worker's service construction. Do not add
-shared model services to the application's `PROCESSES` list.
+shared model services to the application's `PROCESSES` list. If a process
+fails, use its launch context and run-log directory to investigate through
+{doc}`troubleshooting`. Service readiness and a successful client interaction
+are separate checks; record which one actually completed.
 
 ## Verify without hardware
+
+Turn each requirement in the application brief into an observable acceptance
+case. Include configuration defaults when a key is omitted, the intended first
+request, and the recovery behavior for unavailable inputs. For example, a
+camera-based checklist application must use its default list when no checklist
+is configured and give an actionable retry instruction when no image is
+available. Keep these checks in the application's test directory.
 
 From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
@@ -274,6 +312,13 @@ uv --config-file uv.toml run --project tests \
 ```
 
 Refer to {doc}`testing` for the complete test commands and marker rules.
+
+Before reporting that the application is complete, match each requirement to
+its test or client-interaction result. Exercise the intended first request
+through a real client after the hardware-free checks pass. Record the selected
+model environment, configuration, observed response, and any simulated media
+or unverified requirement. Passing tests and service readiness do not replace
+that client check.
 
 ## Understand the application boundary
 

@@ -15,7 +15,8 @@ repo root, so clone before following them.
 
 ## First: two setup questions
 
-Ask the user, then tailor the pointers below to the answers.
+Use choices the user already supplied, ask for any missing choice, then tailor
+the pointers below to the answers.
 
 1. **Release or main?** Build against the latest release tag (default) or
    `main`. This should match the ref this skill was fetched from; re-fetch the
@@ -32,10 +33,12 @@ Ask the user, then tailor the pointers below to the answers.
      `https://nvidia.github.io/xr-ai/<ref>/getting_started/requirements.html`,
      including the VRAM table. Replace `<ref>` with `main` or the selected
      release tag.
-   - **Remote/hosted:** read `docs/source/components/ai-services.md`,
-     `docs/source/guides/deploying-with-nim.md`, and
-     `docs/source/getting_started/credentials.md` for external model
-     endpoints, including speech, and their client dependencies.
+   - **Remote/hosted:** read the same versioned requirements page: the hub
+     still needs an NVIDIA GPU with NVENC and NVDEC, even when inference is
+     remote. Follow `docs/source/guides/deploying-with-nim.md` to configure
+     and validate the application's required endpoints, including remote
+     speech when selected. Read `docs/source/getting_started/credentials.md`
+     for credential sources.
 
 ## Where everything is
 
@@ -64,5 +67,7 @@ Ask the user, then tailor the pointers below to the answers.
   `agent-samples/simple-vlm-example`. For another sample, start that sample’s
   own `model-servers/` project instead. Stop the current model stack before
   switching samples, editing its server settings, or updating the checkout.
-  For external endpoints, follow `docs/source/guides/deploying-with-nim.md`
-  for the sample startup path.
+  For hosted models, validate the consumer profile through the deployment
+  guide before starting the application; skip local model-server startup.
+- **Launch failures:** follow `docs/source/guides/troubleshooting.md` and the
+  failure message's process context and run-log directory.

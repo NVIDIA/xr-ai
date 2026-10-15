@@ -17,6 +17,9 @@ lk_port_ws:  7880
 lk_port_tcp: 7881
 lk_port_udp: 7882
 
+# Changing lk_port_ws also requires lk_internal_url to match. Refer to
+# services/device-io-hub/device_io_hub.yaml for the coupled URL settings.
+
 # Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip
 # validation when the NAT does not support LiveKit's public-IP self-ping.
 # lk_use_external_ip: true
