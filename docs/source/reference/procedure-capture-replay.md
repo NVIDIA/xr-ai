@@ -223,13 +223,16 @@ uv run main.py --mode replay "Guide Name"
 
 Start the shared models first, as for capture. Replay uses the LLM, VLM, STT,
 and TTS endpoints in `yaml/models.json`. Connect using the hub's web
-client URL and enable microphone and camera access. Each participant starts at
-step one with independent progress. No wake phrase or spoken start command is
-required. Turning off live video does not reset the guide. The shared current
+client URL and enable microphone and camera access. The command line selects
+the guide, but connecting does not start it. Say **start replay** to begin step
+one with independent progress for that participant. No wake phrase is required.
+Until then, no verification or timer is running. Say **stop replay** at any time
+to cancel guidance, then **start replay** to begin a fresh run of the same guide.
+Turning off live video does not reset the guide. The shared current
 frame tool may request a still image from clients that support on-demand capture;
 if no fresh image is available, visual verification waits. Timer checks continue
 without a camera. Disconnect releases
-that participant's progress and pending work; reconnect starts a fresh run.
+that participant's progress and pending work; reconnect waits for start replay.
 
 Like {doc}`tea-making-sample`, replay separates foreground conversation from
 background verification. The foreground answers guide questions using the
@@ -242,20 +245,24 @@ requiring a user question, but does not automatically advance to the next step.
 
 | Request | Behavior |
 |---|---|
+| “Start replay” | Begin a fresh run of the command-line-selected guide from step one |
+| “Stop replay” | Cancel guidance and verification, clear progress, and keep the selected guide loaded but inactive |
 | “What should I do?” | Explain the current step |
 | “Does this look right?” | Use the current step's visual tool if available |
 | “How much time remains?” | Use the current step's timer tool if available |
 | “Next” or “continue” | Advance only if the current step is verified complete |
 | “Skip” | Explicitly bypass the current step; this is not evidence of success |
 | “Status” | Report current progress |
-| “Restart,” “reset guide,” or “stop guide” | Clear progress and return to step one of the selected guide |
+| “Stop guide” or “reset guide” | Same as stop replay |
+| “Restart” | Same as start replay |
 
 After “next” on the completed final step, the agent announces workflow
-completion, restores the guide's initial state and timer values, and presents step one again.
-No relaunch or reconnect is needed. Explicitly skipping to the end also resets
-the run, with an explicit skipped-steps message rather than a verified-completion
-claim. Disconnect to stop receiving guidance. Recording commands and selecting
-another guide are not supported inside replay mode.
+completion and leaves the guide inactive, ready for another start replay.
+No relaunch or reconnect is needed. Explicitly skipping to the end also leaves
+the guide inactive, with an explicit skipped-steps message rather than a
+verified-completion claim. While inactive, status and start replay remain
+available, but there is no active step or timer. Recording commands and
+selecting another guide are not supported inside replay mode.
 
 The worker pins the validated guide and SHA-256 from the same captured bytes at
 startup. File edits do not change a running replay; restart the sample to use a
@@ -343,6 +350,13 @@ controls. Its `_Replay` backend in `replay/replaying.py` owns guide progress,
 runtime timers, frame evidence, and background verification. Transitions clear
 both local notices and pending voice-aggregation output under the session lock,
 so obsolete completion notices cannot follow the new step's instruction.
+The foreground receives detached guidance context and scoped tools captured
+under one execution revision. The backend rechecks that revision under its own
+lock when controls execute and answers finish. It owns accepted control tasks
+through completion even if a new utterance cancels the foreground turn; departure
+and shutdown drain those tasks. Stop replay cancels the observer and clears timer
+state without unloading the selected guide. Connecting only loads an inactive
+session; start replay activates it and starts its observer and any first-step timer.
 Replay uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
 shared tool loop. The conversation prompt governs intent; an English wording
 filter is only a conservative routing heuristic, not an authorization boundary.
@@ -392,4 +406,7 @@ These tests cover mode isolation, approval, guide validation, participant-local
 progress, repeated runs, stale observations, timers, and runtime-to-voice delivery.
 They use synthetic guide fixtures, not committed user guides. Opt-in tests in
 `test_sop_replay.py` with `-m gpu` exercise the configured local LLM's tool routing;
-they do not measure visual accuracy or verify a physical assembly.
+they do not measure visual accuracy or verify a physical assembly. Start the
+sample's model servers before running those evaluations. They are also marked
+`external_models`: they query the existing deployment without starting, stopping,
+or deleting its containers.

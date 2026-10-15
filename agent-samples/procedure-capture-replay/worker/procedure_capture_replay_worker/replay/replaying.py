@@ -37,6 +37,24 @@ from .guides import SelectedGuide
 _POLL_INTERVAL_S = 0.25
 
 
+class _AdvanceGuideRequest(StrictRequest):
+    skip: bool = Field(default=False, strict=True)
+
+
+class _GuideResult(BaseModel):
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class _GuidanceTurn:
+    """Detached foreground context and tools scoped to the same replay revision."""
+
+    instructions: str
+    context: dict[str, Any]
+    tools: ToolSet
+    finish: Callable[[str], Awaitable[str]]
+
+
 class _NowResult(BaseModel):
     epoch_us: int
 
@@ -93,6 +111,7 @@ class _Session:
     guide: SelectedGuide
     state: dict[str, Any]
     step_id: str
+    active: bool = True
     revision: int = 1
     next_tick: float = 0.0
     evidence_hits: int = 0
@@ -150,13 +169,84 @@ class _Replay:
         self._connected = connected
         self._sessions: dict[str, _Session] = {}
         self._monitors: dict[str, asyncio.Task[None]] = {}
+        self._control_tasks: dict[str, set[asyncio.Task[tuple[str, int]]]] = {}
+
+    def join(self, participant_id: str) -> str:
+        """Load the selected guide without beginning observations or timers."""
+        self._start(participant_id, active=False)
+        return f"{self._guide.workflow.name} is ready. Say start replay to begin."
+
+    async def guidance(self, participant_id: str) -> _GuidanceTurn | None:
+        """Capture policy, state, and controls at one execution revision.
+
+        The foreground receives detached values, not a mutable session or its
+        lock. Controls and answer acceptance recheck this scope inside the
+        backend after model inference.
+        """
+        session = self._sessions.get(participant_id)
+        if session is None:
+            return None
+        async with session.lock:
+            if not self._connected(participant_id) or self._sessions.get(participant_id) is not session:
+                return None
+            revision = session.revision
+            workflow = session.workflow
+            step = session.step
+            active_trigger: dict[str, Any] | None = None
+            if session.active and step.trigger.function == "clock__timer":
+                active_trigger = {"function": step.trigger.function}
+                if session.timer is None:
+                    active_trigger["unavailable_reason"] = session.timer_error or "No active timer"
+                else:
+                    active_trigger["duration_s"] = session.timer.duration_s
+                    active_trigger["status"] = session.timer.read().model_dump()
+            guide_order = []
+            step_id = workflow.start_step
+            while step_id is not None:
+                ordered_step = workflow.steps[step_id]
+                guide_order.append(ordered_step.title)
+                step_id = ordered_step.next_step
+            results: list[tuple[str, int]] = []
+            controls = self._guide_tools(session, revision, results)
+            named = self._named_tools(participant_id, step.voice.tools) if session.active else ToolSet([])
+            tools = ToolSet({**dict(named.items()), **dict(controls.items())})
+            instructions = f"Selected guide: {workflow.name}.\n{workflow.foreground_prompt}\n"
+            if session.active:
+                instructions += f"Current step: {step.title}.\n{step.voice.prompt}"
+            else:
+                instructions += (
+                    "The selected guide is inactive. There is no active step or verification. "
+                    "Say start replay to begin."
+                )
+            context = {
+                "active": session.active,
+                "guide_order": guide_order,
+                "state": copy.deepcopy(workflow.project(step, session.state)) if session.active else {},
+                "active_trigger": active_trigger,
+            }
+
+        async def finish(answer: str) -> str:
+            async with session.lock:
+                if not self._connected(participant_id):
+                    return ""
+                if self._sessions.get(participant_id) is not session:
+                    return "The guide changed while I was answering. Ask again for the current step."
+                expected_revision = results[-1][1] if results else revision
+                if session.revision != expected_revision:
+                    return "The guide changed while I was answering. Ask again for the current step."
+                return results[-1][0] if results else answer
+
+        return _GuidanceTurn(instructions, context, tools, finish)
 
     async def leave(self, participant_id: str) -> None:
+        await self._drain_controls(participant_id)
         self._sessions.pop(participant_id, None)
         await _cancel(self._monitors, participant_id)
         self._current_frame.release(participant_id)
 
     async def stop(self) -> None:
+        for participant_id in tuple(self._control_tasks):
+            await self._drain_controls(participant_id)
         participants = tuple(self._sessions)
         self._sessions.clear()
         tasks = tuple(self._monitors.values())
@@ -168,7 +258,7 @@ class _Replay:
         for participant_id in participants:
             self._current_frame.release(participant_id)
 
-    def _start(self, participant_id: str) -> str:
+    def _start(self, participant_id: str, *, active: bool = True) -> str:
         guide = self._guide
         workflow = guide.workflow
         session = _Session(
@@ -176,11 +266,12 @@ class _Replay:
             guide=guide,
             state=workflow.initial_state(),
             step_id=workflow.start_step,
+            active=active,
         )
         self._enter_step(session)
         self._sessions[participant_id] = session
         logger.info(
-            "SOP started pid={!r} guide={} version={} sha256={}",
+            "SOP loaded pid={!r} guide={} version={} sha256={}",
             participant_id,
             workflow.id,
             workflow.version,
@@ -188,58 +279,136 @@ class _Replay:
         )
         return session.step.enter_message
 
-    async def _status(self, participant_id: str) -> str:
-        session = self._sessions.get(participant_id)
-        if session is None:
-            return "No guide is active."
+    def _guide_tools(self, session: _Session, revision: int, results: list[tuple[str, int]]) -> ToolSet:
+        async def control(action: str, *, skip: bool = False) -> _GuideResult:
+            # A new utterance can cancel inference, but not half of an accepted
+            # transition. Retain the operation until execution cleanup drains it.
+            task = asyncio.create_task(self._control(session, revision, action, skip=skip))
+            pending = self._control_tasks.setdefault(session.participant_id, set())
+            pending.add(task)
+
+            def finished(completed: asyncio.Task[tuple[str, int]]) -> None:
+                pending.discard(completed)
+                if not completed.cancelled() and (error := completed.exception()):
+                    logger.error("Replay control failed pid={!r}: {!r}", session.participant_id, error)
+
+            task.add_done_callback(finished)
+            message, completed_revision = await asyncio.shield(task)
+            results.append((message, completed_revision))
+            return _GuideResult(message=message)
+
+        async def status(_request: EmptyRequest) -> _GuideResult:
+            return await control("status")
+
+        async def advance(request: _AdvanceGuideRequest) -> _GuideResult:
+            return await control("advance", skip=request.skip)
+
+        async def reset(_request: EmptyRequest) -> _GuideResult:
+            return await control("reset")
+
+        async def restart(_request: EmptyRequest) -> _GuideResult:
+            return await control("restart")
+
+        def tool(name, description, request_type, handler):
+            return Tool(
+                name, description, request_type, _GuideResult, handler,
+                render_result=lambda result: result.message, return_direct=True,
+            )
+
+        tools = [
+            tool("workflow__status", "Report whether the guide is active and its current progress.",
+                 EmptyRequest, status),
+            tool("workflow__reset",
+                 "Stop replay and clear progress only for a direct present request "
+                 "to stop replay, stop, reset, or cancel. "
+                 "The selected guide stays loaded but inactive; this does not restart it. "
+                 "Not for questions, quotations, hypotheticals, reports, or negations.", EmptyRequest, reset),
+            tool("workflow__restart",
+                 "Begin a fresh run of the command-line-selected guide from step one "
+                 "for start replay or a direct restart request. "
+                 "Works whether the guide is active or stopped. "
+                 "Not for questions, quotations, reports, hypotheticals, or negations.", EmptyRequest, restart),
+        ]
+        if session.active:
+            tools.append(tool(
+                "workflow__advance",
+                "USE WHEN: the user directly commands the active guide to move forward now; "
+                "always call even when supplied state looks incomplete because the tool alone decides readiness. "
+                "Set skip=false for continue/next/move-on/proceed commands and "
+                "skip=true only for bypass/skip-this-step commands. DO NOT USE WHEN: a question, "
+                "quotation, hypothetical, deliberation, negation, report, or unrelated wording.",
+                _AdvanceGuideRequest, advance,
+            ))
+        return ToolSet(tools)
+
+    async def _drain_controls(self, participant_id: str) -> None:
+        pending = tuple(self._control_tasks.get(participant_id, ()))
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self._control_tasks.pop(participant_id, None)
+
+    async def _control(
+        self, session: _Session, revision: int, action: str, *, skip: bool = False,
+    ) -> tuple[str, int]:
         async with session.lock:
+            message = await self._apply_control(session, revision, action, skip=skip)
+            return message, session.revision
+
+    async def _apply_control(self, session: _Session, revision: int, action: str, *, skip: bool) -> str:
+        pid = session.participant_id
+        if not self._connected(pid):
+            return "Guide controls are unavailable while disconnected."
+        if self._sessions.get(pid) is not session or session.revision != revision:
+            return "The guide changed while I was answering. Ask again for the current step."
+        if action == "status":
+            if not session.active:
+                return f"{session.workflow.name} is inactive. Say start replay to begin."
             suffix = " Complete; say next when ready." if self._is_complete(session) else ""
             return f"{session.workflow.name}, current step: {session.step.title}.{suffix}"
-
-    async def _advance(self, participant_id: str, *, skip: bool) -> str:
-        session = self._sessions.get(participant_id)
-        if session is None:
-            return "No guide is active."
-        async with session.lock:
-            step = session.step
-            complete = self._is_complete(session)
-            if not complete and not skip:
-                return f"{step.title} is not complete yet. Say skip to move on anyway."
-            # Publication only enqueues speech. Clear the delivery queue as well
-            # as local notices before changing which step that speech describes.
-            await self._invalidate(participant_id)
-            skipping = skip and not complete
-            if skipping:
-                session.skipped = True
-                session.state.update(copy.deepcopy(step.state_on_skip))
-            next_step = None if skipping and step.complete_on_skip else step.next_step
-            session.revision += 1
-            session.evidence_hits = 0
-            session.next_tick = 0.0
-            session.notices.clear()
-            if next_step is None:
-                message = "Replay ended with skipped steps." if session.skipped else session.workflow.complete_message
-                self._reset_progress(session)
-                return f"{message} Ready to replay again. {session.step.enter_message}"
-            session.step_id = next_step
-            self._enter_step(session)
-            if skipping and step.skip_message:
-                return f"{step.skip_message} {session.step.enter_message}"
+        if action == "advance":
+            if not session.active:
+                return "Replay is inactive. Say start replay to begin."
+            return await self._advance(session, skip=skip)
+        if action not in {"reset", "restart"}:
+            raise ValueError(f"unknown replay control: {action}")
+        await self._invalidate(pid)
+        self._reset_progress(session, active=action == "restart")
+        await _cancel(self._monitors, pid)
+        if session.active:
+            self._start_monitor(pid)
             return session.step.enter_message
+        return "Replay stopped. Say start replay to begin again."
 
-    async def _reset(self, participant_id: str) -> str:
-        return await self._restart(participant_id)
+    async def _advance(self, session: _Session, *, skip: bool) -> str:
+        step = session.step
+        complete = self._is_complete(session)
+        if not complete and not skip:
+            return f"{step.title} is not complete yet. Say skip to move on anyway."
+        # Publication only enqueues speech. Clear the delivery queue as well
+        # as local notices before changing which step that speech describes.
+        await self._invalidate(session.participant_id)
+        skipping = skip and not complete
+        if skipping:
+            session.skipped = True
+            session.state.update(copy.deepcopy(step.state_on_skip))
+        next_step = None if skipping and step.complete_on_skip else step.next_step
+        session.revision += 1
+        session.evidence_hits = 0
+        session.next_tick = 0.0
+        session.notices.clear()
+        if next_step is None:
+            message = "Replay ended with skipped steps." if session.skipped else session.workflow.complete_message
+            self._reset_progress(session, active=False)
+            await _cancel(self._monitors, session.participant_id)
+            return f"{message} Say start replay to begin again."
+        session.step_id = next_step
+        self._enter_step(session)
+        if skipping and step.skip_message:
+            return f"{step.skip_message} {session.step.enter_message}"
+        return session.step.enter_message
 
-    async def _restart(self, participant_id: str) -> str:
-        session = self._sessions.get(participant_id)
-        if session is None:
-            return "No guide is active."
-        async with session.lock:
-            await self._invalidate(participant_id)
-            self._reset_progress(session)
-            return session.step.enter_message
-
-    def _reset_progress(self, session: _Session) -> None:
+    def _reset_progress(self, session: _Session, *, active: bool = True) -> None:
+        session.active = active
         session.state = session.workflow.initial_state()
         session.step_id = session.workflow.start_step
         session.revision += 1
@@ -253,7 +422,7 @@ class _Replay:
         session.observed_frames.clear()
         session.timer = None
         session.timer_error = None
-        if session.step.trigger.function == "clock__timer":
+        if session.active and session.step.trigger.function == "clock__timer":
             try:
                 arguments = _TimerRequest.model_validate(self._resolve(session.step.trigger.arguments, session.state))
                 session.timer = _Timer(time.monotonic(), arguments.duration_s)
@@ -275,18 +444,20 @@ class _Replay:
     async def _monitor(self, participant_id: str) -> None:
         while self._connected(participant_id):
             session = self._sessions.get(participant_id)
-            if session is not None:
-                try:
-                    await self._tick(session)
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    logger.opt(exception=True).warning("SOP observation failed pid={!r}", participant_id)
+            if session is None or not session.active:
+                return
+            try:
+                await self._tick(session)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.opt(exception=True).warning("SOP observation failed pid={!r}", participant_id)
             await asyncio.sleep(_POLL_INTERVAL_S)
 
     async def _tick(self, session: _Session) -> None:
         async with session.lock:
-            if self._sessions.get(session.participant_id) is not session or self._is_complete(session):
+            if (not session.active or self._sessions.get(session.participant_id) is not session
+                    or self._is_complete(session)):
                 return
             now = time.monotonic()
             if session.next_tick > now:
@@ -514,7 +685,8 @@ class _Replay:
         async with session.lock:
             notices = tuple(session.notices)
             session.notices.clear()
-            if not self._connected(session.participant_id) or self._sessions.get(session.participant_id) is not session:
+            if (not session.active or not self._connected(session.participant_id)
+                    or self._sessions.get(session.participant_id) is not session):
                 return
             # A transition invalidates already queued speech under this same lock.
             for message in notices:
@@ -522,7 +694,8 @@ class _Replay:
 
     def _current(self, session: _Session, step: Step, revision: int) -> bool:
         return (
-            self._connected(session.participant_id)
+            session.active
+            and self._connected(session.participant_id)
             and self._sessions.get(session.participant_id) is session
             and session.step_id == step.id
             and session.revision == revision
@@ -533,6 +706,8 @@ class _Replay:
     def _is_complete(session: _Session) -> bool:
         # State may be shared with preceding steps. A preexisting completion
         # field cannot authorize advancing past a timer that has not elapsed.
+        if not session.active:
+            return False
         if session.step.trigger.function == "clock__timer":
             if session.timer is None or not session.timer.read().expired:
                 return False
@@ -553,11 +728,13 @@ class _Replay:
 
 
 async def _cancel(tasks: dict[str, asyncio.Task[None]], participant_id: str) -> None:
-    task = tasks.pop(participant_id, None)
+    task = tasks.get(participant_id)
     if task is None:
         return
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
+    if tasks.get(participant_id) is task:
+        tasks.pop(participant_id, None)
 
 
 def _discard(
