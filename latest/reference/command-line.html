@@ -350,6 +350,7 @@
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-replay.html">Procedure capture and replay</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
@@ -480,6 +481,34 @@ protocols, so they are intentionally excluded from the user-facing catalog.</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code></dt><dd><p>bind the unauthenticated event viewer to all IPv4 interfaces instead of loopback</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--capture</span></code></dt><dd><p>record participant video, bidirectional audio, and data-channel traffic</p>
+</dd>
+</dl>
+</section>
+<section id="procedure-capture-replay-model-servers">
+<h2>procedure_capture_replay_model_servers<a class="headerlink" href="#procedure-capture-replay-model-servers" title="Link to this heading">#</a></h2>
+<p>Launch the speech, language, and vision model servers for the sample.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-replay/model-servers/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_replay_model_servers<span class="w"> </span><span class="o">[</span>--stop<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-profile<span class="w"> </span>NAME<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--stop</span></code></dt><dd><p>Stop this sample’s configured model servers and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code></dt><dd><p>Select a startup hardware profile; with –stop, apply its port overrides without GPU detection.</p>
+</dd>
+</dl>
+</section>
+<section id="procedure-capture-replay">
+<h2>procedure_capture_replay<a class="headerlink" href="#procedure-capture-replay" title="Link to this heading">#</a></h2>
+<p>Capture a demonstrated procedure as images, captions, and spoken narration.</p>
+<p>Run from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-replay/</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>procedure_capture_replay<span class="w"> </span><span class="o">[</span>--output-root<span class="w"> </span>PATH<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--output-root</span> <span class="pre">PATH</span></code></dt><dd><p>save task packets under PATH/sessions; overrides YAML artifacts_dir (relative to the launch directory)</p>
 </dd>
 </dl>
 </section>
