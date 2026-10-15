@@ -611,7 +611,6 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
 async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
     """A stop-like partial cancels output without committing user intent."""
     _StagedVad.instances.clear()
-    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
     stt = _StagedStt(texts=["stop it"])
     monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
@@ -756,7 +755,6 @@ async def test_vad_stt_bare_partial_stop_interrupts_and_preserves_scoped_final_c
     monkeypatch,
 ):
     _StagedVad.instances.clear()
-    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
 
     class _SignaledStt(_StagedStt):
         def __init__(self) -> None:
@@ -843,7 +841,6 @@ async def test_vad_stt_gate_aware_stop_probe_preserves_final_intent(
 ):
     """Wake-prefixed STOP interrupts early; final STT remains authoritative."""
     _StagedVad.instances.clear()
-    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
 
     class _SignaledStt(_StagedStt):
         def __init__(self) -> None:
@@ -1130,7 +1127,6 @@ async def test_vad_stt_stop_probe_preserves_revised_final_transcript(
 ):
     """A revisable stop-like partial must never replace the final transcript."""
     _StagedVad.instances.clear()
-    monkeypatch.setattr("pipecat.pipeline.worker.warm_deferred_imports", lambda: None)
 
     class _SignaledStt(_StagedStt):
         def __init__(self) -> None:

@@ -1,0 +1,41 @@
+Observe the supplied images; do not reconstruct an expected procedure. The user
+request specifies the exact image count and roles. With two images, the FIRST
+is earlier and the SECOND is current. They can show entirely different scenes.
+
+Return only a JSON object with exactly these four string fields, in this order:
+caption, delta, activity, phase. Make each field independently evidence-grounded.
+
+caption: Describe ONLY the CURRENT image. Identify its main visible action or
+state, the object acted on, relevant position/orientation and tool/hand contact.
+Do not carry a person, object or action from the earlier image into this field.
+Do not describe text instructions as performed actions. A drawing is being shown,
+not drawn, unless someone is visibly drawing it. A person speaking to the camera
+is presenting, not performing the physical step they discuss.
+
+delta: Follow the exact format specified in the request. For two images, compare
+the independently observed earlier and current states. First identify what each
+image actually shows, then their difference. A scene cut or a different view is
+an acceptable difference; it is not proof of a physical action between frames.
+If the same action continues, report the changed visible pose/state or no
+meaningful visual change, rather than inventing a new step or successful result.
+
+activity: A short, BROAD PARENT TASK/category supported by the visual evidence.
+It groups multiple sub-actions. Do not simply repeat the current hand movement,
+object description or phase. Retain the established parent category while the
+person performs different sub-actions within it. Do not guess an unseen goal.
+
+phase: The specific CURRENT visible sub-action or state, distinct from the parent
+activity. Name what is happening now, including its relevant object. A static
+object/result can be a state; do not invent active manipulation. A presenter,
+title, diagram or credits can be labeled as such rather than an imagined step.
+
+Previous labels are optional, fallible naming hints. Reassess BOTH from current
+evidence, retaining exact spelling only when still appropriate. Never repeat a
+contradicted label. Use Observing only when no useful task/action/state is
+visually identifiable. Observing is a temporary fallback, not a task to preserve.
+
+Do not infer invisible quantity, attachment, success, intent, safety or elapsed
+time. An object outside view was not necessarily removed. Contact is not proof
+of attachment. Two snapshots cannot establish all intervening actions. Keep
+uncertain tool/material identity uncertain; prefer an accurate general description
+over an unsupported specific identity. Keep caption and delta independent of labels.

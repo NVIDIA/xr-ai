@@ -119,6 +119,7 @@ def test_effectively_empty_profile_selection_uses_default(
     "xr-render-demo/yaml/models.json",
     "lab-instrument-monitoring/yaml/models.json",
     "tea-making-sample/yaml/models.local.json",
+    "procedure-capture-replay/yaml/models.json",
 ])
 def test_consumer_profiles_connect_without_model_lifecycle_metadata(relative) -> None:
     profile = _ROOT / "agent-samples" / relative

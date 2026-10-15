@@ -636,6 +636,49 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `lab_instrument_monitoring_worker` → `lab_instrument_monitoring_worker.__main__:run`
 
+#### `procedure-capture-replay` — [`agent-samples/procedure-capture-replay/`](agent-samples/procedure-capture-replay/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `procedure_capture_replay` → `main:run`
+
+#### `procedure-capture-replay-model-servers` — [`agent-samples/procedure-capture-replay/model-servers/`](agent-samples/procedure-capture-replay/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `procedure_capture_replay_model_servers` → `main:run`
+
+#### `procedure-capture-replay-worker` — [`agent-samples/procedure-capture-replay/worker/`](agent-samples/procedure-capture-replay/worker/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `nemo-relay>=0.7.2,<0.8`
+  - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
+  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+  - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
+  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
+  - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
+  - `loguru>=0.7`
+  - `pyyaml>=6.0`
+- Optional dependency groups: none
+- Commands:
+  - `procedure_capture_replay_worker` → `procedure_capture_replay_worker.__main__:run`
+
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
 - Python: `>=3.11,<3.15`

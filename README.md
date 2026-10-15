@@ -47,6 +47,7 @@ through scaffolding, startup, and hardware-free verification.
 | Model servers beside each agent sample | Convenience launchers for each sample’s required local models; refer to the [workflow](https://nvidia.github.io/xr-ai/latest/guides/customizing-model-servers.html) |
 | [NIM endpoints](deployment/nim/README.md) | Configure and validate independently deployed models |
 | [`simple-vlm-example`](agent-samples/simple-vlm-example/README.md) | Voice and text questions about the current camera frame |
+| [`procedure-capture-replay`](agent-samples/procedure-capture-replay/README.md) | Voice-controlled demonstration recording with snapshots, captions, and narration |
 | [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/README.md) | Marker-associated visual monitoring with a foreground voice agent |
 | [`tea-making-sample`](agent-samples/tea-making-sample/README.md) | Guided workflow with visual evidence and background observations |
 | [`xr-render-demo`](agent-samples/xr-render-demo/README.md) | Voice-driven CloudXR scene manipulation |

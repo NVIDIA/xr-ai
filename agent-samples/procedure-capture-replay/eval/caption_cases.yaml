@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Synthetic, deterministic visual controls; no task-specific demonstration data.
+# Objects are [shape, color, left, top, right, bottom] on a 512x384 white canvas.
+cases:
+  - id: initial
+    images:
+      - [[rectangle, red, 40, 140, 120, 220]]
+    expected: One red square at left; delta is Initial observation. No earlier state or action.
+  - id: move_right
+    images:
+      - [[rectangle, red, 40, 140, 120, 220]]
+      - [[rectangle, red, 390, 140, 470, 220]]
+    previous: {activity: Moving shapes, phase: Repositioning}
+    expected: Current square at right; change is left to right. Reuse both grouping names.
+  - id: move_left
+    images:
+      - [[rectangle, red, 390, 140, 470, 220]]
+      - [[rectangle, red, 40, 140, 120, 220]]
+    previous: {activity: Moving shapes, phase: Repositioning}
+    expected: Current square at left; change is right to left. Reuse both grouping names.
+  - id: unchanged
+    images:
+      - [[ellipse, blue, 220, 140, 300, 220]]
+      - [[ellipse, blue, 220, 140, 300, 220]]
+    previous: {activity: Observing shapes, phase: Viewing}
+    expected: Identical images; no meaningful visual change. Reuse both grouping names.
+  - id: additional_object
+    images:
+      - [[rectangle, red, 40, 140, 120, 220]]
+      - [[rectangle, red, 40, 140, 120, 220], [ellipse, blue, 390, 140, 470, 220]]
+    previous: {activity: Arranging shapes, phase: Adding shapes}
+    expected: Red square remains left; blue circle is now visible at right. No invented hand or attachment.
+  - id: outside_view
+    images:
+      - [[rectangle, red, 40, 140, 120, 220]]
+      - []
+    previous: {activity: Arranging shapes, phase: Repositioning}
+    expected: Current view is blank. Square is no longer visible; cannot establish removal or purpose. Unclear view alone must not change grouping.
+  - id: labels_are_not_evidence
+    images:
+      - [[rectangle, red, 40, 140, 120, 220]]
+      - [[rectangle, red, 390, 140, 470, 220]]
+    previous: {activity: Assembling a bicycle, phase: Attaching a wheel}
+    expected: Describe the red square and its movement, not a bicycle, wheel, or successful attachment inferred from labels.
+  - id: provisional_labels
+    images:
+      - [[ellipse, green, 40, 140, 120, 220]]
+      - [[ellipse, green, 390, 140, 470, 220]]
+    previous: {activity: Observing, phase: Initial observation}
+    expected: Current green circle is at right, previously at left. Replace provisional labels with a supported broad grouping and specific repositioning phase. Delta compares both images, not Initial observation. No invented hand or object purpose.
+  - id: phase_changes_within_activity
+    images:
+      - [[rectangle, red, 40, 140, 120, 220], [ellipse, blue, 220, 140, 300, 220]]
+      - [[rectangle, red, 390, 140, 470, 220], [ellipse, blue, 220, 140, 300, 220]]
+    previous: {activity: Arranging shapes, phase: Adding shapes}
+    expected: Keep the broad Arranging shapes activity but revise the stale Adding shapes phase to repositioning. Both objects were already present; only the red square changed position. Current caption must place it at right, and delta must not invent an added object or hand.
