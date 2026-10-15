@@ -464,8 +464,11 @@ def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
         f"service_layout_{sample_name.replace('-', '_')}_capture",
         f"agent-samples/{sample_name}/main.py",
     )
-    assert sample._parser().parse_args([]).capture is False
-    assert sample._parser().parse_args(["--capture"]).capture is True
+    assert sample._parser().parse_args([]).session_recording is False
+    assert sample._parser().parse_args(["--session-recording"]).session_recording is True
+    with pytest.raises(SystemExit) as exc:
+        sample._parser().parse_args(["--capture"])
+    assert exc.value.code == 2
     worker_args = (sample._WORKER_CONFIG,) if sample_name == "tea-making-sample" else ()
     defaults = sample._build_processes(*worker_args)
     assert "capture" not in [process.name for process in defaults]
@@ -487,6 +490,34 @@ def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
     assert config.hub_push_addr == hub.get("ipc_in_addr", "ipc:///tmp/xr_hub_in")
 
 
+@pytest.mark.parametrize("sample_name", ["simple-vlm-example", "xr-render-demo"])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_sample_run_passes_session_recording(
+    sample_name: str, enabled: bool, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _load_module(
+        f"service_layout_{sample_name.replace('-', '_')}_recording_run",
+        f"agent-samples/{sample_name}/main.py",
+    )
+    launches = []
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sample, "run_stack", lambda processes, base: launches.append(processes))
+    if sample_name == "xr-render-demo":
+        monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
+        monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
+        monkeypatch.setattr(sample, "_ensure_lovr_bin", lambda: None)
+
+    sample.run(["--session-recording"] if enabled else [])
+
+    assert len(launches) == 1
+    names = [process.name for process in launches[0]]
+    if enabled:
+        assert names.count("capture") == 1
+        assert names[names.index("hub") + 1] == "capture"
+    else:
+        assert "capture" not in names
+
+
 @pytest.mark.parametrize("sample_name", ["tea-making-sample", "lab-instrument-monitoring"])
 def test_sample_run_passes_capture_and_preserves_web_event_option(
     sample_name: str, monkeypatch: pytest.MonkeyPatch,
@@ -503,7 +534,7 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
         launches.append((processes, config["web_events_host"]))
 
     monkeypatch.setattr(sample, "run_stack", capture_launch)
-    sample.run(["--capture", "--expose-web-events"])
+    sample.run(["--session-recording", "--expose-web-events"])
     processes, host = launches.pop()
     assert host == "0.0.0.0"
     assert [process.name for process in processes][:2] == ["hub", "capture"]

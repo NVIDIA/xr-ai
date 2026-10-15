@@ -40,11 +40,11 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--capture",
+        "--session-recording",
         action="store_true",
         help=(
-            "record participant video, bidirectional audio, and data-channel "
-            "traffic"
+            "enable session recording of participant video, bidirectional audio, "
+            "and data-channel traffic"
         ),
     )
     return parser
@@ -144,7 +144,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config, capture=args.capture), _BASE)
+        run_stack(_build_processes(worker_config, capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":
