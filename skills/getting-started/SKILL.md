@@ -19,16 +19,16 @@ Use choices the user already supplied, ask for any missing choice, then tailor
 the pointers below to the answers.
 
 1. **Release or main?** Build against the latest release tag (default) or
-   `main`. For a release, retrieving `skills/getting-started/SKILL.md` from
-   that tag is a prerequisite, even when this skill is already installed. Use
-   `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/getting-started/SKILL.md`.
-   If retrieval fails, stop setup and ask whether to retry or use `main` for
-   both the skill and the checkout. Continue release setup with the retrieved
-   skill. The answer selects both the git ref to check out and the
-   version of the docs site to read. Use
-   `https://nvidia.github.io/xr-ai/main/` for `main`, or replace `main` with
-   the selected release tag. <https://nvidia.github.io/xr-ai/> opens the
-   latest published release.
+   `main`. This selects `<ref>` for the skill, checkout, and documentation.
+   Before giving setup steps, require a copy of this skill from `<ref>`. If
+   this copy's source ref differs or is unknown, retrieve it from
+   `https://raw.githubusercontent.com/NVIDIA/xr-ai/<ref>/skills/getting-started/SKILL.md`
+   and continue with that copy. If the file is absent at a release tag, that
+   release predates the skill bank: stop and ask before using `main` for both
+   the skill and the checkout. For other retrieval failures, stop and ask
+   whether to retry. Use `https://nvidia.github.io/xr-ai/main/` for `main`, or
+   replace `main` with the selected release tag.
+   <https://nvidia.github.io/xr-ai/> opens the latest published release.
 2. **Local or remote GPU?** Models on the local GPU, or a hosted/remote
    endpoint?
    - **Local:** read the matching version of the requirements page at
