@@ -12,7 +12,7 @@ streaming; otherwise it asks the client to take one picture for that turn. The
 response streams to Pocket TTS and to the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
-session capture. It reuses speaker ASR, Cosmos3 Nano Reasoner, and Pocket TTS
+session recording. It reuses speaker ASR, Cosmos3 Nano Reasoner, and Pocket TTS
 from the sample's local model stack. Before the agent reports ready, the worker sends a
 representative image request through the VLM so the first user query does not
 pay the multimodal warmup cost.
@@ -28,7 +28,7 @@ files before starting the sample:
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
-| `yaml/media_capture.yaml` | Opt-in capture output, NVENC, audio, captions, and retention |
+| `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
 long a second utterance can omit “Hey Agent”:
@@ -67,21 +67,21 @@ Alternatively, run the source file directly after synchronization:
 uv run main.py
 ```
 
-Capture is disabled by default. To record participant video, bidirectional
+Session recording is disabled by default. To record participant video, bidirectional
 audio, and data-channel traffic, opt in explicitly:
 
 ```bash
-uv run simple_vlm_example --capture
+uv run simple_vlm_example --session-recording
 ```
 
 Open the authenticated web-client URL printed by DeviceIOHub, allow microphone
 and camera access, and connect. After the agent reports ready, say
 “Hey agent, let's start talking,” then speak questions without a wake phrase.
 Say “Hey agent, let's stop talking” to close the conversation. Typed questions
-remain available without opening a voice conversation. With `--capture`, each connection is recorded under
+remain available without opening a voice conversation. With `--session-recording`, each connection is recorded under
 `~/.local/share/xr-ai/captures/simple-vlm-example/` and finalized when the
 participant disconnects or the stack stops. The normal command writes no
-capture.
+session recording.
 
 The local models remain running after the sample stops. From this directory,
 stop them with `uv run --project model-servers simple_vlm_example_model_servers --stop`.

@@ -18,8 +18,8 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = _BASE / "yaml" / "lab_instrument_monitoring_worker.yaml"
 
-_CAPTURE_PROCESS = Process(
-    "capture",
+_SESSION_RECORDING_PROCESS = Process(
+    "session-recording",
     "../../services/device-io-hub",
     "device_io_capture",
     config="yaml/media_capture.yaml",
@@ -39,11 +39,11 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--capture",
+        "--session-recording",
         action="store_true",
         help=(
-            "record participant video, bidirectional audio, and data-channel "
-            "traffic"
+            "enable session recording of participant video, bidirectional audio, "
+            "and data-channel traffic"
         ),
     )
     return parser
@@ -97,7 +97,7 @@ def _materialize_worker_config(
 
 
 def _build_processes(
-    worker_config: Path = _WORKER_CONFIG, *, capture: bool = False
+    worker_config: Path = _WORKER_CONFIG, *, session_recording: bool = False
 ) -> list[Process]:
     processes = [
         Process(
@@ -113,8 +113,8 @@ def _build_processes(
             config=worker_config,
         ),
     ]
-    if capture:
-        processes.insert(1, _CAPTURE_PROCESS)
+    if session_recording:
+        processes.insert(1, _SESSION_RECORDING_PROCESS)
     return processes
 
 
@@ -126,7 +126,10 @@ def run(argv: Sequence[str] | None = None) -> None:
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config, capture=args.capture), _BASE)
+        run_stack(
+            _build_processes(worker_config, session_recording=args.session_recording),
+            _BASE,
+        )
 
 
 if __name__ == "__main__":

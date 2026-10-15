@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Configuration for the optional media-hub capture process."""
+"""Configuration for the optional session recording process."""
 from __future__ import annotations
 
 import math
@@ -57,13 +57,13 @@ class CaptureConfig:
 
 
 def load_capture_config(path: Path) -> CaptureConfig:
-    """Load one capture config and resolve its output path."""
+    """Load one session recording config and resolve its output path."""
     if not path.exists():
-        raise FileNotFoundError(f"Capture config file not found: {path}")
+        raise FileNotFoundError(f"Session recording config file not found: {path}")
     with path.open(encoding="utf-8") as stream:
         raw = yaml.safe_load(stream) or {}
     if not isinstance(raw, dict):
-        raise ValueError("capture config must be a YAML mapping")
+        raise ValueError("session recording config must be a YAML mapping")
 
     values = dict(raw)
     out_dir = Path(str(values.get("out_dir", _DEFAULT_OUT_DIR))).expanduser()

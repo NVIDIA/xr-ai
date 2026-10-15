@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command-line entry point for transport-independent media capture."""
+"""Command-line entry point for transport-independent session recording."""
 from __future__ import annotations
 
 import argparse
@@ -42,21 +42,21 @@ async def main(*, config_path: Path, ready_file: Path | None = None) -> None:
         if run_task in done:
             run_task.result()
     except Exception:
-        # The launcher forwards raw stderr to the terminal, not capture.log.
+        # The launcher forwards raw stderr to the terminal, not the log file.
         # Preserve the fatal traceback before the shutdown messages obscure it.
-        logger.exception("media capture failed")
+        logger.exception("session recording failed")
         raise
     finally:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         if service is not None:
-            logger.info("media capture shutting down")
+            logger.info("session recording shutting down")
             await service.stop()
 
 
 def run() -> None:
-    parser = argparse.ArgumentParser(description="Capture normalized XR-AI hub media")
+    parser = argparse.ArgumentParser(description="Session recording of normalized XR-AI hub media")
     parser.add_argument("--config", type=Path, default=Path.cwd() / DEFAULT_CONFIG_NAME)
     parser.add_argument("--ready-file", type=Path, default=None)
     args = parser.parse_args()

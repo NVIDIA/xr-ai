@@ -26,7 +26,7 @@ automatically:
 | `yaml/device_map.yaml` | QR or ArUco identifiers and their instrument names |
 | `yaml/voice_gate.yaml` | Wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
-| `yaml/media_capture.yaml` | Opt-in capture output, NVENC, audio, captions, and retention |
+| `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
 For example, change the two monitoring intervals without changing worker code:
@@ -69,10 +69,10 @@ uv run main.py
 To record a demo session, use:
 
 ```bash
-uv run lab_instrument_monitoring --capture
+uv run lab_instrument_monitoring --session-recording
 ```
 
-Refer to the [session capture guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#opt-in-session-capture)
+Refer to the [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/lab-instrument-monitoring.html#opt-in-session-recording)
 for output and encoding requirements.
 
 To make the unauthenticated event viewer reachable from a trusted private

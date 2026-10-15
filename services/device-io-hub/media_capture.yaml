@@ -1,16 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Media-hub capture reference configuration. Run from services/device-io-hub:
+# Session recording reference configuration. Run from services/device-io-hub:
 #   uv run device_io_capture --config media_capture.yaml
 
 hub_sub_addr: ipc:///tmp/xr_hub_pub
 hub_push_addr: ipc:///tmp/xr_hub_in
 
-# Each participant connection creates one timestamped capture bundle here.
+# Each participant connection creates one timestamped session recording bundle here.
 out_dir: ~/.local/share/xr-ai/captures
 
-# Raw capture is the infrastructure default. `demo` keeps the same canonical
+# Raw session recording is the infrastructure default. `demo` keeps the same canonical
 # bundle, then invokes the separate renderer to add transcript/data panels and
 # a fast-start H.264/AAC MP4 when the session completes.
 profile: raw
@@ -20,7 +20,7 @@ profile: raw
 session_mode: participant
 
 # Video pixels are requested after the media hub has normalized the transport.
-# NVENC runs in bounded worker threads; if capture falls behind, old capture
+# NVENC runs in bounded worker threads; if session recording falls behind, old session recording
 # requests are dropped without delaying the hub, client, or agent.
 sample_fps: 30.0
 bitrate: 6000000
@@ -35,11 +35,11 @@ encoder_workers: 2
 audio_sample_rate: 48000
 
 # These renderer defaults control the large transcript caption and the smaller
-# scrolling data panel. Capture retains the complete source timelines whether
+# scrolling data panel. Session recording retains the complete source timelines whether
 # or not a rendering is requested.
 overlay_seconds: 12.0
 overlay_lines: 4
 
-# Oldest completed capture bundles are removed when the total exceeds 10 GiB.
+# Oldest completed session recording bundles are removed when the total exceeds 10 GiB.
 # Active sessions are never removed. Set to 0 for unlimited retention.
 max_total_bytes: 10737418240

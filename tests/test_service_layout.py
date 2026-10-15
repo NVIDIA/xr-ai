@@ -457,24 +457,27 @@ def test_simple_vlm_declares_only_its_hub_and_worker() -> None:
     "sample_name",
     ["simple-vlm-example", "xr-render-demo", "tea-making-sample", "lab-instrument-monitoring"],
 )
-def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
+def test_sample_session_recording_is_opt_in_and_starts_immediately_after_hub(
     sample_name: str,
 ) -> None:
     sample = _load_module(
-        f"service_layout_{sample_name.replace('-', '_')}_capture",
+        f"service_layout_{sample_name.replace('-', '_')}_session_recording",
         f"agent-samples/{sample_name}/main.py",
     )
-    assert sample._parser().parse_args([]).capture is False
-    assert sample._parser().parse_args(["--capture"]).capture is True
+    assert sample._parser().parse_args([]).session_recording is False
+    assert sample._parser().parse_args(["--session-recording"]).session_recording is True
+    with pytest.raises(SystemExit) as exc:
+        sample._parser().parse_args(["--capture"])
+    assert exc.value.code == 2
     worker_args = (sample._WORKER_CONFIG,) if sample_name == "tea-making-sample" else ()
     defaults = sample._build_processes(*worker_args)
-    assert "capture" not in [process.name for process in defaults]
+    assert "session-recording" not in [process.name for process in defaults]
 
-    processes = sample._build_processes(*worker_args, capture=True)
+    processes = sample._build_processes(*worker_args, session_recording=True)
     names = [process.name for process in processes]
     hub_index = names.index("hub")
-    assert names[hub_index + 1] == "capture"
-    assert [process for process in processes if process.name != "capture"] == defaults
+    assert names[hub_index + 1] == "session-recording"
+    assert [process for process in processes if process.name != "session-recording"] == defaults
     capture = processes[hub_index + 1]
     assert capture.project == "../../services/device-io-hub"
     assert capture.command == "device_io_capture"
@@ -488,11 +491,11 @@ def test_sample_capture_is_opt_in_and_starts_immediately_after_hub(
 
 
 @pytest.mark.parametrize("sample_name", ["tea-making-sample", "lab-instrument-monitoring"])
-def test_sample_run_passes_capture_and_preserves_web_event_option(
+def test_sample_run_passes_session_recording_and_preserves_web_event_option(
     sample_name: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sample = _load_module(
-        f"service_layout_{sample_name.replace('-', '_')}_capture_run",
+        f"service_layout_{sample_name.replace('-', '_')}_session_recording_run",
         f"agent-samples/{sample_name}/main.py",
     )
     launches = []
@@ -503,14 +506,14 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
         launches.append((processes, config["web_events_host"]))
 
     monkeypatch.setattr(sample, "run_stack", capture_launch)
-    sample.run(["--capture", "--expose-web-events"])
+    sample.run(["--session-recording", "--expose-web-events"])
     processes, host = launches.pop()
     assert host == "0.0.0.0"
-    assert [process.name for process in processes][:2] == ["hub", "capture"]
+    assert [process.name for process in processes][:2] == ["hub", "session-recording"]
     sample.run([])
     processes, host = launches.pop()
     assert host == "127.0.0.1"
-    assert "capture" not in [process.name for process in processes]
+    assert "session-recording" not in [process.name for process in processes]
 
 
 def test_render_demo_declares_only_application_processes() -> None:

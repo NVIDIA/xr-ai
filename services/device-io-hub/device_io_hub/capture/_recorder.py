@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Thread-safe participant capture bundles backed by NVENC and PCM files."""
+"""Thread-safe participant session recording bundles backed by NVENC and PCM files."""
 from __future__ import annotations
 
 import base64
@@ -28,15 +28,15 @@ _CAPTURE_MARKER_CONTENT = "xr-ai media capture session v1\n"
 
 
 def _target_parts(target: str | None) -> tuple[str, ...]:
-    """Validate a wrapper-owned namespace beneath the configured capture root."""
+    """Validate a wrapper-owned namespace beneath the configured session recording root."""
     if target is None:
         return ()
     if not target or target.startswith("/"):
-        raise ValueError("capture target must be a non-empty relative path")
+        raise ValueError("session recording target must be a non-empty relative path")
     parts = tuple(target.split("/"))
     if any(part in {".", ".."} or _safe_name(part) != part for part in parts):
         raise ValueError(
-            "capture target components may contain only letters, numbers, '.', '-', and '_'"
+            "session recording target components may contain only letters, numbers, '.', '-', and '_'"
         )
     return parts
 
@@ -113,7 +113,7 @@ class _StereoWaveWriter:
         if missing > 0:
             # Extend with a sparse zero-filled gap. A paused session can put
             # the next chunk minutes later; allocating that entire gap as one
-            # bytes object would make capture memory scale with silence.
+            # bytes object would make session recording memory scale with silence.
             self._stream.seek(byte_offset + byte_count - 1)
             self._stream.write(b"\0")
         self._stream.seek(byte_offset)
@@ -182,13 +182,13 @@ class _ParticipantSession:
 
 
 class SessionRecorder:
-    """Own capture artifacts; callers may invoke methods from worker threads."""
+    """Own session recording artifacts; callers may invoke methods from worker threads."""
 
     def __init__(self, config: CaptureConfig) -> None:
         try:
             import PyNvVideoCodec as nvc
         except (ImportError, RuntimeError, OSError) as exc:
-            raise RuntimeError(f"PyNvVideoCodec is required for media capture: {exc}") from exc
+            raise RuntimeError(f"PyNvVideoCodec is required for session recording: {exc}") from exc
         self._nvc = nvc
         # Query hardware before accepting sessions, never under recording locks.
         self._encoder_caps = nvc.GetEncoderCaps(config.gpu_id, "h264")
@@ -262,7 +262,7 @@ class SessionRecorder:
             )
             self._sessions[participant_id] = session
         self._event(session, "recording", start_us, state="started", trigger=trigger)
-        logger.info("media capture started participant={!r} path={}", participant_id, root)
+        logger.info("session recording started participant={!r} path={}", participant_id, root)
 
     def _ensure_target_root(self, parts: tuple[str, ...]) -> Path:
         target_root = self._root
@@ -273,7 +273,7 @@ class SessionRecorder:
             except FileExistsError:
                 if target_root.is_symlink() or not target_root.is_dir():
                     raise ValueError(
-                        f"capture target component is not a directory: {part!r}"
+                        f"session recording target component is not a directory: {part!r}"
                     ) from None
         return target_root
 
@@ -282,7 +282,7 @@ class SessionRecorder:
         with self._lock:
             session = self._sessions.get(participant_id)
         if session is None:
-            raise RuntimeError(f"no active capture session for {participant_id!r}")
+            raise RuntimeError(f"no active session recording for {participant_id!r}")
         return session
 
     def record_audio(self, direction: str, chunk: AudioChunk) -> None:
@@ -395,7 +395,7 @@ class SessionRecorder:
             with session.lock:
                 session.dropped_video_frames += 1
             logger.warning(
-                "media capture dropped unsupported frame pid={!r} track={!r} size={}x{}; "
+                "session recording dropped unsupported frame pid={!r} track={!r} size={}x{}; "
                 "NVENC requires even dimensions within {}x{}..{}x{}",
                 frame.participant_id, frame.track_id, frame.width, frame.height,
                 caps["width_min"], caps["height_min"], caps["width_max"], caps["height_max"],
@@ -419,7 +419,7 @@ class SessionRecorder:
         except Exception:
             with session.lock:
                 session.video_failed = True
-            logger.exception("media capture video failed pid={!r} track={!r}", frame.participant_id, frame.track_id)
+            logger.exception("session recording video failed pid={!r} track={!r}", frame.participant_id, frame.track_id)
             raise
         if raw_frame is None:
             with session.lock:
@@ -546,7 +546,7 @@ class SessionRecorder:
             except Exception:
                 pending_manifest.unlink(missing_ok=True)
                 raise
-        logger.info("media capture completed participant={!r} path={}", participant_id, session.root)
+        logger.info("session recording completed participant={!r} path={}", participant_id, session.root)
         return session.root
 
     def _mux_video(
@@ -658,7 +658,7 @@ class SessionRecorder:
                 break
             total -= sizes[path]
             shutil.rmtree(path)
-            logger.info("media capture evicted session artifact {}", path)
+            logger.info("session recording evicted session artifact {}", path)
 
     @staticmethod
     def _is_capture_artifact(path: Path) -> bool:

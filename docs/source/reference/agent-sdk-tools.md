@@ -65,7 +65,8 @@ Use `ToolSet.namespaced()` when independently named groups share a model-visible
 catalog. Aliasing changes only catalog names. Only finite tools belong in a
 `ToolSet`; callers consume an `AsyncTool` explicitly with `stream()`.
 
-## Agent-controlled recording
+(agent-controlled-recording)=
+## Agent-controlled session recording
 
 Install the `capture` extra to expose recording controls through the same
 native `Tool` contract. `CaptureTools` takes its relative output namespace and
@@ -74,18 +75,18 @@ fixed metadata at application initialization, then binds tools to a participant:
 ```python
 from xr_ai_tools.capture import CaptureTools
 
-capture = CaptureTools(
+session_recording = CaptureTools(
     endpoint=endpoint,
-    target="sop-capture/assembly-line",
+    target="sop-recordings/assembly-line",
     metadata={"workflow": "wheel-install", "station": 4},
 )
-tools = capture.participant_tools(participant_id)
+tools = session_recording.participant_tools(participant_id)
 ```
 
 The returned `start_recording` and `stop_recording` tools accept `{}` only.
 The model cannot choose the participant, filesystem path, or metadata. Each
 successful start command creates a new timestamped bundle beneath the configured
-namespace. Run the media-capture service with `profile: raw` and
+namespace. Run the session recording service with `profile: raw` and
 `session_mode: explicit`; the commands use reserved hub traffic and are not
 forwarded to the XR client.
 

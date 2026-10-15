@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private video projections over the shared timestamped capture session."""
+"""Private video projections over the shared timestamped session recording."""
 
 from __future__ import annotations
 
@@ -140,10 +140,10 @@ class _RawCaptureFrontend:
     ) -> _RenderedFrame:
         del caption, data_feed
         if frame.width % 2 or frame.height % 2:
-            raise ValueError("NV12 capture requires even video dimensions")
+            raise ValueError("NV12 session recording requires even video dimensions")
         pixels = _to_nv12(frame.data, frame.width, frame.height, frame.fmt)
         if pixels is None:
-            raise ValueError(f"unsupported capture pixel format: {frame.fmt!r}")
+            raise ValueError(f"unsupported session recording pixel format: {frame.fmt!r}")
         return _RenderedFrame(
             pixels=np.ascontiguousarray(pixels),
             width=frame.width,

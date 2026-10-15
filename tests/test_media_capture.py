@@ -98,12 +98,12 @@ async def test_capture_main_logs_fatal_exception_before_cleanup(
             await capture_main.main(config_path=tmp_path / "capture.yaml")
     finally:
         capture_main.logger.remove(sink)
-    failure = next(record for record in records if record["message"] == "media capture failed")
+    failure = next(record for record in records if record["message"] == "session recording failed")
     assert failure["exception"].value is error
     if failure_stage in {"start", "run"}:
         service.stop.assert_awaited_once()
         messages = [record["message"] for record in records]
-        assert messages.index("media capture failed") < messages.index("media capture shutting down")
+        assert messages.index("session recording failed") < messages.index("session recording shutting down")
     else:
         service.stop.assert_not_awaited()
 
@@ -905,7 +905,7 @@ def test_session_bundle_uses_nvenc_packets_and_preserves_raw_streams(
     monkeypatch.setattr(renderer, "_decode_packets", lambda *args, **kwargs: iter([
         ({"pts_us": 1_000_000, "track_id": "camera"}, high_resolution),
     ]))
-    with pytest.raises(ValueError, match=r"capture render frame 5376x\d+.*NVENC H.264.*4096x4096"):
+    with pytest.raises(ValueError, match=r"session recording render frame 5376x\d+.*NVENC H.264.*4096x4096"):
         renderer.render(session)
     assert (session / "manifest.json").read_bytes() == saved_manifest
     assert (session / "video/session.264").read_bytes() == saved_raw

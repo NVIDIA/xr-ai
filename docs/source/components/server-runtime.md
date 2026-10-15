@@ -73,7 +73,7 @@ This is enforced at several layers:
   unknown participants are dropped with a warning.
 - Return-traffic topics (`return_audio.*`, `return_audio_flush.*`,
   `return_data.*`) are transport-infrastructure-only. Connectors consume them
-  for delivery and the optional capture process observes them read-only; an
+  for delivery and the optional session recording process observes them read-only; an
   agent's default subscription excludes them.
 - On the LiveKit side, return audio is published as one track per participant
   with subscribe permissions restricted to that participant, and return data
@@ -200,35 +200,35 @@ uvicorn, GPU codecs). `device_io_hub.ipc` re-exports the same names for the
 server side.
 ```
 
-## Media-hub session capture
+(media-hub-session-capture)=
+## Media-hub session recording
 
 `device_io_capture` is an optional process from the DeviceIOHub package. It
 sits downstream of `HubEndpoint`, not inside the LiveKit connector:
 
 ```
 device transport → connector → HubEndpoint → agents
-                                  └────────→ capture
+                                  └────────→ session recording
                          agent return media ─┘
 ```
 
 This boundary is transport-independent. Incoming camera, microphone, and data
 have already been decoded, timestamped, and tagged with participant and track
-identities. The capture process uses a normal `ProcessorEndpoint` for that
+identities. The session recording process uses a normal `ProcessorEndpoint` for that
 stream and a private read-only subscription to the hub's routed return topics
 for agent audio and data. It does not expose return traffic to agent APIs.
 
-Run the hub first, then start capture from the repository root:
+Run the hub first, then start session recording from the repository root:
 
 ```
 uv run --project services/device-io-hub device_io_capture \
   --config services/device-io-hub/media_capture.yaml
 ```
 
-Capture is split into a raw timestamped session writer and a derived capture
-renderer. The writer owns participant/session boundaries, NVENC encoding, raw
+Session recording uses a raw timestamped session writer and a separate renderer. The writer owns participant/session boundaries, NVENC encoding, raw
 float32 audio, the aligned stereo WAV, transcripts, observations, event
-records, retention, and the manifest. Raw capture is the default. The
-configured `profile` controls only whether rendering follows capture:
+records, retention, and the manifest. Raw session recording is the default. The
+configured `profile` controls only whether rendering follows session recording:
 
 - `raw` writes the canonical camera H.264, audio, transcript, event, and timing
   artifacts and performs no presentation rendering. It does not require
@@ -244,7 +244,7 @@ artifacts and the transcript/event timeline, performs a separate NVDEC/NVENC
 pass for its burned-in panels, and records the derived result under
 `renderings.captioned_mp4` in the manifest. It never replaces the raw media.
 
-Render or re-render any completed bundle independently of the capture process:
+Render or re-render any completed bundle independently of the session recording process:
 
 ```
 uv run --project services/device-io-hub device_io_capture_render \
@@ -254,7 +254,7 @@ uv run --project services/device-io-hub device_io_capture_render \
 `session_mode: participant` records from participant join to leave.
 `session_mode: explicit` creates bundles only between reserved agent start and
 stop messages. A background agent wrapper initializes the private controller
-with a destination namespace relative to `out_dir` and fixed capture metadata;
+with a destination namespace relative to `out_dir` and fixed session recording metadata;
 the semantic actions exposed to the model can therefore remain parameterless
 ``start recording`` and ``stop recording``. Each accepted start creates a new
 timestamped child directory in that namespace. The model never selects a
@@ -279,9 +279,9 @@ timestamp. `events.jsonl` remains the complete directional data timeline, and
 `manifest.json` is the machine-readable entry point. Its `complete` and
 `incomplete_reason` fields distinguish a normally drained session from a
 bounded recovery when the return-traffic departure marker is lost
-(`return_traffic_drain_timeout`) or a fatal video capture failure
+(`return_traffic_drain_timeout`) or a fatal video recording failure
 (`video_capture_failed`). Video failure takes precedence if both occur; exception
-details remain in the capture log. Both causes set `complete` to `false`.
+details remain in the session recording log. Both causes set `complete` to `false`.
 
 In a captioned rendering, final STT and the text actually sent to TTS appear as the
 large primary caption below the sensor image. Each TTS sentence travels through
@@ -295,9 +295,9 @@ never replaces camera
 pixels. Reserved speech-caption metadata stays inside hub IPC and is never
 forwarded to the client data channel.
 
-Capture frame requests are coalesced in a bounded queue, and NVENC work runs in
-dedicated threads in the capture process. Recorder overload therefore drops
-capture frames without delaying the hub's publish path. The manifest's
+Session recording frame requests are coalesced in a bounded queue, and NVENC work runs in
+dedicated threads in the session recording process. Recorder overload therefore drops
+recording frames without delaying the hub's publish path. The manifest's
 `dropped_video_frames` also counts sampled-out frames and source frames with odd
 dimensions or dimensions outside the selected GPU's encoder limits. Unsupported
 source frames are skipped before conversion without stopping audio or subsequent
