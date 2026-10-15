@@ -10,7 +10,6 @@ import importlib.util
 import json
 import re
 import sys
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -19,7 +18,9 @@ import pytest
 import yaml
 from xr_ai_models import ChatResponse, ToolCall, load_models_config, make_llm
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, subscribe
+from xr_ai_tools.current_frame import ImageFrame
 from xr_ai_tools.image import ImageReference
+from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryResult
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
@@ -38,7 +39,6 @@ from procedure_capture_replay_worker.replay._workflow_spec import parse_workflow
 from procedure_capture_replay_worker.replay.agent import (  # noqa: E402
     ReplayAgent,
     _AdvanceGuideRequest,
-    _CommitRequest,
     _tools_for_query,
 )
 from procedure_capture_replay_worker.replay.config import ReplayConfig  # noqa: E402
@@ -48,6 +48,12 @@ from procedure_capture_replay_worker.replay.events import (  # noqa: E402
     USER_QUERY_TOPIC,
 )
 from procedure_capture_replay_worker.replay.guides import SelectedGuide, select_guide  # noqa: E402
+from procedure_capture_replay_worker.replay.replaying import (  # noqa: E402
+    _CommitRequest,
+    _FrameIdentity,
+    _Observation,
+    _Replay,
+)
 
 
 @pytest.fixture
@@ -78,6 +84,12 @@ def selected(document):
     return SelectedGuide(Path("test.guide.yaml"), hashlib.sha256(content).hexdigest(), parse_workflow(content))
 
 
+def observation(text, sequence):
+    return _Observation(True, text, _FrameIdentity(
+        participant_id="alice", track_id="cam", timestamp_us=sequence * 1000, sequence=sequence,
+    ))
+
+
 def context(pid="alice"):
     return SimpleNamespace(metadata=SimpleNamespace(participant_id=pid, correlation_id="turn"))
 
@@ -91,7 +103,7 @@ async def engine(document):
     )
     agent.bind_runtime(Mock(running=True, publish=AsyncMock()))
     # Tick explicitly to make evidence and cancellation tests independent of time.
-    agent._start_monitor = Mock()
+    agent._backend._start_monitor = Mock()
     await agent.participant_joined(None, context())
     yield agent
     await agent.stop()
@@ -138,6 +150,9 @@ def test_ambiguity_and_symlinks_are_rejected(tmp_path, document):
     {"function": "clock__timer", "arguments": {"started_at_us": 1, "duration_s": 5}, "result_field": "bad"},
     {"function": "clock__timer", "arguments": {"started_at_us": True, "duration_s": 5}},
     {"function": "clock__timer", "arguments": {"started_at_us": 1, "duration_s": 0}},
+    {"function": "clock__timer", "arguments": {"duration_s": True}},
+    {"function": "clock__timer", "arguments": {"duration_s": 0}},
+    {"function": "clock__timer", "arguments": {"duration_s": 5}, "result_field": "bad"},
 ])
 def test_invalid_trigger_rejected_before_replay(tmp_path, document, trigger):
     document["steps"][0]["trigger"] = {"interval_s": 1, **trigger}
@@ -227,75 +242,79 @@ def test_guide_loader_is_local_and_still_safe():
 
 
 async def test_starts_on_connect_and_completes_twice_without_disconnect(engine):
-    session = engine._sessions["alice"]
+    session = engine._backend._sessions["alice"]
     assert session.step_id == "base"
     assert "Align Parts" in engine._runtime.publish.call_args.args[1].text
     for _ in range(2):
         for name in ("base", "lid"):
             session.evidence_hits = 2
-            assert engine._commit(session, session.step, {name: True}, "")[1]
-            response = await engine._advance("alice", skip=False)
+            assert engine._backend._commit(session, session.step, {name: True}, "")[1]
+            response = await engine._backend._advance("alice", skip=False)
         assert "Alignment complete. Ready to replay again. Do base." == response
         assert session.step_id == "base"
         assert session.state == {"base": False, "lid": False}
         assert not session.notices and session.evidence_hits == 0
     await engine.participant_joined(None, context())
-    assert engine._sessions["alice"] is session
+    assert engine._backend._sessions["alice"] is session
 
 
 async def test_visual_confirmation_requires_evidence_and_announces_once(engine):
-    session = engine._sessions["alice"]
+    session = engine._backend._sessions["alice"]
     engine._runtime.publish.reset_mock()
-    engine._trigger = AsyncMock(side_effect=[(True, "NO"), (True, "YES"), (True, "YES")])
-    assert "not complete" in await engine._advance("alice", skip=False)
+    engine._backend._trigger = AsyncMock(side_effect=[
+        observation("NO", 1), observation("YES", 2), observation("YES", 3),
+    ])
+    assert "not complete" in await engine._backend._advance("alice", skip=False)
     for complete in (False, False, True):
         session.next_tick = 0
-        await engine._tick(session)
+        await engine._backend._tick(session)
         assert session.step.is_complete(session.state) is complete
     assert session.step_id == "base"
     engine._runtime.publish.assert_awaited_once()
     assert "base complete" in engine._runtime.publish.call_args.args[1].text
-    await engine._tick(session)
+    await engine._backend._tick(session)
     engine._runtime.publish.assert_awaited_once()
     engine._llm.chat.assert_not_called()
 
 
 async def test_unavailable_and_wrong_direction_never_complete(engine):
-    session = engine._sessions["alice"]
-    engine._trigger = AsyncMock(side_effect=[(True, "YES"), (False, "no camera"), (True, "NO")])
+    session = engine._backend._sessions["alice"]
+    engine._backend._trigger = AsyncMock(side_effect=[
+        observation("YES", 1), _Observation(False, "no camera"), observation("NO", 3),
+    ])
     for _ in range(3):
         session.next_tick = 0
-        await engine._tick(session)
+        await engine._backend._tick(session)
     assert not session.state["base"]
     assert session.evidence_hits == 0
 
 
 async def test_stale_commit_and_notices_discarded_on_transition(engine):
-    session = engine._sessions["alice"]
-    commit = engine._commit_tool(session, session.step, session.revision)
+    session = engine._backend._sessions["alice"]
+    commit = engine._backend._commit_tool(session, session.step, session.revision)
     session.notices.append("Old completion")
-    await engine._advance("alice", skip=True)
+    await engine._backend._advance("alice", skip=True)
     result = await commit.execute(_CommitRequest(updates={"base": True}))
     assert not result.accepted
     engine._runtime.publish.reset_mock()
-    await engine._publish_notices(session)
+    await engine._backend._publish_notices(session)
     engine._runtime.publish.assert_not_awaited()
     assert session.step_id == "lid" and not session.state["base"]
 
 
 async def test_disconnect_cancels_work_and_reconnect_starts_clean(engine):
-    old = engine._sessions["alice"]
+    old = engine._backend._sessions["alice"]
     pending = asyncio.create_task(asyncio.Event().wait())
     engine._turns["alice"] = pending
     await engine.participant_joined(None, context("bob"))
     await engine.participant_left(None, context())
-    assert pending.cancelled() and "alice" not in engine._sessions
-    assert "bob" in engine._sessions
-    assert not engine._current(old, old.step, old.revision)
-    engine._current_frame.release.assert_called_once_with("alice")
+    assert pending.cancelled() and "alice" not in engine._backend._sessions
+    assert "bob" in engine._backend._sessions
+    assert not engine._backend._current(old, old.step, old.revision)
+    engine._backend._current_frame.release.assert_called_once_with("alice")
     await engine.participant_joined(None, context())
-    assert engine._sessions["alice"] is not old
-    assert engine._sessions["alice"].step_id == "base"
+    assert engine._backend._sessions["alice"] is not old
+    assert engine._backend._sessions["alice"].step_id == "base"
 
 
 async def test_departure_while_input_cleanup_awaits_does_not_restart_turn(engine):
@@ -312,31 +331,197 @@ async def test_departure_while_input_cleanup_awaits_does_not_restart_turn(engine
     await asyncio.sleep(0)
     release.set()
     await asyncio.wait_for(asyncio.gather(query, leaving), 2)
-    assert not engine._turns and not engine._sessions
+    assert not engine._turns and not engine._backend._sessions
     engine._llm.chat.assert_not_called()
 
 
 async def test_timer_cannot_complete_early_and_does_not_use_camera(engine, document, monkeypatch):
-    now = time.time_ns()
-    monkeypatch.setattr("procedure_capture_replay_worker.replay.agent.time.time_ns", lambda: now)
+    now = 100.0
+    monkeypatch.setattr("procedure_capture_replay_worker.replay.replaying.time.monotonic", lambda: now)
     step = document["steps"][0]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
-                       "arguments": {"started_at_us": now // 1000, "duration_s": 10}}
+                       "arguments": {"duration_s": 10}}
     step["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"base": True}}
     step["voice"]["tools"] = ["clock__timer"]
-    engine._guide = selected(document)
-    engine._start("alice")
-    session = engine._sessions["alice"]
-    await engine._tick(session)
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
+    session = engine._backend._sessions["alice"]
+    await engine._backend._tick(session)
     assert not session.state["base"]
     session.evidence_hits = 1
-    assert engine._commit(session, session.step, {"base": True}, "")[0] is False
-    now += 10_000_000_000
+    assert engine._backend._commit(session, session.step, {"base": True}, "")[0] is False
+    now += 10
     session.next_tick = 0
-    await engine._tick(session)
+    await engine._backend._tick(session)
     assert session.state["base"]
-    engine._current_frame.execute.assert_not_called()
-    engine._image_query.execute.assert_not_called()
+    engine._backend._current_frame.execute.assert_not_called()
+    engine._backend._image_query.execute.assert_not_called()
+
+
+async def test_model_written_timestamp_cannot_backdate_runtime_timer(engine, document, monkeypatch):
+    from procedure_capture_replay_worker.replay import replaying
+
+    now = 100.0
+    monkeypatch.setattr(replaying, "time", SimpleNamespace(monotonic=lambda: now, time_ns=lambda: 10**20))
+    document["state"]["started_us"] = {"type": "integer", "description": "Model-supplied observation"}
+    document["steps"][0]["writes"].append("started_us")
+    document["steps"][0].pop("evidence")
+    wait = document["steps"][1]
+    wait["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
+                       "arguments": {"duration_s": 60}}
+    wait["evidence"] = {"pattern": "true", "consecutive": 1, "commit": {"lid": True}}
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    backend._current_frame.execute.return_value = camera_frame(1)
+    backend._image_query.execute.return_value = ImageQueryResult(text="Aligned")
+    engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
+        id="commit", name="workflow__commit", arguments='{"updates":{"base":true,"started_us":1}}',
+    )], "tool_calls", {})
+    await backend._tick(session)
+    assert session.state["started_us"] == 1 and session.state["base"]
+    await backend._advance("alice", skip=False)
+    assert session.timer.started == now
+    timer_tool = backend._timer_tool("alice")
+    assert (await timer_tool.execute(EmptyRequest())).remaining_s == 60
+    await backend._tick(session)
+    assert not session.state["lid"]
+    # Even a direct model commit cannot substitute a fabricated observation for elapsed time.
+    result = await backend._commit_tool(session, session.step, session.revision).execute(
+        _CommitRequest(updates={"lid": True}),
+    )
+    assert not result.accepted and result.message == "timer has not expired"
+    now += 59
+    session.next_tick = 0
+    await backend._tick(session)
+    assert not session.state["lid"]
+    now += 1
+    session.next_tick = 0
+    await backend._tick(session)
+    assert session.state["lid"]
+    await backend._advance("alice", skip=False)
+    await backend._advance("alice", skip=True)
+    assert session.timer.started == now
+    assert not (await backend._timer_tool("alice").execute(EmptyRequest())).expired
+    with pytest.raises(Exception, match="timer changed"):
+        await timer_tool.execute(EmptyRequest())
+
+
+async def test_active_timer_duration_cannot_be_rewritten(engine, document, monkeypatch):
+    from procedure_capture_replay_worker.replay import replaying
+
+    now = 10.0
+    monkeypatch.setattr(replaying, "time", SimpleNamespace(monotonic=lambda: now))
+    document["state"]["duration"] = {"type": "integer", "description": "Configured wait", "initial": 60}
+    step = document["steps"][0]
+    step["writes"].append("duration")
+    step.pop("evidence")
+    step["trigger"] = {"function": "clock__timer", "interval_s": 1,
+                       "arguments": {"duration_s": "$state.duration"}, "result_field": "expired"}
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    assert backend._commit(session, session.step, {"duration": 1}, "")[0]
+    now += 2
+    assert (await backend._timer_tool("alice").execute(EmptyRequest())).remaining_s == 58
+    assert not backend._commit(session, session.step, {"base": True}, "")[0]
+    await backend._restart("alice")
+    assert session.timer.duration_s == 60 and session.timer.started == now
+
+
+async def test_timer_advance_checks_runtime_even_with_preexisting_completion(engine, document, monkeypatch):
+    from procedure_capture_replay_worker.replay import replaying
+
+    now = 100.0
+    monkeypatch.setattr(replaying, "time", SimpleNamespace(monotonic=lambda: now))
+    document["state"]["base"]["initial"] = True
+    document["steps"][0]["trigger"] = {"function": "clock__timer", "interval_s": 1,
+                                      "arguments": {"duration_s": 60}, "result_field": "expired"}
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    assert "not complete" in await backend._advance("alice", skip=False)
+    assert "Complete" not in await backend._status("alice")
+    now += 60
+    assert await backend._advance("alice", skip=False) == "Do lid."
+
+
+def camera_frame(sequence, *, timestamp_us=None, track_id="cam"):
+    return ImageFrame(
+        image=ImageReference(uri="xr-image://test"), width=16, height=16, participant_id="alice",
+        track_id=track_id, sequence=sequence, timestamp_us=timestamp_us or sequence * 1000,
+    )
+
+
+@pytest.mark.parametrize("model_commit", [False, True])
+@pytest.mark.parametrize("track_id", ["cam", ""])
+async def test_consecutive_visual_evidence_requires_distinct_source_frames(engine, document, model_commit, track_id):
+    backend = engine._backend
+    if model_commit:
+        document["steps"][0]["evidence"].pop("commit")
+        backend._guide = selected(document)
+        backend._start("alice")
+        engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
+            id="commit", name="workflow__commit", arguments='{"updates":{"base":true}}',
+        )], "tool_calls", {})
+    session = backend._sessions["alice"]
+    sequence = 1 if track_id else 0  # On-demand snapshots have no track sequence.
+    backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=1000, track_id=track_id)
+    backend._image_query.execute.return_value = ImageQueryResult(text="YES")
+    for _ in range(3):
+        session.next_tick = 0
+        await backend._tick(session)
+    assert session.evidence_hits == 1 and not session.state["base"]
+    assert engine._llm.chat.call_count == (1 if model_commit else 0)
+    if model_commit:
+        prompt = json.loads(engine._llm.chat.call_args.args[0][1].content)
+        assert prompt["frame"] == {"participant_id": "alice", "track_id": track_id,
+                                   "sequence": sequence, "timestamp_us": 1000}
+    # An older frame cannot supply independent supporting evidence either.
+    backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=500, track_id=track_id)
+    session.next_tick = 0
+    await backend._tick(session)
+    assert session.evidence_hits == 1
+    backend._current_frame.execute.return_value = camera_frame(sequence, timestamp_us=2000, track_id=track_id)
+    session.next_tick = 0
+    await backend._tick(session)
+    assert session.state["base"] and session.evidence_hits == 2
+
+
+async def test_unavailable_frame_breaks_consecutive_evidence(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    backend._trigger = AsyncMock(side_effect=[
+        observation("YES", 1), _Observation(False, "no frame"), observation("YES", 2), observation("YES", 3),
+    ])
+    for hits in (1, 0, 1, 2):
+        session.next_tick = 0
+        await backend._tick(session)
+        assert session.evidence_hits == hits
+        assert session.state["base"] is (hits == 2)
+
+
+async def test_frame_inference_finishing_after_restart_cannot_change_progress(engine):
+    backend = engine._backend
+    session = backend._sessions["alice"]
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def inspect(_request):
+        entered.set()
+        await release.wait()
+        return ImageQueryResult(text="YES")
+
+    backend._current_frame.execute.return_value = camera_frame(1)
+    backend._image_query.execute.side_effect = inspect
+    tick = asyncio.create_task(backend._tick(session))
+    await entered.wait()
+    await backend._restart("alice")
+    release.set()
+    await tick
+    assert not session.state["base"] and session.evidence_hits == 0
+    assert not session.observed_frames
 
 
 async def test_foreground_controls_use_tools_and_cannot_commit(engine):
@@ -350,10 +535,10 @@ async def test_foreground_controls_use_tools_and_cannot_commit(engine):
     assert "workflow__commit" not in {tool.name for tool in tools}
     assert not any("record" in tool.name for tool in tools)
     engine._llm.chat.return_value = ChatResponse("This step aligns the parts.", None, None, "stop", {})
-    before = copy.deepcopy(engine._sessions["alice"].state)
+    before = copy.deepcopy(engine._backend._sessions["alice"].state)
     assert "aligns" in await engine._route("Why would I skip?", "alice")
-    assert before == engine._sessions["alice"].state
-    engine._image_query.execute.assert_not_called()
+    assert before == engine._backend._sessions["alice"].state
+    engine._backend._image_query.execute.assert_not_called()
 
 
 @pytest.mark.parametrize("query", [
@@ -372,8 +557,8 @@ async def test_informational_and_capture_requests_have_no_mutating_tools(engine,
 ])
 async def test_visual_questions_keep_camera_and_use_its_result(engine, query, answer):
     image = ImageReference(uri="xr-image://test-frame")
-    engine._current_frame.execute.return_value = SimpleNamespace(image=image)
-    engine._image_query.execute.return_value = ImageQueryResult(text=answer)
+    engine._backend._current_frame.execute.return_value = camera_frame(1).model_copy(update={"image": image})
+    engine._backend._image_query.execute.return_value = ImageQueryResult(text=answer)
 
     async def chat(messages, *, tools, **kwargs):
         names = {tool.name for tool in tools}
@@ -387,35 +572,33 @@ async def test_visual_questions_keep_camera_and_use_its_result(engine, query, an
         return ChatResponse(answer, None, None, "stop", {})
 
     engine._llm.chat.side_effect = chat
-    before = copy.deepcopy(engine._sessions["alice"].state)
+    before = copy.deepcopy(engine._backend._sessions["alice"].state)
     assert await engine._route(query, "alice") == answer
-    engine._current_frame.execute.assert_awaited_once()
-    assert engine._current_frame.execute.call_args.args[0].participant_id == "alice"
-    request = engine._image_query.execute.call_args.args[0]
+    engine._backend._current_frame.execute.assert_awaited_once()
+    assert engine._backend._current_frame.execute.call_args.args[0].participant_id == "alice"
+    request = engine._backend._image_query.execute.call_args.args[0]
     assert (request.image, request.query) == (image, query)
-    assert engine._sessions["alice"].state == before
+    assert engine._backend._sessions["alice"].state == before
 
 
 async def test_read_only_filter_does_not_grant_undeclared_tools(engine, document):
     document["steps"][0]["voice"]["tools"] = ["clock__now"]
-    engine._guide = selected(document)
-    engine._start("alice")
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
     engine._llm.chat.return_value = ChatResponse("Camera checking is not available for this step.",
                                                None, None, "stop", {})
     await engine._route("What color is the lid?", "alice")
     assert {tool.name for tool in engine._llm.chat.call_args.kwargs["tools"]} == {
         "clock__now", "workflow__status",
     }
-    engine._current_frame.execute.assert_not_called()
+    engine._backend._current_frame.execute.assert_not_called()
 
 
 @pytest.mark.parametrize("state_references", [False, True])
 async def test_timer_question_uses_configured_arguments(engine, document, monkeypatch, state_references):
-    started = 1_800_000_000_000_000
-    arguments = {"started_at_us": started, "duration_s": 25}
-    monkeypatch.setattr(
-        "procedure_capture_replay_worker.replay.agent.time.time_ns", lambda: (started + 7_000_000) * 1000,
-    )
+    now = 100.0
+    arguments = {"duration_s": 25}
+    monkeypatch.setattr("procedure_capture_replay_worker.replay.replaying.time.monotonic", lambda: now)
     step = document["steps"][0]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
                        "arguments": dict(arguments)}
@@ -425,52 +608,57 @@ async def test_timer_question_uses_configured_arguments(engine, document, monkey
             document["state"][name] = {"type": "integer", "description": name, "initial": value}
         step["reads"] = list(arguments)
         step["trigger"]["arguments"] = {name: f"$state.{name}" for name in arguments}
-    engine._guide = selected(document)
-    engine._start("alice")
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
+
+    now += 7
 
     async def chat(messages, *, tools, **kwargs):
         assert {tool.name for tool in tools} == {"clock__timer", "workflow__status"}
         context = json.loads(messages[1].content)
-        assert context["active_trigger"] == {"function": "clock__timer", "arguments": arguments}
+        assert context["active_trigger"] == {
+            "function": "clock__timer", "duration_s": 25,
+            "status": {"elapsed_s": 7, "remaining_s": 18, "expired": False},
+        }
         if not state_references:
             assert not set(arguments).intersection(context["state"])
         if messages[-1].role != "tool":
             return ChatResponse("", None, [ToolCall(
-                id="timer", name="clock__timer", arguments=json.dumps(context["active_trigger"]["arguments"]),
+                id="timer", name="clock__timer", arguments="{}",
             )], "tool_calls", {})
         assert json.loads(messages[-1].content) == {"elapsed_s": 7, "remaining_s": 18, "expired": False}
         return ChatResponse("18 seconds remain.", None, None, "stop", {})
 
     engine._llm.chat.side_effect = chat
     assert await engine._route("How much time remains?", "alice") == "18 seconds remain."
-    engine._current_frame.execute.assert_not_called()
-    assert not engine._sessions["alice"].state["base"]
+    engine._backend._current_frame.execute.assert_not_called()
+    assert not engine._backend._sessions["alice"].state["base"]
 
 
 async def test_missing_timer_state_does_not_block_reset(engine, document):
-    document["state"]["started_us"] = {"type": "integer", "description": "Runtime timer start"}
+    document["state"]["duration_s"] = {"type": "integer", "description": "Wait duration"}
     step = document["steps"][0]
-    step["reads"] = ["started_us"]
+    step["reads"] = ["duration_s"]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1,
-                       "arguments": {"started_at_us": "$state.started_us", "duration_s": 25}}
-    engine._guide = selected(document)
-    engine._start("alice")
-    revision = engine._sessions["alice"].revision
+                       "arguments": {"duration_s": "$state.duration_s"}}
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
+    revision = engine._backend._sessions["alice"].revision
     engine._llm.chat.return_value = ChatResponse("", None, [ToolCall(
         id="restart", name="workflow__restart", arguments="{}",
     )], "tool_calls", {})
     assert await engine._route("Restart the guide", "alice") == "Do base."
     trigger = json.loads(engine._llm.chat.call_args.args[0][1].content)["active_trigger"]
     assert "arguments" not in trigger
-    assert "started_us" in trigger["unavailable_reason"]
-    assert engine._sessions["alice"].revision > revision
+    assert "duration_s" in trigger["unavailable_reason"]
+    assert engine._backend._sessions["alice"].revision > revision
 
 
 async def test_foreground_guide_order_follows_links_not_yaml_order(engine, document):
     document["steps"].reverse()
-    engine._guide = selected(document)
-    engine._start("alice")
-    assert list(engine._sessions["alice"].workflow.steps) == ["lid", "base"]
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
+    assert list(engine._backend._sessions["alice"].workflow.steps) == ["lid", "base"]
     engine._llm.chat.return_value = ChatResponse("Align the base, then the lid.", None, None, "stop", {})
     await engine._route("What order do I follow?", "alice")
     context = json.loads(engine._llm.chat.call_args.args[0][1].content)
@@ -479,24 +667,24 @@ async def test_foreground_guide_order_follows_links_not_yaml_order(engine, docum
 
 async def test_model_observation_uses_guarded_commit(engine, document):
     document["steps"][0].pop("evidence")
-    engine._guide = selected(document)
-    engine._start("alice")
-    engine._trigger = AsyncMock(return_value=(True, "The parts are aligned."))
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
+    engine._backend._trigger = AsyncMock(return_value=observation("The parts are aligned.", 1))
     engine._llm.chat.side_effect = [
         ChatResponse("", None, [ToolCall(id="commit", name="workflow__commit",
                      arguments='{"updates":{"base":true}}')], "tool_calls", {}),
         ChatResponse("Done", None, None, "stop", {}),
     ]
-    await engine._tick(engine._sessions["alice"])
-    assert engine._sessions["alice"].state["base"]
+    await engine._backend._tick(engine._backend._sessions["alice"])
+    assert engine._backend._sessions["alice"].state["base"]
 
 
 async def test_stale_control_after_restart_rejected(engine):
     tools, _ = engine._guide_tools("alice")
-    await engine._restart("alice")
+    await engine._backend._restart("alice")
     result = await tools.get("workflow__advance").execute(_AdvanceGuideRequest(skip=True))
     assert "guide changed" in result.message
-    assert engine._sessions["alice"].step_id == "base"
+    assert engine._backend._sessions["alice"].step_id == "base"
 
 
 def test_cli_selects_replay_without_capture_and_quotes_name(monkeypatch):
@@ -610,10 +798,10 @@ async def test_capture_composition_does_not_construct_replay_or_llm(tmp_path, mo
 
 
 async def test_skip_to_end_resets_without_claiming_verified_success(engine):
-    await engine._advance("alice", skip=True)
-    response = await engine._advance("alice", skip=True)
+    await engine._backend._advance("alice", skip=True)
+    response = await engine._backend._advance("alice", skip=True)
     assert "skipped steps" in response and "Alignment complete" not in response
-    assert not engine._sessions["alice"].skipped
+    assert not engine._backend._sessions["alice"].skipped
 
 
 def test_hash_and_approval_use_same_snapshot_during_edit(tmp_path, document, monkeypatch):
@@ -653,7 +841,7 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
     monkeypatch.setattr(app, "ProcessorEndpoint", lambda **kwargs: endpoint)
     capture = Mock(side_effect=AssertionError("Replay must not create a capture backend"))
     monkeypatch.setattr(app, "_Capture", capture)
-    monkeypatch.setattr(ReplayAgent, "_start_monitor", Mock())
+    monkeypatch.setattr(_Replay, "_start_monitor", Mock())
     agents = []
 
     def replay(**kwargs):
@@ -670,13 +858,13 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
 
         async def run(self, runtime):
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
-            assert agents[0]._sessions["alice"].step_id == "base"
+            assert agents[0]._backend._sessions["alice"].step_id == "base"
             # Simulate worker shutdown while the participant is still connected.
 
     monkeypatch.setattr(app, "ReplayAgent", replay)
     monkeypatch.setattr(app, "VoiceAgent", Voice)
     await app.run_app(config)
-    assert not agents[0]._sessions and not agents[0]._connected
+    assert not agents[0]._backend._sessions and not agents[0]._connected
     assert agents[0]._aggregation._stopping
     capture.assert_not_called()
     endpoint.close.assert_called_once()
@@ -701,7 +889,7 @@ async def test_actual_runtime_and_aggregation_deliver_replay_and_release(documen
         guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
         vision_timeout_s=1, aggregation=aggregation,
     ))
-    agent._trigger = AsyncMock(return_value=(False, "Camera unavailable"))
+    agent._backend._trigger = AsyncMock(return_value=_Observation(False, "Camera unavailable"))
     sink = runtime.register("sink", Sink())
     agent.bind_runtime(runtime)
     async with runtime:
@@ -712,9 +900,74 @@ async def test_actual_runtime_and_aggregation_deliver_replay_and_release(documen
                                   participant_id="alice")
             assert await asyncio.wait_for(sink.outputs.get(), 2) == ("alice", "Align the marked edges.")
             await runtime.publish(PARTICIPANT_LEFT_TOPIC, VoiceParticipantLeft(), participant_id="alice")
-            assert not agent._sessions and not agent._monitors and not agent._turns
+            assert not agent._backend._sessions and not agent._backend._monitors and not agent._turns
             assert not aggregation._states
         finally:
+            await agent.stop()
+            await aggregation.stop()
+
+
+@pytest.mark.parametrize(("control", "final_step"), [
+    ("workflow__restart", False), ("workflow__reset", False),
+    ("workflow__advance", False), ("workflow__advance", True),
+])
+async def test_transition_discards_notice_queued_during_foreground_turn(document, control, final_step):
+    class Sink(Agent):
+        def __init__(self):
+            super().__init__()
+            self.outputs = asyncio.Queue()
+
+        @subscribe(VOICE_OUTPUT_TOPIC)
+        async def receive(self, output: VoiceOutput, ctx: RuntimeContext):
+            await self.outputs.put(output.text)
+
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def chat(*_args, **_kwargs):
+        entered.set()
+        await release.wait()
+        return ChatResponse("", None, [ToolCall(id="control", name=control, arguments="{}")], "tool_calls", {})
+
+    llm = Mock(chat=AsyncMock(side_effect=chat))
+    runtime = AgentRuntime()
+    # Hold non-urgent notices in the real aggregation queue until the transition.
+    aggregation = runtime.register("aggregation", VoiceAggregationAgent(
+        llm=llm, coalesce_window_s=60, minimum_playback_s=0, speech_rate_wpm=60000,
+    ))
+    agent = runtime.register("replay", ReplayAgent(
+        guide=selected(document), llm=llm, current_frame=Mock(), image_query=Mock(),
+        vision_timeout_s=1, aggregation=aggregation,
+    ))
+    backend = agent._backend
+    backend._start_monitor = Mock()
+    sink = runtime.register("sink", Sink())
+    agent.bind_runtime(runtime)
+    async with runtime:
+        try:
+            await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
+            assert await asyncio.wait_for(sink.outputs.get(), 2) == "Align Parts. Do base."
+            if final_step:
+                await backend._advance("alice", skip=True)
+            session = backend._sessions["alice"]
+            session.evidence_hits = 2
+            assert backend._commit(session, session.step, {session.step_id: True}, "")[1]
+            # The observation committed before the foreground began, but its notice
+            # is published after input-time aggregation cleanup and before control.
+            await runtime.publish(USER_QUERY_TOPIC, UserQuery(text="Continue now", timestamp_us=1),
+                                  participant_id="alice")
+            await asyncio.wait_for(entered.wait(), 2)
+            await backend._publish_notices(session)
+            obsolete = aggregation._states["alice"].task
+            release.set()
+            expected_step = "lid" if control == "workflow__advance" and not final_step else "base"
+            output = await asyncio.wait_for(sink.outputs.get(), 2)
+            assert obsolete.cancelled()
+            assert output.endswith(f"Do {expected_step}.") and "complete. Say next." not in output
+            assert session.step_id == expected_step and not session.state[expected_step]
+            assert not session.notices and sink.outputs.empty()
+            assert not aggregation._states["alice"].pending
+        finally:
+            release.set()
             await agent.stop()
             await aggregation.stop()
 
@@ -739,8 +992,10 @@ async def test_actual_runtime_and_aggregation_deliver_replay_and_release(documen
 async def test_live_replay_prompt_routes_intent(engine, query, expected, skip):
     """Opt-in evaluation against the configured local model; no camera or media writes."""
     model = make_llm(load_models_config(_SAMPLE / "yaml/models.json"), "llm")
-    engine._current_frame.execute.return_value = SimpleNamespace(image=ImageReference(uri="xr-image://test"))
-    engine._image_query.execute.return_value = ImageQueryResult(text="The lid is blue; three bolts are attached.")
+    engine._backend._current_frame.execute.return_value = camera_frame(1)
+    engine._backend._image_query.execute.return_value = ImageQueryResult(
+        text="The lid is blue; three bolts are attached.",
+    )
     calls = []
 
     async def chat(*args, **kwargs):
@@ -761,14 +1016,14 @@ async def test_live_replay_prompt_routes_intent(engine, query, expected, skip):
 
 @pytest.mark.gpu
 async def test_live_timer_question_uses_trigger_inputs(engine, document):
-    """The model must obtain timer inputs from configuration, not guess from speech."""
-    arguments = {"started_at_us": time.time_ns() // 1000, "duration_s": 83}
+    """The model reads the bound runtime timer without manufacturing its inputs."""
+    arguments = {"duration_s": 83}
     step = document["steps"][0]
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "arguments": arguments,
                        "result_field": "expired"}
     step["voice"] = {"prompt": "Answer questions about this waiting step.", "tools": ["clock__timer"]}
-    engine._guide = selected(document)
-    engine._start("alice")
+    engine._backend._guide = selected(document)
+    engine._backend._start("alice")
     model = make_llm(load_models_config(_SAMPLE / "yaml/models.json"), "llm")
     calls = []
 
@@ -784,4 +1039,4 @@ async def test_live_timer_question_uses_trigger_inputs(engine, document):
         await model.close()
     assert response.strip()
     assert [call.name for call in calls] == ["clock__timer"]
-    assert json.loads(calls[0].arguments) == arguments
+    assert json.loads(calls[0].arguments) == {}
