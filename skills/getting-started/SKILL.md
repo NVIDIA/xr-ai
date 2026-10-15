@@ -62,12 +62,13 @@ the pointers below to the answers.
 - **Quickstart order:** follow
   `https://nvidia.github.io/xr-ai/<ref>/getting_started/quickstart.html`, with
   `<ref>` replaced as above. For local models, start
-  `agent-samples/simple-vlm-example/model-servers` and
-  wait for it to report readiness before starting
-  `agent-samples/simple-vlm-example`. For another sample, start that sample’s
-  own `model-servers/` project instead. Stop the current model stack before
-  switching samples, editing its server settings, or updating the checkout.
-  For hosted models, validate the consumer profile through the deployment
-  guide before starting the application; skip local model-server startup.
+  `agent-samples/simple-vlm-example/model-servers` and wait for it to report
+  readiness before starting `agent-samples/simple-vlm-example`. For another
+  sample, start that sample’s own `model-servers/` project instead. Stop the
+  current model stack before switching samples, editing its server settings, or
+  updating the checkout.
+  For hosted models, validate the application's `yaml/models.json` through the
+  deployment guide before starting the application; skip local model-server
+  startup.
 - **Launch failures:** follow `docs/source/guides/troubleshooting.md` and the
   failure message's process context and run-log directory.

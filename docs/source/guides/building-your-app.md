@@ -46,9 +46,9 @@ ask before switching the documentation, skill, and checkout to `main`.
 Read `AGENTS.md`, then review the
 {doc}`system requirements </getting_started/requirements>` and
 {doc}`credential sources </getting_started/credentials>` before resolving the
-application. Choose local model services or hosted endpoints, keeping a choice
-already made during setup. The copied reference application uses local model
-services by default. For hosted inference, refer to
+application. Choose local model services or hosted endpoints. If setup already
+selected one, keep that choice. The copied reference application uses local
+model services by default. For hosted inference, refer to
 {doc}`/guides/deploying-with-nim`; the hub still needs NVENC and NVDEC on its
 host as described in the system requirements.
 
@@ -210,10 +210,9 @@ uv --config-file ../../uv.toml run \
 
 Follow {doc}`/guides/deploying-with-nim` to configure and validate the STT, VLM,
 and TTS roles in the application's `yaml/models.json`. Keep a copy of the local
-profile before replacing its entries. The copied worker includes the `riva`
-extra for hosted speech; retain it when selecting a Riva endpoint. Start only
-the application after endpoint validation. The local `model_servers` command
-is not part of this path.
+profile before replacing its entries. Apply the guide's voice-gate settings
+for hosted speech to disable the copied local speaker backend. Start the
+application after endpoint validation.
 
 ### Start the application
 
@@ -224,17 +223,20 @@ After the selected model environment is ready, start the application from
 uv --config-file ../../uv.toml run my_app
 ```
 
-Open the full authenticated web-client URL printed by DeviceIOHub, including
-its scheme and port. HTTPS is enabled by default. Refer to
-{ref}`tls-for-the-web-client` for certificate trust on the client device and
-{ref}`web-client-empty-response` if the browser reports an empty response.
+Open the full web-client URL printed by DeviceIOHub, including its scheme and
+port. For a client on another device, replace `localhost` with the XR AI host's
+IP address or hostname reachable by that device. HTTPS is enabled by default.
+Refer to {ref}`tls-for-the-web-client` for certificate trust on the client
+device and {ref}`web-client-empty-response` if the browser reports an empty
+response.
 
 For the copied voice-and-vision application, select **Connect**, grant camera
 and microphone access, choose **On-demand images** or **Live video** under
 **Camera Mode**, then select **Start Microphone**. Use the conversation controls
 configured in `yaml/voice_gate.yaml` before speaking the application's request.
-The web client's generic **Send** control sends a data-channel message; it is
-not the spoken-request control.
+The web client's **Send** control delivers a typed query to the agent and
+bypasses speech gating. It checks the query path without exercising STT or
+conversation controls.
 
 Write the application's README with its intended client, exact connection
 steps, voice mode, and an example request. Check the adapted commands and link
@@ -242,24 +244,21 @@ targets before handing the application to its user.
 
 The application launcher owns only DeviceIOHub, the worker, and any other
 application processes. The separate model-server launcher owns shared model
-startup and readiness. The copied worker does not poll the STT, VLM, or TTS
-health endpoints; it explicitly exercises VLM inference as an application
+startup and readiness. The voice runtime checks required speaker ASR
+readiness, and the copied worker exercises VLM inference as an application
 warmup before announcing readiness. Keep or replace that probe according to the
 capabilities the application must warm or verify. When a model role changes,
 update `yaml/models.json` and the worker's service construction. Do not add
 shared model services to the application's `PROCESSES` list. If a process
 fails, use its launch context and run-log directory to investigate through
-{doc}`troubleshooting`. Service readiness and a successful client interaction
-are separate checks; record which one actually completed.
+{doc}`troubleshooting`.
 
 ## Verify without hardware
 
 Turn each requirement in the application brief into an observable acceptance
 case. Include configuration defaults when a key is omitted, the intended first
-request, and the recovery behavior for unavailable inputs. For example, a
-camera-based checklist application must use its default list when no checklist
-is configured and give an actionable retry instruction when no image is
-available. Keep these checks in the application's test directory.
+request, and the recovery behavior for unavailable inputs. Keep these checks in
+`apps/my-app/tests/` using the layout and command below.
 
 From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
@@ -317,8 +316,9 @@ Before reporting that the application is complete, match each requirement to
 its test or client-interaction result. Exercise the intended first request
 through a real client after the hardware-free checks pass. Record the selected
 model environment, configuration, observed response, and any simulated media
-or unverified requirement. Passing tests and service readiness do not replace
-that client check.
+or unverified requirement. Distinguish typed input from spoken input and record
+whether STT and the configured conversation controls were exercised. Passing
+tests and service readiness do not replace that client check.
 
 ## Understand the application boundary
 

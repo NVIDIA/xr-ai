@@ -88,7 +88,7 @@ enable_token_server: true
 # under `[experimental]` in %UserProfile%\.wslconfig and run `wsl --shutdown`.
 # token_server_port: 8000
 # URL advertised by this server's /token response. Update its port together
-# with token_server_port; use a hostname reachable by the client.
+# with token_server_port.
 # token_server_url: "ws://localhost:8000"
 
 # ── Video recording (NVENC, optional) ─────────────────────────────────────────

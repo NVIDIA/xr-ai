@@ -402,8 +402,8 @@ owned by `xr_ai_voice.VoiceAgent`.
 client reports an empty reply.
 
 **Cause:** plain HTTP sent to the hub's HTTPS listener can produce this error.
-HTTPS is enabled by default. An empty response alone does not establish the
-cause; check the URL scheme and the hub's launch output.
+HTTPS is enabled by default. Check the URL scheme against the hub's launch
+output.
 
 **Fix:** open the full URL printed by DeviceIOHub, including `https://` and the
 configured web-server port. For example, the default HTTPS listener uses
