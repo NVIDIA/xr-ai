@@ -110,10 +110,12 @@ select among real destinations, lets an explicitly focused destination receive
 the next turn first, and returns to route selection when it releases or declines.
 A declined route is excluded from one bounded reroute. If selected destinations
 decline through those attempts, the configured eligible default receives one
-final answer attempt without another admission check. If routing cannot select
-an eligible destination, the front end asks for clarification without starting
-an answer. Explicit destination clarifications also remain final; if the default
-is unavailable after exhausted declines, the front end asks for clarification.
+final answer attempt without another admission check. If the router chooses
+`clarify` but returns usable scores for eligible destinations, the front end
+tries the highest-scoring candidate through normal admission. Missing or
+invalid eligible scores, or no eligible candidate, still produce a clarification.
+Explicit destination clarifications also remain final; if the default is
+unavailable after exhausted declines, the front end asks for clarification.
 Routing descriptions and priority are selection hints; application policy
 belongs in the destination's instructions and admission check. Destinations
 decline or clarify in `admit()` before work begins; after work, `answer()` returns

@@ -669,7 +669,7 @@ class ConversationFrontEnd:
             ),
             criteria=criteria,
         )
-        eligible = {aid.name for aid in aids if aid.eligible}
+        eligible = [aid.name for aid in aids if aid.eligible]
         with nemo_relay.scope.scope(
             "conversation.destination-route",
             nemo_relay.ScopeType.Agent,
@@ -678,16 +678,61 @@ class ConversationFrontEnd:
         ) as route_scope:
             response = await self._decisions.decide(state, {"destination": question})
             answer = response.answers["destination"]
-            selected = answer.choice if answer.choice in eligible else None
+            probabilities = answer.probabilities
+            eligible_scores: dict[str, float] = {}
+            if isinstance(probabilities, Mapping):
+                for name in eligible:
+                    value = probabilities.get(name)
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    try:
+                        probability = float(value)
+                    except (OverflowError, TypeError, ValueError):
+                        continue
+                    if math.isfinite(probability) and 0.0 <= probability <= 1.0:
+                        eligible_scores[name] = probability
+
+            selected_probability = None
+            if answer.choice in eligible:
+                selected = answer.choice
+                selection_reason = "router_choice"
+                selected_probability = eligible_scores.get(selected)
+            elif answer.choice == "clarify" and eligible_scores:
+                # Preserve candidate registration order for equal probabilities.
+                selected = max(eligible_scores, key=eligible_scores.__getitem__)
+                selected_probability = eligible_scores[selected]
+                selection_reason = "highest_scored_eligible_after_clarify"
+            else:
+                selected = None
+                selection_reason = (
+                    "clarify_without_eligible_scores" if answer.choice == "clarify" else "invalid_or_ineligible_choice"
+                )
+
+            trace_probabilities = {}
+            if isinstance(probabilities, Mapping):
+                for label, value in probabilities.items():
+                    if not isinstance(label, str):
+                        continue
+                    try:
+                        number = float(value)
+                    except (OverflowError, TypeError, ValueError):
+                        number = math.nan
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(number):
+                        trace_probabilities[label] = None
+                    else:
+                        trace_probabilities[label] = number
             nemo_relay.scope.event(
                 "conversation.destination-route-choice",
                 handle=route_scope,
                 data={
-                    "choice": answer.choice,
-                    "confidence": answer.confidence,
-                    "probabilities": dict(answer.probabilities),
+                    "router_choice": answer.choice,
+                    "router_confidence": answer.confidence,
+                    "router_probabilities": trace_probabilities,
                     "selected_destination": selected,
-                    "eligible_destinations": sorted(eligible),
+                    "selected_destination_probability": selected_probability,
+                    "selection_reason": selection_reason,
+                    "eligible_destinations": eligible,
+                    "eligible_scores_available": bool(eligible_scores),
                 },
             )
         return selected

@@ -28,15 +28,16 @@ from xr_ai_conversation.front_end import _bounded_history_with_times  # noqa: E4
 
 
 class _Decisions:
-    def __init__(self, *choices: str) -> None:
+    def __init__(self, *choices: str | DecisionAnswer) -> None:
         self.choices = deque(choices)
         self.calls = []
 
     async def decide(self, state, questions, *, timeout=None):
         self.calls.append((state, questions, timeout))
         choice = self.choices.popleft()
+        answer = choice if isinstance(choice, DecisionAnswer) else DecisionAnswer(choice, 1.0, {choice: 1.0})
         return DecisionResponse(
-            answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+            answers={"destination": answer},
             model="fake",
             usage={},
             raw={},
@@ -379,26 +380,132 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
         lambda name, **kwargs: events.append((name, kwargs["data"])),
     )
     decisions = _RouteDecisions()
-    conversation = _Destination("conversation")
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "General answer."),))
     observation = _Destination("observation", description="Questions about the current camera view")
     front_end = ConversationFrontEnd({"conversation": conversation, "observation": observation}, decisions)
 
     result, output = await _run(front_end, query="How can I move the objects behind me?")
 
-    assert result.disposition == "clarify"
-    assert output == [("conversation", "Which part would you like help with?")]
+    assert result == DestinationResult("answer", "General answer.")
+    assert output == [("conversation", "General answer.")]
+    assert conversation.calls == [
+        ("admit", "How can I move the objects behind me?", False),
+        ("answer", "How can I move the objects behind me?"),
+    ]
+    assert observation.calls == []
     assert events == [
         (
             "conversation.destination-route-choice",
             {
-                "choice": "clarify",
-                "confidence": 0.61,
-                "probabilities": {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
-                "selected_destination": None,
+                "router_choice": "clarify",
+                "router_confidence": 0.61,
+                "router_probabilities": {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
+                "selected_destination": "conversation",
+                "selected_destination_probability": 0.27,
+                "selection_reason": "highest_scored_eligible_after_clarify",
                 "eligible_destinations": ["conversation", "observation"],
+                "eligible_scores_available": True,
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_uncertain_router_uses_highest_probability_eligible_visual_destination():
+    decisions = _Decisions(
+        DecisionAnswer(
+            "clarify",
+            0.05,
+            {"environment": 0.55, "clarify": 0.05, "observation": 0.25, "conversation": 0.15},
+        )
+    )
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "General."),))
+    observation = _Destination("observation", results=(DestinationResult("answer", "Observed."),))
+    environment = _Destination("environment", results=(DestinationResult("answer", "A grounded answer."),))
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "observation": observation, "environment": environment},
+        decisions,
+    )
+
+    result, output = await _run(
+        front_end,
+        query="Can we do the next step for making pasta?",
+    )
+
+    assert result == DestinationResult("answer", "A grounded answer.")
+    assert output == [("environment", "A grounded answer.")]
+    assert environment.calls == [
+        ("admit", "Can we do the next step for making pasta?", False),
+        ("answer", "Can we do the next step for making pasta?"),
+    ]
+    assert conversation.calls == []
+    assert observation.calls == []
+
+
+@pytest.mark.asyncio
+async def test_uncertain_router_uses_observation_for_current_camera_question():
+    decisions = _Decisions(
+        DecisionAnswer(
+            "clarify",
+            0.05,
+            {"conversation": 0.1, "observation": 0.75, "environment": 0.1, "clarify": 0.05},
+        )
+    )
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "General."),))
+    observation = _Destination("observation", results=(DestinationResult("answer", "A blue cup."),))
+    environment = _Destination("environment", results=(DestinationResult("answer", "A grounded answer."),))
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "observation": observation, "environment": environment},
+        decisions,
+    )
+
+    query = "What color is the cup in the current camera view?"
+    result, output = await _run(front_end, query=query)
+
+    assert result == DestinationResult("answer", "A blue cup.")
+    assert output == [("observation", "A blue cup.")]
+    assert observation.calls == [("admit", query, False), ("answer", query)]
+    assert conversation.calls == []
+    assert environment.calls == []
+
+
+@pytest.mark.asyncio
+async def test_uncertain_router_tie_uses_destination_registration_order():
+    decisions = _Decisions(
+        DecisionAnswer(
+            "clarify",
+            0.1,
+            {"observation": 0.45, "clarify": 0.1, "conversation": 0.45},
+        )
+    )
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "General."),))
+    observation = _Destination("observation", results=(DestinationResult("answer", "Observed."),))
+    front_end = ConversationFrontEnd({"conversation": conversation, "observation": observation}, decisions)
+
+    result, output = await _run(front_end, query="What is in front of me?")
+
+    assert result == DestinationResult("answer", "General.")
+    assert output == [("conversation", "General.")]
+    assert conversation.calls == [
+        ("admit", "What is in front of me?", False),
+        ("answer", "What is in front of me?"),
+    ]
+    assert observation.calls == []
+
+
+@pytest.mark.asyncio
+async def test_uncertain_router_with_no_eligible_scores_still_clarifies():
+    decisions = _Decisions(DecisionAnswer("clarify", 0.2, {"clarify": 0.2, "conversation": 0.4, "specialist": 0.4}))
+    conversation = _Destination("conversation", eligible=False)
+    specialist = _Destination("specialist", eligible=False)
+    front_end = ConversationFrontEnd({"conversation": conversation, "specialist": specialist}, decisions)
+
+    result, output = await _run(front_end, query="Help me.")
+
+    assert result == DestinationResult("clarify", "Which part would you like help with?")
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert conversation.calls == []
+    assert specialist.calls == []
 
 
 @pytest.mark.asyncio
@@ -433,7 +540,18 @@ async def test_single_ineligible_destination_is_not_admitted():
 
 @pytest.mark.asyncio
 async def test_exhausted_declines_answer_once_with_default_and_shared_history():
-    decisions = _Decisions("specialist", "visual")
+    decisions = _Decisions(
+        DecisionAnswer(
+            "clarify",
+            0.05,
+            {"conversation": 0.1, "specialist": 0.8, "visual": 0.05, "clarify": 0.05},
+        ),
+        DecisionAnswer(
+            "clarify",
+            0.05,
+            {"conversation": 0.1, "visual": 0.85, "clarify": 0.05},
+        ),
+    )
     history = (ConversationExchange("Earlier request", "Earlier response"),)
     default = _Destination(
         "conversation",
@@ -454,6 +572,15 @@ async def test_exhausted_declines_answer_once_with_default_and_shared_history():
     assert output == [("conversation", "I can still help.")]
     assert [call[0] for call in specialist.calls] == ["admit"]
     assert [call[0] for call in visual.calls] == ["admit"]
+    assert [item["name"] for item in decisions.calls[0][0]["destinations"]] == [
+        "conversation",
+        "specialist",
+        "visual",
+    ]
+    assert [item["name"] for item in decisions.calls[1][0]["destinations"]] == [
+        "conversation",
+        "visual",
+    ]
     assert default.calls == [("answer", "Continue that.")]
     assert default.answer_turns[0].history == history
     assert len(decisions.calls) == 2

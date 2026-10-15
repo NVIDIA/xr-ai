@@ -123,9 +123,11 @@ class ConversationDestination(Protocol):
         destinations must support that standalone answer path.
 
         Destinations decline or clarify in ``admit()``, before output or work begins.
-        If routing cannot select an eligible destination, the front end asks for
-        clarification without starting an answer. It also asks for clarification
-        after exhausted declines when the configured default is unavailable.
+        If routing returns ``clarify`` with usable scores for eligible
+        destinations, the front end tries the highest-scoring candidate through
+        normal admission. Missing or invalid eligible scores, or no eligible
+        candidate, still produce a clarification. After exhausted declines,
+        clarification is also used when the configured default is unavailable.
         """
 
     async def release(self, participant_id: str) -> None:
