@@ -1,15 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Preserve task demonstrations as local evidence packets.
+"""Capture and save the evidence from each participant's procedure demonstration.
 
-Save source frames and narration alongside model-generated captions so later
-review can check interpretations against their evidence. Group captions by
-activity and phase to help readers navigate the demonstration.
+CaptureAgent in agent.py starts and stops a capture session for each
+demonstration. While a session is active, this module samples camera images,
+obtains visual captions, and saves the narration supplied by the agent.
+When capture ends, it finishes saving the evidence packet and its summary
+for later review and guide creation.
 
-Background tasks and filesystem writes can outlive a cancelled caller.
-Finalization must drain that work before sealing the packet so its saved
-evidence, counts, and summary remain consistent.
+Caption request construction and response parsing live in captioning.py;
+spoken command handling remains in agent.py.
 """
 
 from __future__ import annotations
@@ -138,7 +139,10 @@ def _clock(timestamp_us: int, started_at_us: int) -> str:
 
 
 class _Capture:
-    """Private persistence helper owned by CaptureAgent, not a runtime agent.
+    """Collect frames, captions, and narration into per-participant evidence packets.
+
+    CaptureAgent starts and stops this private helper. It owns the background
+    sampling and captioning tasks, saved evidence, and derived packet summaries.
 
     Sampling and caption tasks can outlive a cancelled caller. Finalization
     retains those tasks and drains filesystem writes before sealing the packet.
@@ -168,6 +172,7 @@ class _Capture:
         self._stopped = False
 
     def is_capturing(self, participant_id: str) -> bool:
+        """Report whether this participant has an active capture session."""
         state = self._sessions.get(participant_id)
         return state is not None and state.active
 
@@ -251,7 +256,11 @@ class _Capture:
     async def finish_capture(
         self, participant_id: str, *, stop_command: dict[str, Any] | None = None,
     ) -> None:
-        """Finalize the packet using the same path as worker shutdown."""
+        """Finish a participant's capture and save its final packet and summary.
+
+        Preserve the accepted stop command when supplied. Disconnect and worker
+        shutdown use the same finalization path so pending evidence is drained.
+        """
         if stop_command is not None and (state := self._sessions.get(participant_id)) is not None:
             state.stop_command = stop_command
         await self._close(participant_id, status="complete")

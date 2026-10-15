@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Load shared worker settings and the separately owned capture configuration.
+"""Load the application settings that app.py uses to construct the worker.
+
+Read shared frame and speech settings from worker.yaml, locate the model and
+voice-gate configuration, and load capture-specific settings through
+capture/config.py. Apply the launcher's optional output-directory override.
 
 Keep each YAML's paths anchored to that file so launch-time overrides do not
 relocate model, voice, or capture configuration.
@@ -17,6 +21,8 @@ from .capture.config import CaptureConfig, load_capture_config
 
 @dataclass(frozen=True, slots=True)
 class WorkerConfig:
+    """Shared worker settings plus the capture capability's own configuration."""
+
     models_config: Path
     voice_gate_yaml: Path
     capture: CaptureConfig
@@ -28,6 +34,7 @@ class WorkerConfig:
 
 
 def load_config(path: Path | None) -> WorkerConfig:
+    """Read worker YAML or a launcher request into settings for app.run_app()."""
     if path is None:
         path = Path(__file__).resolve().parents[2] / "yaml/worker.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

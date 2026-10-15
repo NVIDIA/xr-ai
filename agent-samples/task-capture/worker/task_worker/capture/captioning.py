@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Share caption request construction and response validation.
+"""Prepare image-caption requests and parse the VLM's structured responses.
+
+Build instructions for an initial image or an earlier/current image pair, with
+previous activity and phase names as context. Parse responses into the activity,
+phase, caption, and delta fields used by capturing.py and eval/caption.py.
 
 Recording and evaluation use the same helpers so evaluations exercise the
 production caption format. Previous activity and phase names help maintain
@@ -17,7 +21,11 @@ import json
 
 
 def parse_caption(text: str) -> dict[str, str]:
-    """Require a complete four-field observation before it becomes evidence."""
+    """Parse the VLM's JSON into activity, phase, caption, and delta text.
+
+    Reject missing, extra, or empty fields before the response enters caption
+    history. Trim each value and retain at most 1,000 characters per field.
+    """
     candidate = text.strip()
     # Tolerate a Markdown wrapper, but never extract observations from reasoning
     # or arbitrary prose (including an unfinished <think> response).
@@ -35,7 +43,11 @@ def parse_caption(text: str) -> dict[str, str]:
 
 
 def caption_query(previous: dict[str, str] | None) -> str:
-    """Declare image roles explicitly instead of relying on model inference."""
+    """Build the caption request for an initial image or a chronological pair.
+
+    State which image is current and which is the comparison reference, then
+    supply previous activity and phase names only as grouping hints.
+    """
     query = (
         "You received exactly TWO images, in chronological order: FIRST=earlier, SECOND=current. "
         "Describe the SECOND image in caption. In delta use: Earlier: ... Current: ... Change: ... . "

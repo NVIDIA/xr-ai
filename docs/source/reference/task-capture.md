@@ -14,15 +14,20 @@ processing.
 Run commands from `agent-samples/task-capture/`:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json
+uv run --project model-servers task_capture_model_servers
 uv run main.py
 ```
 
-The sample's `yaml/models.json` configures both the worker's model clients and
-the shared launcher's managed services: batch Parakeet STT on port 8103, Cosmos
-VLM on 8100, and Pocket TTS on 8105. Batch STT accepts narration without speaker
-enrollment. Use `--models yaml/models.json`: the launcher's default speech
-service uses a different streaming protocol and requires speaker enrollment.
+The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
+Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
+Batch STT accepts narration without speaker enrollment. The capture worker uses
+STT, TTS, and Cosmos; the LLM is available but does not participate in capture
+or generate guides automatically. The launcher combines shared server defaults with
+`model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
+profile explicitly. The worker's `yaml/models.json` configures its client
+adapters and endpoints, not server deployment. Keep those endpoints aligned
+with server ports when changing configuration. Refer to
+{doc}`/guides/customizing-model-servers` for the shared launch workflow.
 
 Wait for the shared models to be ready before starting the sample. Open the
 authenticated web-client URL printed by DeviceIOHub, enable the microphone,
@@ -41,8 +46,12 @@ To stop the sample, press Ctrl+C. The shared model servers remain running.
 To stop the services selected by this sample's deployment:
 
 ```bash
-uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json --stop
+uv run --project model-servers task_capture_model_servers --stop
 ```
+
+Stop the model stack before changing server settings, switching samples, or
+updating the checkout. If you changed ports in a GPU profile, pass the same
+`--gpu-profile NAME` on stop.
 
 ## Output destination
 

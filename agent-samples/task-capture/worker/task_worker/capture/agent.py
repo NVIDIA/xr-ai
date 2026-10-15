@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Coordinate voice commands and narration for task capture.
+"""Control procedure capture from spoken commands and participant connections.
+
+CaptureAgent receives accepted speech from VoiceAgent, handles "start capture"
+and "stop capture", and sends spoken acknowledgements. It passes narration to
+the capture backend in capturing.py and finalizes active capture on disconnect.
 
 Commands and narration must stay ordered so speech is saved to the intended
 capture session. Participant disconnects must also finalize active capture
@@ -40,7 +44,10 @@ class _Recording:
 
 
 class CaptureAgent(Agent):
-    """Admit input per connection and serialize each participant's capture work.
+    """Handle each participant's capture commands, narration, and acknowledgements.
+
+    Order accepted speech and connection events before invoking the capture
+    backend so each demonstration keeps its own narration and finalization.
 
     Pending command identity and the capture backend's physical session are distinct:
     a new start can be queued while the previous packet is still finalizing.

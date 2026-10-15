@@ -1,12 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Launch the hub and voice-controlled task capture worker.
+"""Capture a demonstrated procedure as images, captions, and spoken narration.
+
+This sample saves evidence for creating a reusable procedure guide. Guided
+replay is planned but is not implemented in this sample yet.
 
 This is the user-facing process-stack entry point. The worker's __main__ module
-runs inside its own process and owns recording commands, snapshots, captions,
-and narration. Model services must already be available; the launcher supervises
-only the hub and worker. Say "start capture" after connecting to begin a task.
+runs inside its own process and launches task_worker/app.py. This launcher
+supervises the hub and worker; model services must already be available.
+After connecting, say "start capture" to begin and "stop capture" to finish.
+Use --output-root to choose where evidence packets are saved.
 """
 
 from __future__ import annotations

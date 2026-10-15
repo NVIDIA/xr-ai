@@ -691,6 +691,17 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `task_capture` → `main:run`
 
+#### `task-capture-model-servers` — [`agent-samples/task-capture/model-servers/`](agent-samples/task-capture/model-servers/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
+- Optional dependency groups: none
+- Commands:
+  - `task_capture_model_servers` → `main:run`
+
 #### `task-capture-worker` — [`agent-samples/task-capture/worker/`](agent-samples/task-capture/worker/)
 
 - Python: `>=3.11,<3.15`

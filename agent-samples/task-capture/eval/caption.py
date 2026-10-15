@@ -1,18 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Exercise the task captioner on small, reproducible visual controls.
+"""Evaluate the procedure captioner using generated images with known contents.
 
-Each YAML case defines one initial image or an earlier/current image pair made
-of colored shapes, optional previous activity/phase hints, and expected visible
-facts. The runner draws those images, queries the configured VLM with the same
-prompt, query builder, tool, and parser as recording, and saves the evidence.
+Run this script independently of the sample to test captioning without a
+connected camera. It creates images from caption_cases.yaml and sends them to
+the configured VLM using the same prompt and captioning helpers as capture.
 
-Automatic checks cover response availability and the four-field JSON contract.
-Inspect the saved images and raw responses against each case's expectations to
-assess direction, change, and grouping. This is a focused prompt regression aid,
-not a comprehensive real-world task or downstream guide-generation evaluation.
-Refer to docs/source/reference/task-capture.md for invocation and interpretation.
+The script checks response format and saves the images, responses, and expected
+observations for human review of visual accuracy. Refer to
+docs/source/reference/task-capture.md for usage and interpretation of results.
 """
 
 from __future__ import annotations
@@ -48,6 +45,11 @@ def render(objects: list, path: Path) -> None:
 
 
 async def evaluate(output: Path, config_path: Path) -> bool:
+    """Run the visual controls and save images and VLM responses for review.
+
+    Return whether every response satisfies the caption format. Expected visual
+    facts are saved for inspection; they are not scored automatically.
+    """
     # Never overwrite a previous evaluation's evidence.
     output.mkdir(parents=True, exist_ok=False)
     config = load_config(config_path)

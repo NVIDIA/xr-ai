@@ -117,29 +117,53 @@ def test_capture_config_rejects_invalid_intervals(tmp_path, name, value):
 
 @pytest.mark.parametrize("gpu_profile", ["spark", "dual_48G_ada", "96G_blackwell"])
 def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
+    from xr_ai_model_server_stack import _stack
     from xr_ai_voicegate import load_voice_gate_config
 
-    server_main = _SAMPLE.parents[1] / "model-server-samples/model-servers/main.py"
+    server_main = _SAMPLE / "model-servers/main.py"
     spec = importlib.util.spec_from_file_location("task_capture_model_servers", server_main)
     launcher = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(launcher)
     monkeypatch.chdir(_SAMPLE)
+    monkeypatch.setattr(sys, "argv", [str(server_main), "--gpu-profile", gpu_profile])
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_: None)
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("explicit profile must bypass detection"))
+    launched = []
+
+    def launch(processes, base, *, exit_after_ready):
+        assert base == server_main.parent
+        assert exit_after_ready is True
+        assert all(Path(process.config).is_file() for process in processes)
+        launched.extend(processes)
+
+    monkeypatch.setattr(_stack, "run_stack", launch)
+    launcher.run()
     config = load_config(_SAMPLE / "yaml/worker.yaml")
     models = load_models_config(config.models_config)
-    processes, _ = launcher._build_processes(Path("yaml/models.json"), gpu_profile)
-    services = {process.name: process for process in processes}
-    assert set(services) == {"stt", "tts", "vlm"}
+    services = {process.name: process for process in launched}
+    assert tuple(services) == ("stt", "tts", "omni", "vlm")
+    assert set(models.entries) == {"stt", "tts", "llm", "vlm"}
     for name, model in models.entries.items():
-        assert urlsplit(model.endpoint.base_url).port == services[name].port
-        assert services[name].launch_mode == "persist"
+        service = services["omni" if name == "llm" else name]
+        assert urlsplit(model.endpoint.base_url).port == service.port
+        assert service.launch_mode == "persist"
+    assert services["omni"].command == "nemotron_omni_llm_server"
     # Match the batch protocol as well as the port; speaker-STT is not a
     # drop-in replacement and would require an enrollment conversation.
     assert models.stt("stt").kind == "openai_compat"
     assert services["stt"].command == "stt_server"
-    assert services["stt"].project == "../../services/stt-server"
+    assert Path(services["stt"].project) == _SAMPLE.parents[1] / "services/stt-server"
     gate = load_voice_gate_config(config.voice_gate_yaml)
     assert gate._speaker is None
     assert gate._conversation is None
+
+    stopped = []
+    monkeypatch.setattr(sys, "argv", [str(server_main), "--stop", "--gpu-profile", gpu_profile])
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_: pytest.fail("stop must not need credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop must not launch"))
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    launcher.run()
+    assert stopped == [(process.name, process.port) for process in launched]
 
 
 @pytest.mark.parametrize("document", [
@@ -148,10 +172,10 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
 ])
 def test_documented_model_commands_select_sample_deployment(document):
     commands = [line for line in document.read_text().splitlines()
-                if line.startswith("uv run --project ") and " model_servers" in line]
+                if line.startswith("uv run --project ") and "task_capture_model_servers" in line]
     assert commands == [
-        "uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json",
-        "uv run --project ../../model-server-samples/model-servers model_servers --models yaml/models.json --stop",
+        "uv run --project model-servers task_capture_model_servers",
+        "uv run --project model-servers task_capture_model_servers --stop",
     ]
 
 

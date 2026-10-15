@@ -28,6 +28,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "xr_render_demo_model_servers",
         "simple_vlm_example",
         "task_capture",
+        "task_capture_model_servers",
         "tea_making_sample",
         "xr_render_demo",
     }
@@ -49,6 +50,10 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--capture",),
     ]
     assert [argument.flags for argument in commands["task_capture"].arguments] == [("--output-root",)]
+    assert [argument.flags for argument in commands["task_capture_model_servers"].arguments] == [
+        ("--stop",), ("--gpu-profile",),
+    ]
+    assert commands["task_capture_model_servers"].project_dir == Path("agent-samples/task-capture/model-servers")
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
         ("--capture",),

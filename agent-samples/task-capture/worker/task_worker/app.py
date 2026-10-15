@@ -1,20 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose voice, frame tools, and the agent that captures task demonstrations.
+"""Run the voice-controlled procedure capture application.
 
-Keep infrastructure ownership here so capture logic can use injected tools
-without managing model clients or transport lifetimes. Capture cleanup must
-finish before those resources close, including when the voice session exits.
+Called by __main__.py, this module sets up the model clients and hub connection,
+then brings VoiceAgent and CaptureAgent together in one runtime. VoiceAgent
+handles speech input and spoken responses; CaptureAgent controls the capture
+sessions. This module coordinates their startup, readiness, and cleanup.
 
-Frame selection and captioning share an image registry so visual inference
-uses the selected evidence. Live frames and on-demand stills use the same tool
-so capture does not depend on a continuously streaming camera.
-
-Commands, narration, and participant departures reach one capture agent so
-speech stays with the intended session and disconnects finalize pending work.
-Readiness checks wait for speech recognition, acknowledgements, and captioning
-services so the worker can support the full capture flow before accepting use.
+Refer to capture/agent.py for command handling and capture/capturing.py for
+collecting and saving demonstration evidence.
 """
 
 from __future__ import annotations

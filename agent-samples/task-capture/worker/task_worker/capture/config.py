@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Keep capture policy separate from shared voice and frame infrastructure.
+"""Load the settings for saving and captioning a procedure demonstration.
+
+Read capture-agent-config.yaml into CaptureConfig: the output directory,
+sampling rate, and caption interval. Load the caption prompt from prompts/ and
+apply an optional output-directory override supplied by the worker configuration.
+Shared voice and frame settings remain in the worker's config.py.
 
 Resolve output paths beside the capture YAML so moving shared worker settings
 does not change where a separately configured capture capability saves evidence.
@@ -15,6 +20,8 @@ import yaml
 
 @dataclass(frozen=True, slots=True)
 class CaptureConfig:
+    """Output, sampling, and caption settings used by the capture backend."""
+
     artifacts_dir: Path
     caption_prompt: str
     capture_fps: float = 2.0
@@ -22,6 +29,7 @@ class CaptureConfig:
 
 
 def load_capture_config(path: Path, *, output_root: Path | None = None) -> CaptureConfig:
+    """Read capture YAML and its bundled prompt, applying an output override if supplied."""
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     settings = {}
     for name in ("capture_fps", "caption_interval_s"):

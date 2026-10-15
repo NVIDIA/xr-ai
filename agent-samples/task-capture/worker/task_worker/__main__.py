@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Worker-process CLI for voice-controlled task capture.
+"""Launch the task capture application defined in app.py.
 
-The outer main.py launches the hub and this worker as separate processes. This
-entry point accepts the launcher's configuration and readiness-file arguments,
-then starts the application that records snapshots, captions, and narration
-between spoken start and stop commands.
+The sample's outer main.py starts this worker alongside the hub. This entry
+point reads the worker configuration and readiness-file arguments, loads settings
+through config.py, and runs app.run_app() in an asyncio event loop. Refer to
+app.py for model and tool wiring, agent registration, and resource cleanup.
 """
 
 from __future__ import annotations

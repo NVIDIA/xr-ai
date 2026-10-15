@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Explicit KV bytes reserve the captioning cache; utilization controls admission.
+stt:
+  cuda_visible_devices: '0'
+tts:
+  cuda_visible_devices: '0'
+omni:
+  max_num_seqs: 8
+  gpu_memory_utilization: 0.35
+  kv_cache_memory_bytes: 2147483648
+vlm:
+  gpu_memory_utilization: 0.23
+  kv_cache_memory_bytes: 1610612736
+  max_num_seqs: 4
