@@ -60,8 +60,9 @@ class _VisualEvidenceChunk(StrictRequest):
 _CURRENT_VIEW_TOOL = ToolDef(
     name="inspect_current_view",
     description=(
-        "Inspect the latest camera frame for visual evidence relevant to the current request. "
-        "Return one concise, standalone question with any reference from conversation history resolved."
+        "Inspect the latest camera frame for directly observable evidence relevant to the current request. "
+        "Ask one concise, standalone question without presupposing an unseen object or asking the visual model "
+        "to choose or recommend. Report when no relevant candidate is clearly visible."
     ),
     parameters={
         "type": "object",
@@ -69,7 +70,7 @@ _CURRENT_VIEW_TOOL = ToolDef(
             "query": {
                 "type": "string",
                 "minLength": 1,
-                "description": "A focused visual evidence question, with referents resolved.",
+                "description": "A focused question about directly visible evidence, with referents resolved.",
             }
         },
         "required": ["query"],

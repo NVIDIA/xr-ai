@@ -124,7 +124,7 @@ class _StreamingVision:
 
 
 async def test_environment_plans_targeted_visual_tool_then_synthesizes_from_context() -> None:
-    llm = _PlannerLLM(plan="Where is a visible place to write a short reminder?")
+    llm = _PlannerLLM(plan="What clearly visible flat surfaces are present? If none are visible, say none.")
     conversation = Conversation(
         llm,  # type: ignore[arg-type]
         instructions="Use visual evidence to answer the user's broader goal.",
@@ -167,12 +167,13 @@ async def test_environment_plans_targeted_visual_tool_then_synthesizes_from_cont
     assert image_query.requests == [
         ImageQueryRequest(
             image=ImageReference(uri="image://current"),
-            query="Where is a visible place to write a short reminder?",
+            query="What clearly visible flat surfaces are present? If none are visible, say none.",
         )
     ]
     assert len(llm.requests) == 2
     planner_messages, planner_tools = llm.requests[0]
     assert planner_tools[0].name == "inspect_current_view"
+    assert "without presupposing an unseen object" in planner_tools[0].description
     assert planner_messages[-1].content.endswith("Where should I write a reminder?")
     synthesis_messages, synthesis_tools = llm.requests[1]
     assert synthesis_tools == ()

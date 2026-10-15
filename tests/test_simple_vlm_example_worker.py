@@ -1063,6 +1063,8 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert "Use inspect_current_view when the request needs evidence" in planner_prompt
     assert "Treat historical visual" in planner_prompt
     assert "recorded time" in planner_prompt
+    assert "judge suitability or infer a commonplace object from the setting" in planner_prompt
+    assert "no candidate is supported by the image" in planner_prompt
     environment_prompt = (
         _WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "environment_reasoning.txt"
     ).read_text()
@@ -1105,6 +1107,14 @@ def test_conversation_eval_cases_keep_direct_visual_and_followup_coverage() -> N
     assert sign_recommendation["destination"] == "environment"
     assert sign_recommendation["admission"] == "accept"
     assert sign_recommendation["route"] == "inspect_current_view_then_synthesize"
+    unsupported_surface = by_name["recommendation_does_not_assume_unseen_surface"]
+    assert unsupported_surface["destination"] == "environment"
+    assert unsupported_surface["route"] == "inspect_current_view_then_synthesize"
+    assert unsupported_surface["any_of"] == [
+        "no clearly visible surface",
+        "cannot identify a suitable surface",
+        "not enough visual evidence",
+    ]
     unavailable_action = by_name["unavailable_external_action"]
     assert unavailable_action["route"] == "direct"
     assert unavailable_action["any_of"] == ["can't", "cannot", "unable"]

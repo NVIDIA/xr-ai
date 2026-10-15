@@ -130,6 +130,14 @@
   query: What could I do to make this sign easier to notice from farther away?
   any_of: [larger, higher, visible, contrast]
 
+- name: recommendation_does_not_assume_unseen_surface
+  image: red_left_blue_right
+  destination: environment
+  admission: accept
+  route: inspect_current_view_then_synthesize
+  query: Where could I set a small cup down in this scene?
+  any_of: [no clearly visible surface, cannot identify a suitable surface, not enough visual evidence]
+
 - name: use_completed_visual_context_without_rechecking
   image: whiteboard_room
   destination: environment
