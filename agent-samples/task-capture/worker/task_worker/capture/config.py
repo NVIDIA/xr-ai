@@ -7,9 +7,6 @@ Read capture-agent-config.yaml into CaptureConfig: the output directory,
 sampling rate, and caption interval. Load the caption prompt from prompts/ and
 apply an optional output-directory override supplied by the worker configuration.
 Shared voice and frame settings remain in the worker's config.py.
-
-Resolve output paths beside the capture YAML so moving shared worker settings
-does not change where a separately configured capture capability saves evidence.
 """
 
 from dataclasses import dataclass

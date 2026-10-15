@@ -6,9 +6,6 @@
 Read shared frame and speech settings from worker.yaml, locate the model and
 voice-gate configuration, and load capture-specific settings through
 capture/config.py. Apply the launcher's optional output-directory override.
-
-Keep each YAML's paths anchored to that file so launch-time overrides do not
-relocate model, voice, or capture configuration.
 """
 
 from dataclasses import dataclass

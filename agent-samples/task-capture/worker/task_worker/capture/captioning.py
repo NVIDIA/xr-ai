@@ -7,10 +7,6 @@ Build instructions for an initial image or an earlier/current image pair, with
 previous activity and phase names as context. Parse responses into the activity,
 phase, caption, and delta fields used by capturing.py and eval/caption.py.
 
-Recording and evaluation use the same helpers so evaluations exercise the
-production caption format. Previous activity and phase names help maintain
-consistent grouping, but must not replace evidence from the supplied images.
-
 Validate responses before saving them so malformed output cannot enter the
 caption history. Format validation does not establish visual accuracy.
 """

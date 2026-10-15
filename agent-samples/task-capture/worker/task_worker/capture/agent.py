@@ -6,10 +6,6 @@
 CaptureAgent receives accepted speech from VoiceAgent, handles "start capture"
 and "stop capture", and sends spoken acknowledgements. It passes narration to
 the capture backend in capturing.py and finalizes active capture on disconnect.
-
-Commands and narration must stay ordered so speech is saved to the intended
-capture session. Participant disconnects must also finalize active capture
-and prevent queued commands from starting work after the participant leaves.
 """
 
 from __future__ import annotations
@@ -48,10 +44,6 @@ class CaptureAgent(Agent):
 
     Order accepted speech and connection events before invoking the capture
     backend so each demonstration keeps its own narration and finalization.
-
-    Pending command identity and the capture backend's physical session are distinct:
-    a new start can be queued while the previous packet is still finalizing.
-    Connection invalidation is immediate so departure cancels queued starts.
     """
     def __init__(self, capture_backend: _Capture) -> None:
         super().__init__()
