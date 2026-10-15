@@ -183,8 +183,8 @@ Choose a mode in each sample's voice-gate YAML:
 
 `wake_only` and `hybrid` require non-empty `magic_phrases`. The packaged default
 is `always_on`, preserving the existing ungated fallback; all shipped voice
-samples explicitly select `conversation`. Tea's `voice_gate.always-on.yaml`
-also means continuous speech **after starting**, not an already-open microphone.
+samples explicitly select `conversation`. Change the sample's `mode` field to
+choose another interaction policy without maintaining a separate preset copy.
 
 ```yaml
 mode: hybrid
