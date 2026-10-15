@@ -36,6 +36,7 @@ _ACKNOWLEDGMENT_PROMPT = (
     "solutions."
 )
 _ACKNOWLEDGMENT_PREFIX = "Let me think through "
+_ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
 _logger = logging.getLogger(__name__)
 
 
@@ -483,21 +484,25 @@ class ConversationFrontEnd:
                     enable_thinking=False,
                 )
             text = response.content.strip()
-            if answer_started.is_set() or not _is_valid_acknowledgment(text):
-                if text and not answer_started.is_set():
-                    _logger.warning("intent acknowledgment did not match the short neutral form")
-                    with nemo_relay.scope.scope(
-                        "conversation.intent-acknowledgment-dropped",
-                        nemo_relay.ScopeType.Agent,
-                        metadata={
-                            "participant_id": turn.participant_id,
-                            "destination": destination,
-                            "reason": "invalid_format",
-                        },
-                    ):
-                        pass
+            if answer_started.is_set():
                 return
-            await emit(text + " ")
+            if _is_valid_acknowledgment(text):
+                await emit(text + " ")
+                return
+
+            _logger.warning("intent acknowledgment did not match the short neutral form")
+            if answer_started.is_set():
+                return
+            with nemo_relay.scope.scope(
+                "conversation.intent-acknowledgment-fallback",
+                nemo_relay.ScopeType.Agent,
+                metadata={
+                    "participant_id": turn.participant_id,
+                    "destination": destination,
+                    "reason": "invalid_format",
+                },
+            ):
+                await emit(_ACKNOWLEDGMENT_FALLBACK + " ")
         except asyncio.CancelledError:
             raise
         except Exception:

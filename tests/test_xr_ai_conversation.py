@@ -481,6 +481,51 @@ def test_acknowledgment_gate_rejects_answer_content(text, valid):
     assert _is_valid_acknowledgment(text) is valid
 
 
+@pytest.mark.parametrize(
+    "generated",
+    [
+        "Let me think through tell me the next one and then summarize all of them in one paragraph.",
+        "Let me think through removing the ceiling light fixture and placing it on the floor safely.",
+        "Let me think through moving the desk behind you to a different spot.",
+        "Let me think through how safe it is to climb on the desk behind you to remove the lights.",
+    ],
+)
+@pytest.mark.asyncio
+async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it(generated):
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction()
+    llm = _AcknowledgmentLLM(content=generated)
+    front_end = ConversationFrontEnd(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    fallback_emitted = asyncio.Event()
+
+    async def emit(source, text):
+        output.append((source, text))
+        if text == "Let me think that through. ":
+            fallback_emitted.set()
+
+    task = asyncio.create_task(
+        front_end.handle(ConversationTurn("alice", "turn-1", "Continue with the next request."), emit=emit)
+    )
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(fallback_emitted.wait(), timeout=1)
+    destination.release_answer.set()
+    result = await asyncio.wait_for(task, timeout=1)
+
+    assert result.disposition == "answer"
+    assert output == [
+        ("destination", "Let me think that through. "),
+        ("destination", "Here is the answer."),
+    ]
+    assert front_end._history["alice"][-1].assistant == "Here is the answer."
+
+
 @pytest.mark.parametrize("disposition", ["focus", "release"])
 @pytest.mark.asyncio
 async def test_completed_focus_and_release_answers_train_first_answer_timing(disposition):
