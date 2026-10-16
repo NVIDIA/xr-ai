@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Share completed-exchange timestamps between routing and answer rendering."""
+"""Share completed-exchange timestamps and their display format."""
 
 from __future__ import annotations
 

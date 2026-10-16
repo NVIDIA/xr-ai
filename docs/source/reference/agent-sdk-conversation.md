@@ -105,7 +105,7 @@ Admission preambles suppress the optional acknowledgment for that turn.
 | `__init__.py` | Lists the routing names exported by `xr_ai_conversation` |
 | `contracts.py` | Defines route metadata, turns, completed exchanges, admission results, and the destination protocol |
 | `front_end.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
-| `_history.py` | Shares private exchange timestamps and their display format between routing and answer rendering |
+| `_history.py` | Shares private exchange timestamps and their display format |
 
 The front end does not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a
