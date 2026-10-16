@@ -3,8 +3,10 @@
 
 """Load the guide selection and verification settings for replay.
 
-Shared worker settings and model endpoints remain in the parent config module.
-This module resolves replay paths relative to their owning YAML file.
+Read replay-agent-config.yaml into ReplayConfig: the guide directory and visual
+verification timeout, together with the guide name supplied on the command line.
+Resolve the guide directory relative to that YAML file. Shared voice, frame,
+and model settings remain in the worker's config.py.
 """
 
 from dataclasses import dataclass

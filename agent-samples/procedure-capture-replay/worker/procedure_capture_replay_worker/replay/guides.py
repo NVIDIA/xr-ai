@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Select and pin one locally reviewed guide for a replay worker."""
+"""Select an approved local procedure guide for the replay worker.
+
+Find the guide named on the command line, validate it through _workflow_spec.py,
+and require an unambiguous match with approved status. Retain the loaded guide
+and its content hash so editing the source file does not change a running
+worker's instructions.
+"""
 
 from __future__ import annotations
 

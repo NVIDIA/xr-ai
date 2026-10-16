@@ -3,6 +3,9 @@
 
 """Replay approved procedure guides with spoken guidance and evidence checks.
 
-The application composes ReplayAgent from agent.py with shared voice and image
-services. Guide loading, validation, prompts, and replay settings stay here.
+agent.py handles conversation and participant connections. replaying.py tracks
+progress and verifies steps using camera observations and timers. guides.py
+selects the approved guide, _workflow_spec.py validates its structure, and
+config.py loads replay settings. Shared voice and image services come from
+the worker's app.py.
 """

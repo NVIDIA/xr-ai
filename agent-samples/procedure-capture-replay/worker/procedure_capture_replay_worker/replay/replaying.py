@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Verify replay progress and own the lifetime of each participant's procedure.
+"""Run each participant's procedure and verify when its steps are complete.
 
-The backend coordinates observations, evidence, timers, and transitions. Its
-session lock keeps verification results and guidance consistent with the active
-step while the agent handles conversation and runtime events.
+The replay backend tracks the active step, checks camera evidence or elapsed
+time, and applies the guide's completion rules. It handles starting, stopping,
+and advancing a run, and supplies current progress and completion notices to
+ReplayAgent in agent.py. Conversation handling remains in the agent.
 """
 
 from __future__ import annotations
