@@ -11,6 +11,26 @@ from typing import Literal, Protocol
 
 
 @dataclass(frozen=True, slots=True)
+class RoutingTurnContext:
+    """Read-only routing metadata captured from the current asynchronous context.
+
+    The snapshot is stable after it is returned, including when the router
+    later updates its private context for another completed exchange.
+    Outside an active routed turn, the identifiers are ``None`` and the
+    history metadata tuples are empty.
+    """
+
+    exchange_id: object | None
+    """Identity of the current completed exchange, when one is active."""
+
+    history_exchange_ids: tuple[object | None, ...]
+    """Exchange identities aligned with the active bounded history."""
+
+    history_timestamps: tuple[int | None, ...]
+    """History timestamps aligned with the active history, in Unix microseconds."""
+
+
+@dataclass(frozen=True, slots=True)
 class AgentExchange:
     """One completed user and assistant exchange."""
 
