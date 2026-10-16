@@ -173,7 +173,7 @@ async def run_app(
         if config.acknowledgment_delay_secs is not None
         else None
     )
-    router: DecisionService = make_decision(models, "router")
+    decisions: DecisionService = make_decision(models, "router")
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
 
@@ -189,9 +189,9 @@ async def run_app(
             silero_threshold=config.silero_threshold,
         ),
         voice_gate=voice_gate,
-        probes={"llm": llm.health, "router": router.health, "vlm": lambda: _warm_vlm(vlm)},
+        probes={"llm": llm.health, "router": decisions.health, "vlm": lambda: _warm_vlm(vlm)},
         ready_file=ready_file,
-        closeables=(vlm, router),
+        closeables=(vlm, decisions),
         text_topic="vlm.response",
         idle_timeout_secs=config.idle_timeout_secs,
         transport=transport,
@@ -266,14 +266,14 @@ async def run_app(
     )
     notes_agent = NoteTakingAgent(
         notes_conversation,
-        router,
+        decisions,
         context_budget_bytes=config.context_budget_bytes,
         publish_context=publish_note_context,
     )
     monitor = VisualMonitorAgent(
         frames,
         ImageQueryTool(images=images, vlm=vlm, system_prompt=_MONITOR_VLM_INSTRUCTIONS),
-        router,
+        decisions,
         publish_monitor_window,
         window_size=config.monitor_window_size,
         context_budget_bytes=config.context_budget_bytes,
@@ -292,7 +292,7 @@ async def run_app(
             "monitor": monitor,
             "notes": notes_agent,
         },
-        router,
+        decisions,
         acknowledgment_llm=acknowledgment_llm,
         acknowledgment_delay_secs=config.acknowledgment_delay_secs,
     )

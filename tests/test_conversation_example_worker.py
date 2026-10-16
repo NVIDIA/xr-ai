@@ -1711,7 +1711,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 0
     assert llm.health_calls >= 1
-    assert router.health_calls >= 1
+    assert decisions.health_calls >= 1
     assert len(vlm.stream_calls) == 1
     warmup_images, question, system_prompt, max_tokens, timeout = vlm.stream_calls[0]
     assert len(warmup_images) == 1
@@ -1722,7 +1722,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert system_prompt == "Answer with one word."
     assert max_tokens == 4
     assert timeout == 120.0
-    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == router.close_calls == 1
+    assert stt.close_calls == tts.close_calls == vlm.close_calls == llm.close_calls == decisions.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
     assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
