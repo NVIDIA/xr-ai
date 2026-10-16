@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -229,6 +230,8 @@ async def evaluate(manifest_path: Path, output: Path, guide_name: str, wait_time
             await say("stop replay")
             assert not session.active and not agent._backend._monitors
     except Exception as exc:
+        # isolation boundary: the evaluation entry point records failure and still saves its report.
+        logging.getLogger(__name__).exception("Replay evaluation failed")
         passed = False
         log("error", error=repr(exc))
     finally:

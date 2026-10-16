@@ -178,7 +178,8 @@ class ReplayAgent(Agent):
             response = await self._route(query.text, participant_id)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001
+            # isolation boundary: one failed conversation task must not end the participant's session.
             logger.opt(exception=True).error("SOP query failed pid={!r}", participant_id)
             response = "I couldn't complete that guide request. Please try again."
         runtime = self._runtime

@@ -452,7 +452,8 @@ class _Replay:
                 await self._tick(session)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001
+                # isolation boundary: report a failed observation while supervising the participant's monitor.
                 logger.opt(exception=True).warning("SOP observation failed pid={!r}", participant_id)
             await asyncio.sleep(_POLL_INTERVAL_S)
 
