@@ -22,9 +22,10 @@ Then start the sample from the same terminal:
 
 ```bash
 uv sync
-uv run main.py --mode capture
+uv run main.py
 ```
 
+Capture is the default mode; `--mode capture` selects it explicitly.
 Alternatively, use the installed entry point:
 
 ```bash

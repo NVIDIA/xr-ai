@@ -34,7 +34,6 @@ _TASK_KEYS = frozenset(
         "name",
         "version",
         "status",
-        "source_session",
         "start_step",
         "foreground_prompt",
         "complete_message",
@@ -126,7 +125,7 @@ class Step:
     reads: tuple[str, ...]
     writes: tuple[str, ...]
     trigger: Trigger
-    agent: Policy
+    agent: Policy | None
     voice: Policy
     evidence: Evidence | None
     complete_when: dict[str, Any]
@@ -152,7 +151,6 @@ class Workflow:
     name: str
     version: int
     status: str
-    source_session: str
     start_step: str
     foreground_prompt: str
     complete_message: str
@@ -233,12 +231,12 @@ def parse_workflow(content: bytes | str) -> Workflow:
         if step.next_step is not None and step.next_step not in by_id:
             raise ValueError(f"step {step.id!r} has unknown next step {step.next_step!r}")
     _validate_linear_graph(start, by_id)
+    _validate_completion(start, by_id, fields)
     return Workflow(
         id=workflow_id,
         name=name,
         version=version,
         status=status,
-        source_session=_required_text(task.get("source_session"), "task.source_session"),
         start_step=start,
         foreground_prompt=_required_text(task.get("foreground_prompt"), "task.foreground_prompt"),
         complete_message=_required_text(task.get("complete_message"), "task.complete_message"),
@@ -303,9 +301,13 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         raise ValueError(f"steps.{step_id}.trigger.result_field must be a non-empty string")
     _validate_trigger(function, arguments, result_field, fields, step_id)
 
-    agent = _policy(raw.get("agent"), f"steps.{step_id}.agent")
     voice = _policy(raw.get("voice"), f"steps.{step_id}.voice")
     evidence = _evidence(raw.get("evidence"), step_id, writes, fields)
+    deterministic = evidence is not None and bool(evidence.commit)
+    agent = (_policy(raw.get("agent"), f"steps.{step_id}.agent")
+             if "agent" in raw or not deterministic else None)
+    if deterministic and not all(evidence.commit.get(name) == value for name, value in completion.items()):
+        raise ValueError(f"step {step_id!r} evidence.commit must satisfy complete_when")
     messages = _mapping(raw.get("messages"), f"steps.{step_id}.messages")
     _only(messages, _MESSAGE_KEYS, f"steps.{step_id}.messages")
     complete_on_skip = raw.get("complete_on_skip", False)
@@ -361,8 +363,8 @@ def _validate_trigger(
             expected = "string" if request.model_fields[key].annotation is str else "integer"
             if state_field.type != expected:
                 raise ValueError(f"step {step_id!r} trigger argument {key!r} requires {expected} state")
-            # Values may be assigned by a preceding step (timer starts commonly
-            # initialize to zero). Validate shape now and actual values at runtime.
+            # A preceding step may supply a duration or visual question.
+            # Validate its type now and its actual value at step entry.
             resolved[key] = "state value" if expected == "string" else 1
     try:
         request.model_validate(resolved)
@@ -401,6 +403,22 @@ def _validate_linear_graph(start: str, steps: dict[str, Step]) -> None:
     unreachable = steps.keys() - visited
     if unreachable:
         raise ValueError(f"workflow has unreachable steps: {sorted(unreachable)}")
+
+
+def _validate_completion(start: str, steps: dict[str, Step], fields: dict[str, StateField]) -> None:
+    previous_writes: set[str] = set()
+    current: str | None = start
+    while current is not None:
+        step = steps[current]
+        # At least one completion requirement must belong to this step and
+        # start unmet. Otherwise earlier observations (or skips) can bypass it.
+        fresh = [name for name, value in step.complete_when.items()
+                 if name not in previous_writes
+                 and (not fields[name].initialized or fields[name].initial != value)]
+        if not fresh:
+            raise ValueError(f"step {step.id!r} can be complete on entry; use a fresh completion field")
+        previous_writes.update(step.writes)
+        current = step.next_step
 
 
 def _validate_state_refs(value: Any, visible: set[str], fields: dict[str, StateField], step_id: str) -> None:

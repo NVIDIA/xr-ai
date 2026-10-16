@@ -306,7 +306,12 @@ tea sample's workflow YAML:
   fixed in the guide, not inferred from packaging colors or retrieved by the LLM.
 - Its three visual steps require two distinct fresh frames. The first reads
   `BRAND | BLEND` and matches `NUMI | CHAMOMILE LEMON`; the second reads a current
-  measurement and matches `100 C` or `212 F`; immersion requires `YES` for
+  `LABEL | NUMBER UNIT` reading and accepts `CURRENT`, `ACTUAL`, or `THERMOMETER`
+  with `100 C` or `212 F`. It preserves `TARGET` and `SET` labels in the visual
+  result so those readings cannot satisfy completion. Unlabeled displays are
+  unavailable rather than assumed to show current temperature. Matching tolerates
+  equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
+  not different temperatures. Immersion requires `YES` for
   visible bag contact with visible water, including a floating bag.
   Other readings, `NO`, `UNKNOWN`, missing frames, and malformed responses
   cannot complete a step. These bounded evidence commits do not use an
@@ -331,32 +336,49 @@ Those tests do not establish accuracy on real tea-making images or appliances.
 
 #### Local-model replay evaluation
 
-`eval/replay.py` exercises a visual-step sequence followed by a timer through
+`eval/replay.py` exercises a manifest's selected guide through
 the actual replay agent, runtime, voice aggregation, frame selection, and model
 tools. It uses the sample's configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.
 
-Prepare a JSON manifest with one entry per visual step, in execution order.
-Each entry has `step` and a `cases` list. Each case has `name`, `image` (relative
-to the manifest), acceptable `answers`, expected `complete`, and optional
-`observations` and `source`. Put incomplete cases before the completing case.
-The script sends a continuing frame stream, checks actual observations and
-progress, and asks the foreground model to advance each verified step. It
-also checks that an early **next** cannot bypass the timer.
+The checked-in `eval/replay_cases.yaml` and `eval/fixtures/indicator.guide.yaml`
+provide a synthetic visual-and-timer scenario. `eval/replay_routing.yaml`
+exercises the composed foreground prompt with controls, polite requests,
+quoted commands, negation, unsupported capture requests, and visual questions.
+Both run with the full permitted tool set; the evaluator does not preselect
+tools based on the utterance.
+
+A YAML or JSON manifest selects `guides_dir` (relative to the manifest) and
+`guide` (name or ID), and lists ordered `actions`:
+
+- `image`: show an image `path`, or a named synthetic `scene`. Optional
+  `scenes` map names to a rectangle color or display text.
+- `observe`: wait for `count` visual results (default two) from the displayed
+  image and compare them to the allowed `answers`.
+- `say`: send `text` as a user turn. Optional `expect` checks the delivered
+  answer against a regex; `tools` and `arguments` check model tool calls.
+  Status assertions use **What is my status?** and `workflow__status`.
+- `wait_speech`: wait for an `expect` regex in speech delivered since the last
+  user turn, with optional `timeout_s`. This checks completion notices, including
+  automatic timer completion, without reading private backend state.
+
+The runner makes no assumptions about step names, step count, or a final timer.
+Timers use real elapsed time. Include negative observations before positive
+ones and explicitly test early advance, completion, stop, and restart as needed.
 
 From the sample directory, with its model servers already running:
 
 ```bash
 uv run --project worker python eval/replay.py \
-  --guide "Tea Making" --manifest /path/to/manifest.json \
-  --output artifacts/tea-replay-eval --wait-timer
+  --output artifacts/replay-eval
+uv run --project worker python eval/replay.py \
+  --manifest eval/replay_routing.yaml --output artifacts/replay-routing-eval
 ```
 
-Use a new output directory for each run. `--wait-timer` waits the actual configured
-duration and checks automatic completion, another **start replay**, and
-**stop replay**. Without it, the run cancels after checking the unexpired timer.
+Use a new output directory for each run. Supply `--manifest /path/to/scenario.yaml`
+to evaluate another guide and its images.
 Outputs include the exact guide, manifest, image hashes, model tool calls, visual
 answers, speech text, and result JSON. Synthetic controls can isolate label or
 setpoint mistakes but do not establish accuracy on a user's actual camera views.
@@ -364,8 +386,9 @@ setpoint mistakes but do not establish accuracy on a user's actual camera views.
 ### Guide structure
 
 The declarative shape follows the tea-making workflow: a task, typed sparse
-state, and ordered steps with separate observation and voice policies. Existing
-schema-version-1 guides from the workflow-recorder sample are supported.
+state, and ordered steps with separate observation and voice policies. This is
+a replay-specific schema inspired by that design, not a compatible loader for
+tea-making or legacy workflow-recorder YAML. Adapt guides to the contract below.
 
 Text fields must be actual strings. Duplicate mapping keys are rejected at
 every level, including overrides introduced through YAML merges, instead of
@@ -374,21 +397,26 @@ even when their `task.status` is `approved`.
 
 - `schema_version` must be `1`.
 - `task` declares `id`, `name`, positive `version`, `status` (`draft` or
-  `approved`), `source_session`, `start_step`, `foreground_prompt`, and
+  `approved`), `start_step`, `foreground_prompt`, and
   `complete_message`.
 - Each `state` field declares a type (`boolean`, `integer`, `number`, or
   `string`), a description, and optionally an initial value.
-- Each step declares `id`, `title`, `reads`, `writes`, `trigger`, `agent`,
+- Each step declares `id`, `title`, `reads`, `writes`, `trigger`,
   `voice`, a non-empty `complete_when` mapping, `next`, and `messages` containing
   `enter`, `complete`, and `skip`. The `next` chain must visit every step once
   and end with `null`.
-- `agent` and `voice` each contain a prompt and a tool list. Allowed step tools
+- `agent` and `voice` each contain a prompt and a tool list. `agent` is optional
+  when `evidence.commit` supplies a deterministic completion patch; that path
+  does not run an observation LLM. Otherwise `agent` is required. Allowed step tools
   are `current_view`, `clock__now`, and `clock__timer`. Only the observer receives
   `workflow__commit`. Foreground workflow controls are supplied by the runner,
   not listed in the guide's step tools.
 - Optional `evidence` contains a full-match regex `pattern`, positive
   `consecutive` count, and optional `commit` mapping. With `commit`, matching
   observations directly apply that bounded patch without an observation LLM.
+  The patch must satisfy every `complete_when` requirement. Each step must have
+  at least one initially unmet completion field that no preceding step can write;
+  use a dedicated completion flag rather than reusing a preceding step's flag.
   Without `commit`, the observation LLM proposes state changes and the evidence
   count gates completion. Use a precise closed-set VLM answer contract if a
   regex is used. Visual evidence counts distinct source frames, identified by
@@ -415,6 +443,8 @@ wall-clock changes cannot backdate the timer or shorten an active wait.
 The foreground `clock__timer` tool takes no arguments and reads the active
 runtime timer. Restarting the guide starts a fresh timer on the next timer-step
 entry; `clock__now` is informational and cannot start or modify timers.
+An unavailable or superseded timer returns `available: false` and a reason,
+not an invented elapsed time or a tool exception.
 Timer-only steps use elapsed-time evidence, not a visual substitute. Completion
 commits for timer triggers are rejected until their configured duration expires.
 
@@ -444,16 +474,22 @@ controls. Its `_Replay` backend in `replay/replaying.py` owns guide progress,
 runtime timers, frame evidence, and background verification. Transitions clear
 both local notices and pending voice-aggregation output under the session lock,
 so obsolete completion notices cannot follow the new step's instruction.
-The foreground receives detached guidance context and scoped tools captured
-under one execution revision. The backend rechecks that revision under its own
-lock when controls execute and answers finish. It owns accepted control tasks
-through completion even if a new utterance cancels the foreground turn; departure
-and shutdown drain those tasks. Stop replay cancels the observer and clears timer
+The foreground receives detached guidance context and scoped tools. Observation
+updates have a state revision; controls have a separate run-and-step revision.
+Completing the same step during inference does not invalidate a stop or advance
+request, but a concurrent step transition does. The backend rechecks those scopes
+under its own lock when controls execute and answers finish. It owns accepted control tasks
+through completion even if a new utterance cancels the foreground turn. The
+cancelled turn drains accepted controls and delivers their still-current transition
+response; new guidance snapshots also drain controls first. Departure and shutdown
+drain those tasks without speaking to disconnected participants.
+Stop replay cancels the observer and clears timer
 state without unloading the selected guide. Connecting only loads an inactive
 session; start replay activates it and starts its observer and any first-step timer.
 Replay uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
-shared tool loop. The conversation prompt governs intent; an English wording
-filter is only a conservative routing heuristic, not an authorization boundary.
+shared tool loop. The conversation prompt governs intent without an English
+wording filter. Polite action requests can use controls; questions about controls
+do not authorize them. This is model policy, not a deterministic intent guarantee.
 State-changing tools independently check session freshness and completion.
 Guide loading and validation live in `replay/guides.py`
 and `replay/_workflow_spec.py`. Replay never constructs the capture backend or
@@ -498,9 +534,9 @@ uv --config-file uv.toml run --project tests pytest -q \
 
 These tests cover mode isolation, approval, guide validation, participant-local
 progress, repeated runs, stale observations, timers, and runtime-to-voice delivery.
-They use synthetic guide fixtures, not committed user guides. Opt-in tests in
-`test_sop_replay.py` with `-m gpu` exercise the configured local LLM's tool routing;
-they do not measure visual accuracy or verify a physical assembly. Start the
-sample's model servers before running those evaluations. They are also marked
-`external_models`: they query the existing deployment without starting, stopping,
-or deleting its containers.
+They use synthetic fixtures and validate the shipped hand-authored tea guide,
+not private user recordings. Offline CLI tests exercise the evaluation runner
+with controlled model responses, including visual-only and visual-and-timer guides.
+These tests establish runtime behavior, not model accuracy. Run the standalone
+`eval/replay.py` scenarios above against existing model servers to measure live
+tool routing and visual judgments; the runner never manages their lifecycle.

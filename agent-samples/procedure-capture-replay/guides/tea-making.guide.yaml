@@ -9,9 +9,8 @@ schema_version: 1
 task:
   id: tea_making
   name: Tea Making
-  version: 2
+  version: 3
   status: approved
-  source_session: hand-authored-example-not-a-recording
   start_step: identify
   foreground_prompt: >-
     Guide brewing Numi Chamomile Lemon herbal tea, not green tea or another
@@ -65,12 +64,9 @@ steps:
           the two labels separated by |, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '^NUMI \| CHAMOMILE LEMON$'
+      pattern: '(?i)^NUMI\s*\|\s*CHAMOMILE LEMON$'
       consecutive: 2
       commit: {tea_identified: true}
-    agent:
-      prompt: Confirm only visible Numi branding and the full Chamomile Lemon blend name on the same product.
-      tools: []
     voice:
       prompt: >-
         Ask to see the packet front so both Numi and Chamomile Lemon are legible.
@@ -96,26 +92,26 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Read the actual CURRENT water temperature from a kettle display or
-          immersed thermometer. Return only the number and unit, such as 75 C
-          or 167 F. Ignore target or set temperatures, heater lights, and printed
-          instructions. If there is no readable current measurement with its
-          unit, return UNKNOWN. Do not infer temperature from steam or substitute
-          a desired brewing temperature. Do not convert units.
+          Read the temperature display label and value. Copy the actual label,
+          number and unit as LABEL | NUMBER UNIT. Preserve labels such as CURRENT,
+          ACTUAL, TARGET or SET. If several readings are shown, select CURRENT
+          or ACTUAL. If only TARGET or SET is shown, copy that label, not CURRENT.
+          For an immersed thermometer use THERMOMETER as label. Return UNKNOWN
+          if no measurement label or immersed thermometer can be identified.
+          Output only the label and reading; do not convert units.
       result_field: text
     evidence:
-      pattern: '^(100 C|212 F)$'
+      pattern: '(?i)^(?:CURRENT|ACTUAL|THERMOMETER)\s*\|\s*(?:100(?:\.0+)?\s*(?:°\s*)?C|212(?:\.0+)?\s*(?:°\s*)?F|100(?:\.0+)?\s*℃|212(?:\.0+)?\s*℉)$'
       consecutive: 2
       commit: {water_at_target: true}
-    agent:
-      prompt: Confirm only the visible current water reading, not a setpoint or a claim that the water is boiling.
-      tools: []
     voice:
       prompt: >-
         Ask for boiling water and a safely visible current temperature display
         of 100 C or 212 F. Use current_view for readings. Do not substitute a
         heater indicator, steam, a target setting, or an elapsed-time estimate.
-        If current temperature cannot be read, say verification is unavailable.
+        Show a CURRENT or ACTUAL label with the reading, or an immersed
+        thermometer. An unlabeled display cannot establish that it is a measured
+        temperature. If current temperature cannot be read, say verification is unavailable.
         Never direct heating an empty vessel, overfilling, or defeating an
         appliance's controls to reach a reading.
       tools: [current_view]
@@ -145,12 +141,9 @@ steps:
           YES, NO, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '^YES$'
+      pattern: '(?i)^YES$'
       consecutive: 2
       commit: {tea_immersed: true}
-    agent:
-      prompt: Confirm visible tea-bag contact with visible water, not a nearby bag or string. Do not write a timer timestamp.
-      tools: []
     voice:
       prompt: >-
         Guide placing the tea bag in the prepared water safely. Use current_view
@@ -180,9 +173,6 @@ steps:
       pattern: '^true$'
       consecutive: 1
       commit: {steeping_complete: true}
-    agent:
-      prompt: Complete only when the fresh runtime timer reports expired. Images and user claims cannot replace elapsed time.
-      tools: []
     voice:
       prompt: >-
         Call clock__timer with no arguments for elapsed-time, remaining-time,

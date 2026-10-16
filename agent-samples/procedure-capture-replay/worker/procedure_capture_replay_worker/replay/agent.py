@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from pathlib import Path
 
 import nemo_relay
@@ -84,8 +83,8 @@ class ReplayAgent(Agent):
         participants = tuple(self._turns) if participant_id is None else (participant_id,)
         for pid in participants:
             async with self._controls.setdefault(pid, asyncio.Lock()):
-                await _cancel(self._turns, pid)
                 await self._aggregation.release(pid)
+                await _cancel(self._turns, pid)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
@@ -121,8 +120,8 @@ class ReplayAgent(Agent):
         async with self._controls.setdefault(participant_id, asyncio.Lock()):
             if participant_id not in self._connected:
                 return
-            await _cancel(self._turns, participant_id)
             await self._aggregation.release(participant_id)
+            await _cancel(self._turns, participant_id)
             if participant_id not in self._connected:
                 return
             await self._start_answer(query, participant_id)
@@ -200,17 +199,14 @@ class ReplayAgent(Agent):
         guidance = await self._backend.guidance(participant_id)
         if guidance is None:
             return ""
-        tools = _tools_for_query(guidance.tools, text)
         system = f"{_FOREGROUND_PROMPT}\n\n{guidance.instructions}"
-        if tools.get("workflow__reset") is None:
-            system += (
-                "\nThis turn is informational, not authorization to change guide state. "
-                "Explain or clarify briefly using only exposed tools for requested live facts. "
-                "Do not claim to advance, skip, reset, restart, or record."
-            )
         user = json.dumps({"request": text, **guidance.context}, ensure_ascii=False)
-        result = await self._tool_loop(system, user, tools, foreground=True)
-        return await guidance.finish(result)
+        try:
+            result = await self._tool_loop(system, user, guidance.tools, foreground=True)
+            return await guidance.finish(result)
+        except asyncio.CancelledError:
+            await guidance.cancel()
+            raise
 
     async def _tool_loop(self, system: str, user: str, tools: ToolSet, *, foreground: bool = False) -> str:
         options = _FOREGROUND_MODEL_OPTIONS if foreground else {"max_tokens": 512, "enable_thinking": False}
@@ -238,23 +234,3 @@ class ReplayAgent(Agent):
         if participant_id is None:
             raise ValueError("SOP engine requires a participant")
         return participant_id
-
-
-def _tools_for_query(tools: ToolSet, query: str) -> ToolSet:
-    """Conservatively filter familiar English phrasing; not an authorization boundary.
-
-    The conversation prompt handles intent outside these cues. State-changing
-    tools still enforce session freshness and completion independently of wording.
-    """
-    text = " ".join(query.casefold().split()).replace("’", "'")
-    unsupported_capture = re.search(r"\b(?:record|recording|capture)\b", text)
-    informational = re.search(
-        r"\b(?:don't|do not|never|not yet|said|says|told|quoted|hypothetical)\b|"
-        r"^(?:if|suppose|imagine|why|how|what|should i|would it|can i|could i)\b",
-        text,
-    )
-    if informational or unsupported_capture:
-        return ToolSet(tool for name, tool in tools.items() if name not in {
-            "workflow__advance", "workflow__restart", "workflow__reset",
-        })
-    return tools
