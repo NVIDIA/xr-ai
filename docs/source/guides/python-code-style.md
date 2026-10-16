@@ -47,12 +47,6 @@ from an enrolled module, such as `xr_ai_tools.current_frame`,
 `xr_ai_tools.vision`, `xr_ai_tools.rpc`, and `xr_ai_models.presets`, remain
 supported. Nothing else is supported.
 
-- Give a new public name a package-root `__all__` entry. Add a public submodule
-  only by enrolling it in the inventory with its own `__all__`.
-- Name every other module with a leading underscore: one that is neither
-  exported from the package root nor enrolled in the inventory. A module that
-  mixes public and internal code is split so the public names are the only
-  ones a consumer needs to import.
 - Document every public name with a docstring, because the generated Python
   reference is rendered from it. Give a private name a docstring only when its
   invariant is not obvious.
@@ -64,8 +58,6 @@ supported. Nothing else is supported.
 - Production code never imports a private name or module of another package.
   When a neighbouring package needs something, the owning package publishes it
   first. Implementation tests of the owning package can import private names.
-- Import a public name from the package root when the root exports it, and
-  otherwise from the enrolled module that documents it.
 - Keep transport and vendor details out of public names and documentation.
   Agent-facing text never mentions LiveKit or StreamKit.
 
@@ -84,6 +76,49 @@ packages, and its change contract places public API documentation in
 `__all__` and co-located docstrings, and it keeps private imports inside their
 owning packages or implementation tests. Preferring the package root for new
 public names and the private-module docstring are **repository conventions**.
+
+## Exports
+
+Each public name has one canonical home, and these rules decide where it is.
+
+- Every module is public or private. A public module is the package root or a
+  module enrolled in `PUBLIC_API_MODULES`. Every other module has a leading
+  underscore. Split a module that mixes public and internal code so the public
+  names live in a public module.
+- Export from the package root by default: define the name in a private module,
+  import it explicitly in `__init__.py`, and list it in the root `__all__`.
+- Add a public submodule only for one of two reasons, and state which in its
+  module docstring. Either importing it requires an optional dependency declared
+  as an extra, so the root could not import it without making the extra
+  mandatory, as `xr_ai_tools.marker_tracking` does for OpenCV; or it namespaces
+  a family of related names that would crowd the root, as `xr_ai_models.presets`
+  does.
+- A public module declares its names in a literal `__all__` and documents each
+  one. The list holds names the module defines, and no underscore names. Only
+  the package root re-exports names defined elsewhere. Do not use wildcard
+  imports.
+- Do not add a module with a public-looking name to `PUBLIC_API_EXCLUSIONS`.
+  That list records legacy modules, such as `xr_ai_runtime.agent`, whose names
+  predate this rule. They are undocumented and so internal; when a change
+  touches one, give it a leading underscore after checking for importers, and
+  add a migration entry if a supported path moves.
+- Import a name from its canonical home: the package root when the root exports
+  it, otherwise the enrolled module that documents it.
+
+**Basis:** The contract in `docs/source/_api_contract.py` already requires every
+importable module to be enrolled or excluded and requires a literal `__all__`
+in each public package and module. [PEP 8](https://peps.python.org/pep-0008/#imports)
+says wildcard imports "should be avoided", because they make it unclear which
+names are present. It also says that imported names "should always be
+considered an implementation detail" unless they are an explicitly documented
+part of the module's API, "such as ... a package's `__init__` module that
+exposes functionality from submodules", which is why only the root re-exports.
+The `xr-ai-tools` `pyproject.toml` declares the optional extras that justify
+its public submodules. Exporting from the root by default, the two reasons for
+a public submodule, and the rule against new `PUBLIC_API_EXCLUSIONS` entries
+are **repository conventions** that describe the existing packages: hub, voice,
+web-events, launcher, and vllm export only from the root, while `xr_ai_tools`
+and `xr_ai_models.presets` use enrolled submodules.
 
 ## Exceptions
 
