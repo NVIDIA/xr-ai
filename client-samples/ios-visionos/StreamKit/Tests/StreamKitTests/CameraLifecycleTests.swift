@@ -32,7 +32,7 @@ private final class CameraBoundaryGate {
     }
 }
 
-private enum CameraBoundaryFailure: Error { case stop, unpublish }
+private enum CameraBoundaryFailure: Error { case stop, unpublish, frameAllocation }
 
 /// Runs public backend methods; only the SDK/network failure boundary is controlled.
 @MainActor
@@ -117,19 +117,21 @@ private final class CameraLifecycleFixture {
         }
     }
 
-    func frame() throws -> sending CMSampleBuffer {
+    nonisolated func frame() throws -> sending CMSampleBuffer {
         var pixel: CVPixelBuffer?
-        #expect(CVPixelBufferCreate(kCFAllocatorDefault, 640, 480, kCVPixelFormatType_32BGRA, nil, &pixel) == kCVReturnSuccess)
-        let image = try #require(pixel)
+        let pixelStatus = CVPixelBufferCreate(kCFAllocatorDefault, 640, 480, kCVPixelFormatType_32BGRA, nil, &pixel)
+        guard pixelStatus == kCVReturnSuccess, let image = pixel else { throw CameraBoundaryFailure.frameAllocation }
         var format: CMVideoFormatDescription?
-        #expect(CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault,
-                                                            imageBuffer: image, formatDescriptionOut: &format) == noErr)
+        let formatStatus = CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault,
+                                                                       imageBuffer: image, formatDescriptionOut: &format)
+        guard formatStatus == noErr, let format else { throw CameraBoundaryFailure.frameAllocation }
         var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: .zero, decodeTimeStamp: .invalid)
         var sample: CMSampleBuffer?
-        #expect(CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: image,
-                                                        formatDescription: try #require(format),
-                                                        sampleTiming: &timing, sampleBufferOut: &sample) == noErr)
-        return try #require(sample)
+        let sampleStatus = CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: image,
+                                                                   formatDescription: format,
+                                                                   sampleTiming: &timing, sampleBufferOut: &sample)
+        guard sampleStatus == noErr, let sample else { throw CameraBoundaryFailure.frameAllocation }
+        return sample
     }
 }
 
