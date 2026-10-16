@@ -874,9 +874,11 @@ disable <code class="docutils literal notranslate"><span class="pre">speaker.ena
 <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>. Automatic selection can use the configured
 ordinary STT adapter when speaker ASR is absent at backend selection; once a
 listener is observed, it waits for compatible service readiness instead.</p>
-<p>The default profile does not start batch STT. Consumers that require it can
-manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
-<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for these deployment choices.</p>
+<p>The default profile does not start batch STT. To select ordinary STT, add an
+<code class="docutils literal notranslate"><span class="pre">stt</span></code> role to the application’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and run an STT service for
+that role. Consumers can manage batch STT in a custom profile, optionally
+alongside speaker ASR. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for
+these deployment choices.</p>
 <p>Say the exact start phrase to nominate its speaker. Other speech can continue:
 the service conditions each candidate transcript on that speaker’s target and
 interference masks. Candidate phrases finalize on each speaker’s configured

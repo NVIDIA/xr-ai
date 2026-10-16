@@ -394,9 +394,11 @@ disable `speaker.enabled` when choosing that speech path. Refer to
 ordinary STT adapter when speaker ASR is absent at backend selection; once a
 listener is observed, it waits for compatible service readiness instead.
 
-The default profile does not start batch STT. Consumers that require it can
-manage batch STT in a custom profile, optionally alongside speaker ASR. Refer to
-{doc}`/guides/customizing-model-servers` for these deployment choices.
+The default profile does not start batch STT. To select ordinary STT, add an
+`stt` role to the application's `yaml/models.json` and run an STT service for
+that role. Consumers can manage batch STT in a custom profile, optionally
+alongside speaker ASR. Refer to {doc}`/guides/customizing-model-servers` for
+these deployment choices.
 
 Say the exact start phrase to nominate its speaker. Other speech can continue:
 the service conditions each candidate transcript on that speaker's target and
