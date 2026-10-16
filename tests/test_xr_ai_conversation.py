@@ -17,7 +17,7 @@ from xr_ai_tools.vision import ImageQueryChunk, ImageQueryRequest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-sdk"))
 
 import xr_ai_conversation as conversation_package  # noqa: E402
-import xr_ai_routing.front_end as front_end_module  # noqa: E402
+import xr_ai_routing.router as front_end_module  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
     Conversation,
     ConversationContextUpdate,
@@ -33,7 +33,7 @@ from xr_ai_routing import (  # noqa: E402
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_routing.front_end import _is_valid_acknowledgment  # noqa: E402
+from xr_ai_routing.router import _is_valid_acknowledgment  # noqa: E402
 from xr_ai_runtime import AgentRuntime, Topic  # noqa: E402
 
 

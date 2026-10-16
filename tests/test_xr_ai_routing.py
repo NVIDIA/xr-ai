@@ -9,7 +9,7 @@ from collections import deque
 
 import pytest
 import xr_ai_routing as routing_module
-import xr_ai_routing.front_end as front_end_module
+import xr_ai_routing.router as router_module
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
@@ -25,7 +25,7 @@ from xr_ai_routing._history import (
     _active_history_exchange_ids,
     _active_history_timestamps,
 )
-from xr_ai_routing.front_end import (
+from xr_ai_routing.router import (
     _bounded_history_with_metadata,
     _bounded_history_with_times,
     _is_valid_acknowledgment,
@@ -606,7 +606,7 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
 
     events = []
     monkeypatch.setattr(
-        "xr_ai_routing.front_end.nemo_relay.scope.event",
+        "xr_ai_routing.router.nemo_relay.scope.event",
         lambda name, **kwargs: events.append((name, kwargs["data"])),
     )
     decisions = _RouteDecisions()
@@ -1044,7 +1044,7 @@ async def test_completed_exchange_ids_remain_aligned_when_history_is_trimmed():
     item = {
         "user": newest.user,
         "assistant": newest.assistant,
-        "recorded_around_utc": front_end_module._format_minute(newest_timestamp),
+        "recorded_around_utc": router_module._format_minute(newest_timestamp),
     }
     budget = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     bounded, bounded_times, bounded_ids = _bounded_history_with_metadata(
@@ -1321,7 +1321,7 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
         acknowledgment_delay_secs=10.0,
     )
     now = 0.0
-    monkeypatch.setattr(front_end_module, "_monotonic", lambda: now)
+    monkeypatch.setattr(router_module, "_monotonic", lambda: now)
     acknowledgment_emit_started = asyncio.Event()
     acknowledgment_emit_release = asyncio.Event()
 

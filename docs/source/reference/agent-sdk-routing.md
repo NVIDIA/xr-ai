@@ -5,7 +5,7 @@
 
 # xr-ai-routing
 
-`xr-ai-routing` provides typed contracts and a participant-scoped front end
+`xr-ai-routing` provides typed contracts and a participant-scoped router
 for routing turns among application destinations. Each registered destination
 implements the public `RoutableAgent` protocol. It uses the typed
 `DecisionService` for route selection. Destinations keep ownership of their
@@ -14,13 +14,13 @@ model calls, application state, and resources.
 ## Route a turn
 
 Pass an `AgentTurn` to `AgentRouter.handle()` with an async
-callback that accepts the route name and text chunk. The front end applies
+callback that accepts the route name and text chunk. The router applies
 these steps:
 
 1. It serializes turns for one participant, cancels and drains that
    participant's previous response, and bounds the completed history supplied
    to routing. It keeps the current query separate from completed history.
-2. If a destination owns explicit focus, the front end checks that destination
+2. If a destination owns explicit focus, the router checks that destination
    first. Otherwise it selects among registered destinations using their
    `RoutingAid` descriptions, eligibility, and priority.
 3. The selected destination runs `admit()` before speaking or starting answer
@@ -28,7 +28,7 @@ these steps:
    focus and return the same query to ordinary routing.
 4. A declined route is excluded from one reroute. After selected destinations
    decline, an eligible configured default gets one answer attempt without a
-   second admission check. If routing has no eligible candidate, the front end
+   second admission check. If routing has no eligible candidate, the router
    asks for clarification.
 5. An accepted destination streams chunks through the callback, tagged with its
    registered route name. It returns an answer, keeps focus, or releases focus
@@ -38,7 +38,7 @@ these steps:
 ```python
 from xr_ai_routing import AgentRouter, AgentTurn
 
-front_end = AgentRouter(
+router = AgentRouter(
     {"conversation": general_destination, "scene": scene_destination},
     decision_service,
 )
@@ -47,23 +47,23 @@ turn = AgentTurn(
     turn_id="turn-42",
     query="Add a blue cube.",
 )
-result = await front_end.handle(turn, emit=publish_chunk)
+result = await router.handle(turn, emit=publish_chunk)
 ```
 
 `AgentExchange` records a completed user request and its user-visible
 answer. The first turn for a participant uses the supplied `turn.history` as its
-initial history. Later turns use history retained by the front end. Only whole
+initial history. Later turns use history retained by the router. Only whole
 recent exchanges that fit `context_budget_bytes` are passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
 oversized exchange is dropped whole.
 
-The front end keeps each retained exchange's timestamp and private identity
+The router keeps each retained exchange's timestamp and private identity
 aligned as history is trimmed. When an admission release emits text, it records
 that text as a completed exchange before rerouting the same query, so the next
 destination receives the updated history.
 
-`RoutingAid` is a concise selection hint. Eligibility is checked by the front
-end, while each destination's `admit()` method remains responsible for deciding
+`RoutingAid` is a concise selection hint. Eligibility is checked by the router,
+while each destination's `admit()` method remains responsible for deciding
 whether it can accept the specific turn. Destinations decline or clarify before
 answer work begins. A clarification returned after answer work starts is an
 error.
@@ -110,10 +110,10 @@ Admission preambles suppress the optional acknowledgment for that turn.
 |---|---|
 | `__init__.py` | Lists the routing names exported by `xr_ai_routing` |
 | `contracts.py` | Defines route metadata, turns, completed exchanges, admission results, and the `RoutableAgent` protocol |
-| `front_end.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
+| `router.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
 | `_history.py` | Shares private exchange timestamps and their display format |
 
-The front end does not depend on a voice transport or a particular application.
+The router does not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a
 `AgentTurn` and connects the callback to its output path.
 
