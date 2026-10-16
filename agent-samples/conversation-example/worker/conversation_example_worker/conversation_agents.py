@@ -14,6 +14,7 @@ from xr_ai_conversation import (
     Conversation,
     ConversationContextUpdate,
 )
+from xr_ai_models import DecisionQuestion, DecisionService
 from xr_ai_routing import (
     Admission,
     AgentTurn,
@@ -21,7 +22,6 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_models import DecisionQuestion, DecisionService
 
 ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
 RoutingContext = Callable[[str], str | None]

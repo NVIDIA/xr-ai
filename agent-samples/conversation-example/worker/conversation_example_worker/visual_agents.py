@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
+from xr_ai_hub import FrameUnavailable
 from xr_ai_routing import (
     Admission,
     AgentTurn,
@@ -15,7 +16,6 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_hub import FrameUnavailable
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 

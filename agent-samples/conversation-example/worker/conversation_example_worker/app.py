@@ -20,7 +20,6 @@ from xr_ai_conversation import (
     Conversation,
     ConversationContextUpdate,
 )
-from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,
@@ -32,6 +31,7 @@ from xr_ai_models import (
     make_tts,
     make_vlm,
 )
+from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_runtime import AgentRuntime, Topic
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry

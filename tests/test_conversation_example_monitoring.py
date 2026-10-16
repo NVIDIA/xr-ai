@@ -407,7 +407,9 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     assert "Observation 1." not in active_aid
 
     await _turn(router, "Where did monitoring last see my pen?")
-    conversation_candidate = next(item for item in decisions.calls[2][0]["destinations"] if item["name"] == "conversation")
+    conversation_candidate = next(
+        item for item in decisions.calls[2][0]["destinations"] if item["name"] == "conversation"
+    )
     assert "Active task, using the latest start/retarget instruction" in conversation_candidate["description"]
     assert "Keep track of where I leave my pen." in conversation_candidate["description"]
     assert "through" in conversation_candidate["description"]

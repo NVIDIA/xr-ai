@@ -38,13 +38,13 @@ from conversation_example_worker.visual_agents import VisualObservationAgent  # 
 from xr_ai_conversation import (  # noqa: E402
     Conversation,
 )
+from xr_ai_models import DecisionResponse, load_models_config, make_decision  # noqa: E402
 from xr_ai_routing import (  # noqa: E402
     AgentExchange,
     AgentRouter,
     AgentTurn,
     RoutingAid,
 )
-from xr_ai_models import DecisionResponse, load_models_config, make_decision  # noqa: E402
 from xr_ai_tools.current_frame import ImageFrame  # noqa: E402
 from xr_ai_tools.image import ImageReference  # noqa: E402
 from xr_ai_tools.vision import ImageQueryResult  # noqa: E402
