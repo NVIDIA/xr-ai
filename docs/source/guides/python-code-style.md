@@ -13,11 +13,12 @@ outside this reference. Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
 conventions that keep them consistent.
 
-These rules describe the target state of all Python code. Code that does not
-yet follow them is brought into line by cleanup changes and tracked outside this
-reference. A rule never withdraws support for a public import, name, signature,
-or behavior by itself: renaming, moving, or removing a supported name is a
-breaking change that needs a migration entry.
+These rules describe the target state of all Python code. Code that does not yet
+follow them is brought into line by cleanup changes and tracked outside this
+reference. Making a supported public name conform to a rule is a breaking
+change: keep the code working in every merged state, update every use in the
+repository, and add a migration entry. Until then the name keeps working as it
+is, and an unrelated change is not asked to rename it.
 
 A package that other projects import, such as everything under `agent-sdk/` and
 `utils/` and any library a service or sample publishes, follows every section.
@@ -27,12 +28,12 @@ from its own tests. The exception rules apply to all of them, and each entry
 point is a sanctioned broad-catch site.
 
 The rules apply established Python guidance, cited rule by rule. This reference
-does not adopt any external style guide wholesale; for example, the
-repository's worker packages use relative imports, which the Google guide
-discourages. Each section ends with its **Basis**, which names the standard it
-comes from. A rule marked **Repository
-convention** goes beyond a published standard to settle a pattern that the
-SDK handled inconsistently, and it has no external source.
+does not adopt any external style guide wholesale; for example, the repository's
+worker packages use relative imports, which the Google guide discourages. Each
+section ends with its **Basis**, which names the standard it comes from. A rule
+marked **Repository convention** goes beyond a published standard to settle a
+pattern that the repository handled inconsistently, and it has no external
+source.
 
 Review feedback on a change cites a rule from this reference. A preference
 that is not written here is raised as a change to this reference, in its own
@@ -160,10 +161,11 @@ obvious.
 is unreachable, a remote service returns an error status, external or
 configuration input is malformed, a timeout fires, or a peer closes.
 
-- Define a package's failures in one `_errors.py` module rooted at a single
-  package base class, such as `ModelServiceError`, with a few meaningful
-  subclasses. End every exception name in `Error`. Re-export the public ones in
-  `__all__`.
+- Root a package's failures at a single package base class, such as
+  `ModelServiceError`, with a few meaningful subclasses, and define each one
+  next to the code that raises it. End every exception name in `Error`. Export
+  the public ones through the package root or the enrolled module that raises
+  them.
 - List the SDK errors a public function raises in its docstring `Raises:`
   section. Do not list the `ValueError` or `TypeError` raised for a caller
   mistake, because that would make behavior under misuse part of the API.
@@ -235,24 +237,24 @@ These rules follow:
 **Basis:**
 - Rules 1 and 2, and the sanctioned sites in rule 3, follow the
   [Google Python Style Guide, section 2.4.4](https://google.github.io/styleguide/pyguide.html#s2.4.4-decision),
-  which forbids catch-all `except:` and catching `Exception` unless re-raising or
-  "creating an isolation point in the program where exceptions are not
+  which forbids catch-all `except:` and catching `Exception` unless re-raising
+  or "creating an isolation point in the program where exceptions are not
   propagated but are recorded and suppressed instead, such as protecting a
   thread from crashing by guarding its outermost block". Rule 1 narrows the
   re-raising allowance to handlers that do failure-only work, because a broad
   handler that merely re-raises has no effect; that narrowing is a
-  **repository convention**. The same section says a library's own exceptions "must inherit from an existing exception
-  class" and that names end in `Error`; calls for `finally` for cleanup;
-  advises raising `ValueError` for a violated precondition; and says not to use
-  `assert` to validate preconditions. Its
+  **repository convention**. The same section says a library's own exceptions
+  "must inherit from an existing exception class" and that names end in `Error`;
+  calls for `finally` for cleanup; advises raising `ValueError` for a violated
+  precondition; and says not to use `assert` to validate preconditions. Its
   [function docstring rules](https://google.github.io/styleguide/pyguide.html#s3.8.3-functions-and-methods)
   say not to document exceptions raised when the API is violated, and its
   [error message rules](https://google.github.io/styleguide/pyguide.html#s3.10.2-error-messages)
   require that a message "precisely match the actual error condition". The
   [PEP 8 programming recommendations](https://peps.python.org/pep-0008/#programming-recommendations)
   warn that a bare `except:` "can disguise other problems", direct the author to
-  name specific exceptions, limit each `try` clause to the minimum code
-  (rule 8), and use `raise X from Y` to replace an exception without losing the
+  name specific exceptions, limit each `try` clause to the minimum code (rule
+  8), and use `raise X from Y` to replace an exception without losing the
   traceback (rule 6). [PEP 20](https://peps.python.org/pep-0020/) states the
   principle: "Errors should never pass silently. Unless explicitly silenced."
 - Ruff has matching rules:
@@ -289,13 +291,11 @@ These rules follow:
   [`contextlib.suppress` documentation](https://docs.python.org/3/library/contextlib.html#contextlib.suppress),
   which limits it to "very specific errors where silently continuing with
   program execution is known to be the right thing to do".
-- **Repository conventions:** raising where the failure is detected and
-  catching only where a decision can be made, returning a value for an ordinary
-  outcome so exceptions mark failures only, the per-package base class in
-  `_errors.py` (the
-  Google guide requires only that an exception inherit from an existing one),
-  inheriting
-  the replaced builtin to avoid a breaking change, translating foreign errors
+- **Repository conventions:** raising where the failure is detected and catching
+  only where a decision can be made, returning a value for an ordinary outcome
+  so exceptions mark failures only, the per-package base class (the Google guide
+  requires only that an exception inherit from an existing one), inheriting the
+  replaced builtin to avoid a breaking change, translating foreign errors
   exactly once, the log-once rule (rule 5), and the greppable
   `# isolation boundary:` and `# ignored:` comment tags.
 
@@ -322,16 +322,17 @@ These rules follow:
 [2.13](https://google.github.io/styleguide/pyguide.html#s2.13-properties) lists
 making an attribute read-only as a use of `@property`, and section
 [3.11](https://google.github.io/styleguide/pyguide.html#s3.11-files-sockets-closeables)
-prefers the `with` statement for resources and requires that code
-documentation "explain clearly how resource lifetime is managed" when that is
-infeasible, which is the reason for explicit lifecycle. The flag rule applies Martin Fowler's
-[Flag Argument](https://martinfowler.com/bliki/FlagArgument.html), which
-prefers separate, explicit calls because they "communicate more clearly what
-my intention is". The second-way rule restates the repository's own
-`AGENTS.md` [change contract](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#change-contract):
-"Do not add an abstraction until two concrete use cases need it." The
-callback, `try_*`, idempotent `stop()`, and constructor-policy rules, and the
-preference for `Enum` or `Literal`, are **repository conventions**.
+prefers the `with` statement for resources and requires that code documentation
+"explain clearly how resource lifetime is managed" when that is infeasible,
+which is the reason for explicit lifecycle. The flag rule applies Martin
+Fowler's [Flag Argument](https://martinfowler.com/bliki/FlagArgument.html),
+which prefers separate, explicit calls because they "communicate more clearly
+what my intention is". The second-way rule restates the repository's own
+`AGENTS.md`
+[change contract](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#change-contract):
+"Do not add an abstraction until two concrete use cases need it." The callback,
+`try_*`, idempotent `stop()`, and constructor-policy rules, and the preference
+for `Enum` or `Literal`, are **repository conventions**.
 
 ## Comments
 
