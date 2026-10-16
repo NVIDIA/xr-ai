@@ -88,10 +88,8 @@ class Conversation(RoutableAgent):
     :param compaction_input_budget_bytes: UTF-8 byte budget for background compaction inputs.
 
     Both budgets must be positive. ``frames`` and ``vision`` must either both
-    be configured or both be omitted.
-
-    :raises ValueError: If a budget is not positive, only one visual tool is configured,
-        or context topic names are invalid or duplicated across either list.
+    be configured or both be omitted. Topic lists contain non-empty names;
+    names must be unique within and across both lists.
     """
 
     def __init__(
@@ -199,9 +197,8 @@ class Conversation(RoutableAgent):
 
         Register the result with the same ``AgentRuntime`` as the conversation
         consumer. The constructor selects each topic's update behavior; each
-        publication carries only source-owned text.
-
-        :raises ValueError: If no context topics were configured.
+        publication carries only source-owned text. Configure at least one
+        topic before calling this method.
         """
 
         return make_context_subscriber(self, self._summary_context_topics, self._incremental_context_topics)
