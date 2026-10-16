@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private participant dialogue and bounded source-context storage."""
+"""Private participant dialogue and bounded source-context storage.
+
+Only modules in ``xr_ai_conversation`` use this implementation.
+"""
 
 from __future__ import annotations
 

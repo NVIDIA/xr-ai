@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Public text payload used by named conversation-context topics."""
+"""Text-record definition used within ``xr_ai_conversation``.
+
+Other packages import the public record from the package root.
+"""
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +16,3 @@ class ConversationContextUpdate(BaseModel):
 
     text: str = Field(min_length=1)
     """Non-empty source-owned context text; handling comes from topic configuration."""
-
-
-__all__ = ["ConversationContextUpdate"]

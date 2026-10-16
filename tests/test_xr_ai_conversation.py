@@ -23,7 +23,7 @@ from xr_ai_conversation import (  # noqa: E402
     ConversationContextUpdate,
 )
 from xr_ai_conversation._context import _ConversationContext  # noqa: E402
-from xr_ai_conversation.conversation import _messages  # noqa: E402
+from xr_ai_conversation._conversation import _messages  # noqa: E402
 from xr_ai_routing import (  # noqa: E402
     Admission,
     AgentExchange,

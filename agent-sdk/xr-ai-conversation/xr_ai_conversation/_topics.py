@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Runtime topic bridge for named conversation context sources."""
+"""Internal runtime topic bridge used only within ``xr_ai_conversation``."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 
-from .context import ConversationContextUpdate
+from ._context_update import ConversationContextUpdate
 
 if TYPE_CHECKING:
-    from .conversation import Conversation
+    from ._conversation import Conversation
 
 
 class _ConversationContextAgent(Agent):

@@ -3,7 +3,7 @@
 
 """Application-instructed conversation and participant-scoped context."""
 
-from .context import ConversationContextUpdate
-from .conversation import Conversation
+from ._context_update import ConversationContextUpdate
+from ._conversation import Conversation
 
 __all__ = ["Conversation", "ConversationContextUpdate"]

@@ -1,13 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Application-instructed conversation destination and optional current-view tools."""
+"""Private conversation implementation used within ``xr_ai_conversation``.
+
+Consumers import the public class from the package root.
+"""
 
 from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
 
 from xr_ai_hub import FrameUnavailable
@@ -26,7 +29,6 @@ from xr_ai_routing._history import (
     _active_history_timestamps,
     _format_minute,
 )
-from xr_ai_routing.contracts import Emit
 from xr_ai_runtime import Agent, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.types import StrictRequest
@@ -37,8 +39,8 @@ from ._context import (
     _rendered_source_size,
     _TranscriptEntry,
 )
+from ._context_update import ConversationContextUpdate
 from ._topics import make_context_subscriber
-from .context import ConversationContextUpdate
 
 _CORE_PROMPT = (Path(__file__).parent / "prompts" / "core.txt").read_text(encoding="utf-8").strip()
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
@@ -146,7 +148,12 @@ class Conversation(RoutableAgent):
         self.activate_participant(turn.participant_id)
         return Admission("accept")
 
-    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(
+        self,
+        turn: AgentTurn,
+        *,
+        emit: Callable[[str, str], Awaitable[None]],
+    ) -> DestinationResult:
         """Forward answer chunks with the general conversation source name.
 
         Cancellation and stream errors propagate after the inner iterator is
