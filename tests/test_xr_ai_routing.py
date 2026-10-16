@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
+from contextlib import contextmanager
 
 import pytest
 import xr_ai_routing as routing_module
@@ -50,16 +51,20 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
 
 
 class _Prediction:
-    def __init__(self, choice="uncertain", probabilities=None, *, error=None, blocked=False) -> None:
+    def __init__(self, choice="uncertain", probabilities=None, *, error=None, blocked=False, cancel_error=None) -> None:
         self.choice = choice
         self.probabilities = probabilities or {"slow": 0.0, "within_delay": 0.0, "uncertain": 1.0}
         self.error = error
         self.blocked = blocked
+        self.cancel_error = cancel_error
         self.calls = []
         self.called = asyncio.Event()
         self.cancelled = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.task: asyncio.Task | None = None
 
     async def decide(self, state, questions, **_kwargs):
+        self.task = asyncio.current_task()
         self.calls.append((state, questions))
         self.called.set()
         try:
@@ -79,9 +84,13 @@ class _Prediction:
                 usage={},
                 raw={},
             )
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
             self.cancelled.set()
+            if self.cancel_error is not None:
+                raise self.cancel_error from error
             raise
+        finally:
+            self.finished.set()
 
 
 class _AcknowledgmentLLM:
@@ -1480,6 +1489,43 @@ async def test_prediction_hang_does_not_delay_answer_and_starts_ack_after_delay(
     assert output == [("destination", "Here is the answer.")]
     assert decisions.cancelled.is_set()
     assert len(llm.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelled_acknowledgment_reports_prediction_cleanup_failure_once(caplog, monkeypatch):
+    @contextmanager
+    def scope(*_args, **_kwargs):
+        yield None
+
+    monkeypatch.setattr(router_module.nemo_relay.scope, "scope", scope)
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction(blocked=True, cancel_error=RuntimeError("prediction cleanup failed"))
+    llm = _AcknowledgmentLLM(blocked=True)
+    front_end = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    task = asyncio.create_task(_ack_output(front_end, "Answer while prediction is cancelled.", output))
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.called.wait(), timeout=1)
+    await asyncio.wait_for(llm.started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.finished.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert output[-1] == ("destination", "Here is the answer.")
+    assert decisions.cancelled.is_set()
+    assert decisions.task is not None and decisions.task.done()
+    assert llm.cancelled.is_set()
+    failures = [record for record in caplog.records if "optional acknowledgment task failed" in record.message]
+    assert len(failures) == 1
+    assert failures[0].exc_info is not None
+    assert isinstance(failures[0].exc_info[1], RuntimeError)
+    assert "prediction cleanup failed" in str(failures[0].exc_info[1])
 
 
 @pytest.mark.asyncio
