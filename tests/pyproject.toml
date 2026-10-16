@@ -33,6 +33,8 @@ dependencies = [
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    # Measures which SDK and service code the suite exercises; see [tool.coverage].
+    "coverage>=7.10",
     "numpy>=1.24",
     # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "audioop-lts; python_version >= '3.13'",
@@ -75,4 +77,42 @@ pythonpath   = ["../services/openxr-service", "../services/stt-server", "../serv
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     "integration: spawns a real server subprocess (CPU-only); runs in CI",
+]
+
+# The measured packages are the SDK, utilities, and services that the test
+# project installs or puts on its pytest `pythonpath`, not samples. A package
+# missing from `source_pkgs` does not appear in the report. Run from tests/ as
+# CI does:
+#   coverage run -m pytest -m "not gpu" && coverage json
+# then `python3 ../.github/scripts/coverage_summary.py coverage.json`.
+[tool.coverage.run]
+branch = true
+source_pkgs = [
+    "device_io_hub",
+    "openxr_service",
+    "rag_service",
+    "speaker_stt",
+    "stt_server",
+    "video_memory_service",
+    "xr_ai_hub",
+    "xr_ai_launcher",
+    "xr_ai_logging",
+    "xr_ai_model_server_stack",
+    "xr_ai_models",
+    "xr_ai_runtime",
+    "xr_ai_tools",
+    "xr_ai_vad",
+    "xr_ai_vllm",
+    "xr_ai_voice",
+    "xr_ai_voicegate",
+    "xr_ai_web_events",
+]
+
+[tool.coverage.report]
+skip_empty = true
+# Type-only and abstract code that has no runtime behavior to test.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    '^\s*\.\.\.$',
 ]
