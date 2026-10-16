@@ -42,8 +42,10 @@ mm_encoder_tp_mode:     data
 
 # Optional attention overrides. When omitted, Cosmos3 on SM12 GPUs (RTX
 # Blackwell and GB10) with the default Docker image uses TRITON_ATTN for both
-# decoder and vision attention to avoid FA2's PTX fallback. Other GPUs, custom
-# images, and pip mode retain vLLM defaults.
+# decoder and vision attention to reduce cold-start latency. The 26.09 x86
+# image's FA2 PTX fallback does not describe the ARM image, which includes
+# native Blackwell kernels. Other GPUs, custom images, and pip mode retain
+# vLLM defaults.
 # Set either to auto to opt back into vLLM's selection for that component.
 # attention_backend: TRITON_ATTN
 # mm_encoder_attn_backend: TRITON_ATTN
