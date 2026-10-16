@@ -120,16 +120,16 @@ async def test_real_hub_audio_projection_retains_existing_track_identity():
 
 
 @pytest.mark.asyncio
-async def test_wire_payload_matches_independent_protocol3_service_schema(monkeypatch):
-    # This is the service schema shipped in merged #585, independent of the
-    # worker's expanded config dataclass. Client policy must never enter it.
+async def test_wire_payload_matches_independent_protocol4_service_schema(monkeypatch):
+    # Enumerate the peer's protocol fields independently of client dataclasses.
     accepted = {"start_phrase", "stop_phrase", "require_wake_phrase", "phrase_window_s",
-                "activity_threshold", "silence_duration", "max_utterance_s"}
+                "activity_threshold", "silence_duration", "max_utterance_s",
+                "mode", "magic_phrases", "followup_grace_s", "stop_commands_enabled"}
     async def handler(socket):
         opening = json.loads(await socket.recv())
         assert set(opening["config"]) == accepted
         assert opening["audio_origin_us"] == 100
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
         await socket.recv()
         await socket.send(json.dumps({"events": []}))
     async with serve(handler, "127.0.0.1", 0) as server:
@@ -147,14 +147,14 @@ async def test_http_and_websocket_ignore_ambient_proxy_and_normalize_origin(monk
         writer.close()
     async def health(reader, writer):
         await reader.readuntil(b"\r\n\r\n")
-        body = b'{"service":"xr-ai-speaker-stt","protocol":3}'
+        body = b'{"service":"xr-ai-speaker-stt","protocol":4}'
         writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode()
                      + b"\r\nConnection: close\r\n\r\n" + body)
         await writer.drain()
         writer.close()
     async def handler(socket):
         await socket.recv()
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
     proxy_server = await asyncio.start_server(proxy, "127.0.0.1", 0)
     health_server = await asyncio.start_server(health, "127.0.0.1", 0)
     async with proxy_server, health_server, serve(handler, "127.0.0.1", 0) as ws:

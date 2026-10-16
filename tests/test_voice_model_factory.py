@@ -85,7 +85,6 @@ def test_factory_wrong_role_and_invalid_capacity_fail_before_client(tmp_path, mo
 @pytest.mark.parametrize("sample, model_file, preset", [
     ("simple-vlm-example", "models.json", "voice_gate.yaml"),
     ("tea-making-sample", "models.local.json", "voice_gate.yaml"),
-    ("tea-making-sample", "models.local.json", "voice_gate.always-on.yaml"),
 ])
 async def test_documented_nim_switch_preserves_first_backup_and_restores_active_preset(
     tmp_path, sample, model_file, preset,

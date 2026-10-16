@@ -5,9 +5,8 @@
 # Paths resolve relative to this file's directory.
 
 # ── Voice gate ────────────────────────────────────────────────────────────────
-# Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with
-# `magic_phrases: []` (always-on) to preserve the pre-migration behavior;
-# operators populate the list to enable wake-word gating.
+# Interaction mode and optional wake phrases live in voice_gate.yaml.
+# The sample starts with a closed conversation; the start phrase opens it.
 voice_gate_yaml: voice_gate.yaml
 
 # ── Native capability services ───────────────────────────────────────────────

@@ -234,7 +234,7 @@ async def test_cancelled_request_closes_connection_and_releases_session(cancel_o
             if cancel_op == "open":
                 allocated.set()
                 await release_reply.wait()
-            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
             await socket.recv()
             if cancel_op == "audio":
                 allocated.set()
@@ -424,7 +424,7 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
         opening = json.loads(await socket.recv())
         assert socket.request.path == "/v1/audio/transcriptions/stream"
         sessions[socket] = opening["audio_origin_us"]
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 3}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
         count, samples = 0, 0
         try:
             async for audio in socket:
@@ -515,8 +515,8 @@ async def test_web_audio_queue_allows_two_seconds_before_reset():
         await asyncio.Future()
     processor._client = SimpleNamespace(_feed=feed, _forget=AsyncMock(), _close=AsyncMock())
     processor.push_frame = AsyncMock()
-    processor._enrolled.add("web-client")
     await processor.process_frame(ParticipantJoinedFrame("web-client"), FrameDirection.DOWNSTREAM)
+    processor._enrolled.add("web-client")
     def audio():
         frame = InputAudioRawFrame(audio=bytes(320), sample_rate=16000, num_channels=1)
         frame.transport_source = "web-client"
@@ -860,7 +860,7 @@ async def test_missing_or_incompatible_speaker_endpoint(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", get)
     assert not await client._available()
     get.side_effect = None
-    get.return_value = httpx.Response(200, json={"service": "unrelated", "protocol": 3}, request=httpx.Request("GET", "http://localhost/health"))
+    get.return_value = httpx.Response(200, json={"service": "unrelated", "protocol": 4}, request=httpx.Request("GET", "http://localhost/health"))
     with pytest.raises(RuntimeError, match="incompatible service"):
         await client._available()
     get.side_effect = httpx.ReadTimeout("unresponsive")
@@ -879,6 +879,7 @@ def test_invalid_backend_configuration_fails_early(settings):
 def test_conversation_owns_controls_when_both_mappings_are_present(tmp_path):
     path = tmp_path / "voice.yaml"
     path.write_text(yaml.safe_dump({
+        "magic_phrases": ["hey agent"],
         "conversation": {"enabled": True, "start_phrase": "begin our session", "require_wake_phrase": True},
         "speaker": {"enabled": True, "start_phrase": "ignore this old phrase", "require_wake_phrase": False},
     }))
@@ -892,5 +893,6 @@ def test_conversation_can_use_ordinary_stt_or_preserve_legacy_wake_mode(tmp_path
     assert cfg._conversation is not None and cfg._speaker is None
     assert not cfg._conversation.require_wake_phrase
     cfg = _config(tmp_path, conversation=False)
-    assert cfg._conversation is None and cfg._speaker is None
+    assert cfg._conversation is None and cfg._speaker is not None
+    assert cfg._speaker.mode == "wake_only"
     assert cfg.magic_phrases == ("hey agent",)

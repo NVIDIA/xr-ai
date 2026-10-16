@@ -32,7 +32,7 @@ passes each file to the process that owns it:
 |---|---|
 | `yaml/cloudxr_runtime.yaml` | Client profile, EULA acceptance, and compositor GPU |
 | `yaml/xr_render_demo_worker.yaml` | Capability endpoints, text memory, VAD, and idle timeout |
-| `yaml/voice_gate.yaml` | Always-on speech or wake phrases |
+| `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/models.json` | Reused model adapters and endpoint addresses |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, networking, and video recording |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |

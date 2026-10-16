@@ -175,18 +175,18 @@ def test_web_event_config_defaults_and_validation(
         == _SAMPLE / "yaml/voice_gate.yaml"
     )
 
-    always_on_source = tmp_path / "always-on-worker.yaml"
-    always_on_source.write_text(
+    custom_gate = tmp_path / "custom-voice.yaml"
+    custom_gate.write_text("mode: hybrid\nmagic_phrases: [hey agent]\n", encoding="utf-8")
+    custom_source = tmp_path / "custom-worker.yaml"
+    custom_source.write_text(
         (_SAMPLE / "yaml/tea_making_worker.yaml")
         .read_text()
-        .replace("voice_gate.yaml", "voice_gate.always-on.yaml"),
+        .replace("voice_gate.yaml", "custom-voice.yaml"),
         encoding="utf-8",
     )
-    monkeypatch.setattr(sample_main, "_WORKER_CONFIG", always_on_source)
-    always_on_config = sample_main._materialize_worker_config(tmp_path)
-    assert load_config(always_on_config).voice_gate_yaml == (
-        tmp_path / "voice_gate.always-on.yaml"
-    )
+    monkeypatch.setattr(sample_main, "_WORKER_CONFIG", custom_source)
+    custom_config = sample_main._materialize_worker_config(tmp_path)
+    assert load_config(custom_config).voice_gate_yaml == custom_gate
 
 
 @pytest.mark.asyncio
