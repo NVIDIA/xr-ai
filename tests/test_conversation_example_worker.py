@@ -1543,6 +1543,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(
     agent = ConversationExampleAgent(_ignore_status, front_end=front_end, conversations=())
 
     class Context:
+        agent_name = "conversation-example"
         metadata = SimpleNamespace(message_id="response-1", correlation_id=None, participant_id="alice")
 
         def __init__(self):
@@ -1562,7 +1563,7 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(
 
     context = Context()
     task = asyncio.create_task(
-        agent._stream_response(UserQuery(text="Explain this request.", timestamp_us=123), context)  # type: ignore[arg-type]
+        agent._stream(UserQuery(text="Explain this request.", timestamp_us=123), context)  # type: ignore[arg-type]
     )
     await asyncio.wait_for(context.acknowledgment_started.wait(), timeout=1)
     destination.release_answer.set()

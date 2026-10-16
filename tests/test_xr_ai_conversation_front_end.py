@@ -7,6 +7,7 @@ import asyncio
 from collections import deque
 
 import pytest
+import xr_ai_conversation as conversation_module
 import xr_ai_conversation.front_end as front_end_module
 from xr_ai_conversation import (
     Admission,
@@ -14,11 +15,28 @@ from xr_ai_conversation import (
     ConversationFrontEnd,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from xr_ai_conversation._history import _active_history_timestamps
 from xr_ai_conversation.front_end import _bounded_history_with_times, _is_valid_acknowledgment
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
+
+
+def test_routable_agent_replaces_destination_protocol_export() -> None:
+    assert RoutableAgent.__name__ == "RoutableAgent"
+    assert conversation_module.__all__ == [
+        "Admission",
+        "Conversation",
+        "ConversationContextUpdate",
+        "ConversationExchange",
+        "ConversationFrontEnd",
+        "ConversationTurn",
+        "DestinationResult",
+        "RoutableAgent",
+        "RoutingAid",
+    ]
+    assert not hasattr(conversation_module, "ConversationDestination")
 
 
 class _Prediction:

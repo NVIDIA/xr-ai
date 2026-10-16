@@ -24,11 +24,11 @@ from ._history import (
 )
 from .contracts import (
     Admission,
-    ConversationDestination,
     ConversationExchange,
     ConversationTurn,
     DestinationResult,
     Emit,
+    RoutableAgent,
 )
 
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
@@ -85,7 +85,7 @@ class ConversationFrontEnd:
 
     def __init__(
         self,
-        destinations: Mapping[str, ConversationDestination],
+        destinations: Mapping[str, RoutableAgent],
         decisions: DecisionService,
         *,
         default_destination: str = "conversation",

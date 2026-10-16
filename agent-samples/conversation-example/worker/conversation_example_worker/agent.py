@@ -62,7 +62,8 @@ class ConversationExampleAgent(Agent):
         self._conversations = conversations
         self._participant_left_handlers = participant_left_handlers
         self._frames = frames
-        self._tasks: dict[str, asyncio.Task[None]] = {}
+        # The adapter owns response tasks; the front end owns its route tasks.
+        self._response_tasks: dict[str, asyncio.Task[None]] = {}
         self._participants: set[str] = set()
 
     @subscribe(USER_QUERY_TOPIC)
@@ -73,14 +74,16 @@ class ConversationExampleAgent(Agent):
         if participant_id is None:
             raise ValueError("conversation example queries require a participant")
         self._participants.add(participant_id)
-        await self._cancel(participant_id)
+        await self._cancel_response(participant_id)
+        # Runtime publication awaits subscribers; detach model streaming so a
+        # query delivery can finish while this response remains active.
         task = asyncio.create_task(
             self._stream(request, ctx),
             name=f"conversation-example-query:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
-        self._tasks[participant_id] = task
-        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
+        self._response_tasks[participant_id] = task
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard_response(pid, completed))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -99,28 +102,13 @@ class ConversationExampleAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
-        await self._cancel(participant_id)
+        await self._cancel_response(participant_id)
         errors: list[Exception] = []
         try:
             await self._front_end.participant_left(participant_id)
         except Exception as error:
             errors.append(error)
-        for handler in self._participant_left_handlers:
-            try:
-                await handler(participant_id)
-            except Exception as error:
-                errors.append(error)
-        for conversation in self._conversations:
-            try:
-                await conversation.participant_left(participant_id)
-            except Exception as error:
-                errors.append(error)
-        self._participants.discard(participant_id)
-        if self._frames is not None:
-            try:
-                self._frames.release(participant_id)
-            except Exception as error:
-                errors.append(error)
+        errors.extend(await self._cleanup_participant_state((participant_id,), collect_errors=True))
         if errors:
             raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
 
@@ -149,11 +137,16 @@ class ConversationExampleAgent(Agent):
 
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            await self._cancel_all()
+            await self._cancel_responses()
             return
-        await self._cancel(participant_id)
+        await self._cancel_response(participant_id)
 
     async def _stream(self, request: UserQuery, ctx: RuntimeContext) -> None:
+        response_id = ctx.metadata.message_id or ctx.metadata.correlation_id
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            raise ValueError("conversation example queries require a participant")
+
         with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
             with nemo_relay.scope.scope(
                 "conversation-example.turn",
@@ -166,106 +159,87 @@ class ConversationExampleAgent(Agent):
                     "participant_id": ctx.metadata.participant_id,
                 },
             ):
-                await self._stream_response(request, ctx)
+                stream_opened = False
+                cancelled = False
+                output_failure: Exception | None = None
 
-    async def _stream_response(
-        self,
-        request: UserQuery,
-        ctx: RuntimeContext,
-    ) -> None:
-        response_id = ctx.metadata.message_id or ctx.metadata.correlation_id
-        participant_id = ctx.metadata.participant_id
-        if participant_id is None:
-            raise ValueError("conversation example queries require a participant")
-        first = True
-        opened = False
-        cancelled = False
-        processing = False
-        output_failure: Exception | None = None
-        try:
-            await self._set_status("processing", participant_id)
-            processing = True
-            fragments: list[str] = []
+                async def emit(source: str, text: str) -> None:
+                    nonlocal stream_opened, output_failure
+                    try:
+                        with nemo_relay.scope.scope(
+                            "conversation-example.destination-output",
+                            nemo_relay.ScopeType.Agent,
+                            metadata={"destination": source},
+                        ):
+                            await ctx.publish(
+                                VOICE_OUTPUT_TOPIC,
+                                VoiceOutput(
+                                    text=text,
+                                    response_id=response_id,
+                                    final=False,
+                                    interrupt=not stream_opened,
+                                    timestamp_us=request.timestamp_us,
+                                ),
+                            )
+                    except Exception as error:
+                        output_failure = error
+                        raise
+                    # A response starts only after its first chunk is accepted.
+                    stream_opened = True
 
-            async def emit(source: str, text: str) -> None:
-                nonlocal first, opened, output_failure
-                fragments.append(text)
-                interrupt = first
+                await self._set_status("processing", participant_id)
                 try:
-                    with nemo_relay.scope.scope(
-                        "conversation-example.destination-output",
-                        nemo_relay.ScopeType.Agent,
-                        metadata={"destination": source},
-                    ):
-                        await ctx.publish(
-                            VOICE_OUTPUT_TOPIC,
-                            VoiceOutput(
-                                text=text,
-                                response_id=response_id,
-                                final=False,
-                                interrupt=interrupt,
-                                timestamp_us=request.timestamp_us,
-                            ),
-                        )
-                except Exception as error:
-                    output_failure = error
-                    raise
-                # The front end drains a committed emission before allowing another first chunk.
-                first = False
-                opened = True
-
-            try:
-                await self._front_end.handle(
-                    ConversationTurn(
-                        participant_id=participant_id,
-                        turn_id=response_id,
-                        query=request.text,
-                    ),
-                    emit=emit,
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                if output_failure is not None:
-                    raise output_failure
-                logger.exception("conversation routing or generation failed participant={!r}", participant_id)
-                if not fragments:
-                    with suppress(RuntimeClosedError):
-                        await ctx.publish(
-                            VOICE_OUTPUT_TOPIC,
-                            VoiceOutput(
-                                text="I couldn't complete that request. Please try again.",
-                                timestamp_us=request.timestamp_us,
-                            ),
-                        )
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
-        finally:
-            if processing:
-                await self._set_status("idle", participant_id)
-            if opened and not cancelled:
-                with suppress(RuntimeClosedError):
-                    await ctx.publish(
-                        VOICE_OUTPUT_TOPIC,
-                        VoiceOutput(
-                            response_id=response_id,
-                            timestamp_us=request.timestamp_us,
+                    await self._front_end.handle(
+                        ConversationTurn(
+                            participant_id=participant_id,
+                            turn_id=response_id,
+                            query=request.text,
                         ),
+                        emit=emit,
                     )
+                except asyncio.CancelledError:
+                    cancelled = True
+                    raise
+                except Exception:
+                    if output_failure is not None:
+                        raise output_failure
+                    logger.exception(
+                        "conversation routing or generation failed participant={!r}",
+                        participant_id,
+                    )
+                    if not stream_opened:
+                        with suppress(RuntimeClosedError):
+                            await ctx.publish(
+                                VOICE_OUTPUT_TOPIC,
+                                VoiceOutput(
+                                    text="I couldn't complete that request. Please try again.",
+                                    timestamp_us=request.timestamp_us,
+                                ),
+                            )
+                finally:
+                    await self._set_status("idle", participant_id)
+                    if stream_opened and not cancelled:
+                        with suppress(RuntimeClosedError):
+                            await ctx.publish(
+                                VOICE_OUTPUT_TOPIC,
+                                VoiceOutput(
+                                    response_id=response_id,
+                                    timestamp_us=request.timestamp_us,
+                                ),
+                            )
 
-    async def _cancel(self, participant_id: str) -> None:
+    async def _cancel_response(self, participant_id: str) -> None:
         await self._front_end.interrupt(participant_id)
-        task = self._tasks.pop(participant_id, None)
+        task = self._response_tasks.pop(participant_id, None)
         if task is None:
             return
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
-    async def _cancel_all(self) -> None:
+    async def _cancel_responses(self) -> None:
         await self._front_end.interrupt()
-        tasks = tuple(self._tasks.values())
-        self._tasks.clear()
+        tasks = tuple(self._response_tasks.values())
+        self._response_tasks.clear()
         for task in tasks:
             task.cancel()
         if tasks:
@@ -274,21 +248,57 @@ class ConversationExampleAgent(Agent):
     async def stop(self) -> None:
         """Cancel turns and release participant history owned by this agent."""
 
-        await self._cancel_all()
+        await self._cancel_responses()
         await self._front_end.stop()
         participants = tuple(self._participants)
         self._participants.clear()
-        for handler in self._participant_left_handlers:
-            await asyncio.gather(*(handler(pid) for pid in participants))
-        for conversation in self._conversations:
-            await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
-        if self._frames is not None:
-            for participant_id in participants:
-                self._frames.release(participant_id)
+        await self._cleanup_participant_state(participants, collect_errors=False)
 
-    def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
-        if self._tasks.get(participant_id) is task:
-            self._tasks.pop(participant_id, None)
+    async def _cleanup_participant_state(
+        self,
+        participant_ids: tuple[str, ...],
+        *,
+        collect_errors: bool,
+    ) -> list[Exception]:
+        """Release adapter-owned state after front-end departure cleanup."""
+
+        errors: list[Exception] = []
+        for handler in self._participant_left_handlers:
+            if collect_errors:
+                for participant_id in participant_ids:
+                    try:
+                        await handler(participant_id)
+                    except Exception as error:
+                        errors.append(error)
+            else:
+                await asyncio.gather(*(handler(pid) for pid in participant_ids))
+
+        for conversation in self._conversations:
+            if collect_errors:
+                for participant_id in participant_ids:
+                    try:
+                        await conversation.participant_left(participant_id)
+                    except Exception as error:
+                        errors.append(error)
+            else:
+                await asyncio.gather(*(conversation.participant_left(pid) for pid in participant_ids))
+
+        if collect_errors:
+            self._participants.difference_update(participant_ids)
+            if self._frames is not None:
+                for participant_id in participant_ids:
+                    try:
+                        self._frames.release(participant_id)
+                    except Exception as error:
+                        errors.append(error)
+        elif self._frames is not None:
+            for participant_id in participant_ids:
+                self._frames.release(participant_id)
+        return errors
+
+    def _discard_response(self, participant_id: str, task: asyncio.Task[None]) -> None:
+        if self._response_tasks.get(participant_id) is task:
+            self._response_tasks.pop(participant_id, None)
         if not task.cancelled() and (error := task.exception()) is not None:
             logger.error("conversation example turn failed pid={!r}: {!r}", participant_id, error)
 

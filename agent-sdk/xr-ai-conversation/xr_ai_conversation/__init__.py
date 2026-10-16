@@ -6,10 +6,10 @@
 from .contracts import (
     Admission,
     ConversationContextUpdate,
-    ConversationDestination,
     ConversationExchange,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from .conversation import Conversation
@@ -19,10 +19,10 @@ __all__ = [
     "Admission",
     "Conversation",
     "ConversationContextUpdate",
-    "ConversationDestination",
     "ConversationExchange",
     "ConversationFrontEnd",
     "ConversationTurn",
     "DestinationResult",
+    "RoutableAgent",
     "RoutingAid",
 ]
