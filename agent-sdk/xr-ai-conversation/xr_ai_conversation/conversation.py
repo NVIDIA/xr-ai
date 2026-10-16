@@ -31,6 +31,7 @@ from .contracts import (
     ConversationTurn,
     DestinationResult,
     Emit,
+    RoutableAgent,
     RoutingAid,
 )
 
@@ -66,7 +67,7 @@ class _CurrentViewRequest(StrictRequest):
     query: str
 
 
-class Conversation:
+class Conversation(RoutableAgent):
     """Stream an application-instructed conversation with optional current-view tools.
 
     :param llm: Typed streamed language model service.

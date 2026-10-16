@@ -25,12 +25,20 @@ from xr_ai_conversation import (  # noqa: E402
     ConversationFrontEnd,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from xr_ai_conversation._context import _ConversationContext  # noqa: E402
 from xr_ai_conversation.conversation import _messages  # noqa: E402
 from xr_ai_conversation.front_end import _is_valid_acknowledgment  # noqa: E402
 from xr_ai_runtime import AgentRuntime, Topic  # noqa: E402
+
+
+def test_conversation_explicitly_implements_routable_agent():
+    assert Conversation.__bases__ == (RoutableAgent,)
+    assert all(
+        callable(Conversation.__dict__.get(method)) for method in ("routing_aid", "admit", "answer", "release")
+    )
 
 
 class _Prediction:
