@@ -19,11 +19,11 @@ from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMServ
 from ._history import _active_history_timestamps, _format_minute
 from .contracts import (
     Admission,
-    ConversationDestination,
     ConversationExchange,
     ConversationTurn,
     DestinationResult,
     Emit,
+    RoutableAgent,
 )
 
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
@@ -80,7 +80,7 @@ class ConversationFrontEnd:
 
     def __init__(
         self,
-        destinations: Mapping[str, ConversationDestination],
+        destinations: Mapping[str, RoutableAgent],
         decisions: DecisionService,
         *,
         default_destination: str = "conversation",
