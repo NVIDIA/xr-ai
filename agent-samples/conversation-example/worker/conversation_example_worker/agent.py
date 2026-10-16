@@ -103,12 +103,28 @@ class ConversationExampleAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel_response(participant_id)
+        # Departure still releases every owner when an earlier hook fails.
         errors: list[Exception] = []
         try:
             await self._front_end.participant_left(participant_id)
         except Exception as error:
             errors.append(error)
-        errors.extend(await self._cleanup_participant_state((participant_id,), collect_errors=True))
+        for handler in self._participant_left_handlers:
+            try:
+                await handler(participant_id)
+            except Exception as error:
+                errors.append(error)
+        for conversation in self._conversations:
+            try:
+                await conversation.participant_left(participant_id)
+            except Exception as error:
+                errors.append(error)
+        self._participants.discard(participant_id)
+        if self._frames is not None:
+            try:
+                self._frames.release(participant_id)
+            except Exception as error:
+                errors.append(error)
         if errors:
             raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
 
@@ -252,49 +268,15 @@ class ConversationExampleAgent(Agent):
         await self._front_end.stop()
         participants = tuple(self._participants)
         self._participants.clear()
-        await self._cleanup_participant_state(participants, collect_errors=False)
-
-    async def _cleanup_participant_state(
-        self,
-        participant_ids: tuple[str, ...],
-        *,
-        collect_errors: bool,
-    ) -> list[Exception]:
-        """Release adapter-owned state after front-end departure cleanup."""
-
-        errors: list[Exception] = []
+        # Shutdown cleans each resource across participants concurrently and
+        # stops at the first failing cleanup stage.
         for handler in self._participant_left_handlers:
-            if collect_errors:
-                for participant_id in participant_ids:
-                    try:
-                        await handler(participant_id)
-                    except Exception as error:
-                        errors.append(error)
-            else:
-                await asyncio.gather(*(handler(pid) for pid in participant_ids))
-
+            await asyncio.gather(*(handler(pid) for pid in participants))
         for conversation in self._conversations:
-            if collect_errors:
-                for participant_id in participant_ids:
-                    try:
-                        await conversation.participant_left(participant_id)
-                    except Exception as error:
-                        errors.append(error)
-            else:
-                await asyncio.gather(*(conversation.participant_left(pid) for pid in participant_ids))
-
-        if collect_errors:
-            self._participants.difference_update(participant_ids)
-            if self._frames is not None:
-                for participant_id in participant_ids:
-                    try:
-                        self._frames.release(participant_id)
-                    except Exception as error:
-                        errors.append(error)
-        elif self._frames is not None:
-            for participant_id in participant_ids:
+            await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
+        if self._frames is not None:
+            for participant_id in participants:
                 self._frames.release(participant_id)
-        return errors
 
     def _discard_response(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._response_tasks.get(participant_id) is task:
