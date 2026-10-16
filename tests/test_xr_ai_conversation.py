@@ -263,7 +263,7 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
 async def test_conversation_reconciles_recent_front_end_window_after_another_destination_answers():
     class Decisions:
         def __init__(self):
-            self.choices = iter(("conversation", "scene", "conversation", "conversation"))
+            self.choices = iter(("conversation", "scene", "conversation", "conversation", "scene", "conversation"))
 
         async def decide(self, _state, _questions, **_kwargs):
             choice = next(self.choices)
@@ -313,6 +313,117 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
     repeated_context = llm.messages[2][1].content
     assert repeated_context.count("Added the blue cube to the room.") == 1
     assert "Turn 2: user asked: Add a blue cube." in repeated_context
+
+    # The same scene result can happen again immediately. Causal exchange
+    # identity, not timestamp distance or text equality, keeps both turns.
+    await front_end.handle(ConversationTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
+    await front_end.handle(ConversationTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
+    latest_context = llm.messages[3][1].content
+    assert latest_context.count("Added the blue cube to the room.") == 2
+
+
+@pytest.mark.asyncio
+async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
+    class Decisions:
+        def __init__(self):
+            self.choices = iter(("conversation", "scene", "conversation"))
+
+        async def decide(self, _state, _questions, **_kwargs):
+            choice = next(self.choices)
+            return DecisionResponse(
+                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    class Scene:
+        def routing_aid(self, _participant_id):
+            return RoutingAid("scene", "Applies requested changes to the current scene.")
+
+        async def admit(self, _turn, *, focused):
+            return Admission("accept")
+
+        async def answer(self, _turn, *, emit):
+            answer = "Added the blue cube to the room."
+            await emit("scene", answer)
+            return DestinationResult("answer", answer)
+
+        async def release(self, _participant_id):
+            pass
+
+    llm = _LLM()
+    conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "scene": Scene()},
+        Decisions(),  # type: ignore[arg-type]
+        context_budget_bytes=1_000,
+    )
+
+    async def emit(_source, _text):
+        pass
+
+    seed = ConversationExchange("Add a blue cube.", "Added the blue cube to the room.")
+    await front_end.handle(
+        ConversationTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit
+    )
+    await front_end.handle(ConversationTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await front_end.handle(ConversationTurn("alice", "turn-3", "What did I add?"), emit=emit)
+
+    prompt_context = llm.messages[1][1].content
+    assert prompt_context.count("Added the blue cube to the room.") == 2
+
+
+@pytest.mark.asyncio
+async def test_admission_release_text_and_rerouted_answer_keep_separate_history_identity():
+    class Decisions:
+        def __init__(self):
+            self.choices = iter(("scene", "conversation", "conversation"))
+
+        async def decide(self, _state, _questions, **_kwargs):
+            choice = next(self.choices)
+            return DecisionResponse(
+                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    class Scene:
+        def routing_aid(self, _participant_id):
+            return RoutingAid("scene", "Applies requested changes to the current scene.")
+
+        async def admit(self, _turn, *, focused):
+            return Admission("release", text="Leaving the scene task.")
+
+        async def answer(self, _turn, *, emit):  # pragma: no cover - release skips answer
+            raise AssertionError("released destination must not answer")
+
+        async def release(self, _participant_id):
+            pass
+
+    llm = _LLM()
+    conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "scene": Scene()},
+        Decisions(),  # type: ignore[arg-type]
+        context_budget_bytes=1_000,
+    )
+
+    async def emit(_source, _text):
+        pass
+
+    await front_end.handle(ConversationTurn("alice", "turn-1", "What should happen next?"), emit=emit)
+    await front_end.handle(ConversationTurn("alice", "turn-2", "What did we decide?"), emit=emit)
+
+    prompt_context = llm.messages[1][1].content
+    assert prompt_context.count("Leaving the scene task.") == 1
+    assert prompt_context.count("Hello there.") == 1
+    assert [item.assistant for item in front_end._history["alice"]] == [
+        "Leaving the scene task.",
+        "Hello there.",
+        "Hello there.",
+    ]
 
 
 @pytest.mark.asyncio
@@ -890,13 +1001,12 @@ def test_private_transcript_reconciles_overlapping_windows_and_keeps_timestamp_p
             ("Latest request", "Latest reply", None),
         ),
     )
-    # Replaying the same bounded window must not duplicate either exchange.
+    # A repeated utterance/result at a distinct known time is new, while
+    # replaying that exact timestamped window must not duplicate it.
+    context.reconcile_transcript("alice", (("Scene request", "Scene reply", 2_000_000),))
     context.reconcile_transcript(
         "alice",
-        (
-            ("Scene request", "Scene reply", 20),
-            ("Latest request", "Latest reply", None),
-        ),
+        (("Scene request", "Scene reply", 2_000_000),),
     )
 
     transcript = context.transcript("alice")
@@ -904,8 +1014,19 @@ def test_private_transcript_reconciles_overlapping_windows_and_keeps_timestamp_p
         ("First request", "First reply"),
         ("Scene request", "Scene reply"),
         ("Latest request", "Latest reply"),
+        ("Scene request", "Scene reply"),
     ]
-    assert [entry.timestamp_us for entry in transcript] == [10, 20, None]
+    assert [entry.timestamp_us for entry in transcript] == [10, 20, None, 2_000_000]
+
+    unknown_seed = _ConversationContext()
+    unknown_seed.reconcile_transcript("alice", (("Scene request", "Scene reply", None),))
+    new_known_id = object()
+    unknown_seed.reconcile_transcript(
+        "alice",
+        (("Scene request", "Scene reply", 30),),
+        exchange_ids=(new_known_id,),
+    )
+    assert len(unknown_seed.transcript("alice")) == 2
 
 
 @pytest.mark.asyncio

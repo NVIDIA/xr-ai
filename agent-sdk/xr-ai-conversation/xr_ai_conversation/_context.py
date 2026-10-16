@@ -23,6 +23,7 @@ class _TranscriptEntry:
     user: str
     assistant: str
     timestamp_us: int | None = None
+    exchange_id: object | None = None
 
     @property
     def utf8_size(self) -> int:
@@ -67,13 +68,24 @@ class _ParticipantMemory:
 _Compactor = Callable[[str, str, Sequence[_TranscriptEntry]], Awaitable[str]]
 _DialogueCompactor = Callable[[str, Sequence[_TranscriptEntry]], Awaitable[str]]
 _logger = logging.getLogger(__name__)
+_Exchange = tuple[str, str, int | None, object | None]
 
 
-def _contains_exchange_window(existing: tuple[tuple[str, str], ...], incoming: tuple[tuple[str, str], ...]) -> bool:
-    """Return whether a bounded input window is already retained verbatim."""
+def _same_exchange(left: _Exchange, right: _Exchange) -> bool:
+    """Compare exchange identity, falling back only when both sides lack it."""
+
+    if left[3] is not None or right[3] is not None:
+        return left[3] is not None and left[3] is right[3]
+    if left[2] is not None and right[2] is not None:
+        return left[2] == right[2] and left[:2] == right[:2]
+    return left[:2] == right[:2]
+
+
+def _contains_exchange_window(existing: tuple[_Exchange, ...], incoming: tuple[_Exchange, ...]) -> bool:
+    """Return whether a bounded input window is already retained."""
 
     return len(incoming) <= len(existing) and any(
-        existing[start : start + len(incoming)] == incoming
+        all(_same_exchange(left, right) for left, right in zip(existing[start : start + len(incoming)], incoming))
         for start in range(len(existing) - len(incoming) + 1)
     )
 
@@ -97,36 +109,52 @@ class _ConversationContext:
         assistant: str,
         *,
         timestamp_us: int | None = None,
+        exchange_id: object | None = None,
     ) -> _TranscriptEntry:
         memory = self._participants.setdefault(participant, _ParticipantMemory())
-        entry = _TranscriptEntry(len(memory.transcript), "dialogue", user, assistant, timestamp_us)
+        entry = _TranscriptEntry(len(memory.transcript), "dialogue", user, assistant, timestamp_us, exchange_id)
         memory.transcript.append(entry)
         return entry
 
     def reconcile_transcript(
-        self, participant: str, exchanges: Sequence[tuple[str, str] | tuple[str, str, int | None]]
+        self,
+        participant: str,
+        exchanges: Sequence[tuple[str, str] | tuple[str, str, int | None]],
+        *,
+        exchange_ids: Sequence[object | None] = (),
     ) -> None:
         """Merge a front-end history window without replaying retained exchanges."""
 
         memory = self._participants.setdefault(participant, _ParticipantMemory())
-        existing = tuple((entry.user, entry.assistant) for entry in memory.transcript)
-        normalized = tuple(
-            (exchange[0], exchange[1], exchange[2] if len(exchange) == 3 else None) for exchange in exchanges
+        existing = tuple(
+            (entry.user, entry.assistant, entry.timestamp_us, entry.exchange_id) for entry in memory.transcript
         )
-        incoming = tuple((user, assistant) for user, assistant, _ in normalized)
-        if not incoming:
+        if exchange_ids and len(exchange_ids) != len(exchanges):
+            raise ValueError("history exchange IDs must align with the exchanges")
+        normalized = tuple(
+            (
+                exchange[0],
+                exchange[1],
+                exchange[2] if len(exchange) == 3 else None,
+                exchange_ids[index] if exchange_ids else None,
+            )
+            for index, exchange in enumerate(exchanges)
+        )
+        if not normalized:
             return
 
         # FE history is a bounded recent window and can start after every turn
         # retained here. Match its overlap with our tail; a non-overlapping
         # window is new completed context, not a divergent transcript to drop.
-        if _contains_exchange_window(existing, incoming):
+        if _contains_exchange_window(existing, normalized):
             return
-        overlap = min(len(existing), len(incoming))
-        while overlap and existing[-overlap:] != incoming[:overlap]:
+        overlap = min(len(existing), len(normalized))
+        while overlap and not all(
+            _same_exchange(left, right) for left, right in zip(existing[-overlap:], normalized[:overlap])
+        ):
             overlap -= 1
-        for user, assistant, timestamp_us in normalized[overlap:]:
-            self.append(participant, user, assistant, timestamp_us=timestamp_us)
+        for user, assistant, timestamp_us, exchange_id in normalized[overlap:]:
+            self.append(participant, user, assistant, timestamp_us=timestamp_us, exchange_id=exchange_id)
 
     def transcript(self, participant: str) -> tuple[_TranscriptEntry, ...]:
         memory = self._participants.get(participant)
@@ -231,8 +259,8 @@ class _ConversationContext:
     ) -> bool:
         summary = await compact(previous_input, batch)
         memory = self._participants.get(participant)
-        # Do not commit a result if newer turns or a replacement summary won
-        # while the asynchronous compaction request was running.
+        # Commit only while the prior summary and compacted transcript prefix
+        # still match; newer tail turns may remain uncompacted.
         if memory is None or memory.dialogue_revision != revision:
             return False
         if memory.dialogue_background != previous:

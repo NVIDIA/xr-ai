@@ -22,7 +22,7 @@ from ._context import (
     _rendered_source_size,
     _TranscriptEntry,
 )
-from ._history import _active_history_timestamps, _format_minute
+from ._history import _active_exchange_id, _active_history_exchange_ids, _active_history_timestamps, _format_minute
 from ._topics import make_context_subscriber
 from .contracts import (
     Admission,
@@ -293,6 +293,9 @@ class Conversation:
         history_timestamps = _active_history_timestamps.get()
         if len(history_timestamps) != len(history):
             history_timestamps = (None,) * len(history)
+        history_exchange_ids = _active_history_exchange_ids.get()
+        if len(history_exchange_ids) != len(history):
+            history_exchange_ids = (None,) * len(history)
         # The front end supplies a bounded recent window, not necessarily the
         # complete prefix retained by this engine.
         self._context.reconcile_transcript(
@@ -301,6 +304,7 @@ class Conversation:
                 (exchange.user, exchange.assistant, timestamp_us)
                 for exchange, timestamp_us in zip(history, history_timestamps, strict=True)
             ),
+            exchange_ids=history_exchange_ids,
         )
         self._schedule_dialogue_compaction(participant_id)
         dialogue_summary, dialogue_entries = self._context.dialogue_snapshot(participant_id)
@@ -386,7 +390,13 @@ class Conversation:
     def _record_completed_exchange(self, participant_id: str, user: str, assistant: str) -> None:
         if not assistant.strip():
             return
-        self._context.append(participant_id, user, assistant, timestamp_us=time.time_ns() // 1_000)
+        self._context.append(
+            participant_id,
+            user,
+            assistant,
+            timestamp_us=time.time_ns() // 1_000,
+            exchange_id=_active_exchange_id.get(),
+        )
         self._schedule_dialogue_compaction(participant_id)
 
     def _schedule_dialogue_compaction(self, participant_id: str) -> None:

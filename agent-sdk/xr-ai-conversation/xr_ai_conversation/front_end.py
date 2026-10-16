@@ -16,7 +16,12 @@ from functools import partial
 import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
 
-from ._history import _active_history_timestamps, _format_minute
+from ._history import (
+    _active_exchange_id,
+    _active_history_exchange_ids,
+    _active_history_timestamps,
+    _format_minute,
+)
 from .contracts import (
     Admission,
     ConversationDestination,
@@ -112,6 +117,7 @@ class ConversationFrontEnd:
         self._departure_calls: dict[str, int] = {}
         self._history: dict[str, list[ConversationExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
+        self._history_exchange_ids: dict[str, list[object | None]] = {}
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
 
@@ -151,11 +157,14 @@ class ConversationFrontEnd:
                 owned_history = list(turn.history)
                 self._history[participant_id] = owned_history
                 self._history_times[participant_id] = [None] * len(owned_history)
+                self._history_exchange_ids[participant_id] = [None] * len(owned_history)
             history = tuple(owned_history) if owned_history else turn.history
             timestamps = tuple(self._history_times.get(participant_id, (None,) * len(history)))
-            history, timestamps = _bounded_history_with_times(
-                history, timestamps, self._context_budget_bytes, participant_id
+            exchange_ids = tuple(self._history_exchange_ids.get(participant_id, (None,) * len(history)))
+            history, timestamps, exchange_ids = _bounded_history_with_metadata(
+                history, timestamps, exchange_ids, self._context_budget_bytes, participant_id
             )
+            current_exchange_id = object()
             current_turn = ConversationTurn(
                 participant_id=turn.participant_id,
                 turn_id=turn.turn_id,
@@ -170,11 +179,15 @@ class ConversationFrontEnd:
                     await emit(source, text)
 
             async def run_handle() -> DestinationResult:
-                token = _active_history_timestamps.set(timestamps)
+                timestamp_token = _active_history_timestamps.set(timestamps)
+                history_id_token = _active_history_exchange_ids.set(exchange_ids)
+                current_id_token = _active_exchange_id.set(current_exchange_id)
                 try:
                     return await self._handle(current_turn, emit=emit_if_current, generation=generation)
                 finally:
-                    _active_history_timestamps.reset(token)
+                    _active_exchange_id.reset(current_id_token)
+                    _active_history_exchange_ids.reset(history_id_token)
+                    _active_history_timestamps.reset(timestamp_token)
 
             task = asyncio.create_task(
                 run_handle(),
@@ -269,6 +282,7 @@ class ConversationFrontEnd:
                 if admission.text:
                     await emit(destination_name, admission.text)
                     self._remember(turn, admission.text)
+                    turn = self._turn_with_latest_history(turn)
                 focused = None
                 candidates = [item for item in self._destinations if item != destination_name]
                 if not candidates or attempt == 1:
@@ -467,6 +481,7 @@ class ConversationFrontEnd:
                     self._destinations_used.setdefault(participant_id, set()).update(used)
                 self._history.pop(participant_id, None)
                 self._history_times.pop(participant_id, None)
+                self._history_exchange_ids.pop(participant_id, None)
                 self._first_answer_samples.pop(participant_id, None)
                 errors = []
                 for destination_name in used:
@@ -516,6 +531,33 @@ class ConversationFrontEnd:
         history = self._history.setdefault(turn.participant_id, [])
         history.append(ConversationExchange(turn.query, answer))
         self._history_times.setdefault(turn.participant_id, []).append(time.time_ns() // 1_000)
+        exchange_id = _active_exchange_id.get()
+        if exchange_id is None:
+            exchange_id = object()
+        self._history_exchange_ids.setdefault(turn.participant_id, []).append(exchange_id)
+        # One route attempt can complete an admission-release message and then
+        # a second destination's answer. Each visible history record needs its
+        # own identity even though both belong to the same input turn.
+        _active_exchange_id.set(object())
+
+    def _turn_with_latest_history(self, turn: ConversationTurn) -> ConversationTurn:
+        """Include a completed admission-release message in a same-turn reroute."""
+
+        participant_id = turn.participant_id
+        history = tuple(self._history.get(participant_id, ()))
+        timestamps = tuple(self._history_times.get(participant_id, (None,) * len(history)))
+        exchange_ids = tuple(self._history_exchange_ids.get(participant_id, (None,) * len(history)))
+        history, timestamps, exchange_ids = _bounded_history_with_metadata(
+            history, timestamps, exchange_ids, self._context_budget_bytes, participant_id
+        )
+        _active_history_timestamps.set(timestamps)
+        _active_history_exchange_ids.set(exchange_ids)
+        return ConversationTurn(
+            participant_id=turn.participant_id,
+            turn_id=turn.turn_id,
+            query=turn.query,
+            history=history,
+        )
 
     def _record_first_answer(self, turn: ConversationTurn, destination: str, duration_secs: float) -> None:
         sample = (turn.query, duration_secs)
@@ -831,6 +873,19 @@ def _bounded_history_with_times(
     budget_bytes: int,
     participant_id: str,
 ) -> tuple[tuple[ConversationExchange, ...], tuple[int | None, ...]]:
+    bounded, bounded_times, _ = _bounded_history_with_metadata(
+        history, timestamps, (None,) * len(history), budget_bytes, participant_id
+    )
+    return bounded, bounded_times
+
+
+def _bounded_history_with_metadata(
+    history: tuple[ConversationExchange, ...],
+    timestamps: tuple[int | None, ...],
+    exchange_ids: tuple[object | None, ...],
+    budget_bytes: int,
+    participant_id: str,
+) -> tuple[tuple[ConversationExchange, ...], tuple[int | None, ...], tuple[object | None, ...]]:
     """Bound serialized completed-history entries, including their time labels.
 
     The current request, current-time anchor, and destination descriptions are
@@ -840,7 +895,8 @@ def _bounded_history_with_times(
     retained: list[ConversationExchange] = []
     size = 0
     retained_times: list[int | None] = []
-    for exchange, timestamp_us in reversed(tuple(zip(history, timestamps, strict=True))):
+    retained_ids: list[object | None] = []
+    for exchange, timestamp_us, exchange_id in reversed(tuple(zip(history, timestamps, exchange_ids, strict=True))):
         item = {
             "user": exchange.user,
             "assistant": exchange.assistant,
@@ -867,8 +923,9 @@ def _bounded_history_with_times(
             break
         retained.append(exchange)
         retained_times.append(timestamp_us)
+        retained_ids.append(exchange_id)
         size += item_size
-    return tuple(reversed(retained)), tuple(reversed(retained_times))
+    return tuple(reversed(retained)), tuple(reversed(retained_times)), tuple(reversed(retained_ids))
 
 
 def _history_timestamp(index: int) -> str:
