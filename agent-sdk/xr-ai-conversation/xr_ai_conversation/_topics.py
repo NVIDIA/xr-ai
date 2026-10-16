@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from xr_ai_runtime import Agent, RuntimeContext, Topic, subscribe
 
-from .contracts import ConversationContextUpdate
+from .context import ConversationContextUpdate
 
 if TYPE_CHECKING:
     from .conversation import Conversation

@@ -9,17 +9,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class ConversationContextUpdate(BaseModel):
-    """Text published on a configured conversation-context topic."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    text: str = Field(min_length=1)
-    """Non-empty source-owned context text; behavior comes from the configured topic."""
-
 
 @dataclass(frozen=True, slots=True)
 class ConversationExchange:
@@ -158,7 +147,6 @@ class RoutableAgent(Protocol):
 
 __all__ = [
     "Admission",
-    "ConversationContextUpdate",
     "ConversationExchange",
     "ConversationTurn",
     "DestinationResult",
