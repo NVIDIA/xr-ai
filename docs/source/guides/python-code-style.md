@@ -5,7 +5,7 @@
 
 # Python code style
 
-This reference governs new and changed Python code throughout the repository:
+This reference governs Python code throughout the repository:
 where the public API ends, how failures are represented, and how modules are
 laid out. It covers the SDK, utilities, services, samples, and tests.
 Application-owned projects under `apps/` are outside repository tooling and
@@ -13,11 +13,11 @@ outside this reference. Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
 conventions that keep them consistent.
 
-These rules are prospective. They do not withdraw support for an existing
-public import, name, signature, or behavior, and they do not require rewriting
-existing code. Bring existing code in line when a change touches it. Renaming,
-moving, or removing a supported name is a breaking change that needs a
-migration entry.
+These rules describe the target state of all Python code. Code that does not
+yet follow them is brought into line by cleanup changes and tracked outside this
+reference. A rule never withdraws support for a public import, name, signature,
+or behavior by itself: renaming, moving, or removing a supported name is a
+breaking change that needs a migration entry.
 
 A package that other projects import, such as everything under `agent-sdk/` and
 `utils/` and any library a service or sample publishes, follows every section.
@@ -50,7 +50,7 @@ supported. Nothing else is supported.
 - Document every public name with a docstring, because the generated Python
   reference is rendered from it. Give a private name a docstring only when its
   invariant is not obvious.
-- Start each new private module with a short module docstring that states what
+- Start each private module with a short module docstring that states what
   it owns and which packages can import it.
 - Use only public types in public signatures. Keep internal state in
   `_`-prefixed attributes that no other package reads. If a consumer needs
@@ -74,8 +74,8 @@ are enrolled. The repository's
 requires that LiveKit not appear in agent APIs and that workers use public SDK
 packages, and its change contract places public API documentation in
 `__all__` and co-located docstrings, and it keeps private imports inside their
-owning packages or implementation tests. Preferring the package root for new
-public names and the private-module docstring are **repository conventions**.
+owning packages or implementation tests. The private-module docstring is a
+**repository convention**.
 
 ## Exports
 
@@ -97,11 +97,10 @@ Each public name has one canonical home, and these rules decide where it is.
   one. The list holds names the module defines, and no underscore names. Only
   the package root re-exports names defined elsewhere. Do not use wildcard
   imports.
-- Do not add a module with a public-looking name to `PUBLIC_API_EXCLUSIONS`.
-  That list records legacy modules, such as `xr_ai_runtime.agent`, whose names
-  predate this rule. They are undocumented and so internal; when a change
-  touches one, give it a leading underscore after checking for importers, and
-  add a migration entry if a supported path moves.
+- Do not add a module to `PUBLIC_API_EXCLUSIONS`. A module with a public-looking
+  name is either enrolled in the public API or given a leading underscore; the
+  list only tracks modules awaiting that change. Check for importers before
+  renaming one, and add a migration entry if a supported path moves.
 - Import a name from its canonical home: the package root when the root exports
   it, otherwise the enrolled module that documents it.
 
@@ -115,10 +114,8 @@ part of the module's API, "such as ... a package's `__init__` module that
 exposes functionality from submodules", which is why only the root re-exports.
 The `xr-ai-tools` `pyproject.toml` declares the optional extras that justify
 its public submodules. Exporting from the root by default, the two reasons for
-a public submodule, and the rule against new `PUBLIC_API_EXCLUSIONS` entries
-are **repository conventions** that describe the existing packages: hub, voice,
-web-events, launcher, and vllm export only from the root, while `xr_ai_tools`
-and `xr_ai_models.presets` use enrolled submodules.
+a public submodule, and the rule against `PUBLIC_API_EXCLUSIONS` entries are
+**repository conventions**.
 
 ## Module boundaries
 
@@ -152,10 +149,7 @@ alternative to absolute imports, especially when dealing with complex package
 layouts", and `AGENTS.md` requires relative internal imports in worker
 packages. Treating the sub-package `__init__.py` as the parent's boundary, the
 one-way dependency rule, and logic-free `__init__.py` files are **repository
-conventions**. Most packages already follow them: ten of the thirteen SDK and
-utility `__init__.py` files only re-export. `xr_ai_voice._processors` is the one
-private sub-package and is a known exception, because its parent imports its
-files and it imports its parent's modules.
+conventions**.
 
 ## Exceptions
 
@@ -166,11 +160,10 @@ obvious.
 is unreachable, a remote service returns an error status, external or
 configuration input is malformed, a timeout fires, or a peer closes.
 
-- Define a new package's failures in one `_errors.py` module rooted at a single
+- Define a package's failures in one `_errors.py` module rooted at a single
   package base class, such as `ModelServiceError`, with a few meaningful
-  subclasses. End every new exception name in `Error`. Re-export the public
-  ones in `__all__`. Supported exception names and import locations, such as
-  `xr_ai_tools.rpc.RPCError`, stay as they are.
+  subclasses. End every exception name in `Error`. Re-export the public ones in
+  `__all__`.
 - List the SDK errors a public function raises in its docstring `Raises:`
   section. Do not list the `ValueError` or `TypeError` raised for a caller
   mistake, because that would make behavior under misuse part of the API.
