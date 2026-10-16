@@ -107,27 +107,27 @@ class ConversationExampleAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel_response(participant_id)
-        # Departure still releases every owner when an earlier hook fails.
+        # Continue independent cleanup owners, aggregate failures, then let the runtime report them.
         errors: list[Exception] = []
         try:
             await self._router.participant_left(participant_id)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 -- retain each cleanup failure for the final group.
             errors.append(error)
         for handler in self._participant_left_handlers:
             try:
                 await handler(participant_id)
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 -- continue cleanup and aggregate below.
                 errors.append(error)
         for conversation in self._conversations:
             try:
                 await conversation.participant_left(participant_id)
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 -- continue cleanup and aggregate below.
                 errors.append(error)
         self._participants.discard(participant_id)
         if self._frames is not None:
             try:
                 self._frames.release(participant_id)
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 -- continue cleanup and aggregate below.
                 errors.append(error)
         if errors:
             raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
@@ -238,9 +238,12 @@ class ConversationExampleAgent(Agent):
                 except asyncio.CancelledError:
                     cancelled = True
                     raise
-                except Exception:
+                # isolation boundary: record one failed query and end this owned response task.
+                except Exception as error:
                     if output_failure is not None:
-                        raise output_failure
+                        if output_failure is error:
+                            raise
+                        raise output_failure from error
                     logger.exception(
                         "conversation routing or generation failed participant={!r}",
                         participant_id,
@@ -287,7 +290,7 @@ class ConversationExampleAgent(Agent):
         if self._response_tasks.get(participant_id) is task:
             self._response_tasks.pop(participant_id, None)
         if not task.cancelled() and (error := task.exception()) is not None:
-            logger.error("conversation example turn failed pid={!r}: {!r}", participant_id, error)
+            logger.opt(exception=error).error("conversation example turn failed pid={!r}", participant_id)
 
 
 __all__ = [

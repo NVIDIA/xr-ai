@@ -126,7 +126,8 @@ async def _warm_vlm(vlm: VLMService) -> bool:
             (time.monotonic() - started_at) * 1000,
         )
         return True
-    except Exception:
+    # isolation boundary: the VoiceAgent probe loop retries after transient inference failures.
+    except Exception:  # noqa: BLE001 -- report probe failure so VoiceAgent retries readiness.
         logger.exception("VLM warmup failed; readiness will retry")
         return False
 
@@ -149,6 +150,7 @@ async def _relay_event_log(log_file: Path) -> AsyncIterator[Path]:
     try:
         nemo_relay.subscribers.register(subscriber, write_event)
     except Exception:
+        # A failed registration must close its already-opened sink before propagating.
         sink.close()
         raise
     try:

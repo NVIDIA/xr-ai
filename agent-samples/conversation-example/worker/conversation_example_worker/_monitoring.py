@@ -220,6 +220,7 @@ class VisualMonitorAgent(RoutableAgent):
         self._instructions[participant_id] = instructions
         self._failures.pop(participant_id, None)
         self._refresh_routing_cue(participant_id)
+        # Roll back the provisional route state before the original start failure propagates.
         try:
             # Replace the named summary before exposing the new task to sampling.
             await self._publish(participant_id)
@@ -243,9 +244,10 @@ class VisualMonitorAgent(RoutableAgent):
         if failed:
             self._failures[participant_id] = "the monitor context could not be updated"
         self._refresh_routing_cue(participant_id)
+        # Rollback is failure-only work; preserve the original start error if publishing also fails.
         try:
             await self._publish(participant_id)
-        except Exception:
+        except Exception:  # noqa: BLE001 -- log rollback failure while preserving the active exception.
             logger.exception("failed to clear incomplete monitor start participant={!r}", participant_id)
 
     async def _observe(self, participant_id: str, generation: int, instructions: str) -> None:
@@ -284,7 +286,8 @@ class VisualMonitorAgent(RoutableAgent):
             if participant_id in self._records:
                 self._records[participant_id].append(f"Observation unavailable at {_timestamp(None)}.")
                 await self._publish(participant_id)
-        except Exception:
+        # isolation boundary: end this background monitor after recording and logging its failure.
+        except Exception:  # noqa: BLE001 -- isolate, record, and log this monitor task failure.
             if not self._is_current(participant_id, generation, instructions):
                 return
             self._failures[participant_id] = "the observation request failed"

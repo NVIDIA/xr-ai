@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 import nemo_relay
+from loguru import logger
 from xr_ai_conversation import (
     Conversation,
     ConversationContextUpdate,
@@ -25,6 +26,7 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
 )
+from xr_ai_runtime import RuntimeClosedError
 
 ContextPublisher = Callable[[str, ConversationContextUpdate], Awaitable[None]]
 RoutingContext = Callable[[str], str | None]
@@ -101,10 +103,14 @@ class ContextualConversationAgent(RoutableAgent):
                     turn.participant_id,
                     ConversationContextUpdate(text=bounded),
                 )
-            except Exception:
-                # The destination answer is already complete; optional context fan-out
-                # must not turn it into a failed user-facing turn.
-                pass
+            except RuntimeClosedError:
+                # ignored: the answer is complete and runtime shutdown only skips optional context sharing.
+                return
+            except ExceptionGroup:
+                logger.exception(
+                    "optional conversation context publication failed participant={!r}",
+                    turn.participant_id,
+                )
 
 class NoteTakingAgent(ContextualConversationAgent):
     """Keep participant-authored notes in an explicit, focused session."""
@@ -201,6 +207,7 @@ class NoteTakingAgent(ContextualConversationAgent):
         try:
             return await self._conversation.admit(turn, focused=focused)
         except BaseException:
+            # Clear provisional action state before propagating failure or cancellation.
             self._pending.pop(turn.participant_id, None)
             raise
 
@@ -218,7 +225,13 @@ class NoteTakingAgent(ContextualConversationAgent):
                 await self._publish_note(turn.participant_id)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except RuntimeClosedError:
+                # ignored: the note is saved locally; shutdown only prevents optional sharing.
+                text = "I saved that note here, but couldn't share it with general conversation."
+                await emit("notes", text)
+                return DestinationResult("focus", text)
+            except ExceptionGroup:
+                logger.exception("note context publication failed participant={!r}", turn.participant_id)
                 text = "I saved that note here, but couldn't share it with general conversation."
                 await emit("notes", text)
                 return DestinationResult("focus", text)
@@ -284,7 +297,7 @@ class NoteTakingAgent(ContextualConversationAgent):
                         await asyncio.shield(publisher)
                     except asyncio.CancelledError:
                         continue
-                    except Exception:
+                    except Exception:  # noqa: BLE001 -- drain the child failure without masking caller cancellation.
                         break
                 if not publisher.cancelled():
                     publisher.exception()

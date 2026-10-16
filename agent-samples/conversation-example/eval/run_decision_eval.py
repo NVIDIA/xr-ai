@@ -112,6 +112,7 @@ class _DecisionRecorder:
         try:
             response = await self.service.decide(state, questions, images=images, timeout=timeout)
         except Exception as error:
+            # Record the failed model call before the evaluator's owner logs and propagates it.
             self.calls.append(
                 {
                     **trace,
@@ -744,7 +745,8 @@ async def main() -> None:
     try:
         outputs, summary = await run_decisions(flows, cases, recorder, context_budget=12_000)
         summary = {**summary, "run_status": "completed", "preflight": plan}
-    except BaseException as error:
+    # Preserve a failure summary even when cancellation or process shutdown interrupts evaluation.
+    except BaseException as error:  # noqa: BLE001 -- write failure output, then re-raise the same failure.
         failure = error
         summary = {
             "run_status": "failed",
