@@ -137,8 +137,15 @@ configuration input is malformed, a timeout fires, or a peer closes.
 - List the SDK errors a public function raises in its docstring `Raises:`
   section. Do not list the `ValueError` or `TypeError` raised for a caller
   mistake, because that would make behavior under misuse part of the API.
-- Catch the narrowest type, at the one place that can make a decision: retry,
-  degrade, or report.
+- Raise where the failure is detected, and catch at the one place that can make
+  a decision: retry, degrade, or report. Catch the narrowest type there, and do
+  not catch in between.
+- When a failure depends on state outside the program, such as a file, a socket,
+  or an entry another task can change, attempt the operation and handle the
+  specific exception instead of checking first, because the check can go stale
+  before the operation runs. Validate caller-supplied arguments up front, and
+  return a value for an ordinary outcome the caller branches on, so that an
+  exception always marks a failure.
 - Translate a foreign error (`httpx`, `zmq`, `grpc`, `OSError`, `json`, `yaml`,
   `pydantic`) into an SDK error exactly once, at the adapter boundary, with
   `raise SdkError(...) from exc`. Foreign types do not appear in public
@@ -192,6 +199,8 @@ These rules follow:
 7. Cleanup that must not mask the primary error uses
    `contextlib.suppress(<specific type>)` with a comment.
 8. Keep each `try` body to the statements that can raise the handled error.
+9. Release resources with `with` or `async with`, using `contextlib.closing` for
+   an object that lacks one. Use `try/finally` for other cleanup.
 
 **Basis:**
 - Rules 1 and 2, and the sanctioned sites in rule 3, follow the
@@ -232,11 +241,28 @@ These rules follow:
   the owner check reads. Letting an owner consume a child's completion is a
   **repository convention**; the existing shutdown paths in `xr_ai_voice` and
   `xr_ai_tools` cancel and await child tasks this way.
+- The attempt-first bullet follows the Python glossary definition of
+  [EAFP](https://docs.python.org/3/glossary.html#term-EAFP), a style that
+  "assumes the existence of valid keys or attributes and catches exceptions if
+  the assumption proves false". The
+  [`os.access` documentation](https://docs.python.org/3/library/os.html#os.access)
+  says that checking before opening "creates a security hole, because the user
+  might exploit the short time interval between checking and opening the file"
+  and that "It's preferable to use EAFP techniques". Validating arguments up
+  front is the Google guide's advice to raise `ValueError` for a violated
+  precondition.
+- Rule 9 follows the Google guide's
+  [section 3.11](https://google.github.io/styleguide/pyguide.html#s3.11-files-sockets-closeables):
+  "The preferred way to manage files and similar resources is using the `with`
+  statement", with `contextlib.closing()` for objects that do not support it.
 - Rule 7 follows the
   [`contextlib.suppress` documentation](https://docs.python.org/3/library/contextlib.html#contextlib.suppress),
   which limits it to "very specific errors where silently continuing with
   program execution is known to be the right thing to do".
-- **Repository conventions:** the per-package base class in `_errors.py` (the
+- **Repository conventions:** raising where the failure is detected and
+  catching only where a decision can be made, returning a value for an ordinary
+  outcome so exceptions mark failures only, the per-package base class in
+  `_errors.py` (the
   Google guide requires only that an exception inherit from an existing one),
   inheriting
   the replaced builtin to avoid a breaking change, translating foreign errors
