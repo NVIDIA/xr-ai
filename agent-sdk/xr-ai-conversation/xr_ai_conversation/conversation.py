@@ -70,14 +70,11 @@ class _CurrentViewRequest(StrictRequest):
 class Conversation:
     """Stream an application-instructed conversation with optional current-view tools.
 
-    Args:
-        llm: Typed streamed language model service.
-        instructions: Application-owned prompt text defining domain, role, tone,
-            and handling policy.
-        routing: Concise destination metadata for the front end; defaults to a
-            general conversation description, adjusted when vision is unavailable.
-        frames: Native current-frame tool. Configure together with ``vision``.
-        vision: Native streaming visual-query tool. Configure together with ``frames``.
+    :param llm: Typed streamed language model service.
+    :param instructions: Application-owned prompt text defining domain, role, tone, and handling policy.
+    :param routing: Concise front-end metadata; defaults to a general description adjusted when vision is unavailable.
+    :param frames: Native current-frame tool. Configure together with ``vision``.
+    :param vision: Native streaming visual-query tool. Configure together with ``frames``.
     """
 
     def __init__(

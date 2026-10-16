@@ -139,10 +139,7 @@ front_end = ConversationFrontEnd(
 result = await front_end.handle(turn, emit=publish_chunk)
 ```
 
-## Public API
+## Python API reference
 
-```{eval-rst}
-.. automodule:: xr_ai_conversation
-   :members:
-   :undoc-members:
-```
+The generated {doc}`Python reference </reference/python/xr_ai_conversation/index>`
+documents the exported package names and their signatures.
