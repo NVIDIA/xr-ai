@@ -75,7 +75,7 @@ jobs:
 
       # Coverage is measured on one interpreter only; it is informational and
       # does not gate the build. The [tool.coverage] tables in tests/pyproject.toml
-      # select the measured packages and record spawned subprocesses.
+      # select the measured packages.
       - name: Run tests with coverage
         if: matrix.python-version == '3.12'
         working-directory: tests
@@ -89,7 +89,6 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: ../.venv
         run: |
-          uv run coverage combine
           uv run coverage json
           uv run coverage xml
           python3 ../.github/scripts/coverage_summary.py coverage.json

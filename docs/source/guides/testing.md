@@ -81,14 +81,14 @@ traffic.
 
 CI measures coverage on Python 3.12 and publishes a per-project table to the job
 summary, with the raw reports attached as the `coverage` artifact. The report is
-informational and does not gate the build. The `[tool.coverage]` tables in
-`tests/pyproject.toml` select the measured packages and record the hub and
-worker subprocesses that the integration tests spawn. To reproduce it, run from
+informational and does not gate the build. The measured packages are listed in
+`source_pkgs` in `tests/pyproject.toml`: the SDK, utilities, and services that
+the test project installs or puts on its `pythonpath`. A package missing from
+that list does not appear in the table. To reproduce the report, run from
 `tests/` with the project environment at the repository root:
 
 ```bash
 UV_PROJECT_ENVIRONMENT=../.venv uv --config-file ../uv.toml run coverage run -m pytest -m "not gpu"
-UV_PROJECT_ENVIRONMENT=../.venv uv --config-file ../uv.toml run coverage combine
 UV_PROJECT_ENVIRONMENT=../.venv uv --config-file ../uv.toml run coverage json
 python3 ../.github/scripts/coverage_summary.py coverage.json
 ```

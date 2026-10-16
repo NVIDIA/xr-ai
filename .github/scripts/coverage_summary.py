@@ -9,17 +9,18 @@
 """Summarize test coverage per project, including exception-handler coverage.
 
 Reads the JSON report written by ``coverage json`` and prints a Markdown table
-with line, branch, and exception-handler coverage for each project under
-``agent-sdk/``, ``utils/``, and ``services/``. When ``GITHUB_STEP_SUMMARY`` is
-set the table is also appended to the job summary. The report is informational
-and always exits 0.
+with line, branch, and exception-handler coverage for each measured project.
+The measured projects are the packages listed in ``source_pkgs`` in
+``tests/pyproject.toml``, grouped by project directory. When
+``GITHUB_STEP_SUMMARY`` is set the table is also appended to the job summary.
+The report is informational and always exits 0.
 
 Line coverage alone overstates how well failure handling is tested: an
 ``except`` body runs only when a test provokes the failure. The handler columns
 count the ``except`` clauses in each file and how many of them ran at least
 once, which is the number that matters before changing exception handling.
 
-Usage (from ``tests/``, after ``coverage combine``)::
+Usage (from ``tests/``, after ``coverage run -m pytest``)::
 
     coverage json && python3 ../.github/scripts/coverage_summary.py coverage.json
 """
