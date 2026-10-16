@@ -79,8 +79,6 @@ class AgentRouter:
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
     :param acknowledgment_delay_secs: Finite positive delay before fallback
         acknowledgment; requires ``acknowledgment_llm``.
-    :raises ValueError: If the default is unregistered, the history budget is
-        not positive, or acknowledgment settings are incomplete or invalid.
     """
 
     def __init__(
@@ -470,6 +468,7 @@ class AgentRouter:
                 and self._acknowledgment_delay_secs is not None
                 and not admission.preamble
             ):
+                acknowledgment_cleanup_errors: list[BaseException] = []
                 routing_aid = destination.routing_aid(turn.participant_id)
                 acknowledgment_task = asyncio.create_task(
                     self._acknowledge_if_needed(
@@ -479,6 +478,7 @@ class AgentRouter:
                         answer_started_at,
                         answer_started,
                         prediction_trace,
+                        acknowledgment_cleanup_errors,
                         partial(emit_acknowledgment, destination_name),
                     ),
                     name=f"conversation-acknowledgment:{turn.participant_id}",
@@ -490,6 +490,7 @@ class AgentRouter:
                         participant_id=turn.participant_id,
                         destination=destination_name,
                         prediction_trace=prediction_trace,
+                        cleanup_errors=acknowledgment_cleanup_errors,
                     )
                 )
             try:
@@ -592,12 +593,15 @@ class AgentRouter:
         answer_started_at: float,
         answer_started: asyncio.Event,
         prediction_trace: dict[str, object],
+        cleanup_errors: list[BaseException],
         emit: _Emit,
     ) -> None:
-        assert self._acknowledgment_llm is not None
-        assert self._acknowledgment_delay_secs is not None
+        acknowledgment_llm = self._acknowledgment_llm
+        delay_secs = self._acknowledgment_delay_secs
+        if acknowledgment_llm is None or delay_secs is None:
+            raise RuntimeError("acknowledgment task started without its configured client and delay")
         delay_task = asyncio.create_task(
-            asyncio.sleep(max(0.0, self._acknowledgment_delay_secs - (_monotonic() - answer_started_at)))
+            asyncio.sleep(max(0.0, delay_secs - (_monotonic() - answer_started_at)))
         )
         prediction_task = asyncio.create_task(
             self._predict_slow_answer(turn, destination, description, prediction_trace)
@@ -634,10 +638,10 @@ class AgentRouter:
                 metadata={
                     "participant_id": turn.participant_id,
                     "destination": destination,
-                    "acknowledgment_delay_secs": self._acknowledgment_delay_secs,
+                    "acknowledgment_delay_secs": delay_secs,
                 },
             ):
-                response = await self._acknowledgment_llm.chat(
+                response = await acknowledgment_llm.chat(
                     messages,
                     max_tokens=_ACKNOWLEDGMENT_MAX_TOKENS,
                     enable_thinking=False,
@@ -666,7 +670,32 @@ class AgentRouter:
             for task in (delay_task, prediction_task):
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(delay_task, prediction_task, return_exceptions=True)
+            drain = asyncio.gather(delay_task, prediction_task, return_exceptions=True)
+            try:
+                outcomes = await asyncio.shield(drain)
+            except asyncio.CancelledError:
+                outcomes = await drain
+                _record_cancelled_acknowledgment_cleanup_failure(
+                    outcomes,
+                    prediction_trace=prediction_trace,
+                    cleanup_errors=cleanup_errors,
+                )
+                raise
+            failures = [
+                outcome
+                for outcome in outcomes
+                if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError)
+            ]
+            if failures:
+                current_task = asyncio.current_task()
+                if current_task is not None and current_task.cancelling():
+                    _record_acknowledgment_failure(
+                        failures[0],
+                        prediction_trace=prediction_trace,
+                        cleanup_errors=cleanup_errors,
+                    )
+                else:
+                    raise failures[0]
 
     async def _predict_slow_answer(
         self,
@@ -855,29 +884,67 @@ async def _emit_from(emit: _Emit, destination: str, _source: str, text: str) -> 
     await emit(destination, text)
 
 
+# isolation boundary: the optional acknowledgment task cannot fail the destination answer.
 def _report_acknowledgment_failure(
     task: asyncio.Task[None],
     *,
     participant_id: str,
     destination: str,
     prediction_trace: dict[str, object],
+    cleanup_errors: list[BaseException],
 ) -> None:
     """Record and log an optional acknowledgment task failure at its owner."""
 
-    # isolation boundary: acknowledgment work is auxiliary and must not fail the destination answer.
     if task.cancelled():
-        return
-    error = task.exception()
+        error = cleanup_errors[0] if cleanup_errors else None
+    else:
+        error = task.exception()
     if error is None:
         return
-    prediction_trace["choice"] = "failed"
-    prediction_trace["failure"] = f"{type(error).__name__}: {error}"
+    _record_acknowledgment_failure(
+        error,
+        prediction_trace=prediction_trace,
+        cleanup_errors=cleanup_errors,
+    )
     _logger.warning(
         "optional acknowledgment task failed participant=%r destination=%r",
         participant_id,
         destination,
         exc_info=(type(error), error, error.__traceback__),
     )
+
+
+def _record_cancelled_acknowledgment_cleanup_failure(
+    outcomes: list[object],
+    *,
+    prediction_trace: dict[str, object],
+    cleanup_errors: list[BaseException],
+) -> None:
+    failures = [
+        outcome
+        for outcome in outcomes
+        if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError)
+    ]
+    if failures:
+        _record_acknowledgment_failure(
+            failures[0],
+            prediction_trace=prediction_trace,
+            cleanup_errors=cleanup_errors,
+        )
+
+
+def _record_acknowledgment_failure(
+    error: BaseException,
+    *,
+    prediction_trace: dict[str, object],
+    cleanup_errors: list[BaseException],
+) -> None:
+    """Store one optional acknowledgment failure for its task owner."""
+
+    prediction_trace["choice"] = "failed"
+    prediction_trace["failure"] = f"{type(error).__name__}: {error}"
+    if not any(recorded is error for recorded in cleanup_errors):
+        cleanup_errors.append(error)
 
 
 def _bounded_history(
