@@ -63,7 +63,7 @@ final class MicrophoneOperations {
 
     func disconnect(
         cleanup: @escaping @Sendable () async throws -> Void,
-        close: @escaping @Sendable () async -> Void
+        close: @escaping @Sendable () async throws -> Void
     ) async throws {
         cancelStarts()
         let task = enqueue { operations in
@@ -73,7 +73,8 @@ final class MicrophoneOperations {
                 result = .success(())
             } catch { result = .failure(error) }
             // Close the transport even if capture teardown fails, within the queue.
-            await close()
+            do { try await close() }
+            catch { if case .success = result { throw error } }
             try result.get()
         }
         try await task.value

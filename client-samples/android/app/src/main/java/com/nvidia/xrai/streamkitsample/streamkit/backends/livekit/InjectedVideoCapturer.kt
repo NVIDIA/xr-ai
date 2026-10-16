@@ -23,6 +23,9 @@ internal class InjectedVideoCapturer : VideoCapturer {
 
     private var observer: CapturerObserver? = null
     @Volatile private var started: Boolean = false
+    /** This component's disposal callback, not proof of SDK-native source release. */
+    @Volatile var disposed: Boolean = false
+        private set
 
     override fun initialize(
         surfaceTextureHelper: SurfaceTextureHelper?,
@@ -49,6 +52,7 @@ internal class InjectedVideoCapturer : VideoCapturer {
     override fun dispose() {
         started = false
         observer = null
+        disposed = true
     }
 
     override fun isScreencast(): Boolean = false

@@ -108,6 +108,22 @@ camera and start a new publication to change settings. Custom backends using
 the original frame-injection method retain their existing behavior and ignore
 the optional encoding policy until they implement it.
 
+Android device cameras use LiveKit's cached camera track; StreamKit does not
+dispose that SDK-owned allocation. Injected Android tracks remain explicit
+allocations. Camera stop during LiveKit reconnection reports not connected:
+the SDK can retain an unpublished track for republishing, so stop cannot safely
+release it until reconnection completes or the room disconnects. A reported
+partial native disposal failure prevents replacement rather than retrying an
+already partly disposed allocation. SDK-internal cleanup failures that LiveKit
+does not expose remain an SDK limitation; a capturer disposal callback is not
+proof that every private native source was released.
+
+Apple camera start, stop, and disconnect drain in-flight publication work.
+Failed capture cleanup retains the exact track for a later stop or disconnect
+attempt; late frames cannot replace it. A terminal room disconnect also attempts
+that cleanup. Neither backend treats a removed publication as proof of completed
+capture release.
+
 These settings do not guarantee minimum streaming resolution, minimum FPS, or
 latency. Under insufficient bandwidth, delivery may stall or lose frames.
 Consumers must still handle changing frame dimensions. A receiver's LiveKit

@@ -7,6 +7,11 @@ import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.StreamError
+import io.livekit.android.events.RoomEvent
+import io.livekit.android.events.DisconnectReason
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
@@ -32,6 +37,7 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.CancellationException
 
 /** Runs the real backend transaction; mocks only the SDK/native boundary.
@@ -42,14 +48,27 @@ class CameraPublicationTests {
         val participant = Mockito.mock(LocalParticipant::class.java)
         val room = Mockito.mock(Room::class.java)
         val track = Mockito.mock(LocalVideoTrack::class.java)
+        val deviceTrack = Mockito.mock(LocalVideoTrack::class.java)
         val publication = Mockito.mock(LocalTrackPublication::class.java)
         val backend = LiveKitBackend(LiveKitConfig(host = "test"), Mockito.mock(Context::class.java))
         var defaults = VideoTrackPublishDefaults(simulcast = false, videoCodec = "h264")
         var captureDefaults = LocalVideoTrackOptions()
         var active: LocalTrackPublication? = null
+        var capturer: InjectedVideoCapturer? = null
 
         init {
             Mockito.`when`(room.localParticipant).thenReturn(participant)
+            Mockito.`when`(room.state).thenReturn(Room.State.CONNECTED)
+            Mockito.doAnswer {
+                if (active?.track === track) {
+                    track.dispose()
+                    // SDK calls the exact private capturer's dispose callback.
+                    capturer?.let { value -> Mockito.`when`(value.disposed).thenReturn(true) }
+                    active = null
+                }
+                Mockito.`when`(room.state).thenReturn(Room.State.DISCONNECTED)
+                null
+            }.`when`(room).disconnect()
             Mockito.`when`(participant.videoTrackCaptureDefaults).thenAnswer { captureDefaults }
             Mockito.doAnswer { captureDefaults = it.getArgument(0); null }
                 .`when`(participant).videoTrackCaptureDefaults =
@@ -60,22 +79,32 @@ class CameraPublicationTests {
                     Mockito.any(VideoTrackPublishDefaults::class.java) ?: defaults
             Mockito.`when`(participant.getTrackPublication(Track.Source.CAMERA)).thenAnswer { active }
             Mockito.`when`(publication.track).thenReturn(track)
+            Mockito.`when`(participant.getOrCreateDefaultVideoTrack()).thenReturn(deviceTrack)
+            Mockito.`when`(deviceTrack.dimensions).thenReturn(Track.Dimensions(1280, 960))
             setField("room", room)
             setField("isConnected", true)
             setField("cameraPublishBaseline", defaults)
         }
 
-        fun setField(name: String, value: Any) {
+        fun setField(name: String, value: Any?) {
             backend.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(backend, value)
+        }
+
+        suspend fun terminalEvent() = event(RoomEvent.Disconnected(room, null, DisconnectReason.SERVER_SHUTDOWN))
+
+        suspend fun event(event: RoomEvent) = suspendCoroutine<Unit> { continuation ->
+            val method = backend.javaClass.getDeclaredMethod(
+                "handleEvent", Room::class.java, RoomEvent::class.java, Continuation::class.java,
+            ).apply { isAccessible = true }
+            val result = method.invoke(backend, room, event, continuation)
+            if (result !== COROUTINE_SUSPENDED) continuation.resume(Unit)
         }
 
         suspend fun prepareDeviceCamera() {
             Mockito.doAnswer { true }.`when`(participant).setCameraEnabled(false)
             Mockito.doAnswer {
-                // A retained publication is unmuted, not replaced. A removed
-                // publication gets a new track identity on the next enable.
+                // The SDK caches the device track even across unpublish.
                 if (active == null) {
-                    val deviceTrack = Mockito.mock(LocalVideoTrack::class.java)
                     val devicePublication = Mockito.mock(LocalTrackPublication::class.java)
                     Mockito.`when`(devicePublication.track).thenReturn(deviceTrack)
                     active = devicePublication
@@ -97,7 +126,10 @@ class CameraPublicationTests {
             val capturerArgument = Mockito.mock(livekit.org.webrtc.VideoCapturer::class.java)
             val captureArgument = LocalVideoTrackOptions()
             val publishArgument = VideoTrackPublishOptions(base = defaults)
-            Mockito.doReturn(track).`when`(participant).createVideoTrack(
+            Mockito.doAnswer {
+                capturer = it.getArgument(1)
+                track
+            }.`when`(participant).createVideoTrack(
                 Mockito.anyString(), Mockito.any(livekit.org.webrtc.VideoCapturer::class.java) ?: capturerArgument,
                 Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
             )
@@ -115,6 +147,7 @@ class CameraPublicationTests {
 
     @Test fun injectionCannotPublishInsideSuspendedDeviceSwitch() = runBlocking {
         val f = Fixture()
+        f.prepareDeviceCamera()
         f.prepareInjection()
         var stopped: Continuation<Boolean>? = null
         Mockito.doAnswer {
@@ -282,24 +315,21 @@ class CameraPublicationTests {
 
     @Test fun devicePolicyUsesActualSDKDimensionsAndExistingCaptureSelection() = runBlocking {
         val f = Fixture()
-        f.prepareInjection()
+        f.prepareDeviceCamera()
         f.defaults = f.defaults.copy(simulcast = true)
         f.setField("cameraPublishBaseline", f.defaults)
-        Mockito.`when`(f.track.dimensions).thenReturn(Track.Dimensions(1280, 960))
-        val captureArgument = LocalVideoTrackOptions()
-        Mockito.doReturn(f.track).`when`(f.participant).createVideoTrack(
-            Mockito.anyString(), Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
-        )
         f.backend.startCamera(CameraConfig(deviceId = "pinned", facing = CameraConfig.CameraFacing.BACK,
                                           encoding = CameraEncodingConfig(maxBitrateBps = 50_000)))
-        assertSame(f.publication, f.active)
+        assertSame(f.deviceTrack, f.active!!.track)
         assertEquals("pinned", f.captureDefaults.deviceId)
         assertEquals(CameraPosition.BACK, f.captureDefaults.position)
-        val options = org.mockito.ArgumentCaptor.forClass(VideoTrackPublishOptions::class.java)
-        Mockito.verify(f.participant).publishVideoTrack(Mockito.eq(f.track) ?: f.track,
-                                                       options.capture() ?: VideoTrackPublishOptions(base = f.defaults), Mockito.isNull())
-        assertTrue(options.value.simulcastLayers!!.all { it.encoding.maxBitrate <= 50_000 })
-        assertEquals(listOf(240, 480), options.value.simulcastLayers!!.map { it.capture.width })
+        assertTrue(f.defaults.simulcastLayers!!.all { it.encoding.maxBitrate <= 50_000 })
+        assertEquals(listOf(240, 480), f.defaults.simulcastLayers!!.map { it.capture.width })
+        f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig(maxBitrateBps = 3_000_000)))
+        assertTrue(f.defaults.simulcastLayers!!.any { it.encoding.maxBitrate > 50_000 })
+        f.backend.startCamera(CameraConfig())
+        assertNull(f.defaults.simulcastLayers)
+        Mockito.verify(f.deviceTrack, Mockito.never()).dispose()
     }
 
     @Test fun cancelledFirstPublicationCleansItsOwnedAllocationBeforeReleasingCamera() = runBlocking {
@@ -339,25 +369,19 @@ class CameraPublicationTests {
         }
     }
 
-    @Test fun explicitlyCreatedDeviceIsDisposedWhenReturningToSDKCamera() = runBlocking {
+    @Test fun cachedDeviceSurvivesPolicyResetAndPublicationRejectionIsReported() = runBlocking {
         val f = Fixture()
         f.prepareDeviceCamera()
-        f.prepareInjection()
         f.defaults = f.defaults.copy(simulcast = true)
         f.setField("cameraPublishBaseline", f.defaults)
-        Mockito.`when`(f.track.dimensions).thenReturn(Track.Dimensions(1280, 720))
-        val captureArgument = LocalVideoTrackOptions()
-        Mockito.doReturn(f.track).`when`(f.participant).createVideoTrack(
-            Mockito.anyString(), Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
-        )
         f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig(maxBitrateBps = 50_000)))
-        Mockito.verify(f.track, Mockito.never()).dispose()
         f.backend.startCamera(CameraConfig())
-        Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
-        Mockito.verify(f.track, Mockito.times(1)).dispose()
-        assertNotSame(f.track, f.active!!.track)
+        assertSame(f.deviceTrack, f.active!!.track)
         f.backend.stopCamera()
-        Mockito.verify(f.active!!.track!!, Mockito.never()).dispose()
+        Mockito.verify(f.deviceTrack, Mockito.never()).dispose()
+        Mockito.doReturn(false).`when`(f.participant).setCameraEnabled(true)
+        try { f.backend.startCamera(CameraConfig()); fail("Rejected SDK publication must be reported") }
+        catch (_: IllegalStateException) {}
     }
 
     @Test fun failedFirstDeliveryDisposesAlreadyPublishedOwnedTrack() = runBlocking {
@@ -381,7 +405,7 @@ class CameraPublicationTests {
         }
     }
 
-    @Test fun failedDisposalRemainsOwnedUntilStopRetrySucceeds() = runBlocking {
+    @Test fun partialDisposalRetainsFailureAndRejectsUnsafeRetry() = runBlocking {
         val f = Fixture()
         f.prepareInjection()
         Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
@@ -393,11 +417,160 @@ class CameraPublicationTests {
             } catch (_: IllegalStateException) {
                 assertNull(f.active)
             }
-            f.backend.stopCamera()
+            try { f.backend.stopCamera(); fail("Partial native cleanup cannot be blindly retried") }
+            catch (_: IllegalStateException) {}
             Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
-            Mockito.verify(f.track, Mockito.times(2)).dispose()
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            try { f.backend.startCamera(CameraConfig()); fail("Replacement must not discard failed owner") }
+            catch (_: IllegalStateException) {}
+        }
+    }
+
+    @Test fun terminalDisconnectDoesNotDisposeSDKReleasedCameraInNextSession() = runBlocking {
+        val old = Fixture()
+        old.prepareInjection()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java) { capturer, _ ->
+            Mockito.`when`(capturer.disposed).thenCallRealMethod()
+            Mockito.doCallRealMethod().`when`(capturer).dispose()
+        }.use { capturers ->
+            old.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            // Model the pinned SDK boundary: cleanup removes and disposes the
+            // publication BEFORE delivering the terminal room event.
+            old.participant.unpublishTrack(old.track)
+            old.track.dispose()
+            capturers.constructed().first().dispose()
+            Mockito.doThrow(IllegalStateException("already disposed")).`when`(old.track).dispose()
+            old.terminalEvent()
+            old.backend.stopCamera()
+            try {
+                old.backend.connect(SessionConfig.DEFAULT)
+                fail("This fixture intentionally has no connection token")
+            } catch (_: StreamError.MissingToken) { /* Teardown reached credential validation. */ }
+            val next = Fixture()
+            next.prepareInjection()
+            old.setField("room", next.room)
+            old.setField("isConnected", true)
+            old.setField("cameraPublishBaseline", next.defaults)
+            old.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 1)
+            assertSame(next.publication, next.active)
+            Mockito.verify(old.track, Mockito.times(1)).dispose()
+            old.backend.stopCamera()
+            Mockito.verify(next.track, Mockito.times(1)).dispose()
+        }
+    }
+
+    @Test fun disconnectClosesRoomAndReportsFailedUnpublishedCleanup() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        val states = mutableListOf<ConnectionState>()
+        f.backend.onConnectionStateChanged = { states.add(it) }
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            Mockito.doThrow(IllegalStateException("dispose failed")).doThrow(IllegalStateException("retry failed"))
+                .doNothing().`when`(f.track).dispose()
+            try { f.backend.stopCamera(); fail("Expected failed explicit release") }
+            catch (_: IllegalStateException) {}
+            try { f.backend.disconnect(); fail("Cleanup error must remain visible") }
+            catch (_: IllegalStateException) {}
+            Mockito.verify(f.room).disconnect()
+            assertEquals(listOf(ConnectionState.DISCONNECTED), states)
+            try { f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 1); fail("Closed admission") }
+            catch (_: StreamError.NotConnected) {}
+            try { f.backend.stopCamera(); fail("Retained partial native failure remains visible") }
+            catch (_: IllegalStateException) {}
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
+        }
+    }
+
+    @Test fun terminalDisconnectDoesNotForgetUnpublishedAllocation() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        val options = VideoTrackPublishOptions(base = f.defaults)
+        Mockito.doAnswer { false }.`when`(f.participant).publishVideoTrack(
+            Mockito.eq(f.track) ?: f.track,
+            Mockito.any(VideoTrackPublishOptions::class.java) ?: options, Mockito.isNull(),
+        )
+        Mockito.doThrow(IllegalStateException("dispose failed")).doNothing().`when`(f.track).dispose()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            try { f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0); fail("Publication rejected") }
+            catch (_: IllegalStateException) {}
+            // SDK cleanup cannot see this allocation: it was never published.
+            f.terminalEvent()
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            Mockito.verify(f.participant, Mockito.never()).unpublishTrack(f.track)
+            try { f.backend.stopCamera(); fail("Retained partial native failure remains visible") }
+            catch (_: IllegalStateException) {}
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+        }
+    }
+
+    @Test fun injectionUnpublishesButNeverDisposesSDKCachedDevice() = runBlocking {
+        val f = Fixture()
+        f.prepareDeviceCamera()
+        f.prepareInjection()
+        f.defaults = f.defaults.copy(simulcast = true)
+        f.setField("cameraPublishBaseline", f.defaults)
+        val captureArgument = LocalVideoTrackOptions()
+        f.backend.startCamera(CameraConfig(encoding = CameraEncodingConfig(maxBitrateBps = 50_000)))
+        val next = Mockito.mock(LocalVideoTrack::class.java)
+        val nextPublication = Mockito.mock(LocalTrackPublication::class.java)
+        Mockito.`when`(nextPublication.track).thenReturn(next)
+        val capturerArgument = Mockito.mock(livekit.org.webrtc.VideoCapturer::class.java)
+        Mockito.doAnswer {
+            Mockito.verify(f.participant).unpublishTrack(f.deviceTrack)
+            Mockito.verify(f.deviceTrack, Mockito.never()).dispose()
+            next
+        }.`when`(f.participant).createVideoTrack(
+            Mockito.anyString(), Mockito.any(livekit.org.webrtc.VideoCapturer::class.java) ?: capturerArgument,
+            Mockito.any(LocalVideoTrackOptions::class.java) ?: captureArgument, Mockito.isNull(),
+        )
+        val publishArgument = VideoTrackPublishOptions(base = f.defaults)
+        Mockito.doAnswer { f.active = nextPublication; true }.`when`(f.participant).publishVideoTrack(
+            Mockito.eq(next) ?: next, Mockito.any(VideoTrackPublishOptions::class.java) ?: publishArgument, Mockito.isNull(),
+        )
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 1)
+            assertSame(nextPublication, f.active)
+            Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.deviceTrack)
+            Mockito.verify(next, Mockito.never()).dispose()
+        }
+    }
+
+    @Test fun serverUnpublishThenDisconnectStillDisposesExplicitAllocation() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            // Server unpublish removes the SDK registry entry and stops, but
+            // does not dispose this explicitly allocated native stack.
+            f.participant.unpublishTrack(f.track)
+            assertNull(f.active)
+            f.event(RoomEvent.TrackUnpublished(f.room, f.publication, f.participant))
+            f.backend.disconnect()
+            Mockito.verify(f.room).disconnect()
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
+        }
+    }
+
+    @Test fun reconnectKeepsSDKRepublishCustodyUntilNormalStopCanAcknowledge() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            // Exact SDK full-reconnect boundary: registry empty while the
+            // same track is retained privately for republishing.
+            f.active = null
+            f.setField("isConnected", false)
+            try { f.backend.stopCamera(); fail("SDK retains the track for republish") }
+            catch (_: StreamError.NotConnected) {}
+            Mockito.verify(f.track, Mockito.never()).dispose()
+            f.active = f.publication
+            f.setField("isConnected", true)
             f.backend.stopCamera()
-            Mockito.verify(f.track, Mockito.times(2)).dispose()
+            Mockito.verify(f.participant).unpublishTrack(f.track)
+            Mockito.verify(f.track).dispose()
         }
     }
 }
