@@ -75,13 +75,15 @@ class Conversation:
     :param routing: Concise front-end metadata; defaults to a general description adjusted when vision is unavailable.
     :param frames: Native current-frame tool. Configure together with ``vision``.
     :param vision: Native streaming visual-query tool. Configure together with ``frames``.
+    :param context_topics: Runtime topic names whose updates provide named background context.
     :param context_budget_bytes: UTF-8 byte budget for prior context rendered into a request.
     :param compaction_input_budget_bytes: UTF-8 byte budget for background compaction inputs.
 
     Both budgets must be positive. ``frames`` and ``vision`` must either both
     be configured or both be omitted.
 
-    :raises ValueError: If a budget is not positive or only one visual tool is configured.
+    :raises ValueError: If a budget is not positive, only one visual tool is configured,
+        or context topic names are invalid or duplicated.
     """
 
     def __init__(
@@ -92,6 +94,7 @@ class Conversation:
         routing: RoutingAid | None = None,
         frames: CurrentFrameTool | None = None,
         vision: StreamingImageQueryTool | None = None,
+        context_topics: Sequence[str] = (),
         context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
         compaction_input_budget_bytes: int = _DEFAULT_COMPACTION_INPUT_BUDGET_BYTES,
     ) -> None:
@@ -99,8 +102,16 @@ class Conversation:
             raise ValueError("frames and vision must be configured together")
         if context_budget_bytes <= 0 or compaction_input_budget_bytes <= 0:
             raise ValueError("conversation context byte budgets must be positive")
+        if isinstance(context_topics, str):
+            raise ValueError("context_topics must be a sequence of topic names, not a string")
+        names = tuple(context_topics)
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError("context topic names must be non-empty strings")
+        if len(set(names)) != len(names):
+            raise ValueError("context topic names must be unique")
         self._frames = frames
         self._vision = vision
+        self._context_topics = tuple(Topic(name, ConversationContextUpdate) for name in names)
         self._llm = llm
         self._context = _ConversationContext()
         self._context_budget_bytes = context_budget_bytes
@@ -170,14 +181,17 @@ class Conversation:
         self._closed_participants.add(participant_id)
         await self._context.clear(participant_id)
 
-    def context_subscriber(self, topics: Sequence[Topic[ConversationContextUpdate]]) -> Agent:
-        """Return an Agent subscribed to the supplied named context topics.
+    def context_subscriber(self) -> Agent:
+        """Return an Agent subscribed to the configured context topics.
 
         Register the result with the same ``AgentRuntime`` as the conversation
-        consumer. Each topic name is retained as the section's source identity.
+        consumer. The constructor's topic names identify source sections;
+        publishers choose ``incremental`` or ``summary`` for each update.
+
+        :raises ValueError: If no context topics were configured.
         """
 
-        return make_context_subscriber(self, topics)
+        return make_context_subscriber(self, self._context_topics)
 
     async def _update_context(
         self,

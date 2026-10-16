@@ -230,9 +230,7 @@ class VisualMonitorDestination:
                     ImageQueryRequest(
                         image=frame.image,
                         query=(
-                            "Monitoring request: "
-                            f"{instructions}\n"
-                            "Describe only relevant details visible in this frame."
+                            f"Monitoring request: {instructions}\nDescribe only relevant details visible in this frame."
                         ),
                     )
                 )
@@ -330,9 +328,6 @@ class VisualMonitorDestination:
 
     async def release(self, participant_id: str) -> None:
         """Keep independently requested background monitoring running on reroute."""
-
-    async def release_focus(self, participant_id: str) -> None:
-        """The background monitor does not own foreground focus."""
 
     async def _stop_monitor(self, participant_id: str, *, publish: bool = True) -> None:
         self._instructions.pop(participant_id, None)

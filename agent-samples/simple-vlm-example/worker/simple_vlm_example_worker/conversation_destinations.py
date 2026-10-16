@@ -94,9 +94,6 @@ class ContextualConversationDestination:
     async def release(self, _participant_id: str) -> None:
         """Keep completed context when the router tries another destination."""
 
-    async def release_focus(self, _participant_id: str) -> None:
-        """Conversation destinations do not own foreground resources."""
-
     async def participant_left(self, participant_id: str) -> None:
         self._last_completed.pop(participant_id, None)
         await self._conversation.participant_left(participant_id)
@@ -283,9 +280,6 @@ class NoteTakingDestination(ContextualConversationDestination):
                     publisher.exception()
                 raise
             self._context_dirty.discard(participant_id)
-
-    async def release_focus(self, participant_id: str) -> None:
-        self._pending.pop(participant_id, None)
 
     async def release(self, participant_id: str) -> None:
         self._pending.pop(participant_id, None)

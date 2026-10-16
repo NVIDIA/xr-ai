@@ -260,8 +260,7 @@ async def test_observation_native_admission_overrides_poisoned_history_without_g
     assert frames.calls[0].participant_id == "alice"
     assert len(vision.requests) == 1
     assert vision.requests[0].query == (
-        "Frame source time: 2026-10-15 16:00 UTC.\n"
-        "What color is the marker on the display?"
+        "Frame source time: 2026-10-15 16:00 UTC.\nWhat color is the marker on the display?"
     )
     assert len(router.calls) == 1
     assert list(router.calls[0][1]) == ["destination"]
@@ -377,9 +376,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
             "conversation": general,
             "observation": observation,
             "monitor": monitor,
-            "notes": NoteTakingDestination(
-                _Conversation("notes"), _Decisions(), context_budget_bytes=4096
-            ),
+            "notes": NoteTakingDestination(_Conversation("notes"), _Decisions(), context_budget_bytes=4096),
         },
         router,
     )
@@ -407,9 +404,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     assert "Observation 1." not in active_aid
 
     await _turn(front_end, "Where did monitoring last see my pen?")
-    conversation_candidate = next(
-        item for item in router.calls[2][0]["destinations"] if item["name"] == "conversation"
-    )
+    conversation_candidate = next(item for item in router.calls[2][0]["destinations"] if item["name"] == "conversation")
     assert "Active task, using the latest start/retarget instruction" in conversation_candidate["description"]
     assert "Keep track of where I leave my pen." in conversation_candidate["description"]
     assert "through" in conversation_candidate["description"]
@@ -424,8 +419,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     assert visual_result.disposition == "answer"
     assert visual_output == [("observation", "The exit sign is green.")]
     assert vision.requests[0].query == (
-        "Frame source time: 2026-10-15 16:00 UTC.\n"
-        "Look at the current camera frame: what color is the exit sign?"
+        "Frame source time: 2026-10-15 16:00 UTC.\nLook at the current camera frame: what color is the exit sign?"
     )
 
     await _turn(front_end, "Is background monitoring still active?")
@@ -438,9 +432,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     assert len(monitor_updates) >= 2
 
     await _turn(front_end, "Where did the monitor last see my pen?")
-    final_candidate = next(
-        item for item in router.calls[-1][0]["destinations"] if item["name"] == "conversation"
-    )
+    final_candidate = next(item for item in router.calls[-1][0]["destinations"] if item["name"] == "conversation")
     assert "stopped" in final_candidate["description"].casefold()
     assert "not current-view evidence" in final_candidate["description"]
 
@@ -797,10 +789,11 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
     general_conversation = Conversation(
         llm,
         instructions="Answer the participant using their conversation and named context.",
+        context_topics=(note_topic.name,),
         context_budget_bytes=4096,
         compaction_input_budget_bytes=4096,
     )
-    runtime.register("general-context", general_conversation.context_subscriber((note_topic,)))
+    runtime.register("general-context", general_conversation.context_subscriber())
     note_conversation = _Conversation("notes")
 
     async def publish_note(participant_id, update):
@@ -875,10 +868,11 @@ async def test_retarget_replaces_published_monitor_summary_before_new_sampling_a
     general_conversation = Conversation(
         llm,
         instructions="Answer using the conversation and named context sources.",
+        context_topics=(monitor_topic.name,),
         context_budget_bytes=8192,
         compaction_input_budget_bytes=8192,
     )
-    runtime.register("general-context", general_conversation.context_subscriber((monitor_topic,)))
+    runtime.register("general-context", general_conversation.context_subscriber())
     updates = []
 
     async def publish_window(participant_id, update):

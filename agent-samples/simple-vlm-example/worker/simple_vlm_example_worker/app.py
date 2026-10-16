@@ -41,9 +41,6 @@ from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agent import (
-    _CONVERSATION_INSTRUCTIONS,
-    _MONITOR_VLM_INSTRUCTIONS,
-    _NOTES_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -65,6 +62,10 @@ _CONVERSATION_SCOPE = (
     "turns contain the same or a similar question and answer. Historical monitor records are not current-camera "
     "evidence. This destination does not inspect the camera."
 )
+_PROMPTS = Path(__file__).parent / "prompts"
+_CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
+_NOTES_INSTRUCTIONS = (_PROMPTS / "note_taking.txt").read_text(encoding="utf-8").strip()
+_MONITOR_VLM_INSTRUCTIONS = (_PROMPTS / "monitor_observation.txt").read_text(encoding="utf-8").strip()
 _NOTES_CONTEXT_TOPIC = Topic("simple-vlm.foreground-notes", ConversationContextUpdate)
 
 
@@ -216,6 +217,7 @@ async def run_app(
         llm,
         instructions=_CONVERSATION_INSTRUCTIONS,
         routing=RoutingAid(name="conversation", description=_CONVERSATION_SCOPE),
+        context_topics=config.context_topics,
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
@@ -289,9 +291,11 @@ async def run_app(
         acknowledgment_llm=acknowledgment_llm,
         acknowledgment_delay_secs=config.acknowledgment_delay_secs,
     )
-    configured_topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
-    if configured_topics:
-        runtime.register("conversation-context", conversation.context_subscriber(configured_topics))
+    if config.context_topics:
+        runtime.register("conversation-context", conversation.context_subscriber())
+    # The front end cleans destinations used on turns. These direct callbacks
+    # also clear participant-joined conversation and sample-owned state when a
+    # participant leaves without routing through every destination.
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(

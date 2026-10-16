@@ -1,14 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-scoped streaming orchestration for the simple VLM sample."""
+"""Bridge runtime voice queries to destination routing and voice output."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from pathlib import Path
 
 import nemo_relay
 from loguru import logger
@@ -37,14 +36,14 @@ PARTICIPANT_LEFT_TOPIC = Topic(
 )
 INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
 PARTICIPANT_JOINED_TOPIC = Topic("simple-vlm.participant-joined", VoiceParticipantJoined)
-_PROMPTS = Path(__file__).parent / "prompts"
-_CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
-_NOTES_INSTRUCTIONS = (_PROMPTS / "note_taking.txt").read_text(encoding="utf-8").strip()
-_MONITOR_VLM_INSTRUCTIONS = (_PROMPTS / "monitor_observation.txt").read_text(encoding="utf-8").strip()
 
 
 class SimpleVlmAgent(Agent):
-    """Own streamed user turns and cancellation around a vision tool."""
+    """Adapt runtime user queries and routed text output to the voice topics.
+
+    This sample adapter owns its streaming response tasks. The injected
+    ``ConversationFrontEnd`` owns route choice, destination work, and focus.
+    """
 
     def __init__(
         self,
@@ -87,7 +86,13 @@ class SimpleVlmAgent(Agent):
         _event: VoiceParticipantLeft,
         ctx: RuntimeContext,
     ) -> None:
-        """Release this agent's work and frame state for a departed participant."""
+        """Release participant state owned across the sample adapter.
+
+        The front end cleans destinations it used for turns. The explicit
+        handlers and conversation tuple also clean join-activated resources for
+        participants who have not used a route. Cleanup can therefore reach a
+        used destination twice; its departure hooks are idempotent.
+        """
 
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
@@ -138,7 +143,7 @@ class SimpleVlmAgent(Agent):
         _event: VoiceInterrupted,
         ctx: RuntimeContext,
     ) -> None:
-        """Cancel participant-scoped or global vision work."""
+        """Cancel participant-scoped or global response work."""
 
         participant_id = ctx.metadata.participant_id
         if participant_id is None:

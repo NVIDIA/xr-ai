@@ -54,13 +54,15 @@ sys.path.insert(0, str(_REPO_ROOT / "agent-sdk" / "xr-ai-conversation"))
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    _CONVERSATION_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     VOICE_OUTPUT_TOPIC,
     SimpleVlmAgent,
+)
+from simple_vlm_example_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    _CONVERSATION_INSTRUCTIONS,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.conversation_destinations import (  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -295,10 +297,7 @@ class _RouteDecisions:
                 "destination": DecisionAnswer(
                     choice,
                     1.0,
-                    {
-                        name: float(name == choice)
-                        for name in ("conversation", "observation", "monitor", "notes")
-                    },
+                    {name: float(name == choice) for name in ("conversation", "observation", "monitor", "notes")},
                 )
             },
             model="fake",
@@ -314,8 +313,13 @@ def _make_front_end(
     *,
     destination: str | tuple[str, ...] = "vision",
     include_vision: bool = True,
+    context_topics: tuple[str, ...] = (),
 ):
-    conversation = Conversation(llm, instructions=_CONVERSATION_INSTRUCTIONS)  # type: ignore[arg-type]
+    conversation = Conversation(
+        llm,
+        instructions=_CONVERSATION_INSTRUCTIONS,
+        context_topics=context_topics,
+    )  # type: ignore[arg-type]
     destinations = {"conversation": conversation}
     conversations = [conversation]
     if include_vision:
@@ -328,6 +332,7 @@ def _make_front_end(
             ),
             frames=frames,  # type: ignore[arg-type]
             vision=vision,  # type: ignore[arg-type]
+            context_topics=context_topics,
         )
         destinations["vision"] = visual
         conversations.append(visual)
@@ -1070,9 +1075,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.system_prompt == prompt
     assert "conversation history" in prompt
     assert "supplied current\ncamera frame" in prompt
-    observation_prompt = (
-        _WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "monitor_observation.txt"
-    ).read_text()
+    observation_prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "monitor_observation.txt").read_text()
     assert "background monitoring request" in observation_prompt
     assert config.frame_max_age_s == 5.0
     assert config.frame_timeout_s == 5.0
@@ -1425,7 +1428,13 @@ async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
 @pytest.mark.asyncio
 async def test_participant_rejoin_reopens_context_before_topic_updates() -> None:
     llm = _ConversationService()
-    front_end, conversations = _make_front_end(llm, None, None, destination="conversation")
+    front_end, conversations = _make_front_end(
+        llm,
+        None,
+        None,
+        destination="conversation",
+        context_topics=("tea.status",),
+    )
     conversation, visual_conversation = conversations
 
     async def set_status(_status: str, _participant_id: str) -> None:
@@ -1434,8 +1443,8 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
     agent = SimpleVlmAgent(set_status, front_end=front_end, conversations=conversations)
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
-    runtime.register("conversation-context", conversation.context_subscriber((context_topic,)))
-    runtime.register("vision-context", visual_conversation.context_subscriber((context_topic,)))
+    runtime.register("conversation-context", conversation.context_subscriber())
+    runtime.register("vision-context", visual_conversation.context_subscriber())
     runtime.register("simple-vlm", agent)
 
     async with runtime:

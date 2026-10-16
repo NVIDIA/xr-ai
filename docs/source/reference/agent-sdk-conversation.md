@@ -52,18 +52,19 @@ does not enforce the application's policy.
 
 ## Named context topics and history budgets
 
-Publish `ConversationContextUpdate(mode="incremental", text=...)` or
-`ConversationContextUpdate(mode="summary", text=...)` on a named runtime
-`Topic`. The topic name becomes the source section. Register
-`conversation.context_subscriber(topics)` with the same `AgentRuntime` before
-starting it. Runtime metadata supplies participant identity; unscoped updates
-are dropped. Incremental source updates are compacted asynchronously and
-independently per participant and source. A fitting summary replaces that
-source's active background and cancels older compaction work. If a summary is
-too large for the context budget, the source's prior section is cleared;
-oversized incremental updates are dropped whole. Compaction also drops an
-oversized summary for that source. After a participant leaves, updates for
-that session are dropped. Call
+Configure the names of the runtime topics a conversation listens to with
+``context_topics``. Topic names identify source sections; they do not prescribe
+an update mode. Each publisher chooses ``incremental`` or ``summary`` on each
+`ConversationContextUpdate`. Call ``conversation.context_subscriber()`` to
+create the typed runtime subscriber, then register that Agent with the same
+`AgentRuntime` before starting it. Runtime metadata supplies participant
+identity; unscoped updates are dropped. Incremental source updates are
+compacted asynchronously and independently per participant and source. A
+fitting summary replaces that source's active background and cancels older
+compaction work. If a summary is too large for the context budget, the source's
+prior section is cleared; oversized incremental updates are dropped whole.
+Compaction also drops an oversized summary for that source. After a
+participant leaves, updates for that session are dropped. Call
 `conversation.activate_participant(participant_id)` from the participant-joined
 lifecycle event before publishing that participant's context. The simple VLM
 sample wires the existing `VoiceParticipantJoined` topic for this purpose;
@@ -94,8 +95,9 @@ transport framing, or the current request; they are not a model-window guarantee
 from xr_ai_conversation import ConversationContextUpdate
 from xr_ai_runtime import Topic
 
+conversation = Conversation(llm, context_topics=("tea.status",))
 topic = Topic("tea.status", ConversationContextUpdate)
-runtime.register("conversation-context", conversation.context_subscriber((topic,)))
+runtime.register("conversation-context", conversation.context_subscriber())
 await runtime.publish(
     topic,
     ConversationContextUpdate(mode="summary", text="The timer is at six minutes."),
@@ -149,6 +151,23 @@ front_end = ConversationFrontEnd(
 )
 result = await front_end.handle(turn, emit=publish_chunk)
 ```
+
+## Source map
+
+The package is under `agent-sdk/xr-ai-conversation/xr_ai_conversation/`:
+
+| File | Responsibility |
+|---|---|
+| `__init__.py` | Lists the names exported from `xr_ai_conversation` |
+| `contracts.py` | Defines destination protocols and typed turn, route, admission, result, and context records |
+| `front_end.py` | Implements route selection, admission, focus, history, interruption, and cleanup coordination |
+| `conversation.py` | Implements the reusable conversation destination and optional current-view tool path |
+| `_context.py` | Owns private transcript, named-context, byte-budget, and compaction state |
+
+The reusable routing front end has no voice or application-destination
+dependency. Applications connect it to their input and output systems with a
+small adapter that translates incoming requests to `ConversationTurn` and maps
+the `Emit` callback to their output transport.
 
 ## Python API reference
 

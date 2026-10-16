@@ -119,7 +119,15 @@ Emit = Callable[[str, str], Awaitable[None]]
 
 
 class ConversationDestination(Protocol):
-    """A destination that owns its state and handles admitted or fallback turns."""
+    """A destination that owns its state and handles admitted or fallback turns.
+
+    The front end calls ``release()`` when it releases a destination during
+    rerouting or clears its focus. On participant departure it calls an optional
+    ``participant_left(participant_id)`` method when present, otherwise it calls
+    ``release()``. Implement that optional hook when departure should clear
+    durable participant state that route release retains; it is not required by
+    this protocol.
+    """
 
     def routing_aid(self, participant_id: str) -> RoutingAid:
         """Describe this participant's current eligibility and route scope."""
@@ -149,7 +157,14 @@ class ConversationDestination(Protocol):
         """
 
     async def release(self, participant_id: str) -> None:
-        """Release or clear destination-owned state and resources for one participant."""
+        """Handle route release; the front end also uses it for departure fallback.
+
+        This method runs when the front end releases a destination during
+        rerouting or clears its focus. It is also the departure fallback when
+        no ``participant_left()`` hook is present. A destination can clear
+        active resources here while retaining completed participant data; use
+        the optional departure hook for stronger cleanup.
+        """
 
 
 __all__ = [

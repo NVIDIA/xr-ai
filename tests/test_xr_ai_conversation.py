@@ -786,11 +786,14 @@ async def test_dialogue_compaction_keeps_appended_tail_and_cancels_on_departure(
 @pytest.mark.asyncio
 async def test_runtime_named_context_topics_are_participant_scoped_and_summary_replaces_source():
     llm = _LLM()
-    conversation = Conversation(llm)  # type: ignore[arg-type]
     tea = Topic("tea.status", ConversationContextUpdate)
     xr = Topic("xr.observations", ConversationContextUpdate)
+    conversation = Conversation(
+        llm,
+        context_topics=(tea.name, xr.name),
+    )  # type: ignore[arg-type]
     runtime = AgentRuntime()
-    runtime.register("conversation-context", conversation.context_subscriber((tea, xr)))
+    runtime.register("conversation-context", conversation.context_subscriber())
 
     async with runtime:
         await runtime.publish(tea, {"mode": "summary", "text": "Tea timer is at 4 minutes."}, participant_id="alice")
@@ -808,6 +811,22 @@ async def test_runtime_named_context_topics_are_participant_scoped_and_summary_r
     assert alice == (("tea.status", "Timer is now at 6 minutes."), ("xr.observations", "The exhibit has three panels."))
     assert bob == (("tea.status", "A different timer is at 2 minutes."),)
     assert "Timer was extended once" not in repr(alice)
+
+
+def test_context_topic_names_must_be_nonempty_and_unique():
+    llm = _LLM()
+
+    with pytest.raises(ValueError, match="not a string"):
+        Conversation(llm, context_topics="tea.status")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="non-empty strings"):
+        Conversation(llm, context_topics=("tea.status", " "))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="non-empty strings"):
+        Conversation(llm, context_topics=("tea.status", None))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="unique"):
+        Conversation(llm, context_topics=("tea.status", "tea.status"))  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="at least one context topic"):
+        Conversation(llm).context_subscriber()  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

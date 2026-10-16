@@ -20,6 +20,32 @@ output path to Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`
 </getting_started/quickstart>` to run the sample. This reference owns the
 sample's design and operational details.
 
+## Runtime boundary
+
+The routing front end is already separate from `VoiceAgent`. The front end
+accepts typed turns and a source-tagged text callback; it does not subscribe to
+voice topics. `VoiceAgent` owns the voice session and publishes runtime events.
+The sample's `SimpleVlmAgent` is the adapter between them:
+
+```text
+VoiceAgent
+  -- UserQuery and participant lifecycle topics -->
+SimpleVlmAgent
+  -- ConversationTurn and source-tagged emit callback -->
+ConversationFrontEnd
+  -- route, admit, and answer -->
+Selected destination
+  -- attributed text -->
+SimpleVlmAgent
+  -- VoiceOutput topic -->
+VoiceAgent
+```
+
+`app.py` is the composition root that constructs the voice agent, sample
+adapter, `ConversationFrontEnd`, and sample destinations. It registers the
+voice agent and sample adapter with one `AgentRuntime`; when context topics are
+configured, it also registers the conversation context subscriber.
+
 ## Composition
 
 The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
@@ -121,8 +147,8 @@ The worker package is under
 | File | Responsibility |
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
-| `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
-| `agent.py` | Owns participant-scoped routed turns, voice streaming, cancellation, and cleanup |
+| `app.py` | Composition root for `VoiceAgent`, `SimpleVlmAgent`, the front end, destinations, services, and readiness |
+| `agent.py` | Adapts runtime user queries and lifecycle events to the front end and publishes attributed voice output |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
 | `conversation_destinations.py` | Adds bounded continuation cues and participant-scoped foreground note-taking to `Conversation` destinations |
 | `monitoring.py` | Owns the explicitly started background monitor and rolling text window |
@@ -142,7 +168,7 @@ repository root with the `tests` project environment:
 ```bash
 uv --config-file uv.toml run --project tests pytest \
   tests/test_xr_ai_conversation.py \
-  tests/test_simple_vlm_front_end.py \
+  tests/test_xr_ai_conversation_front_end.py \
   tests/test_simple_vlm_example_worker.py \
   tests/test_simple_vlm_visual_destinations.py \
   tests/test_simple_vlm_monitoring.py \
@@ -152,7 +178,7 @@ uv --config-file uv.toml run --project tests pytest \
 
 | Behavior | Deterministic contract | Corpus/model layer |
 |---|---|---|
-| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_simple_vlm_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
+| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_conversation_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
 | Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
 | Current-frame-only observation and camera/tool failures | `test_simple_vlm_visual_destinations.py`, `test_simple_vlm_example_worker.py` | Current-view tool/evidence expectations in both corpora |
 | Monitor task scope, hot sampling, retarget, failure, stop, participant isolation | `test_simple_vlm_monitoring.py` | Monitor controls, active/stopped scope, route and evidence expectations |

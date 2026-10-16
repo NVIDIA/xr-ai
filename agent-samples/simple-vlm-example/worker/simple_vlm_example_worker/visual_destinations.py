@@ -77,10 +77,10 @@ class VisualObservationDestination:
         return DestinationResult("answer", answer)
 
     async def release(self, _participant_id: str) -> None:
-        """Keep image state until the participant actually leaves."""
+        """Keep shared frame state while another destination may use it."""
 
     async def participant_left(self, _participant_id: str) -> None:
-        """Frame ownership and cleanup remain with the sample voice agent."""
+        """The sample adapter releases shared frame state on participant departure."""
 
 
 def _frame_time_label(timestamp_us: int) -> str:

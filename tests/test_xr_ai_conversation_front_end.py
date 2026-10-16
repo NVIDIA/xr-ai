@@ -4,18 +4,10 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from collections import deque
-from pathlib import Path
 
 import pytest
-from xr_ai_models import DecisionAnswer, DecisionResponse
-
-_SAMPLE_DIR = Path(__file__).resolve().parents[1] / "agent-samples" / "simple-vlm-example"
-sys.path.insert(0, str(_SAMPLE_DIR / "worker"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-sdk"))
-
-from xr_ai_conversation import (  # noqa: E402
+from xr_ai_conversation import (
     Admission,
     ConversationExchange,
     ConversationFrontEnd,
@@ -23,8 +15,9 @@ from xr_ai_conversation import (  # noqa: E402
     DestinationResult,
     RoutingAid,
 )
-from xr_ai_conversation._context import _active_history_timestamps  # noqa: E402
-from xr_ai_conversation.front_end import _bounded_history_with_times  # noqa: E402
+from xr_ai_conversation._context import _active_history_timestamps
+from xr_ai_conversation.front_end import _bounded_history_with_times
+from xr_ai_models import DecisionAnswer, DecisionResponse
 
 
 class _Decisions:
