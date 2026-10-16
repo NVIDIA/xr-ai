@@ -125,7 +125,8 @@ class VisualMonitorDestination:
                 "handoff": "The request is not a monitor start, stop, or status control.",
             }
         instructions = (
-            "Classify only background-monitor controls: start, retarget, stop, status, or handoff. Do not answer questions about "
+            "Classify only background-monitor controls: start, retarget, stop, status, or handoff. "
+            "Do not answer questions about "
             "recorded observation content; conversation receives the timestamped window. Do not answer questions about "
             "what is visible now; direct observation obtains a fresh frame. Monitoring is background work and does not "
             "take conversation focus. Do not start it merely because a request mentions a visual subject."
