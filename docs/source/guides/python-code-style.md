@@ -124,16 +124,19 @@ swallowed error.
 These rules follow:
 
 1. Do not write a bare `except:`, and do not catch `Exception` or
-   `BaseException` unless the handler re-raises or is a sanctioned site below.
+   `BaseException` outside the sanctioned sites below. A broad handler that only
+   re-raises does nothing: delete it. Put work that must run whether or not the
+   block fails in `finally`. Catch broadly and re-raise only to do work that
+   applies to failure alone, such as rolling back partial state, and say why
+   in a comment.
 2. Do not silence an error with `pass`, `continue`, or a bare `return` in an
    `except` clause. Where ignoring a failure is correct, catch the specific
    type and explain why in a `# ignored:` comment.
 3. The sanctioned broad-catch sites each carry a `# isolation boundary:`
-   comment and either consume the failure or re-raise it. A site that consumes
-   the failure logs it once with its traceback through the package's logger,
-   and ends the unit of work or continues the loop it supervises. A site that
-   re-raises does not log; the owner that finally consumes the failure logs it.
-   The sites are:
+   comment and consume the failure: the site logs it once with its traceback
+   through the package's logger, then ends the unit of work or continues the
+   loop it supervises. A handler that re-raises does not log; the owner that
+   finally consumes the failure logs it. The sites are:
    - calling a user-supplied callback from a loop the SDK owns, so one handler
      cannot stop the loop;
    - a background-task supervisor or done callback that records the failure and
@@ -161,8 +164,10 @@ These rules follow:
   which forbids catch-all `except:` and catching `Exception` unless re-raising or
   "creating an isolation point in the program where exceptions are not
   propagated but are recorded and suppressed instead, such as protecting a
-  thread from crashing by guarding its outermost block". The same section
-  says a library's own exceptions "must inherit from an existing exception
+  thread from crashing by guarding its outermost block". Rule 1 narrows the
+  re-raising allowance to handlers that do failure-only work, because a broad
+  handler that merely re-raises has no effect; that narrowing is a
+  **repository convention**. The same section says a library's own exceptions "must inherit from an existing exception
   class" and that names end in `Error`; calls for `finally` for cleanup;
   advises raising `ValueError` for a violated precondition; and says not to use
   `assert` to validate preconditions. Its
