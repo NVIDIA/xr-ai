@@ -10,7 +10,9 @@ from ._contracts import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
+    RoutingTurnContext,
 )
+from ._history import current_turn_context
 from ._router import AgentRouter
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "DestinationResult",
     "RoutableAgent",
     "RoutingAid",
+    "RoutingTurnContext",
+    "current_turn_context",
 ]

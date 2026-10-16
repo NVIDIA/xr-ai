@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
+from contextlib import contextmanager
+from dataclasses import FrozenInstanceError
 
 import pytest
 import xr_ai_routing as routing_module
@@ -19,6 +21,8 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
+    RoutingTurnContext,
+    current_turn_context,
 )
 from xr_ai_routing._history import (
     _active_exchange_id,
@@ -42,6 +46,8 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
         "DestinationResult",
         "RoutableAgent",
         "RoutingAid",
+        "RoutingTurnContext",
+        "current_turn_context",
     ]
     assert not hasattr(routing_module, "ConversationDestination")
     assert not hasattr(routing_module, "ConversationExchange")
@@ -50,16 +56,23 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
 
 
 class _Prediction:
-    def __init__(self, choice="uncertain", probabilities=None, *, error=None, blocked=False) -> None:
+    def __init__(self, choice="uncertain", probabilities=None, *, error=None, blocked=False, cancel_error=None) -> None:
         self.choice = choice
         self.probabilities = probabilities or {"slow": 0.0, "within_delay": 0.0, "uncertain": 1.0}
         self.error = error
         self.blocked = blocked
+        self.cancel_error = cancel_error
         self.calls = []
         self.called = asyncio.Event()
         self.cancelled = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.task: asyncio.Task | None = None
+        self.cancel_blocked = False
+        self.release_cancel = asyncio.Event()
+        self.cancel_count = 0
 
     async def decide(self, state, questions, **_kwargs):
+        self.task = asyncio.current_task()
         self.calls.append((state, questions))
         self.called.set()
         try:
@@ -79,9 +92,40 @@ class _Prediction:
                 usage={},
                 raw={},
             )
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
+            self.cancel_count += 1
             self.cancelled.set()
+            if self.cancel_blocked:
+                await self.release_cancel.wait()
+            if self.cancel_error is not None:
+                raise self.cancel_error from error
             raise
+        finally:
+            self.finished.set()
+
+
+def test_current_turn_context_returns_immutable_snapshot_of_private_metadata():
+    assert current_turn_context() == RoutingTurnContext(None, (), ())
+
+    current_id = object()
+    history_ids = (object(), None)
+    timestamps = (1_800_000_000_000_000, None)
+    current_token = _active_exchange_id.set(current_id)
+    ids_token = _active_history_exchange_ids.set(history_ids)
+    timestamps_token = _active_history_timestamps.set(timestamps)
+    try:
+        snapshot = current_turn_context()
+        assert snapshot == RoutingTurnContext(current_id, history_ids, timestamps)
+        _active_exchange_id.set(object())
+        _active_history_exchange_ids.set(())
+        _active_history_timestamps.set(())
+        assert snapshot == RoutingTurnContext(current_id, history_ids, timestamps)
+        with pytest.raises(FrozenInstanceError):
+            snapshot.exchange_id = None  # type: ignore[misc]
+    finally:
+        _active_history_timestamps.reset(timestamps_token)
+        _active_history_exchange_ids.reset(ids_token)
+        _active_exchange_id.reset(current_token)
 
 
 class _AcknowledgmentLLM:
@@ -1480,6 +1524,109 @@ async def test_prediction_hang_does_not_delay_answer_and_starts_ack_after_delay(
     assert output == [("destination", "Here is the answer.")]
     assert decisions.cancelled.is_set()
     assert len(llm.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelled_acknowledgment_reports_prediction_cleanup_failure_once(caplog, monkeypatch):
+    @contextmanager
+    def scope(*_args, **_kwargs):
+        yield None
+
+    monkeypatch.setattr(router_module.nemo_relay.scope, "scope", scope)
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction(blocked=True, cancel_error=RuntimeError("prediction cleanup failed"))
+    llm = _AcknowledgmentLLM(blocked=True)
+    front_end = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    task = asyncio.create_task(_ack_output(front_end, "Answer while prediction is cancelled.", output))
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.called.wait(), timeout=1)
+    await asyncio.wait_for(llm.started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.finished.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert output[-1] == ("destination", "Here is the answer.")
+    assert decisions.cancelled.is_set()
+    assert decisions.task is not None and decisions.task.done()
+    assert llm.cancelled.is_set()
+    failures = [record for record in caplog.records if "optional acknowledgment task failed" in record.message]
+    assert len(failures) == 1
+    assert failures[0].exc_info is not None
+    assert isinstance(failures[0].exc_info[1], RuntimeError)
+    assert "prediction cleanup failed" in str(failures[0].exc_info[1])
+
+
+@pytest.mark.asyncio
+async def test_repeated_acknowledgment_cancellation_drains_and_reports_child_failure_once(caplog, monkeypatch):
+    @contextmanager
+    def scope(*_args, **_kwargs):
+        yield None
+
+    monkeypatch.setattr(router_module.nemo_relay.scope, "scope", scope)
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction(blocked=True, cancel_error=RuntimeError("prediction cleanup failed"))
+    decisions.cancel_blocked = True
+    llm = _AcknowledgmentLLM(blocked=True)
+    front_end = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    drain_started = asyncio.Event()
+    original_shield = asyncio.shield
+
+    def observe_drain(future):
+        task = asyncio.current_task()
+        if task is not None and task.get_name().startswith("conversation-acknowledgment:"):
+            drain_started.set()
+        return original_shield(future)
+
+    monkeypatch.setattr(router_module.asyncio, "shield", observe_drain)
+    owner_task = asyncio.create_task(_ack_output(front_end, "Answer while cleanup is canceled.", output))
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.called.wait(), timeout=1)
+    await asyncio.wait_for(llm.started.wait(), timeout=1)
+    acknowledgment_task = next(
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name().startswith("conversation-acknowledgment:")
+    )
+    acknowledgment_done = asyncio.Event()
+    acknowledgment_task.add_done_callback(lambda _task: acknowledgment_done.set())
+
+    acknowledgment_task.cancel()
+    await asyncio.wait_for(decisions.cancelled.wait(), timeout=1)
+    await asyncio.wait_for(drain_started.wait(), timeout=1)
+    await asyncio.sleep(0)
+    acknowledgment_task.cancel()
+    acknowledgment_task.cancel()
+    assert decisions.cancel_count == 1
+    decisions.release_cancel.set()
+    await asyncio.wait_for(acknowledgment_done.wait(), timeout=1)
+    destination.release_answer.set()
+
+    result = await asyncio.wait_for(owner_task, timeout=1)
+    with pytest.raises(asyncio.CancelledError):
+        await acknowledgment_task
+
+    assert result.disposition == "answer"
+    assert output[-1] == ("destination", "Here is the answer.")
+    assert decisions.task is not None and decisions.task.done()
+    failures = [record for record in caplog.records if "optional acknowledgment task failed" in record.message]
+    assert len(failures) == 1
+    assert failures[0].exc_info is not None
+    assert isinstance(failures[0].exc_info[1], RuntimeError)
+    assert "prediction cleanup failed" in str(failures[0].exc_info[1])
 
 
 @pytest.mark.asyncio
