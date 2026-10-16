@@ -48,9 +48,9 @@ from .agent import (
     ConversationExampleAgent,
 )
 from .config import WorkerConfig
-from .conversation_destinations import ContextualConversationDestination, NoteTakingDestination
-from .monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorDestination
-from .visual_destinations import VisualObservationDestination
+from .conversation_destinations import ContextualConversationAgent, NoteTakingAgent
+from .monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorAgent
+from .visual_destinations import VisualObservationAgent
 
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4
@@ -261,17 +261,17 @@ async def run_app(
         )
 
     # Each destination owns its tools, admission policy, and sample state.
-    observation = VisualObservationDestination(
+    observation = VisualObservationAgent(
         frames,
         vision,
     )
-    notes_destination = NoteTakingDestination(
+    notes_agent = NoteTakingAgent(
         notes_conversation,
         router,
         context_budget_bytes=config.context_budget_bytes,
         publish_context=publish_note_context,
     )
-    monitor = VisualMonitorDestination(
+    monitor = VisualMonitorAgent(
         frames,
         ImageQueryTool(images=images, vlm=vlm, system_prompt=_MONITOR_VLM_INSTRUCTIONS),
         router,
@@ -279,7 +279,7 @@ async def run_app(
         window_size=config.monitor_window_size,
         context_budget_bytes=config.context_budget_bytes,
     )
-    conversation_destination = ContextualConversationDestination(
+    conversation_agent = ContextualConversationAgent(
         conversation,
         static_description=_CONVERSATION_SCOPE,
         context_budget_bytes=config.context_budget_bytes,
@@ -288,10 +288,10 @@ async def run_app(
     )
     front_end = ConversationFrontEnd(
         {
-            "conversation": conversation_destination,
+            "conversation": conversation_agent,
             "observation": observation,
             "monitor": monitor,
-            "notes": notes_destination,
+            "notes": notes_agent,
         },
         router,
         acknowledgment_llm=acknowledgment_llm,
@@ -311,7 +311,7 @@ async def run_app(
             front_end=front_end,
             conversations=(conversation, notes_conversation),
             frames=frames,
-            participant_left_handlers=(notes_destination.participant_left, monitor.participant_left),
+            participant_left_handlers=(notes_agent.participant_left, monitor.participant_left),
         ),
     )
     runtime.register("voice", voice)

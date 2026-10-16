@@ -21,14 +21,14 @@ _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "agent-samples/conversation-example/worker"))
 
 from conversation_example_worker.conversation_destinations import (  # noqa: E402
-    ContextualConversationDestination,
-    NoteTakingDestination,
+    ContextualConversationAgent,
+    NoteTakingAgent,
 )
 from conversation_example_worker.monitoring import (  # noqa: E402
-    VisualMonitorDestination,
+    VisualMonitorAgent,
 )
 from conversation_example_worker.visual_destinations import (  # noqa: E402
-    VisualObservationDestination,
+    VisualObservationAgent,
 )
 from xr_ai_conversation import (  # noqa: E402
     Admission,
@@ -194,7 +194,7 @@ def _monitor(
         if publisher is not None:
             await publisher(participant_id, update)
 
-    destination = VisualMonitorDestination(
+    destination = VisualMonitorAgent(
         frames,
         image_query,
         decisions,
@@ -228,9 +228,9 @@ async def test_observation_native_admission_overrides_poisoned_history_without_g
     frames = _Frames((frame_gate, None))
     vision = _StreamingVision("The marker is red.")
     router = _RouteDecisions("observation")
-    observation = VisualObservationDestination(frames, vision)
+    observation = VisualObservationAgent(frames, vision)
     conversation = _Conversation("conversation")
-    notes = NoteTakingDestination(_Conversation("notes"), _Decisions(), context_budget_bytes=4096)
+    notes = NoteTakingAgent(_Conversation("notes"), _Decisions(), context_budget_bytes=4096)
     monitor, _ = _monitor(_Decisions(), _Frames(), _ImageQuery())
     front_end = ConversationFrontEnd(
         {
@@ -359,7 +359,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     monitor, monitor_updates = _monitor(monitor_actions, monitor_frames, monitor_images)
 
     general_inner = _Conversation("conversation")
-    general = ContextualConversationDestination(
+    general = ContextualConversationAgent(
         general_inner,
         static_description="Answer general text questions and use completed context.",
         context_budget_bytes=4096,
@@ -368,7 +368,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
     visual_gate = asyncio.Event()
     visual_frames = _Frames((visual_gate, None))
     vision = _StreamingVision("The exit sign is green.")
-    observation = VisualObservationDestination(visual_frames, vision)
+    observation = VisualObservationAgent(visual_frames, vision)
     router = _RouteDecisions(
         "monitor", "conversation", "conversation", "observation", "monitor", "monitor", "conversation", "monitor"
     )
@@ -377,7 +377,7 @@ async def test_active_monitor_task_augments_general_routing_aid_but_not_current_
             "conversation": general,
             "observation": observation,
             "monitor": monitor,
-            "notes": NoteTakingDestination(_Conversation("notes"), _Decisions(), context_budget_bytes=4096),
+            "notes": NoteTakingAgent(_Conversation("notes"), _Decisions(), context_budget_bytes=4096),
         },
         router,
     )
@@ -523,7 +523,7 @@ async def test_monitor_continues_during_notes_focus_and_router_resumes_after_fin
     async def publish_note(participant_id, update):
         note_updates.append((participant_id, update))
 
-    notes = NoteTakingDestination(
+    notes = NoteTakingAgent(
         note_conversation,
         note_actions,
         context_budget_bytes=4096,
@@ -710,7 +710,7 @@ async def test_note_handoff_releases_focus_and_routes_same_query_to_conversation
     async def publish_note(participant_id, update):
         published.append((participant_id, update))
 
-    notes = NoteTakingDestination(
+    notes = NoteTakingAgent(
         note_conversation,
         _Decisions("start", "capture", "handoff"),
         context_budget_bytes=4096,
@@ -741,7 +741,7 @@ async def test_note_handoff_releases_focus_and_routes_same_query_to_conversation
 
 @pytest.mark.asyncio
 async def test_note_context_is_participant_scoped_and_cleared_on_departure():
-    notes = NoteTakingDestination(
+    notes = NoteTakingAgent(
         _Conversation("notes"),
         _Decisions("start", "capture", "start", "capture"),
         context_budget_bytes=4096,
@@ -801,7 +801,7 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
         published.append(update)
         await runtime.publish(note_topic, update, participant_id=participant_id)
 
-    notes = NoteTakingDestination(
+    notes = NoteTakingAgent(
         note_conversation,
         _Decisions("start", "capture", "capture", "finish"),
         context_budget_bytes=4096,
@@ -810,7 +810,7 @@ async def test_note_topic_reaches_general_conversation_after_focus_finishes():
     router = _RouteDecisions("notes", "conversation")
     front_end = ConversationFrontEnd(
         {
-            "conversation": ContextualConversationDestination(
+            "conversation": ContextualConversationAgent(
                 general_conversation,
                 static_description="General conversation and recall.",
                 context_budget_bytes=4096,
@@ -893,7 +893,7 @@ async def test_retarget_replaces_published_monitor_summary_before_new_sampling_a
         image_query,
         publisher=publish_window,
     )
-    conversation = ContextualConversationDestination(
+    conversation = ContextualConversationAgent(
         general_conversation,
         static_description="General conversation and current monitor context.",
         context_budget_bytes=8192,

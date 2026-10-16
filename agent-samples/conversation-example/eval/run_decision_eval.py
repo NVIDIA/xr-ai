@@ -30,11 +30,11 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from conversation_example_worker.app import _CONVERSATION_SCOPE  # noqa: E402
 from conversation_example_worker.conversation_destinations import (  # noqa: E402
-    ContextualConversationDestination,
-    NoteTakingDestination,
+    ContextualConversationAgent,
+    NoteTakingAgent,
 )
-from conversation_example_worker.monitoring import VisualMonitorDestination  # noqa: E402
-from conversation_example_worker.visual_destinations import VisualObservationDestination  # noqa: E402
+from conversation_example_worker.monitoring import VisualMonitorAgent  # noqa: E402
+from conversation_example_worker.visual_destinations import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
     Conversation,
     ConversationExchange,
@@ -285,7 +285,7 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
         context_budget_bytes=context_budget,
     )
     notes_conversation = Conversation(_NoAnswerModel(), context_budget_bytes=context_budget)
-    monitor = VisualMonitorDestination(
+    monitor = VisualMonitorAgent(
         frames,
         _ImageQuery(frames),
         recorder,
@@ -294,15 +294,15 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
         context_budget_bytes=context_budget,
     )
     destinations = {
-        "conversation": ContextualConversationDestination(
+        "conversation": ContextualConversationAgent(
             conversation,
             static_description=_CONVERSATION_SCOPE,
             context_budget_bytes=context_budget,
             routing_context=monitor.routing_context,
         ),
-        "observation": VisualObservationDestination(None, None),
+        "observation": VisualObservationAgent(None, None),
         "monitor": monitor,
-        "notes": NoteTakingDestination(
+        "notes": NoteTakingAgent(
             notes_conversation,
             recorder,
             context_budget_bytes=context_budget,

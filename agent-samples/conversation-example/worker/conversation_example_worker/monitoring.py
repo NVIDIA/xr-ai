@@ -18,6 +18,7 @@ from xr_ai_conversation import (
     ConversationContextUpdate,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from xr_ai_hub import FrameUnavailable
@@ -65,7 +66,7 @@ class MonitorRoutingCue:
         return f"Monitoring is {self.status}; no observation is available as current evidence."
 
 
-class VisualMonitorDestination:
+class VisualMonitorAgent(RoutableAgent):
     """Capture text-only visual observations while explicitly enabled for a participant."""
 
     def __init__(
@@ -414,4 +415,4 @@ def _utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
-__all__ = ["MONITOR_WINDOW_TOPIC", "VisualMonitorDestination"]
+__all__ = ["MONITOR_WINDOW_TOPIC", "VisualMonitorAgent"]

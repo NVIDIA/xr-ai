@@ -65,8 +65,8 @@ from conversation_example_worker.app import (  # noqa: E402  # pyright: ignore[r
 )
 from conversation_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from conversation_example_worker.conversation_destinations import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    ContextualConversationDestination,
-    NoteTakingDestination,
+    ContextualConversationAgent,
+    NoteTakingAgent,
 )
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     Admission,
@@ -466,7 +466,7 @@ async def test_completed_agent_exchange_refreshes_bounded_routing_cue_and_publis
     async def publish(participant_id, update):
         published.append((participant_id, update))
 
-    destination = ContextualConversationDestination(
+    destination = ContextualConversationAgent(
         conversation,
         static_description="General conversation and follow-up help.",
         context_budget_bytes=500,
@@ -527,7 +527,7 @@ async def test_notes_capture_readback_and_finish_preserve_context_until_departur
     async def publish_context(participant_id, update):
         published.append((participant_id, update))
 
-    destination = NoteTakingDestination(
+    destination = NoteTakingAgent(
         conversation,
         decisions,  # type: ignore[arg-type]
         context_budget_bytes=500,
@@ -594,7 +594,7 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
         _ConversationService(visual=False),  # type: ignore[arg-type]
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
     )
-    destination = NoteTakingDestination(
+    destination = NoteTakingAgent(
         conversation,
         CaptureDecision(),  # type: ignore[arg-type]
         context_budget_bytes=500,
@@ -639,7 +639,7 @@ async def test_over_budget_note_is_refused_without_partial_capture() -> None:
     async def publish_context(participant_id, update):
         published.append((participant_id, update))
 
-    destination = NoteTakingDestination(
+    destination = NoteTakingAgent(
         conversation,
         CaptureDecision(),  # type: ignore[arg-type]
         context_budget_bytes=80,
@@ -675,7 +675,7 @@ async def test_sample_departure_callback_clears_notes_after_front_end_release() 
         _ConversationService(visual=False),  # type: ignore[arg-type]
         routing=RoutingAid(name="notes", description="Focused note-taking destination."),
     )
-    destination = NoteTakingDestination(
+    destination = NoteTakingAgent(
         conversation,
         object(),  # type: ignore[arg-type]
         context_budget_bytes=500,
@@ -741,7 +741,7 @@ async def test_front_end_departure_error_does_not_skip_sample_cleanup() -> None:
     assert "alice" not in agent._participants  # noqa: SLF001
 
 
-async def test_domain_visual_request_routes_to_configured_conversation_destination() -> None:
+async def test_domain_visual_request_routes_to_configured_conversation_agent() -> None:
     class Decisions:
         def __init__(self) -> None:
             self.state = None
@@ -1688,9 +1688,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     assert len(wired_front_ends) == 1
     assert set(wired_front_ends[0]) == {"conversation", "observation", "monitor", "notes"}
-    assert wired_front_ends[0]["observation"].__class__.__name__ == "VisualObservationDestination"
-    assert wired_front_ends[0]["monitor"].__class__.__name__ == "VisualMonitorDestination"
-    assert wired_front_ends[0]["notes"].__class__.__name__ == "NoteTakingDestination"
+    assert wired_front_ends[0]["observation"].__class__.__name__ == "VisualObservationAgent"
+    assert wired_front_ends[0]["monitor"].__class__.__name__ == "VisualMonitorAgent"
+    assert wired_front_ends[0]["notes"].__class__.__name__ == "NoteTakingAgent"
 
     assert ready_file.exists()
     relay_log = worker_log.parent / "relay-events.jsonl"

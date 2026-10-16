@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Conversation destinations with participant-owned routing context."""
+"""Routable conversation agents with participant-owned context."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from xr_ai_conversation import (
     ConversationContextUpdate,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from xr_ai_models import DecisionQuestion, DecisionService
@@ -25,7 +26,7 @@ RoutingContext = Callable[[str], str | None]
 Emit = Callable[[str, str], Awaitable[None]]
 
 
-class ContextualConversationDestination:
+class ContextualConversationAgent(RoutableAgent):
     """Add a bounded last-completed-exchange cue to a Conversation route."""
 
     def __init__(
@@ -99,7 +100,7 @@ class ContextualConversationDestination:
         await self._conversation.participant_left(participant_id)
 
 
-class NoteTakingDestination(ContextualConversationDestination):
+class NoteTakingAgent(ContextualConversationAgent):
     """Keep participant-authored notes in an explicit, focused session."""
 
     def __init__(
@@ -295,4 +296,4 @@ def _fit_utf8(text: str, budget_bytes: int) -> str:
     return ""
 
 
-__all__ = ["ContextualConversationDestination", "NoteTakingDestination"]
+__all__ = ["ContextualConversationAgent", "NoteTakingAgent"]

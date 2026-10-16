@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sample-local direct current-view observation destination."""
+"""Sample-local direct current-view observation agent."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from xr_ai_conversation import (
     Admission,
     ConversationTurn,
     DestinationResult,
+    RoutableAgent,
     RoutingAid,
 )
 from xr_ai_hub import FrameUnavailable
@@ -23,7 +24,7 @@ _NO_VISUAL_EVIDENCE = "I couldn't inspect the current view right now. Please try
 Emit = Callable[[str, str], Awaitable[None]]
 
 
-class VisualObservationDestination:
+class VisualObservationAgent(RoutableAgent):
     """Answer visible-fact questions by sending the current image directly to Cosmos."""
 
     def __init__(
@@ -102,4 +103,4 @@ def _frame_unavailable(error: BaseException) -> bool:
     return False
 
 
-__all__ = ["VisualObservationDestination"]
+__all__ = ["VisualObservationAgent"]

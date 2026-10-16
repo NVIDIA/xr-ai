@@ -21,7 +21,7 @@ _WORKER = _ROOT / "agent-samples" / "conversation-example" / "worker"
 sys.path.insert(0, str(_WORKER))
 
 from conversation_example_worker.visual_destinations import (  # noqa: E402
-    VisualObservationDestination,
+    VisualObservationAgent,
 )
 
 
@@ -54,7 +54,7 @@ class _StreamingVision:
 async def test_observation_asks_cosmos_directly_without_an_omni_planner() -> None:
     frames = _Frames()
     vision = _StreamingVision()
-    destination = VisualObservationDestination(
+    destination = VisualObservationAgent(
         frames,  # type: ignore[arg-type]
         vision,  # type: ignore[arg-type]
     )
@@ -80,7 +80,7 @@ async def test_observation_asks_cosmos_directly_without_an_omni_planner() -> Non
 async def test_observation_labels_the_actual_frame_timestamp() -> None:
     frames = _Frames(timestamp_us=1_790_856_000_000_000)
     vision = _StreamingVision()
-    destination = VisualObservationDestination(
+    destination = VisualObservationAgent(
         frames,  # type: ignore[arg-type]
         vision,  # type: ignore[arg-type]
     )
