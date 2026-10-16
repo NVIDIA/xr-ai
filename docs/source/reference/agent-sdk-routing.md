@@ -62,6 +62,15 @@ aligned as history is trimmed. When an admission release emits text, it records
 that text as a completed exchange before rerouting the same query, so the next
 destination receives the updated history.
 
+`current_turn_context()` returns an immutable snapshot for code running inside
+the active routed turn. Its `exchange_id` identifies the current exchange;
+`history_exchange_ids` and `history_timestamps` align with the bounded history.
+Timestamps are Unix microseconds, with `None` for an unknown time. The snapshot
+stays unchanged as routing advances. Outside a routed turn, the identifier is
+`None` and both history tuples are empty. These opaque identifiers can be used
+to correlate work with the exchanges visible to the current destination; they
+do not expose or modify router state.
+
 `RoutingAid` is a concise selection hint. Eligibility is checked by the router,
 while each destination's `admit()` method remains responsible for deciding
 whether it can accept the specific turn. Destinations decline or clarify before
