@@ -47,7 +47,6 @@ PUBLIC_API_MODULES = (
     "xr_ai_tools.vision",
 )
 PUBLIC_API_EXCLUSIONS = (
-    "xr_ai_conversation._history",
     "xr_ai_conversation.contracts",
     "xr_ai_conversation.front_end",
     "xr_ai_models.presets.cosmos3_nano_reasoner",

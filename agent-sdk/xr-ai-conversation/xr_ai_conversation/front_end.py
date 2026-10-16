@@ -128,6 +128,10 @@ class ConversationFrontEnd:
         future chunks from the interrupted turn but cannot retract chunks
         already delivered to ``emit``.
 
+        Raises ``RuntimeError`` while ``participant_left()`` is pending or
+        after it fails or is canceled. A successful departure cleanup reopens
+        the participant for later turns.
+
         :param turn: Current request and optional initial completed history.
         :param emit: Callback that receives destination-attributed text chunks.
         :return: The final answer, focus, release, or clarification disposition.
@@ -441,7 +445,10 @@ class ConversationFrontEnd:
         Attempts every destination used by the participant, calling its
         ``participant_left()`` hook when present and otherwise ``release()``.
         Failed releases remain tracked for a caller-triggered retry and are
-        raised together in an ``ExceptionGroup``.
+        raised together in an ``ExceptionGroup``. Until this method completes
+        successfully, ``handle()`` raises ``RuntimeError`` for that participant.
+        Retry after a failure or cancellation; successful cleanup reopens
+        admission for later turns.
         """
 
         # Keep new turns out until all overlapping departure callers finish.
