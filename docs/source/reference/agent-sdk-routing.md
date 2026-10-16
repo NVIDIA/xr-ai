@@ -57,6 +57,11 @@ recent exchanges that fit `context_budget_bytes` are passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
 oversized exchange is dropped whole.
 
+The front end keeps each retained exchange's timestamp and private identity
+aligned as history is trimmed. When an admission release emits text, it records
+that text as a completed exchange before rerouting the same query, so the next
+destination receives the updated history.
+
 `RoutingAid` is a concise selection hint. Eligibility is checked by the front
 end, while each destination's `admit()` method remains responsible for deciding
 whether it can accept the specific turn. Destinations decline or clarify before
