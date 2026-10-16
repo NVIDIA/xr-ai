@@ -13,9 +13,15 @@ import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 import nemo_relay
-from xr_ai_routing._history import _format_minute
+
+
+def _format_minute(timestamp_us: int) -> str:
+    """Format an exchange timestamp at the conversation's display precision."""
+
+    return datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 @dataclass(frozen=True, slots=True)

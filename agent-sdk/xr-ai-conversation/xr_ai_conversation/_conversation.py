@@ -27,7 +27,6 @@ from xr_ai_routing._history import (
     _active_exchange_id,
     _active_history_exchange_ids,
     _active_history_timestamps,
-    _format_minute,
 )
 from xr_ai_runtime import Agent, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
@@ -36,6 +35,7 @@ from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
 from ._context import (
     _ConversationContext,
+    _format_minute,
     _rendered_source_size,
     _TranscriptEntry,
 )
