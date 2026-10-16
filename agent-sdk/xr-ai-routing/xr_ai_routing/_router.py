@@ -618,7 +618,7 @@ class AgentRouter:
                 await delay_task
             if answer_started.is_set():
                 return
-            if not prediction_task.done():
+            if not prediction_task.done() and not prediction_task.cancelling():
                 prediction_task.cancel()
             messages = (
                 ChatMessage(role="system", content=_ACKNOWLEDGMENT_PROMPT),
@@ -668,19 +668,26 @@ class AgentRouter:
                 await emit(_ACKNOWLEDGMENT_FALLBACK + " ")
         finally:
             for task in (delay_task, prediction_task):
-                if not task.done():
+                if not task.done() and not task.cancelling():
                     task.cancel()
             drain = asyncio.gather(delay_task, prediction_task, return_exceptions=True)
-            try:
-                outcomes = await asyncio.shield(drain)
-            except asyncio.CancelledError:
-                outcomes = await drain
+            owner_cancelled = False
+            while True:
+                try:
+                    outcomes = await asyncio.shield(drain)
+                    break
+                except asyncio.CancelledError:
+                    owner_cancelled = True
+                    if drain.done():
+                        outcomes = drain.result()
+                        break
+            if owner_cancelled:
                 _record_cancelled_acknowledgment_cleanup_failure(
                     outcomes,
                     prediction_trace=prediction_trace,
                     cleanup_errors=cleanup_errors,
                 )
-                raise
+                raise asyncio.CancelledError
             failures = [
                 outcome
                 for outcome in outcomes
