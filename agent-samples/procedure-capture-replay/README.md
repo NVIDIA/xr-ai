@@ -40,13 +40,13 @@ and finalization.
 
 To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
 
-To test replay with the included green-tea example:
+To test replay with the included Numi Chamomile Lemon example:
 
 ```bash
 uv run main.py --mode replay "Tea Making"
 ```
 
-Use green tea suitable for 80°C water and a three-minute steep, and a kettle
+Use Numi Chamomile Lemon tea, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
 reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
 The guide must have `task.status: approved`. Replay uses the same model servers;

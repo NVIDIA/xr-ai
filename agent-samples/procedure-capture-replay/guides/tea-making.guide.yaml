@@ -1,56 +1,55 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Hand-authored adaptation of tea-making-sample/yaml/workflow.yaml.
-# The fixed green-tea recipe comes from that sample's rag-documents/tea-brewing.md;
-# replay does not expose its retrieval or temperature-conversion tools.
+# Numi specifies 5–6 minutes for Chamomile Lemon; use the five-minute minimum.
+# https://numitea.com/products/chamomile-lemon
+# Its general herbal-tea instructions specify boiling water:
+# https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits
 schema_version: 1
 task:
   id: tea_making
   name: Tea Making
-  version: 1
+  version: 2
   status: approved
   source_session: hand-authored-example-not-a-recording
   start_step: identify
   foreground_prompt: >-
-    Guide this green-tea demonstration using water at about 80 degrees Celsius
-    (176 degrees Fahrenheit) and a three-minute steep. Use tea whose package
-    instructions are compatible with this recipe; if they differ, explain that
-    this example is not suitable and ask the user to stop replay and adapt the
-    guide. Do not silently change the recipe or infer the tea variety.
-    Keep the vessel stable on a heat-safe surface and hands clear of hot water
-    and steam. Never ask the user to lift or tilt a hot vessel for the camera.
-    Camera judgments are not safety guarantees. Use only exposed tools; no
-    retrieval or temperature-conversion tool is available. Say next advances a
-    verified step; user claims alone do not verify completion. The steeping
-    timer begins on entry to the timer step, not when immersion is detected.
-  complete_message: Tea guidance complete. Remove the tea if you have not already, and let the drink cool before tasting.
+    Guide brewing Numi Chamomile Lemon herbal tea, not green tea or another
+    chamomile blend. This recipe uses boiling water, verified here by a current
+    water reading of 100 C or 212 F, and a five-minute steep selected from the
+    manufacturer's 5–6 minute instructions. Do not silently change the recipe.
+    If the user's packet differs, or local boiling temperature cannot reach
+    this display target, stop and adapt the guide rather than bypass verification.
+    Use a stable heat-safe vessel and follow appliance instructions. Keep hands
+    clear of hot water and steam; never ask the user to tilt a hot vessel for
+    the camera. Visual judgments do not guarantee safety. No retrieval or
+    temperature-conversion tools are available. Say next advances a verified
+    visual step. The timer starts only on entering the fourth step, not when
+    immersion is first detected. When the timer expires the run ends automatically;
+    no next command is needed to finish. Start replay begins a fresh run.
+  complete_message: Five minutes have elapsed. Your Numi Chamomile Lemon guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
 
 state:
   tea_identified:
     type: boolean
-    description: A readable package label explicitly identifies green tea.
-    initial: false
-  water_filled:
-    type: boolean
-    description: Water is visibly inside the heating vessel.
+    description: The visible packet identifies both Numi and Chamomile Lemon.
     initial: false
   water_at_target:
     type: boolean
-    description: A current water-temperature display visibly reads 78 to 82 C or 172 to 180 F.
+    description: A current water-temperature reading visibly shows 100 C or 212 F.
     initial: false
   tea_immersed:
     type: boolean
-    description: Visible tea contacts visible water inside the same vessel.
+    description: The tea bag visibly contacts water inside the same vessel.
     initial: false
   steeping_complete:
     type: boolean
-    description: The runtime-owned three-minute steeping timer has expired.
+    description: The runtime-owned five-minute steeping timer has expired.
     initial: false
 
 steps:
   - id: identify
-    title: Identify the tea
+    title: Read the tea packet
     reads: []
     writes: [tea_identified]
     trigger:
@@ -58,71 +57,38 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Does a clearly readable tea package or tag explicitly identify green
-          tea? Do not infer variety from package color, pictures, or loose leaves.
-          Answer exactly YES if the label confirms green tea, NO if it explicitly
-          identifies another tea, or UNKNOWN if the label is missing or unreadable.
+          Read the brand and full blend name printed on the same tea packet or
+          box. Return the actual printed words in uppercase as BRAND | BLEND.
+          Do not substitute the desired product for the visible label. If either
+          cannot be fully read, return UNKNOWN. Use printed words, not colors,
+          flowers, nearby cups, or knowledge of likely products. Output only
+          the two labels separated by |, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '^YES$'
+      pattern: '^NUMI \| CHAMOMILE LEMON$'
       consecutive: 2
       commit: {tea_identified: true}
     agent:
-      prompt: Confirm only a readable green-tea label; missing or ambiguous evidence is not confirmation.
+      prompt: Confirm only visible Numi branding and the full Chamomile Lemon blend name on the same product.
       tools: []
     voice:
       prompt: >-
-        Explain the fixed green-tea recipe. Use current_view to read the label or
-        package brewing instructions if asked. Do not infer a variety from color
-        or memory. If the package conflicts with this recipe, recommend stopping
-        and adapting the guide; do not claim that the recipe was changed.
+        Ask to see the packet front so both Numi and Chamomile Lemon are legible.
+        Use current_view for label questions. A different brand, a different Numi
+        blend, or chamomile alone is not the selected product. Do not say the
+        package is verified based on a user assertion. The fixed recipe is
+        boiling water and five minutes, not green-tea settings.
       tools: [current_view]
     complete_when: {tea_identified: true}
-    next: fill_water
-    complete_on_skip: true
-    messages:
-      enter: Show a green-tea package or tag. This example uses water at 80 degrees Celsius and a three-minute steep.
-      complete: The label identifies green tea. Check that the package supports this recipe, then say next.
-      skip: Tea identification skipped; ending this example rather than choosing an unverified recipe.
-
-  - id: fill_water
-    title: Fill the heating vessel
-    reads: []
-    writes: [water_filled]
-    trigger:
-      function: current_view
-      interval_s: 2
-      arguments:
-        question: >-
-          Is water visibly inside the kettle or pot? Require a visible water
-          surface or level inside the vessel, not a nearby jug, empty reflective
-          interior, or pouring gesture alone. Answer exactly YES for visible
-          water, NO for a clearly empty vessel, or UNKNOWN when its contents
-          are hidden or ambiguous.
-      result_field: text
-    evidence:
-      pattern: '^YES$'
-      consecutive: 2
-      commit: {water_filled: true}
-    agent:
-      prompt: Confirm only visible water inside the heating vessel, not a report that it was filled.
-      tools: []
-    voice:
-      prompt: >-
-        Ask for fresh water in a stable kettle or pot within its safe fill limits.
-        Use current_view for visual questions. Do not ask the user to tilt a hot
-        vessel; an obscured water level remains unconfirmed.
-      tools: [current_view]
-    complete_when: {water_filled: true}
     next: heat_water
     complete_on_skip: true
     messages:
-      enter: Fill a kettle or pot with fresh water within its safe fill limits. Keep it stable with the water level visible.
-      complete: Water is visible in the vessel. Say next when ready to heat it.
-      skip: Water verification skipped; ending this example without directing heating of an unverified vessel.
+      enter: Show the Numi Chamomile Lemon packet so I can read the brand and tea name.
+      complete: The packet identifies Numi Chamomile Lemon. Say next to check the water temperature.
+      skip: Packet verification skipped; ending this run rather than choosing an unverified tea.
 
   - id: heat_water
-    title: Heat the water
+    title: Verify the brewing temperature
     reads: []
     writes: [water_at_target]
     trigger:
@@ -130,40 +96,39 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Does a kettle or immersed thermometer clearly show CURRENT water
-          temperature from 78 to 82 degrees Celsius, or 172 to 180 Fahrenheit,
-          including the unit? Answer exactly YES if in range, NO if a clear
-          current reading is outside it, or UNKNOWN if the value, unit, or
-          current-versus-target meaning is unclear. A setpoint, heater light,
-          printed instructions, steam, or bubbles alone is not a current reading.
+          Read the actual CURRENT water temperature from a kettle display or
+          immersed thermometer. Return only the number and unit, such as 75 C
+          or 167 F. Ignore target or set temperatures, heater lights, and printed
+          instructions. If there is no readable current measurement with its
+          unit, return UNKNOWN. Do not infer temperature from steam or substitute
+          a desired brewing temperature. Do not convert units.
       result_field: text
     evidence:
-      pattern: '^YES$'
+      pattern: '^(100 C|212 F)$'
       consecutive: 2
       commit: {water_at_target: true}
     agent:
-      prompt: Confirm only a visible current water-temperature reading in the stated range.
+      prompt: Confirm only the visible current water reading, not a setpoint or a claim that the water is boiling.
       tools: []
     voice:
       prompt: >-
-        The target is about 80 C (176 F); this demonstration accepts 78 to 82 C
-        or 172 to 180 F. Ask the user to follow their appliance instructions and
-        show a current water-temperature display safely. Use current_view for
-        readings. A heater light, steam, or target setpoint cannot confirm water
-        temperature. If above the range, let the water cool; do not claim it is
-        safe to touch. If no display is available, explain that verification
-        cannot complete; do not invent a reading or a timer substitute.
+        Ask for boiling water and a safely visible current temperature display
+        of 100 C or 212 F. Use current_view for readings. Do not substitute a
+        heater indicator, steam, a target setting, or an elapsed-time estimate.
+        If current temperature cannot be read, say verification is unavailable.
+        Never direct heating an empty vessel, overfilling, or defeating an
+        appliance's controls to reach a reading.
       tools: [current_view]
     complete_when: {water_at_target: true}
     next: start_steeping
     complete_on_skip: true
     messages:
-      enter: Heat the water to about 80 degrees Celsius, or 176 Fahrenheit. Keep the current temperature display visible.
-      complete: The displayed water temperature is in the recipe range. Say next when ready to steep the tea.
-      skip: Temperature verification skipped; ending this example without claiming the water is ready.
+      enter: Heat fresh water according to your appliance instructions. Show a current water-temperature reading of 100 degrees Celsius or 212 Fahrenheit.
+      complete: The displayed current water temperature is at the brewing target. Say next to put the tea in the water.
+      skip: Temperature verification skipped; ending this run without claiming the water is ready.
 
   - id: start_steeping
-    title: Start steeping
+    title: Put the tea in water
     reads: []
     writes: [tea_immersed]
     trigger:
@@ -171,64 +136,66 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Are BOTH a water surface or level AND a tea bag, infuser, or tea leaves
-          visibly contacting that water inside the same vessel? Tea beside or
-          above water, a dry tea bag in an empty cup, or an opaque vessel does
-          not confirm immersion. Answer exactly YES when both facts are visible,
-          NO when clearly not immersed, or UNKNOWN when either fact is obscured
-          or ambiguous. Do not infer contact from prior context.
+          Is a tea bag visibly in water inside a vessel? A bag floating on the
+          liquid surface counts; it need not sink. Require visible liquid and
+          visible bag contact, not just a bag inside a cup. Answer YES only for
+          that contact, NO for a dry bag in an empty vessel or a bag above or
+          beside water, UNKNOWN if liquid or contact is obscured. The cup rim,
+          cup outline, and a string alone are not evidence of water. Output only
+          YES, NO, or UNKNOWN.
       result_field: text
     evidence:
       pattern: '^YES$'
       consecutive: 2
       commit: {tea_immersed: true}
     agent:
-      prompt: Confirm only visible water and visible tea-water contact in the same vessel; do not write a start timestamp.
+      prompt: Confirm visible tea-bag contact with visible water, not a nearby bag or string. Do not write a timer timestamp.
       tools: []
     voice:
       prompt: >-
-        Guide safe immersion of the tea in the prepared water. Use current_view
-        for visual questions; a tea bag merely inside a cup is not proof of
-        contact with water. The timer is not running in this step. Once immersion
-        is verified, ask the user to say next promptly to start the full
-        three-minute timer. Never claim a timer started at immersion.
+        Guide placing the tea bag in the prepared water safely. Use current_view
+        for visual checks. The timer is not running in this step. After verified
+        immersion ask the user to say next promptly to enter the timer step.
+        Never claim that immersion itself started the timer.
       tools: [current_view]
     complete_when: {tea_immersed: true}
     next: steep_timer
     complete_on_skip: true
     messages:
-      enter: Carefully put the tea in the prepared water, keeping the vessel stable and your hands clear of steam.
-      complete: Tea is visibly immersed. Say next now to start the three-minute timer.
+      enter: Carefully put the Numi Chamomile Lemon tea bag in the prepared water, keeping the vessel stable.
+      complete: The tea bag is visibly in the water. Say next now to start the five-minute steeping timer.
       skip: Immersion verification and the timer were skipped; this run is not a verified completion.
 
   - id: steep_timer
-    title: Wait for steeping
+    title: Start the steeping timer
     reads: []
     writes: [steeping_complete]
     trigger:
       function: clock__timer
       interval_s: 1
       arguments:
-        duration_s: 180
+        duration_s: 300
       result_field: expired
     evidence:
       pattern: '^true$'
       consecutive: 1
       commit: {steeping_complete: true}
     agent:
-      prompt: Complete only from the fresh runtime timer expired result. No visual check can replace elapsed time.
+      prompt: Complete only when the fresh runtime timer reports expired. Images and user claims cannot replace elapsed time.
       tools: []
     voice:
       prompt: >-
-        Call clock__timer with no arguments for every elapsed-time, remaining-time,
-        or timer-completion question. Use its fresh result, never a guessed start
-        timestamp, the tea's color, or the user's estimate. This timer counts
-        three minutes from entry to this step, not from the earlier immersion.
-        It cannot confirm that the tea remained immersed throughout the wait.
+        Call clock__timer with no arguments for elapsed-time, remaining-time,
+        or timer-completion questions. Use its fresh result, not the tea color,
+        a guessed start timestamp, or a user's estimate. This five-minute timer
+        starts on entry to this step. When it expires the guide ends automatically;
+        do not ask the user to say next to finish. Stop replay cancels the run.
+        The timer cannot verify continued tea immersion throughout the wait.
       tools: [clock__timer]
     complete_when: {steeping_complete: true}
     next: null
+    finish_on_complete: true
     messages:
-      enter: The three-minute timer is now running. Keep the tea steeping; I will announce when the timer finishes.
-      complete: Three minutes have elapsed. Carefully remove the tea, then say next to finish.
+      enter: The five-minute steeping timer is now running. I will let you know when the guide is finished.
+      complete: Five minutes have elapsed. The guide is complete; carefully remove the tea bag.
       skip: Timer skipped; the full steeping duration was not verified.
