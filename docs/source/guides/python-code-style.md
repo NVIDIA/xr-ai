@@ -120,6 +120,43 @@ are **repository conventions** that describe the existing packages: hub, voice,
 web-events, launcher, and vllm export only from the root, while `xr_ai_tools`
 and `xr_ai_models.presets` use enrolled submodules.
 
+## Module boundaries
+
+The unit of encapsulation is a package, not a file. Hierarchy is fine: a package
+can contain sub-packages, and each one is a boundary for the code around it.
+
+- Import from a package, not from one of its files. Code outside a package
+  imports from its root or from an enrolled public module, and never from a
+  private file such as `xr_ai_voice._runtime`.
+- A sub-package is a boundary for its parent. The parent imports from the
+  sub-package's `__init__.py`, whose `__all__` lists what the parent may use,
+  and not from the sub-package's files: write
+  `from ._processors import VadSttProcessor`, not
+  `from ._processors.vad_stt import VadSttProcessor`. Everything else in the
+  sub-package is private to it.
+- Modules in the same package form one unit and import each other directly with
+  relative imports.
+- Dependencies point one way. A sub-package does not import its parent's
+  modules. Put a definition that both need in a lower-level module or
+  sub-package that both import, or pass it in as an argument.
+- An `__init__.py` assembles a boundary and holds no logic: a docstring,
+  explicit imports, and `__all__`. Put logic in a private module and re-export
+  what the boundary exposes.
+
+**Basis:** [PEP 8](https://peps.python.org/pep-0008/#public-and-internal-interfaces)
+treats an interface as internal when any containing namespace is internal, so
+everything inside a private sub-package is internal, and it names "a package's
+`__init__` module that exposes functionality from submodules" as the documented
+way to expose names. PEP 8 also calls explicit relative imports "an acceptable
+alternative to absolute imports, especially when dealing with complex package
+layouts", and `AGENTS.md` requires relative internal imports in worker
+packages. Treating the sub-package `__init__.py` as the parent's boundary, the
+one-way dependency rule, and logic-free `__init__.py` files are **repository
+conventions**. Most packages already follow them: ten of the thirteen SDK and
+utility `__init__.py` files only re-export. `xr_ai_voice._processors` is the one
+private sub-package and is a known exception, because its parent imports its
+files and it imports its parent's modules.
+
 ## Exceptions
 
 Every exception is either expected or unexpected, and the code makes the kind
