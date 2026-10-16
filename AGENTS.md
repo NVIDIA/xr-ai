@@ -212,5 +212,6 @@ Use these canonical references when working in their area:
 | Networking | [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) |
 | Testing | [`docs/source/guides/testing.md`](docs/source/guides/testing.md) |
 | Documentation style | [`docs/source/guides/documentation-style.md`](docs/source/guides/documentation-style.md) |
+| Python code style | [`docs/source/guides/python-code-style.md`](docs/source/guides/python-code-style.md) |
 | Troubleshooting | [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md) |
 | xr-render-demo | [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) |
