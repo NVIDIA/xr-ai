@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import sys
 from collections import deque
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from loguru import logger
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatStreamEvent
 from xr_ai_runtime import AgentRuntime, Topic
@@ -1023,6 +1025,78 @@ async def test_hot_monitor_serializes_observations_and_retains_only_bounded_time
 
     await _turn(router, "Stop tracking the table.")
     await router.stop()
+
+
+@pytest.mark.asyncio
+async def test_retired_monitor_logs_unexpected_failure_without_mutating_new_generation():
+    frame_started = asyncio.Event()
+    release_frame = asyncio.Event()
+    log_stream = io.StringIO()
+
+    class FailingFrames:
+        async def execute(self, _request):
+            frame_started.set()
+            await release_frame.wait()
+            raise TypeError("unexpected stale frame failure")
+
+    monitor, _updates = _monitor(_Decisions(), FailingFrames(), _ImageQuery())
+    monitor._generations["alice"] = 1  # noqa: SLF001
+    monitor._instructions["alice"] = "old task"  # noqa: SLF001
+    sink_id = logger.add(log_stream, format="{message}\n{exception}")
+    try:
+        task = asyncio.create_task(monitor._observe("alice", 1, "old task"))  # noqa: SLF001
+        await frame_started.wait()
+        monitor._generations["alice"] = 2  # noqa: SLF001
+        monitor._instructions["alice"] = "new task"  # noqa: SLF001
+        monitor._records["alice"] = deque(["current record"])  # noqa: SLF001
+        release_frame.set()
+        await task
+    finally:
+        logger.remove(sink_id)
+
+    assert monitor._generations["alice"] == 2  # noqa: SLF001
+    assert monitor._instructions["alice"] == "new task"  # noqa: SLF001
+    assert list(monitor._records["alice"]) == ["current record"]  # noqa: SLF001
+    assert "alice" not in monitor._failures  # noqa: SLF001
+    assert "background visual monitor failed" in log_stream.getvalue()
+    assert "unexpected stale frame failure" in log_stream.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_monitor_logs_failure_state_publish_exception_with_traceback():
+    log_stream = io.StringIO()
+
+    class FailedFrames:
+        async def execute(self, _request):
+            raise RuntimeError("frame service failed")
+
+    async def failed_failure_publish(_participant_id, update):
+        if "Observation unavailable" in update.text:
+            raise ValueError("failure-state publication failed")
+
+    monitor, _updates = _monitor(
+        _Decisions(),
+        FailedFrames(),
+        _ImageQuery(),
+        publisher=failed_failure_publish,
+    )
+    monitor._generations["alice"] = 1  # noqa: SLF001
+    monitor._instructions["alice"] = "watch the demo"  # noqa: SLF001
+    monitor._records["alice"] = deque(["16:00:00: prior observation"])  # noqa: SLF001
+    sink_id = logger.add(log_stream, format="{message}\n{exception}")
+    try:
+        task = asyncio.create_task(monitor._observe("alice", 1, "watch the demo"))  # noqa: SLF001
+        monitor._tasks["alice"] = task  # noqa: SLF001
+        with pytest.raises(ValueError, match="failure-state publication failed"):
+            await task
+        monitor._discard("alice", task)  # noqa: SLF001
+    finally:
+        logger.remove(sink_id)
+
+    assert "background visual monitor stopped" in log_stream.getvalue()
+    assert "background visual monitor failed" in log_stream.getvalue()
+    assert "failure-state publication failed" in log_stream.getvalue()
+    assert "Traceback (most recent call last)" in log_stream.getvalue()
 
 
 @pytest.mark.asyncio

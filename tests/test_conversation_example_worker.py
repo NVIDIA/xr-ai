@@ -20,6 +20,7 @@ from typing import cast
 import nemo_relay
 import pytest
 import yaml
+from loguru import logger
 from PIL import Image
 from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import (
@@ -31,7 +32,7 @@ from xr_ai_models import (
     VLMService,
     load_models_config,
 )
-from xr_ai_runtime import AgentRuntime, Topic
+from xr_ai_runtime import Agent, AgentRuntime, Topic, subscribe
 from xr_ai_voice import (
     UserQuery,
     VoiceAgent,
@@ -622,6 +623,58 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
 
 
 @pytest.mark.asyncio
+async def test_note_capture_logs_child_publish_failure_and_preserves_caller_cancellation() -> None:
+    entered_publish = asyncio.Event()
+    release_publisher = asyncio.Event()
+    log_stream = io.StringIO()
+
+    class CaptureDecision:
+        async def decide(self, _state, questions, *, timeout=None):
+            assert "capture" in questions["note_action"].criteria
+            return DecisionResponse(
+                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    async def failing_publisher(_participant_id, _update):
+        entered_publish.set()
+        await release_publisher.wait()
+        raise RuntimeError("child publisher failed")
+
+    destination = NoteTakingAgent(
+        Conversation(
+            _ConversationService(visual=False),  # type: ignore[arg-type]
+            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
+        ),
+        CaptureDecision(),  # type: ignore[arg-type]
+        context_budget_bytes=500,
+        publish_context=failing_publisher,
+    )
+    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    assert (await destination.admit(turn, focused=True)).disposition == "accept"
+
+    async def emit(_source, _text):
+        return None
+
+    sink_id = logger.add(log_stream, format="{message}\n{exception}")
+    try:
+        task = asyncio.create_task(destination.answer(turn, emit=emit))
+        await entered_publish.wait()
+        task.cancel()
+        release_publisher.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        logger.remove(sink_id)
+
+    assert "child publisher failed" in log_stream.getvalue()
+    assert "note context publication failed while draining cancellation" in log_stream.getvalue()
+    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+
+
+@pytest.mark.asyncio
 async def test_note_capture_propagates_programming_error_from_context_publisher() -> None:
     class CaptureDecision:
         async def decide(self, _state, questions, *, timeout=None):
@@ -655,6 +708,77 @@ async def test_note_capture_propagates_programming_error_from_context_publisher(
         await destination.answer(turn, emit=emit)
 
     assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+
+
+@pytest.mark.asyncio
+async def test_note_capture_logs_runtime_publisher_exception_group_and_keeps_note() -> None:
+    note_topic = Topic("conversation-example.test-notes", ConversationContextUpdate)
+
+    class FailingSubscriber(Agent):
+        @subscribe(note_topic)
+        async def fail(self, _update: ConversationContextUpdate, _ctx) -> None:
+            raise RuntimeError("subscriber programming error")
+
+    class CaptureDecision:
+        async def decide(self, _state, questions, *, timeout=None):
+            assert "capture" in questions["note_action"].criteria
+            return DecisionResponse(
+                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    runtime = AgentRuntime()
+    runtime.register("failing-context-subscriber", FailingSubscriber())
+
+    async def publish_context(participant_id, update):
+        await runtime.publish(note_topic, update, participant_id=participant_id)
+
+    general = ContextualConversationAgent(
+        Conversation(
+            _ConversationService(visual=False),  # type: ignore[arg-type]
+            routing=RoutingAid(name="conversation", description="General conversation."),
+        ),
+        static_description="General conversation and follow-up help.",
+        context_budget_bytes=500,
+        publish_context=publish_context,
+    )
+    destination = NoteTakingAgent(
+        Conversation(
+            _ConversationService(visual=False),  # type: ignore[arg-type]
+            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
+        ),
+        CaptureDecision(),  # type: ignore[arg-type]
+        context_budget_bytes=500,
+        publish_context=publish_context,
+    )
+    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    log_stream = io.StringIO()
+    sink_id = logger.add(log_stream, format="{message}\n{exception}")
+    try:
+        async with runtime:
+            async def emit(_source, _text):
+                return None
+
+            answer = await general.answer(
+                AgentTurn("alice", "answer", "Can you explain that?"),
+                emit=emit,
+            )
+            assert (await destination.admit(turn, focused=True)).disposition == "accept"
+            result = await destination.answer(turn, emit=emit)
+    finally:
+        logger.remove(sink_id)
+
+    assert answer.disposition == "answer"
+    assert "Hello there." in answer.text
+    assert "Can you explain that?" in general.routing_aid("alice").description
+    assert result.disposition == "focus"
+    assert "couldn't share it" in result.text
+    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+    assert "note context publication failed" in log_stream.getvalue()
+    assert "optional conversation context publication failed" in log_stream.getvalue()
+    assert "subscriber programming error" in log_stream.getvalue()
 
 
 @pytest.mark.asyncio

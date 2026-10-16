@@ -298,6 +298,10 @@ class NoteTakingAgent(ContextualConversationAgent):
                     except asyncio.CancelledError:
                         continue
                     except Exception:  # noqa: BLE001 -- drain the child failure without masking caller cancellation.
+                        logger.exception(
+                            "note context publication failed while draining cancellation participant={!r}",
+                            participant_id,
+                        )
                         break
                 if not publisher.cancelled():
                     publisher.exception()

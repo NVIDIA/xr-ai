@@ -249,6 +249,7 @@ class ConversationExampleAgent(Agent):
                         participant_id,
                     )
                     if not stream_opened:
+                        # Runtime shutdown can race with this query's safe fallback output.
                         with suppress(RuntimeClosedError):
                             await ctx.publish(
                                 VOICE_OUTPUT_TOPIC,
@@ -260,6 +261,7 @@ class ConversationExampleAgent(Agent):
                 finally:
                     await self._set_status("idle", participant_id)
                     if stream_opened and not cancelled:
+                        # A closed runtime cannot accept the final stream marker.
                         with suppress(RuntimeClosedError):
                             await ctx.publish(
                                 VOICE_OUTPUT_TOPIC,

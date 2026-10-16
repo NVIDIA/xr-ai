@@ -288,13 +288,13 @@ class VisualMonitorAgent(RoutableAgent):
                 await self._publish(participant_id)
         # isolation boundary: end this background monitor after recording and logging its failure.
         except Exception:  # noqa: BLE001 -- isolate, record, and log this monitor task failure.
+            logger.exception("background visual monitor failed participant={!r}", participant_id)
             if not self._is_current(participant_id, generation, instructions):
                 return
             self._failures[participant_id] = "the observation request failed"
             self._instructions.pop(participant_id, None)
             self._generations[participant_id] = generation + 1
             self._refresh_routing_cue(participant_id)
-            logger.exception("background visual monitor failed participant={!r}", participant_id)
             if participant_id in self._records:
                 self._records[participant_id].append(f"Observation unavailable at {_timestamp(None)}.")
                 await self._publish(participant_id)
@@ -374,7 +374,7 @@ class VisualMonitorAgent(RoutableAgent):
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
         if not task.cancelled() and (error := task.exception()) is not None:
-            logger.error("background visual monitor failed participant={!r}: {!r}", participant_id, error)
+            logger.opt(exception=error).error("background visual monitor failed participant={!r}", participant_id)
 
 
 def _render_window(

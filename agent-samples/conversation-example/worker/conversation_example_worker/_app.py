@@ -135,30 +135,24 @@ async def _warm_vlm(vlm: VLMService) -> bool:
 @asynccontextmanager
 async def _relay_event_log(log_file: Path) -> AsyncIterator[Path]:
     event_path = log_file.parent / "relay-events.jsonl"
-    sink = event_path.open("w", encoding="utf-8")
     lock = Lock()
     subscriber = "conversation-example-compact-event-log"
 
-    def write_event(event: nemo_relay.Event) -> None:
-        if event.kind == "mark" and event.name == "llm.chunk":
-            return
-        with lock:
-            sink.write(event.to_json())
-            sink.write("\n")
-            sink.flush()
+    with event_path.open("w", encoding="utf-8") as sink:
+        def write_event(event: nemo_relay.Event) -> None:
+            if event.kind == "mark" and event.name == "llm.chunk":
+                return
+            with lock:
+                sink.write(event.to_json())
+                sink.write("\n")
+                sink.flush()
 
-    try:
         nemo_relay.subscribers.register(subscriber, write_event)
-    except Exception:
-        # A failed registration must close its already-opened sink before propagating.
-        sink.close()
-        raise
-    try:
-        yield event_path
-    finally:
-        await nemo_relay.subscribers.flush_async()
-        nemo_relay.subscribers.deregister(subscriber)
-        sink.close()
+        try:
+            yield event_path
+        finally:
+            await nemo_relay.subscribers.flush_async()
+            nemo_relay.subscribers.deregister(subscriber)
 
 
 async def run_app(
