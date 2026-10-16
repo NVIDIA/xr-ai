@@ -542,7 +542,10 @@ layout works without command-line configuration arguments.</p>
 example, lower <code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code> in the worker YAML if quieter speech is being
 missed, or change <code class="docutils literal notranslate"><span class="pre">conversation.start_phrase</span></code> and <code class="docutils literal notranslate"><span class="pre">conversation.stop_phrase</span></code>
 in the voice-gate YAML. Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require
-its configured <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> during an active conversation. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
+its configured <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> during an active conversation. Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code>
+to also accept wake-addressed one-off questions while closed, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">wake_only</span></code>
+to use wake-addressed turns without a persistent conversation. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>. Relative paths in the worker YAML are resolved from <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>, not
 from the shell’s current directory.</p>
 <p>Changing an entry in <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.

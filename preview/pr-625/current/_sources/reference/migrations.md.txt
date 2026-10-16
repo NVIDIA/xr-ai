@@ -8,16 +8,47 @@
 ## Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
-consumer profile selects `nvidia/nemotron-3-embed-1b`. Stop the tea sample's model
-stack before updating, then restart it to load the new weights. The local
-endpoint remains on port 8109 with the served name `embed`.
+consumer profile selects `nvidia/nemotron-3-embed-1b`. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name `embed`.
 
-For copied tea configurations, change `embedding_dim` from `768` to `2048` in
-`rag_service.yaml` and restart the agent stack. The dimension change invalidates
-the cached index automatically. If retaining a custom dimension while replacing
-the model behind an unchanged endpoint profile, also change `cache_key` to
-rebuild its embeddings. Independently deployed NIM endpoints must serve the new
-model before using the updated NIM profile.
+1. Stop the agent and its persistent embedding server **before updating**.
+   For the tea sample, run from the repository root:
+
+   ```bash
+   uv run --project agent-samples/tea-making-sample/model-servers tea_making_sample_model_servers --stop
+   ```
+
+   For a standalone deployment, stop the embedding process or container through
+   the supervisor that started it. Check that its listener on port 8109 has
+   stopped. Stopping only RAG or the embedding launcher does not stop persistent
+   weights; the pip launcher reuses a healthy listener without comparing models.
+2. Update the checkout and change `embedding_dim: 768` to `embedding_dim: 2048`
+   in copied tea **and standalone** `rag_service.yaml` files. Restart the
+   embedding server before RAG. Verify the `embed` entry's `root` in
+   `/v1/models` identifies Nemotron 3 Embed, not the previous model.
+3. Restart the agent. RAG rebuilds legacy caches automatically. Its new cache
+   key includes the server-reported backing model, model-profile hash,
+   indexing settings, document content, and optional `cache_key`. The manual
+   key no longer replaces the profile hash. If backing-model metadata is
+   unavailable, RAG rebuilds without reading or writing a persistent cache.
+
+Earlier revisions could build a nominally 2048-dimensional cache from an old
+server still listening on port 8109, then reuse it after switching weights.
+To recover, stop that server, start the intended model, and restart RAG with
+a new `cache_key`, or delete the affected cache directory: normally
+`models/tea-making-rag-cache` for tea or `services/rag-service/.rag-cache` for
+standalone RAG. Deleting generated indexes loses no source documents. Old
+768-dimensional `.npz` caches are no longer used by the default configuration
+and can also be deleted to reclaim space.
+
+Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. A served ID alone is not a backing-model identity: endpoints
+without a `root` field rebuild on each RAG startup. If weights change under an
+unchanged `root`, bump `cache_key` and restart RAG. Do not change models while
+RAG is running; its in-memory document vectors must match query embeddings.
+Custom `EmbeddingService` implementations must provide `model_identity()`;
+return `None` when the backing model cannot be identified.
 
 ## Session recording flag
 
@@ -48,6 +79,34 @@ Update the checkout, then start the sample again. Model and configuration
 identity do not identify the running application code version: an already
 running text-only listener cannot accept images. Image requests require the
 updated service; there is no silent text-only fallback.
+
+## Explicit voice interaction modes
+
+Choose `mode: conversation`, `hybrid`, `wake_only`, or `always_on` at the top of
+the selected voice-gate YAML. Remove `conversation.enabled` when setting mode.
+The four conversation samples select `conversation` to preserve their closed-until-start
+workflow. Tea's redundant alternate preset is removed; change `mode` in its
+normal `voice_gate.yaml` to choose another interaction policy.
+`hybrid` adds one-off addressed questions without persistent enrollment before
+starting a natural conversation. `wake_only` and `hybrid` require non-empty
+`magic_phrases`. `always_on` explicitly preserves the ungated baseline.
+
+Existing mode-less inputs normalize their present conversation and phrase
+settings at the loader boundary, but new configurations must use the explicit
+mode rather than combining old activation flags. Speaker-only controls must
+move to the `conversation` mapping when adding an
+explicit mode; otherwise the loader reports an error rather than replacing
+custom phrases. The advanced setting
+`conversation.require_wake_phrase` applies only after a conversation opens.
+Speaker backend selection is now independent: disabling conversation controls
+does not disable a configured speaker backend. To use batch STT, explicitly set
+`speaker.enabled: false` and supply the batch STT model client/service.
+
+Speaker streaming protocol 4 carries explicit interaction policy and attributed
+one-turn events. Restart/update the service and client together; old peers fail
+the identity check rather than silently changing speech authorization. There
+is no cross-version service reuse, anonymous transcript fallback, or upgrade
+reconciliation machinery.
 
 ## Single LLM entry in model profiles
 
@@ -180,7 +239,7 @@ unconditional worker `make_stt` calls with `VoiceAgent.from_models`, passing
 the loaded models and voice-gate settings. To serve batch STT, explicitly select
 `stt` in the sample's launcher and hardware overrides and configure the consuming
 worker's batch adapter. For batch-only speech omit `speaker-stt` from that
-selection and disable speaker enrollment.
+selection and set `speaker.enabled: false` in the worker's voice-gate YAML.
 Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
 
 ## Voice sample conversation defaults
@@ -192,15 +251,16 @@ within the configured window. The existing STT adapters and NIM model stack
 remain unchanged.
 
 Set `conversation.require_wake_phrase: true` in the sample's voice-gate YAML to
-keep wake phrases during an active conversation. Set
-`conversation.enabled: false` to restore the original wake-only behavior, or
-always-on dispatch when `magic_phrases` is empty. Restart workers after editing
+keep wake phrases during an active conversation. Select `mode: wake_only` for
+addressed turns without a persistent session, `mode: hybrid` to combine addressed
+one-off questions with natural conversations, or `mode: always_on` for ungated
+dispatch. Restart workers after editing
 these settings. Refer to {ref}`voice-conversation-controls`.
 
-Only final transcripts during an active conversation reach
-`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Applications
-that need all final transcripts retain that behavior by disabling conversation
-controls.
+In conversation mode only final transcripts during an active conversation reach
+`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Hybrid mode also
+delivers its accepted closed-state one-off questions. Applications that need
+ungated final transcripts can select `mode: always_on` explicitly.
 
 ## Local model-server CLI
 

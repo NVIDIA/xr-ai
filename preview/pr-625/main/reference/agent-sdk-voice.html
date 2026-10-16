@@ -499,9 +499,11 @@ For deployment order and migration of existing applications, refer to
 <a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 <p>Each non-empty final STT result during an active conversation is queued for
 publication on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before optional wake-phrase filtering.
-Conversation control phrases and speech while the conversation is closed are
-withheld. With conversation controls disabled, all non-empty final results are
-published before wake-phrase filtering. Accepted speech and
+In conversation mode, control phrases and speech while closed are withheld.
+Hybrid mode also publishes accepted closed-state one-off questions, never
+ignored candidate speech. With batch ASR in non-conversation modes, non-empty
+final results are published before wake-phrase filtering; speaker ASR publishes
+only explicitly authorized turns. Accepted speech and
 untopiced typed text become <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>; named application and control messages
 are never interpreted as user text. Optional participant join, leave, and
 interruption topics let application agents own their state cleanup.</p>
@@ -578,16 +580,136 @@ its terminator or idle expiry so stale fragments cannot reopen speech.</p>
 runtime shutdown. The aggregator logs accepted contributions discarded during
 release or shutdown.</p>
 </section>
+<section id="voice-gate-configuration-reference">
+<h2>Voice-gate configuration reference<a class="headerlink" href="#voice-gate-configuration-reference" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-voicegate</span></code> ships the annotated <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code> below as its actual
+packaged default. Each sample selects its own <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code>; that file’s
+fields override the packaged baseline. Missing or empty files use the baseline.
+There is no new discovery rule, public loader parameter, or inheritance between
+sample files. <code class="docutils literal notranslate"><span class="pre">mode</span></code> chooses interaction independently of the speech backend;
+<code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> selects speaker ASR. Lists replace rather than append to
+default values. Direct <code class="docutils literal notranslate"><span class="pre">VoiceGateConfig()</span></code> construction retains its typed
+defaults; direct processor callers infer wake-only from non-empty phrases and
+otherwise always-on. The YAML loader normalizes and validates the explicit mode
+once against the packaged baseline.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Packaged voice-gate defaults, read by load_voice_gate_config(Path(...)).</span>
+<span class="c1"># Sample-owned voice_gate.yaml files override these values. Missing or empty</span>
+<span class="c1"># sample files use this baseline. No CWD discovery or extra loader is needed.</span>
+<span class="c1"># No environment-variable substitution or relative file paths are used here.</span>
+
+<span class="c1"># always_on: every utterance; wake_only: wake-addressed turns only;</span>
+<span class="c1"># conversation: exact start/stop controls; hybrid: wake-addressed one-offs</span>
+<span class="c1"># while closed, natural conversation after start. Backend choice is separate.</span>
+<span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always_on</span>
+
+<span class="c1"># Required and non-empty in wake_only and hybrid modes, e.g. ["hey agent"].</span>
+<span class="c1"># Ignored by always_on. Matches start a sentence, not a mid-sentence mention.</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="c1"># After a bare wake phrase, the next utterance may begin this many seconds later</span>
+<span class="c1"># without repeating it, even if the utterance finishes after that window.</span>
+<span class="c1"># Speaker ASR scopes this permission to that same recognized speaker; 0 disables.</span>
+<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="c1"># Available only with magic_phrases; the consumer must call play_chime.</span>
+<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="c1"># false makes STOP words follow normal query gating, useful for passive input.</span>
+<span class="c1"># This does not disable conversation start/stop controls below.</span>
+<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="c1"># Conversation controls apply in conversation and hybrid modes. Mode selects</span>
+<span class="c1"># activation; these fields only tune controls and the active-session policy.</span>
+<span class="nt">conversation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
+<span class="w">  </span><span class="c1"># Advanced: true requires addressing even after the conversation opens.</span>
+<span class="w">  </span><span class="c1"># This does not enable wake-addressed queries while closed; hybrid does that.</span>
+<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="c1"># Maximum onset window for joining exact control-phrase fragments.</span>
+<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+
+<span class="c1"># Optional speaker-conditioned streaming ASR. Set speaker.enabled: true in a</span>
+<span class="c1"># sample to enable it, independently of mode. The baseline remains off.</span>
+<span class="c1"># Keep conversation controls in the mapping above, not duplicated under speaker.</span>
+<span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="c1"># HTTP origin including port; no credentials, API path, query, or fragment.</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
+<span class="w">  </span><span class="c1"># auto can use the supplied batch STT when speaker ASR is unavailable.</span>
+<span class="w">  </span><span class="c1"># required fails closed instead; choose required for a speaker-only stack.</span>
+<span class="w">  </span><span class="c1"># VoiceAgent.from_models needs a batch STT role unless required is enabled.</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="nt">timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span><span class="w">                 </span><span class="c1"># Positive finite HTTP timeout, in seconds.</span>
+<span class="w">  </span><span class="nt">activity_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span><span class="w">          </span><span class="c1"># Speaker activity threshold, strictly (0, 1).</span>
+<span class="w">  </span><span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span><span class="w">            </span><span class="c1"># Per-speaker silence before finalization (s).</span>
+<span class="w">  </span><span class="nt">max_utterance_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span><span class="w">            </span><span class="c1"># Forced segment boundary; must exceed silence.</span>
+</pre></div>
+</div>
+</section>
 <section id="conversation-controls">
 <span id="voice-conversation-controls"></span><h2>Conversation controls<a class="headerlink" href="#conversation-controls" title="Link to this heading">#</a></h2>
-<p>The shipped voice samples start with their microphone conversation closed.
+<p>The Simple VLM, Tea making, lab monitoring and XR render samples start with
+their microphone conversation closed.
 After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak naturally
 without a wake phrase. Say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code> to close the
 conversation and interrupt the current response. A short <code class="docutils literal notranslate"><span class="pre">stop</span></code> interrupts the
 response while keeping the conversation open.</p>
-<p>Configure the phrases in each sample’s voice-gate YAML:</p>
+<p>Choose a mode in each sample’s voice-gate YAML:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Before start</p></th>
+<th class="head"><p>After start</p></th>
+<th class="head"><p>Speaker ownership</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">wake_only</span></code></p></td>
+<td><p>Wake-addressed turns only</p></td>
+<td><p>No persistent conversation</p></td>
+<td><p>No persistent owner</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">conversation</span></code></p></td>
+<td><p>Exact start phrase only</p></td>
+<td><p>Natural speech until stop</p></td>
+<td><p>Start phrase enrolls its speaker</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hybrid</span></code></p></td>
+<td><p>Wake-addressed one-off or exact start</p></td>
+<td><p>Natural speech until stop</p></td>
+<td><p>One-off never enrolls; start enrolls</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">always_on</span></code></p></td>
+<td><p>All recognized speech</p></td>
+<td><p>No persistent conversation</p></td>
+<td><p>No persistent owner</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">wake_only</span></code> and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> require non-empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>. The packaged default
+is <code class="docutils literal notranslate"><span class="pre">always_on</span></code>, preserving the existing ungated fallback; the four conversation
+samples explicitly select <code class="docutils literal notranslate"><span class="pre">conversation</span></code>. Procedure capture instead uses
+ungated narration with STOP disabled. Change the sample’s <code class="docutils literal notranslate"><span class="pre">mode</span></code> field to
+choose another interaction policy without maintaining a separate preset copy.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hybrid</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>While closed, <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">what</span> <span class="pre">is</span> <span class="pre">this?</span></code> answers one question without opening
+the conversation or registering a persistent speaker. The next unaddressed
+utterance is ignored. <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent</span></code> alone permits one next utterance in the
+existing <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> window; its onset must be in the window, but it may
+finish later. Speaker ASR binds that permission to the same recognized speaker.
+This temporary permission is not speaker registration or an idle conversation
+timeout. A control prefix such as <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span></code> is withheld, never sent
+as a question, and consumes an earlier bare-wake permission; it does not preserve
+that permission for a third utterance. The complete start phrase opens the conversation.</p>
+<p>Tune conversation controls separately:</p>
+<p>With explicit <code class="docutils literal notranslate"><span class="pre">mode</span></code>, put all session controls in <code class="docutils literal notranslate"><span class="pre">conversation</span></code>, not <code class="docutils literal notranslate"><span class="pre">speaker</span></code>;
+misplaced controls are rejected instead of silently replaced by defaults.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -599,19 +721,35 @@ response while keeping the conversation open.</p>
 by <code class="docutils literal notranslate"><span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, starts the conversation if their speech onsets fall
 within <code class="docutils literal notranslate"><span class="pre">phrase_window_s</span></code>. An unrelated or unrecognized utterance, an expired
 window, or a disconnect discards pending fragments. Quoting the phrase inside a
-longer utterance does not activate it. Control phrases never become agent
-queries or transcript-topic events.</p>
-<p>These controls use the sample’s existing STT service, including the independent
-NIM model stack. They do not identify speakers or reject other voices on the
-same microphone. Conversation state is scoped to each connected participant.
+longer utterance does not activate it. In conversation and hybrid modes, control
+phrases never become agent queries or transcript-topic events. In wake-only and
+always-on modes, their words are ordinary text subject to that mode’s admission
+policy, not session controls.</p>
+<p>These controls work with the sample’s existing batch STT service, including NIM,
+or with speaker ASR. Batch STT controls are participant-scoped and cannot identify
+people sharing one microphone. Speaker ASR attributes each candidate before
+authorization, enrolls only a unique complete start-phrase speaker, and accepts
+only that owner while the conversation is open. While closed, ambiguous
+simultaneous addressed candidates are discarded, never resolved by label/order.
+An exact unique start has priority over concurrent one-off questions. Diagnostic
+transcripts are not authorization. Stop releases the owner; reset, departure
+and transport failure clear temporary permissions and ownership.
 Untopiced typed messages bypass speech gating and are delivered as queries even
 while the microphone conversation is closed. They cannot open or close a
 microphone conversation.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> during
 an active conversation, preserving the optional chime and follow-up grace
-window. Set <code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code>, or omit the mapping, for the original
-wake-only behavior. An empty <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> list in that mode restores
-immediate always-on speech dispatch.</p>
+window. This is an advanced <strong>active-session</strong> policy, not the switch for closed
+one-off questions; use <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> for those. To require addressing for every
+turn without a persistent session, choose <code class="docutils literal notranslate"><span class="pre">wake_only</span></code>; choose <code class="docutils literal notranslate"><span class="pre">always_on</span></code> for
+ungated/passive input. <code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> and <code class="docutils literal notranslate"><span class="pre">speaker.backend</span></code> choose recognition
+independently. <code class="docutils literal notranslate"><span class="pre">auto</span></code> may select batch STT at startup if the speaker endpoint is
+absent; protocol mismatch is an error, not a fallback. Required speaker ASR never
+silently switches to batch after reset.</p>
+<p>The speaker service and client use protocol <strong>4</strong> for explicit attributed
+one-turn authorization. Update/restart both together; protocol 3 peers are
+rejected rather than treating their transcripts as permissions. Refer to
+<a class="reference internal" href="migrations.html"><span class="doc">Release migration</span></a> for configuration migration.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
@@ -697,7 +835,8 @@ connection owns that participant’s enrollment and closes when the participant
 leaves or its audio worker resets. After one configuration and audio-origin
 message, the worker sends ordered 16 kHz mono signed-16 PCM frames and waits for
 each event response before sending the next frame. The service derives timestamps
-from accepted sample counts; reconnecting starts a fresh timeline and requires
+from accepted sample counts; reconnecting starts a fresh timeline and clears
+temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
 diarization and interference conditioning, but are not transcribed after
 enrollment. Before enrollment, the service independently decodes each detected
@@ -744,13 +883,16 @@ inactivity boundary, without requiring global silence. A tie means multiple
 exact matches completed in the same accepted audio step, not a claim about
 absolute acoustic simultaneity. Split controls retain the same speaker label;
 truncated candidate episodes cannot nominate from their continuing tail. No
-candidate transcript dispatches a query before enrollment. After enrollment,
+unqualified candidate transcript dispatches a query before enrollment. Wake-only
+and hybrid modes explicitly authorize attributed closed-state one-off turns
+without enrollment. After enrollment,
 only the selected speaker can send queries or release the conversation. Wake
 phrases remain optional through <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase</span></code>; filtering
 cannot determine whom the wearer is addressing.</p>
-<p>Conversation state belongs to a participant connection. Disconnect, inference
-failure or processing overload requires
-enrollment again. Per-participant queues retain at most two seconds or 200 audio
+<p>Interaction state belongs to a participant connection. Disconnect, inference
+failure or processing overload clears temporary permissions and enrollment;
+conversation and hybrid sessions must enroll again to reopen. Per-participant
+queues retain at most two seconds or 200 audio
 frames; overload drops pending audio and revokes enrollment. Workers wait two
 seconds before retrying after failure or overload. Closing the WebSocket releases
 its inference session, and the service bounds their count. At <code class="docutils literal notranslate"><span class="pre">max_utterance_s</span></code>,
@@ -764,8 +906,10 @@ interrupts the current answer and emits one listening-reset notice; subsequent
 outage retries do not repeatedly interrupt or announce the same reset.</p>
 <p>Worker phrase settings do not require restarting the model service. When both
 <code class="docutils literal notranslate"><span class="pre">conversation</span></code> and <code class="docutils literal notranslate"><span class="pre">speaker</span></code> are present, <code class="docutils literal notranslate"><span class="pre">conversation</span></code> owns the control settings.
-Speaker-only YAML remains supported. Disabling conversation controls also disables
-speaker enrollment; typed input retains its existing behavior.</p>
+Existing mode-less speaker-only YAML retains conversation behavior. Explicit
+mode chooses interaction independently of <code class="docutils literal notranslate"><span class="pre">speaker.enabled</span></code> and backend;
+wake-only and always-on modes need no persistent enrollment. Typed input
+retains its existing behavior.</p>
 <p>Speech accuracy, identity stability, interference suppression, latency and GPU
 memory require live qualification on the intended microphones. Enrollment selects
 a session speaker; it is not authentication or a persistent biometric identity.
@@ -836,6 +980,7 @@ not client playback.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-agent">Voice agent</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-output-and-interruption">Voice output and interruption</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-speech-producers">Multiple speech producers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gate-configuration-reference">Voice-gate configuration reference</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversation-controls">Conversation controls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-gating-and-early-probes">Voice gating and early probes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#speaker-filtering-and-backend-selection">Speaker filtering and backend selection</a></li>

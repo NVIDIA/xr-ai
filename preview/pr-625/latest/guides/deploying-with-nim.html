@@ -552,9 +552,11 @@ type labels. Send non-empty text after a label; a label alone does not supply
 embedding content. A mixed batch uses up to two sequential HTTP requests;
 the caller’s <code class="docutils literal notranslate"><span class="pre">timeout</span></code> applies to each request, not an overall batch deadline.
 Local profiles omit <code class="docutils literal notranslate"><span class="pre">input_type</span></code>, preserving their original text payloads.
-The <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> NIM returns 2048-dimensional vectors. Omit
-<code class="docutils literal notranslate"><span class="pre">dimensions</span></code> or set it to <code class="docutils literal notranslate"><span class="pre">2048</span></code>; this NIM does not support reduced dimensions.
-The tea sample’s <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> uses the same native dimension.
+The shipped SDK profile sends no <code class="docutils literal notranslate"><span class="pre">dimensions</span></code> field. The
+<code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> NIM returns its native 2048-dimensional vectors;
+its API supports only 2048 dimensions. The tea and standalone RAG configurations
+use that native dimension, as described in NVIDIA’s
+<a class="reference external" href="https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-embed-1b">Nemotron 3 Embed API documentation</a>.
 Refer to NVIDIA’s
 <a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/reference.html">embedding API reference</a>
 and <a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/getting-started.html">NIM deployment instructions</a>.</p>
@@ -668,9 +670,11 @@ worker YAML. Tea making’s worker and RAG YAML each select <code class="docutil
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.</p>
-<p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code>. Tea making can
-select <code class="docutils literal notranslate"><span class="pre">voice_gate.always-on.yaml</span></code> instead of <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>; disable speaker
-ASR in the selected preset, and back up and restore that same file. Use a
+<p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code> (Tea making
+defaults to <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>). Disable speaker ASR in that file, and back up
+and restore the same file. Interaction
+mode does not select the ASR backend: keep the selected conversation mode, or
+choose another mode independently. Use a
 different backup directory when adapting another sample. If the directory
 already exists, this procedure fails without overwriting its original local
 configuration or changing the active files. Do not rerun the switch to replace

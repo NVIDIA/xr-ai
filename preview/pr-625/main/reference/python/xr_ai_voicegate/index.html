@@ -558,15 +558,21 @@ Scoped application commands such as “stop recording” remain queries.</p>
 <dt class="sig sig-object py" id="xr_ai_voicegate.load_voice_gate_config">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_voicegate.</span></span><span class="sig-name descname"><span class="pre">load_voice_gate_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><span class="pre">VoiceGateConfig</span></a></span></span><a class="headerlink" href="#xr_ai_voicegate.load_voice_gate_config" title="Link to this definition">#</a></dt>
 <dd><p>Load + parse a voice_gate YAML file into a <a class="reference internal" href="#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceGateConfig</span></code></a>.</p>
-<p>Schema: a top-level mapping with keys <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> (list[str] or
+<p>Schema: a top-level mapping with <code class="docutils literal notranslate"><span class="pre">mode</span></code> (<code class="docutils literal notranslate"><span class="pre">always_on</span></code>, <code class="docutils literal notranslate"><span class="pre">wake_only</span></code>,
+<code class="docutils literal notranslate"><span class="pre">conversation</span></code> or <code class="docutils literal notranslate"><span class="pre">hybrid</span></code>), <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> (list[str] or
 bare str), <code class="docutils literal notranslate"><span class="pre">listening_chime</span></code> (bool), <code class="docutils literal notranslate"><span class="pre">followup_grace_s</span></code> (float),
 <code class="docutils literal notranslate"><span class="pre">stop_commands_enabled</span></code> (bool, default true).
 Optional <code class="docutils literal notranslate"><span class="pre">conversation</span></code> and <code class="docutils literal notranslate"><span class="pre">speaker</span></code> mappings configure session
 controls and speech-backend selection for the unified voice pipeline.
 Their settings remain private to that path.
-Missing file or empty file → returns the dataclass defaults (gate
-disabled / always-on). <code class="docutils literal notranslate"><span class="pre">magic_phrases:</span> <span class="pre">null</span></code> and trailing whitespace
-in phrases are normalized the same way the inline-block parser did.</p>
+The package’s annotated <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code> supplies defaults; the selected
+file overrides individual top-level and section fields. Missing or empty
+files use the packaged <code class="docutils literal notranslate"><span class="pre">always_on</span></code> baseline. Mode chooses activation;
+the optional mappings tune controls and choose ASR independently. Addressed
+modes require non-empty phrases. Current mode-less configurations normalize
+once using their conversation and phrase settings; explicit mode must not be
+mixed with <code class="docutils literal notranslate"><span class="pre">conversation.enabled</span></code>. <code class="docutils literal notranslate"><span class="pre">magic_phrases:</span> <span class="pre">null</span></code> and trailing
+whitespace are normalized before validation.</p>
 </dd></dl>
 
 <dl class="py class">
