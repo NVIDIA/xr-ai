@@ -622,6 +622,42 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
 
 
 @pytest.mark.asyncio
+async def test_note_capture_propagates_programming_error_from_context_publisher() -> None:
+    class CaptureDecision:
+        async def decide(self, _state, questions, *, timeout=None):
+            assert "capture" in questions["note_action"].criteria
+            return DecisionResponse(
+                answers={"note_action": DecisionAnswer("capture", 1.0, {"capture": 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    async def broken_publisher(_participant_id, _update):
+        raise RuntimeError("publisher programming error")
+
+    destination = NoteTakingAgent(
+        Conversation(
+            _ConversationService(visual=False),  # type: ignore[arg-type]
+            routing=RoutingAid(name="notes", description="Focused note-taking destination."),
+        ),
+        CaptureDecision(),  # type: ignore[arg-type]
+        context_budget_bytes=500,
+        publish_context=broken_publisher,
+    )
+    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
+    assert (await destination.admit(turn, focused=True)).disposition == "accept"
+
+    async def emit(_source, _text):
+        return None
+
+    with pytest.raises(RuntimeError, match="publisher programming error"):
+        await destination.answer(turn, emit=emit)
+
+    assert "The demo showed an AR overlay" in destination.routing_aid("alice").description
+
+
+@pytest.mark.asyncio
 async def test_over_budget_note_is_refused_without_partial_capture() -> None:
     class CaptureDecision:
         async def decide(self, _state, _questions, *, timeout=None):
