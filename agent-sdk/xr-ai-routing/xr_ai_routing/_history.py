@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Share completed-exchange timestamps and their display format."""
+"""Share private completed-exchange identity, timestamps, and display format."""
 
 from __future__ import annotations
 
@@ -10,6 +10,12 @@ from datetime import UTC, datetime
 
 _active_history_timestamps: contextvars.ContextVar[tuple[int | None, ...]] = contextvars.ContextVar(
     "xr_ai_conversation_history_timestamps", default=()
+)
+_active_history_exchange_ids: contextvars.ContextVar[tuple[object | None, ...]] = contextvars.ContextVar(
+    "xr_ai_conversation_history_exchange_ids", default=()
+)
+_active_exchange_id: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+    "xr_ai_conversation_exchange_id", default=None
 )
 
 
