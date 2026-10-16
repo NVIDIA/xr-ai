@@ -108,8 +108,10 @@ class ConversationFrontEnd:
         self._tasks: dict[str, asyncio.Task[DestinationResult]] = {}
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._departing: set[str] = set()
+        self._departure_calls: dict[str, int] = {}
         self._history: dict[str, list[ConversationExchange]] = {}
-        self._history_times: dict[str, list[int]] = {}
+        self._history_times: dict[str, list[int | None]] = {}
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
 
@@ -132,12 +134,21 @@ class ConversationFrontEnd:
         """
 
         participant_id = turn.participant_id
+        # Departure owns the participant until destination cleanup finishes.
+        if participant_id in self._departing:
+            raise RuntimeError("participant is leaving")
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
+            if participant_id in self._departing:
+                raise RuntimeError("participant is leaving")
             await self.interrupt(participant_id)
             owned_history = self._history.get(participant_id)
+            if not owned_history and turn.history:
+                owned_history = list(turn.history)
+                self._history[participant_id] = owned_history
+                self._history_times[participant_id] = [None] * len(owned_history)
             history = tuple(owned_history) if owned_history else turn.history
-            timestamps = tuple(self._history_times.get(participant_id, ())) if owned_history else (None,) * len(history)
+            timestamps = tuple(self._history_times.get(participant_id, (None,) * len(history)))
             history, timestamps = _bounded_history_with_times(
                 history, timestamps, self._context_budget_bytes, participant_id
             )
@@ -216,6 +227,7 @@ class ConversationFrontEnd:
             raise ExceptionGroup("failed to release conversation destinations", errors)
 
     async def _handle(self, turn: ConversationTurn, *, emit: Emit, generation: object) -> DestinationResult:
+        # Route selection, admission, and answer commit are separate phases.
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
         if focused is not None:
@@ -225,7 +237,6 @@ class ConversationFrontEnd:
                 if self._generation.get(turn.participant_id) is not generation:
                     raise asyncio.CancelledError()
                 self._focus.pop(turn.participant_id, None)
-                self._forget_destination(turn.participant_id, focused)
                 candidates = [
                     destination_name
                     for destination_name in self._destinations
@@ -251,14 +262,17 @@ class ConversationFrontEnd:
                 if self._generation.get(turn.participant_id) is not generation:
                     raise asyncio.CancelledError()
                 self._focus.pop(turn.participant_id, None)
-                self._forget_destination(turn.participant_id, destination_name)
                 if admission.text:
                     await emit(destination_name, admission.text)
                     self._remember(turn, admission.text)
                 focused = None
                 candidates = [item for item in self._destinations if item != destination_name]
-                if not candidates:
-                    return DestinationResult("clarify", admission.text)
+                if not candidates or attempt == 1:
+                    text = admission.text or "Which part would you like help with?"
+                    if not admission.text:
+                        await emit(self._default_destination, text)
+                        self._remember(turn, text)
+                    return DestinationResult("clarify", text)
                 continue
             if admission.disposition == "clarify":
                 if admission.text:
@@ -270,7 +284,9 @@ class ConversationFrontEnd:
                 if destination_name == focused:
                     self._focus.pop(turn.participant_id, None)
                     focused = None
-                candidates = [item for item in candidates if item != destination_name]
+                    candidates = [item for item in self._destinations if item != destination_name]
+                else:
+                    candidates = [item for item in candidates if item != destination_name]
                 if not candidates or attempt == 1:
                     destination_name = self._default_destination
                     destination = self._destinations[destination_name]
@@ -285,7 +301,6 @@ class ConversationFrontEnd:
                         await declined_destination.release(turn.participant_id)
                         if self._generation.get(turn.participant_id) is not generation:
                             raise asyncio.CancelledError()
-                        self._forget_destination(turn.participant_id, declined_name)
                         text = admission.text or "Which part would you like help with?"
                         await emit(destination_name, text)
                         self._remember(turn, text)
@@ -297,7 +312,6 @@ class ConversationFrontEnd:
                         await declined_destination.release(turn.participant_id)
                         if self._generation.get(turn.participant_id) is not generation:
                             raise asyncio.CancelledError()
-                        self._forget_destination(turn.participant_id, declined_name)
                     self._destinations_used.setdefault(turn.participant_id, set()).add(destination_name)
                     focused = None
                     admission = Admission("accept")
@@ -305,7 +319,6 @@ class ConversationFrontEnd:
                     await destination.release(turn.participant_id)
                     if self._generation.get(turn.participant_id) is not generation:
                         raise asyncio.CancelledError()
-                    self._forget_destination(turn.participant_id, destination_name)
                     continue
 
             if admission.preamble:
@@ -415,7 +428,6 @@ class ConversationFrontEnd:
                     raise asyncio.CancelledError()
                 if self._focus.get(turn.participant_id) == destination_name:
                     self._focus.pop(turn.participant_id, None)
-                self._forget_destination(turn.participant_id, destination_name)
             if result.disposition in {"answer", "focus", "release"} and result.text.strip():
                 self._remember(turn, result.text)
             if result.disposition in {"answer", "focus", "release"} and first_answer_duration is not None:
@@ -432,29 +444,45 @@ class ConversationFrontEnd:
         raised together in an ``ExceptionGroup``.
         """
 
-        await self.interrupt(participant_id)
-        used = set(self._destinations_used.get(participant_id, ()))
-        focused = self._focus.pop(participant_id, None)
-        if focused is not None:
-            used.add(focused)
-        if used:
-            self._destinations_used.setdefault(participant_id, set()).update(used)
-        self._history.pop(participant_id, None)
-        self._history_times.pop(participant_id, None)
-        self._first_answer_samples.pop(participant_id, None)
-        self._locks.pop(participant_id, None)
-        errors = []
-        for destination_name in used:
-            try:
-                destination = self._destinations[destination_name]
-                on_departure = getattr(destination, "participant_left", destination.release)
-                await on_departure(participant_id)
-            except Exception as error:
-                errors.append(error)
+        # Keep new turns out until all overlapping departure callers finish.
+        self._departure_calls[participant_id] = self._departure_calls.get(participant_id, 0) + 1
+        self._departing.add(participant_id)
+        lock = self._locks.setdefault(participant_id, asyncio.Lock())
+        succeeded = False
+        try:
+            async with lock:
+                await self.interrupt(participant_id)
+                used = set(self._destinations_used.get(participant_id, ()))
+                focused = self._focus.pop(participant_id, None)
+                if focused is not None:
+                    used.add(focused)
+                if used:
+                    self._destinations_used.setdefault(participant_id, set()).update(used)
+                self._history.pop(participant_id, None)
+                self._history_times.pop(participant_id, None)
+                self._first_answer_samples.pop(participant_id, None)
+                errors = []
+                for destination_name in used:
+                    try:
+                        destination = self._destinations[destination_name]
+                        on_departure = getattr(destination, "participant_left", destination.release)
+                        await on_departure(participant_id)
+                    except Exception as error:
+                        errors.append(error)
+                    else:
+                        self._forget_destination(participant_id, destination_name)
+                if errors:
+                    raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+                succeeded = True
+        finally:
+            remaining_calls = self._departure_calls[participant_id] - 1
+            if remaining_calls:
+                self._departure_calls[participant_id] = remaining_calls
             else:
-                self._forget_destination(participant_id, destination_name)
-        if errors:
-            raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+                self._departure_calls.pop(participant_id, None)
+                if succeeded:
+                    self._departing.discard(participant_id)
+                    self._locks.pop(participant_id, None)
 
     def _forget_destination(self, participant_id: str, destination: str) -> None:
         used = self._destinations_used.get(participant_id)
