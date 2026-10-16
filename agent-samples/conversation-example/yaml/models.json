@@ -1,0 +1,32 @@
+{
+  "models": {
+    "vlm": {
+      "adapter": {"preset": "cosmos3_nano_reasoner"},
+      "endpoint": {"base_url": "http://localhost:8100"}
+    },
+    "llm": {
+      "adapter": {
+        "preset": "nemotron_omni",
+        "default_extras": {
+          "max_tokens": 4608,
+          "temperature": 0.25,
+          "chat_template_kwargs": {
+            "enable_thinking": true,
+            "reasoning_budget": 4096
+          }
+        }
+      },
+      "endpoint": {"base_url": "http://localhost:8108"}
+    },
+    "router": {
+      "category": "decision",
+      "kind": "systemone",
+      "model_name": "Cloudflare/clef-flash",
+      "base_url": "http://localhost:8120"
+    },
+    "tts": {
+      "adapter": {"preset": "pocket_tts"},
+      "endpoint": {"base_url": "http://localhost:8105"}
+    }
+  }
+}

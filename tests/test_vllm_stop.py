@@ -69,6 +69,56 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
 
 
+def test_clef_ownership_requires_command_and_matching_managed_port(tmp_path, monkeypatch) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    (proc_root / "cmdline").write_text("python\0-m\0clef_server\0--config\0clef.yaml")
+    (proc_root / "environ").write_bytes(b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0")
+    monkeypatch.setattr(xr_ai_vllm._docker, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
+
+    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8120)
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8121)
+    (proc_root / "cmdline").write_text("python\0unrelated.py")
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8120)
+
+
+def test_clef_stop_keeps_process_identity_after_listener_pid_is_reused(monkeypatch) -> None:
+    signaled = []
+    closed = []
+    listener_pid = [1234]
+    wait_calls = []
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "container_on_port_checked",
+        lambda _port: (_ for _ in ()).throw(AssertionError("Clef is not a vLLM container")),
+    )
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "pid_on_port_checked",
+        lambda _port: (listener_pid[0], True, True),
+    )
+    monkeypatch.setattr(xr_ai_vllm._docker, "is_xr_ai_server_process", lambda *_args: True)
+    monkeypatch.setattr(xr_ai_vllm.os, "pidfd_open", lambda pid: 77)
+    monkeypatch.setattr(xr_ai_vllm.os, "close", lambda pidfd: closed.append(pidfd))
+
+    def send_signal(pidfd, sig):
+        signaled.append((pidfd, sig))
+        if sig == signal.SIGTERM:
+            listener_pid[0] = 5678
+
+    def wait(readable, _writable, _exceptional, _timeout):
+        wait_calls.append(readable)
+        return ([], [], []) if len(wait_calls) == 1 else (readable, [], [])
+
+    monkeypatch.setattr(xr_ai_vllm.signal, "pidfd_send_signal", send_signal)
+    monkeypatch.setattr(xr_ai_vllm.select, "select", wait)
+
+    assert xr_ai_vllm.stop_persistent_servers([("clef", 8120)])
+    assert signaled == [(77, signal.SIGTERM), (77, signal.SIGKILL)]
+    assert closed == [77]
+    assert listener_pid == [5678]
+
+
 def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)

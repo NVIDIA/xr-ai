@@ -1218,7 +1218,18 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command
+    if label == "clef":
+        return "clef_server" in command and has_clef_ownership_marker(pid, port)
     return has_xr_ai_ownership_marker(pid, port)
+
+
+def has_clef_ownership_marker(pid: int, port: int) -> bool:
+    """Return whether *pid* carries Clef's matching managed-port marker."""
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except OSError:
+        return False
+    return b"XR_AI_CLEF_MANAGED=1" in entries and f"XR_AI_CLEF_PORT={port}".encode() in entries
 
 
 def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:

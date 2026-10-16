@@ -43,6 +43,8 @@ from __future__ import annotations
 
 import logging
 import os
+import select
+import signal
 from pathlib import Path
 
 from . import _docker, _pip
@@ -60,6 +62,41 @@ DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.09-py3"
 
 Individual services may pin a newer image when required by their model.
 """
+
+
+def _stop_clef_process(pid: int, port: int) -> bool:
+    """Stop only the verified Clef process, retaining its identity through shutdown."""
+    pidfd = None
+    try:
+        pidfd = os.pidfd_open(pid)
+        if not _docker.is_xr_ai_server_process(pid, "clef", port):
+            print(f"  [clef] listener on :{port} is not an owned Clef server — not stopping", flush=True)
+            return False
+        if _docker.pid_on_port_checked(port) != (pid, True, True):
+            print(f"  [clef] listener on :{port} changed during inspection — not stopping", flush=True)
+            return False
+
+        signal.pidfd_send_signal(pidfd, signal.SIGTERM)
+        print(f"  [clef] stopping (pid={pid}, port={port})…", flush=True)
+        if select.select([pidfd], [], [], 20.0)[0]:
+            print("  [clef] stopped", flush=True)
+            return True
+
+        signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+        if select.select([pidfd], [], [], 5.0)[0]:
+            print("  [clef] force-stopped", flush=True)
+            return True
+        print("  [clef] still running after SIGKILL", flush=True)
+        return False
+    except ProcessLookupError:
+        print("  [clef] already gone", flush=True)
+        return True
+    except (AttributeError, OSError) as error:
+        print(f"  [clef] cannot track configured process: {error} — not stopping", flush=True)
+        return False
+    finally:
+        if pidfd is not None:
+            os.close(pidfd)
 
 
 def serve(
@@ -183,7 +220,11 @@ def stop_persistent_servers(
     success = True
     found = False
     for label, port in services:
-        container_name, container_checked = _docker.container_on_port_checked(port)
+        if label == "clef":
+            # Clef is a managed in-process service, not an xr-ai-vllm container.
+            container_name, container_checked = None, True
+        else:
+            container_name, container_checked = _docker.container_on_port_checked(port)
         if not container_checked:
             print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
             success = False
@@ -231,6 +272,11 @@ def stop_persistent_servers(
             print(f"  [{label}] listener on :{port} is not an xr-ai server — not stopping",
                   flush=True)
             success = False
+            continue
+
+        if label == "clef":
+            if not _stop_clef_process(pid, port):
+                success = False
             continue
 
         pgid = (
