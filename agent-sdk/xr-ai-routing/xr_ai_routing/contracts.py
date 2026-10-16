@@ -11,7 +11,7 @@ from typing import Literal, Protocol
 
 
 @dataclass(frozen=True, slots=True)
-class ConversationExchange:
+class AgentExchange:
     """One completed user and assistant exchange."""
 
     user: str
@@ -22,7 +22,7 @@ class ConversationExchange:
 
 
 @dataclass(frozen=True, slots=True)
-class ConversationTurn:
+class AgentTurn:
     """The current user turn and complete exchanges selected for this destination."""
 
     participant_id: str
@@ -34,7 +34,7 @@ class ConversationTurn:
     query: str
     """Unmodified current user request."""
 
-    history: tuple[ConversationExchange, ...] = ()
+    history: tuple[AgentExchange, ...] = ()
     """Newest whole completed exchanges that fit the front-end byte budget."""
 
 
@@ -110,10 +110,10 @@ class RoutableAgent(Protocol):
     def routing_aid(self, participant_id: str) -> RoutingAid:
         """Describe this participant's current eligibility and route scope."""
 
-    async def admit(self, turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         """Accept, decline, clarify, or release before producing spoken output."""
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
         Stream chunks and return answer, focus, or release. After selected
@@ -147,8 +147,8 @@ class RoutableAgent(Protocol):
 
 __all__ = [
     "Admission",
-    "ConversationExchange",
-    "ConversationTurn",
+    "AgentExchange",
+    "AgentTurn",
     "DestinationResult",
     "Emit",
     "RoutableAgent",

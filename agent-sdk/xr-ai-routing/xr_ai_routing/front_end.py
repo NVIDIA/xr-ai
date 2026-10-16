@@ -24,8 +24,8 @@ from ._history import (
 )
 from .contracts import (
     Admission,
-    ConversationExchange,
-    ConversationTurn,
+    AgentExchange,
+    AgentTurn,
     DestinationResult,
     Emit,
     RoutableAgent,
@@ -46,7 +46,7 @@ _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
 _logger = logging.getLogger(__name__)
 
 
-class ConversationFrontEnd:
+class AgentRouter:
     """Route a turn, check admission before speech, and retain explicit focus.
 
     A focused destination receives the participant's next turn first. It can
@@ -115,13 +115,13 @@ class ConversationFrontEnd:
         self._locks: dict[str, asyncio.Lock] = {}
         self._departing: set[str] = set()
         self._departure_calls: dict[str, int] = {}
-        self._history: dict[str, list[ConversationExchange]] = {}
+        self._history: dict[str, list[AgentExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
         self._history_exchange_ids: dict[str, list[object | None]] = {}
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
 
-    async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def handle(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         """Route and answer one turn, emitting source-tagged text chunks.
 
         The supplied ``turn.history`` seeds this participant when the front end
@@ -165,7 +165,7 @@ class ConversationFrontEnd:
                 history, timestamps, exchange_ids, self._context_budget_bytes, participant_id
             )
             current_exchange_id = object()
-            current_turn = ConversationTurn(
+            current_turn = AgentTurn(
                 participant_id=turn.participant_id,
                 turn_id=turn.turn_id,
                 query=turn.query,
@@ -243,7 +243,7 @@ class ConversationFrontEnd:
         if errors:
             raise ExceptionGroup("failed to release conversation destinations", errors)
 
-    async def _handle(self, turn: ConversationTurn, *, emit: Emit, generation: object) -> DestinationResult:
+    async def _handle(self, turn: AgentTurn, *, emit: Emit, generation: object) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
@@ -513,7 +513,7 @@ class ConversationFrontEnd:
             if not used:
                 self._destinations_used.pop(participant_id, None)
 
-    def _trace_default_fallback(self, turn: ConversationTurn, reason: str, *, eligible: bool) -> None:
+    def _trace_default_fallback(self, turn: AgentTurn, reason: str, *, eligible: bool) -> None:
         with nemo_relay.scope.scope(
             "conversation.default-destination-fallback",
             nemo_relay.ScopeType.Agent,
@@ -527,9 +527,9 @@ class ConversationFrontEnd:
         ):
             pass
 
-    def _remember(self, turn: ConversationTurn, answer: str) -> None:
+    def _remember(self, turn: AgentTurn, answer: str) -> None:
         history = self._history.setdefault(turn.participant_id, [])
-        history.append(ConversationExchange(turn.query, answer))
+        history.append(AgentExchange(turn.query, answer))
         self._history_times.setdefault(turn.participant_id, []).append(time.time_ns() // 1_000)
         exchange_id = _active_exchange_id.get()
         if exchange_id is None:
@@ -540,7 +540,7 @@ class ConversationFrontEnd:
         # own identity even though both belong to the same input turn.
         _active_exchange_id.set(object())
 
-    def _turn_with_latest_history(self, turn: ConversationTurn) -> ConversationTurn:
+    def _turn_with_latest_history(self, turn: AgentTurn) -> AgentTurn:
         """Include a completed admission-release message in a same-turn reroute."""
 
         participant_id = turn.participant_id
@@ -552,14 +552,14 @@ class ConversationFrontEnd:
         )
         _active_history_timestamps.set(timestamps)
         _active_history_exchange_ids.set(exchange_ids)
-        return ConversationTurn(
+        return AgentTurn(
             participant_id=turn.participant_id,
             turn_id=turn.turn_id,
             query=turn.query,
             history=history,
         )
 
-    def _record_first_answer(self, turn: ConversationTurn, destination: str, duration_secs: float) -> None:
+    def _record_first_answer(self, turn: AgentTurn, destination: str, duration_secs: float) -> None:
         sample = (turn.query, duration_secs)
         examples = self._first_answer_samples.setdefault(turn.participant_id, {}).setdefault(destination, [])
         sample_size = _timing_sample_size(sample)
@@ -571,7 +571,7 @@ class ConversationFrontEnd:
 
     async def _acknowledge_if_needed(
         self,
-        turn: ConversationTurn,
+        turn: AgentTurn,
         destination: str,
         description: str,
         answer_started_at: float,
@@ -673,7 +673,7 @@ class ConversationFrontEnd:
 
     async def _predict_slow_answer(
         self,
-        turn: ConversationTurn,
+        turn: AgentTurn,
         destination: str,
         description: str,
         prediction_trace: dict[str, object],
@@ -723,7 +723,7 @@ class ConversationFrontEnd:
         )
         return slow_probability > alternatives_probability
 
-    async def _select(self, turn: ConversationTurn, candidates: list[str]) -> str | None:
+    async def _select(self, turn: AgentTurn, candidates: list[str]) -> str | None:
         if not candidates:
             return None
         if len(candidates) == 1:
@@ -859,20 +859,20 @@ async def _emit_from(emit: Emit, destination: str, _source: str, text: str) -> N
 
 
 def _bounded_history(
-    history: tuple[ConversationExchange, ...],
+    history: tuple[AgentExchange, ...],
     budget_bytes: int,
     participant_id: str,
-) -> tuple[ConversationExchange, ...]:
+) -> tuple[AgentExchange, ...]:
     bounded, _ = _bounded_history_with_times(history, (None,) * len(history), budget_bytes, participant_id)
     return bounded
 
 
 def _bounded_history_with_times(
-    history: tuple[ConversationExchange, ...],
+    history: tuple[AgentExchange, ...],
     timestamps: tuple[int | None, ...],
     budget_bytes: int,
     participant_id: str,
-) -> tuple[tuple[ConversationExchange, ...], tuple[int | None, ...]]:
+) -> tuple[tuple[AgentExchange, ...], tuple[int | None, ...]]:
     bounded, bounded_times, _ = _bounded_history_with_metadata(
         history, timestamps, (None,) * len(history), budget_bytes, participant_id
     )
@@ -880,19 +880,19 @@ def _bounded_history_with_times(
 
 
 def _bounded_history_with_metadata(
-    history: tuple[ConversationExchange, ...],
+    history: tuple[AgentExchange, ...],
     timestamps: tuple[int | None, ...],
     exchange_ids: tuple[object | None, ...],
     budget_bytes: int,
     participant_id: str,
-) -> tuple[tuple[ConversationExchange, ...], tuple[int | None, ...], tuple[object | None, ...]]:
+) -> tuple[tuple[AgentExchange, ...], tuple[int | None, ...], tuple[object | None, ...]]:
     """Bound serialized completed-history entries, including their time labels.
 
     The current request, current-time anchor, and destination descriptions are
     separate routing fields and are outside this history-entry budget.
     """
 
-    retained: list[ConversationExchange] = []
+    retained: list[AgentExchange] = []
     size = 0
     retained_times: list[int | None] = []
     retained_ids: list[object | None] = []
@@ -957,4 +957,4 @@ def _is_valid_acknowledgment(text: str) -> bool:
     return bool(body.strip()) and not any(mark in body for mark in ".!?\n")
 
 
-__all__ = ["ConversationFrontEnd"]
+__all__ = ["AgentRouter"]
