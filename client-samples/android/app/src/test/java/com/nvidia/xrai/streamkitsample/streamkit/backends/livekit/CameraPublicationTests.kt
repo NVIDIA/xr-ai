@@ -16,6 +16,7 @@ import io.livekit.android.events.BroadcastEventBus
 import io.livekit.android.ConnectOptions
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
+import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.participant.VideoTrackPublishOptions
 import io.livekit.android.room.track.LocalTrackPublication
@@ -53,6 +54,7 @@ class CameraPublicationTests {
     private class Fixture(token: String? = null) {
         val participant = Mockito.mock(LocalParticipant::class.java)
         val room = Mockito.mock(Room::class.java)
+        var factoryRoom: Room = room
         val track = Mockito.mock(LocalVideoTrack::class.java)
         val deviceTrack = Mockito.mock(LocalVideoTrack::class.java)
         val publication = Mockito.mock(LocalTrackPublication::class.java)
@@ -60,7 +62,7 @@ class CameraPublicationTests {
         val callbackFailures = mutableListOf<Throwable>()
         val callbackFailureObserved = kotlinx.coroutines.CompletableDeferred<Unit>()
         val backend = LiveKitBackend(LiveKitConfig(host = "test", token = token), Mockito.mock(Context::class.java),
-            createRoom = { room }, eventContext = Dispatchers.Unconfined + CoroutineExceptionHandler { _, error ->
+            createRoom = { factoryRoom }, eventContext = Dispatchers.Unconfined + CoroutineExceptionHandler { _, error ->
                 callbackFailures.add(error)
                 callbackFailureObserved.complete(Unit)
             })
@@ -75,6 +77,9 @@ class CameraPublicationTests {
         init {
             Mockito.`when`(room.localParticipant).thenReturn(participant)
             Mockito.`when`(room.events).thenReturn(events.readOnly())
+            Mockito.`when`(room.remoteParticipants).thenReturn(emptyMap())
+            Mockito.`when`(participant.trackPublications).thenReturn(emptyMap())
+            Mockito.`when`(participant.connectionQuality).thenReturn(ConnectionQuality.UNKNOWN)
             Mockito.`when`(room.state).thenReturn(Room.State.CONNECTED)
             Mockito.doAnswer {
                 if (active?.track === track) {
@@ -111,6 +116,14 @@ class CameraPublicationTests {
             setField("roomLifetime", null)
             setField("isConnected", false)
             Mockito.`when`(room.state).thenReturn(Room.State.DISCONNECTED)
+        }
+
+        suspend fun prepareSDKConnection() {
+            Mockito.doAnswer {
+                Mockito.`when`(room.state).thenReturn(Room.State.CONNECTED)
+                Unit
+            }.`when`(room).connect(Mockito.anyString(), Mockito.anyString(),
+                Mockito.any(ConnectOptions::class.java) ?: ConnectOptions())
         }
 
         fun setField(name: String, value: Any?) {
@@ -720,6 +733,41 @@ class CameraPublicationTests {
             pending?.resumeWithException(CancellationException())
             pending = null
             attempt.cancel()
+        }
+    }
+
+    @Test(timeout = 60_000) fun independentReceiptReclaimsQuarantinedCameraAfterApplicationCollectorFails() = runBlocking {
+        val f = Fixture(token = "test")
+        f.beforeConnect()
+        f.prepareSDKConnection()
+        f.prepareInjection()
+        f.backend.connect(SessionConfig.DEFAULT)
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            f.backend.onConnectionStateChanged = {
+                if (it == ConnectionState.RECONNECTING) throw IllegalStateException("application callback")
+            }
+            f.events.postEvent(RoomEvent.Reconnecting(f.room))
+            f.callbackFailureObserved.await()
+            f.active = null // SDK failed republish; exact allocation remains ours
+            Mockito.`when`(f.room.state).thenReturn(Room.State.DISCONNECTED)
+            f.onDisconnect = {} // no terminal receipt yet
+            try { f.backend.disconnect(); fail("Unknown capture custody must be reported") }
+            catch (_: IllegalStateException) {}
+            Mockito.verify(f.track, Mockito.never()).dispose()
+            val disposed = kotlinx.coroutines.CompletableDeferred<Unit>()
+            Mockito.doAnswer { disposed.complete(Unit); null }.`when`(f.track).dispose()
+            f.events.postEvent(RoomEvent.Disconnected(f.room, null, DisconnectReason.SERVER_SHUTDOWN))
+            disposed.await()
+            val next = Fixture()
+            next.prepareSDKConnection()
+            next.prepareDeviceCamera()
+            f.factoryRoom = next.room
+            f.backend.connect(SessionConfig.DEFAULT)
+            f.backend.startCamera(CameraConfig())
+            assertSame(next.deviceTrack, next.active!!.track)
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            f.backend.disconnect()
         }
     }
 }
