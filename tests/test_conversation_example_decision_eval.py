@@ -174,10 +174,11 @@ def test_resume_preserves_prior_calls_and_runs_only_unattempted_flows():
 
 def test_resume_accepts_harness_only_change_but_rejects_changed_decision_inputs(tmp_path):
     evaluator_path = str(Path(evaluator.__file__).resolve().relative_to(evaluator._ROOT))
+    history_source = "agent-sdk/xr-ai-conversation/xr_ai_conversation/_history.py"
     hashes = {
         evaluator_path: "old-harness",
         "yaml/models.json": "same-config",
-        "prompts/system.txt": "same-prompt",
+        history_source: "same-history-source",
     }
     log = tmp_path / "prior.jsonl"
     log.write_text(
@@ -191,9 +192,16 @@ def test_resume_accepts_harness_only_change_but_rejects_changed_decision_inputs(
     assert len(calls) == 1
     assert prior_hash == "old-harness"
 
-    changed_source = dict(hashes, **{"prompts/system.txt": "changed-prompt"})
+    changed_source = dict(hashes, **{history_source: "changed-history-source"})
     with pytest.raises(ValueError, match="hashes do not match"):
         evaluator._load_resume_calls(log, changed_source)
+
+
+def test_preflight_fingerprints_shared_conversation_history_source():
+    flows, cases = evaluator.load_fixtures()
+    source = "agent-sdk/xr-ai-conversation/xr_ai_conversation/_history.py"
+
+    assert source in evaluator.preflight(flows, cases)["sha256"]
 
 
 def test_missing_monitor_record_skips_dependent_flow_but_runs_independent_flows():
