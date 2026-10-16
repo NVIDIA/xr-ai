@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Guide participants through an approved procedure and verify their progress.
+"""Provide spoken guidance and controls for replaying an approved procedure.
 
-ReplayAgent handles speech and connection events and exposes conversational
-guide controls. The replay backend owns verification and progress so model
-responses cannot bypass the active step's completion rules.
+ReplayAgent receives speech and participant events from the voice runtime.
+It uses the guide and current progress to answer questions, handles requests
+to start, stop, or advance replay, and sends spoken responses and completion
+announcements. Step verification and progress belong to replaying.py.
 """
 
 from __future__ import annotations

@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Strict, task-neutral schema for locally discovered SOP guides."""
+"""Define and validate the procedure-guide format used by replay.
+
+Parse guide YAML into task, state, and step definitions for the replay backend.
+Check the step sequence, tool requests, and completion rules before a guide can
+run, so malformed requirements are rejected rather than silently interpreted
+differently. Guide discovery and approval checks live in guides.py.
+"""
 
 from __future__ import annotations
 
