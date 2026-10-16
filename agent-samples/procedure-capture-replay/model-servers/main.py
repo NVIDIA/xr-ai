@@ -3,10 +3,10 @@
 
 """Launch the speech, language, and vision model servers for the sample.
 
-This entry point selects batch STT, acknowledgement TTS, an LLM, and the captioning
-VLM. Capture uses STT, TTS, and the VLM; the LLM is available but is not called
-by the capture worker.
-Batch STT accepts narration without speaker enrollment. The shared model-stack
+This entry point selects batch and speaker-conditioned STT, acknowledgement TTS,
+an LLM, and the captioning VLM. Capture uses batch STT without speaker enrollment,
+TTS, and the VLM. Replay uses speaker-conditioned STT, TTS, the LLM, and the VLM
+for guidance and verification. The shared model-stack
 launcher combines server defaults with this directory's GPU-profile YAML and
 handles startup, readiness, and explicit shutdown independently of the worker.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 from xr_ai_model_server_stack import run_model_stack
 
 _BASE = Path(__file__).resolve().parent
-_SERVICES = ("stt", "tts", "omni", "vlm")
+_SERVICES = ("speaker-stt", "stt", "tts", "omni", "vlm")
 
 
 def run() -> None:

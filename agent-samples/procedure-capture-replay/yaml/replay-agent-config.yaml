@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Replay-only settings; paths are relative to this file. Models are shared with capture.
+guides_dir: ../guides
+vision_timeout_s: 15.0

@@ -49,7 +49,9 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
         ("--session-recording",),
     ]
-    assert [argument.flags for argument in commands["procedure_capture_replay"].arguments] == [("--output-root",)]
+    assert [argument.flags for argument in commands["procedure_capture_replay"].arguments] == [
+        ("--mode",), ("guide_name",), ("--output-root",),
+    ]
     assert [argument.flags for argument in commands["procedure_capture_replay_model_servers"].arguments] == [
         ("--stop",), ("--gpu-profile",),
     ]
