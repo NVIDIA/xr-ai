@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import deque
 
 import pytest
@@ -19,16 +20,22 @@ from xr_ai_routing import (
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_routing._history import _active_history_timestamps
-from xr_ai_routing.front_end import _bounded_history_with_times, _is_valid_acknowledgment
+from xr_ai_routing._history import (
+    _active_exchange_id,
+    _active_history_exchange_ids,
+    _active_history_timestamps,
+)
+from xr_ai_routing.front_end import (
+    _bounded_history_with_metadata,
+    _bounded_history_with_times,
+    _is_valid_acknowledgment,
+)
 
 
-def test_routable_agent_replaces_destination_protocol_export() -> None:
+def test_routable_agent_is_the_only_destination_protocol_export() -> None:
     assert RoutableAgent.__name__ == "RoutableAgent"
     assert routing_module.__all__ == [
         "Admission",
-        "Conversation",
-        "ConversationContextUpdate",
         "ConversationExchange",
         "ConversationFrontEnd",
         "ConversationTurn",
@@ -1010,6 +1017,88 @@ async def test_front_end_attaches_completion_recency_to_its_owned_history():
     history = decisions.calls[1][0]["completed_history"]
     assert history[0]["user"] == "first request"
     assert history[0]["recorded_around_utc"] != "unknown"
+
+
+@pytest.mark.asyncio
+async def test_completed_exchange_ids_remain_aligned_when_history_is_trimmed():
+    destination = _Destination(
+        "conversation",
+        results=(DestinationResult("answer", "first answer"), DestinationResult("answer", "second answer")),
+    )
+    front_end = ConversationFrontEnd({"conversation": destination}, _Decisions())
+
+    await _run(front_end, query="first request")
+    await _run(front_end, query="second request")
+
+    history = tuple(front_end._history["alice"])
+    history_times = tuple(front_end._history_times["alice"])
+    history_ids = tuple(front_end._history_exchange_ids["alice"])
+    assert history_ids[0] is not history_ids[1]
+    assert len(history_ids) == len(history_times) == len(history) == 2
+
+    newest = history[-1]
+    newest_timestamp = history_times[-1]
+    item = {
+        "user": newest.user,
+        "assistant": newest.assistant,
+        "recorded_around_utc": front_end_module._format_minute(newest_timestamp),
+    }
+    budget = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    bounded, bounded_times, bounded_ids = _bounded_history_with_metadata(
+        history, history_times, history_ids, budget, "alice"
+    )
+
+    assert bounded == (newest,)
+    assert bounded_times == (newest_timestamp,)
+    assert bounded_ids[0] is history_ids[-1]
+
+
+@pytest.mark.asyncio
+async def test_admission_release_reroute_receives_history_with_separate_exchange_ids():
+    observed = {}
+
+    class _ReroutedDestination(_Destination):
+        async def answer(self, turn, *, emit):
+            observed["history"] = turn.history
+            observed["timestamps"] = _active_history_timestamps.get()
+            observed["history_ids"] = _active_history_exchange_ids.get()
+            observed["active_id"] = _active_exchange_id.get()
+            return await super().answer(turn, emit=emit)
+
+    releasing = _Destination(
+        "scene",
+        admissions=(Admission("release", text="Leaving scene mode."),),
+    )
+    conversation = _ReroutedDestination(
+        "conversation",
+        results=(DestinationResult("answer", "The answer."),),
+    )
+    front_end = ConversationFrontEnd(
+        {"scene": releasing, "conversation": conversation},
+        _Decisions("scene"),
+        default_destination="conversation",
+    )
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    result = await front_end.handle(
+        ConversationTurn("alice", "turn-1", "Continue with the request."),
+        emit=emit,
+    )
+
+    assert result.text == "The answer."
+    assert output == [
+        ("scene", "Leaving scene mode."),
+        ("conversation", "The answer."),
+    ]
+    assert observed["history"] == (ConversationExchange("Continue with the request.", "Leaving scene mode."),)
+    assert len(observed["timestamps"]) == len(observed["history_ids"]) == 1
+    assert observed["timestamps"][0] is not None
+    assert observed["history_ids"][0] is front_end._history_exchange_ids["alice"][0]
+    assert observed["active_id"] is not observed["history_ids"][0]
+    assert front_end._history_exchange_ids["alice"][0] is not front_end._history_exchange_ids["alice"][1]
 
 
 def test_routing_history_byte_budget_counts_timestamp_and_utf8_json_fields():
