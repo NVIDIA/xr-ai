@@ -221,7 +221,14 @@ class _CurrentFrameTool:
 
     async def execute(self, request):
         self.requests.append(request)
-        return SimpleNamespace(image=ImageReference(uri="https://example.com/frame.jpg"))
+        return ImageFrame(
+            image=ImageReference(uri="https://example.com/frame.jpg"),
+            timestamp_us=None,
+            width=2,
+            height=2,
+            sequence=1,
+            participant_id=request.participant_id,
+        )
 
     def release(self, participant_id: str) -> None:
         self.released.append(participant_id)
