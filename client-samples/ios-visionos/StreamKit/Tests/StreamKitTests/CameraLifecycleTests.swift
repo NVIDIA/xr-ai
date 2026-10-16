@@ -285,4 +285,33 @@ struct CameraLifecycleTests {
         try await f.backend.disconnect()
         #expect(original.capturer._state.startStopCounter == 0)
     }
+
+    @Test func startDuringStopWaitsForExactEarlierCleanupBeforeAllocatingCapture() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        try await f.backend.injectVideoFrame(f.frame())
+        let original = try #require(f.tracks.first)
+        let gate = CameraBoundaryGate()
+        f.unpublishGate = gate
+        let stopped = Task { try await f.backend.stopCamera() }
+        defer { gate.release() }
+        await gate.waitUntilEntered()
+        var started: Task<Void, any Error>!
+        await withCheckedContinuation { (entered: CheckedContinuation<Void, Never>) in
+            started = Task { @MainActor in
+                entered.resume()
+                try await f.backend.startCamera(config: .default)
+            }
+        }
+        #expect(f.unpublishCount == 1 && f.starts.count == 1 && f.tracks.count == 1)
+        gate.release()
+        try await stopped.value
+        try await started.value
+        #expect(f.unpublishCount == 1 && f.starts.count == 2 && f.tracks.count == 2)
+        #expect(original.capturer._state.startStopCounter == 0)
+        #expect(f.tracks[1] !== original && f.tracks[1].capturer._state.startStopCounter == 1)
+        f.unpublishGate = nil
+        try await f.backend.disconnect()
+        #expect(f.tracks[1].capturer._state.startStopCounter == 0)
+    }
 }

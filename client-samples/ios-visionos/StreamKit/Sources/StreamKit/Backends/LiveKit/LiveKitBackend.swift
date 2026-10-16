@@ -367,11 +367,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
         let connection = connectionGeneration
         let previous = cameraStartTask
+        let precedingStop = cameraStopTask
         previous?.task.cancel()
         cameraStartGeneration &+= 1
         let generation = cameraStartGeneration
         let task = Task {
             _ = try? await previous?.task.value
+            try await precedingStop?.task.value
             try Task.checkCancellation()
             guard self.room === requestedRoom, connectionGeneration == connection else {
                 throw StreamError.notConnected
