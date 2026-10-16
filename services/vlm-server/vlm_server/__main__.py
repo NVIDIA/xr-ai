@@ -126,6 +126,8 @@ def run() -> None:
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     cuda_devices = setup_hf_env(cfg, model_cache)
+    if cuda_devices is None:
+        cuda_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
 
     if model == _COSMOS3_NANO_MODEL:
         architectures = (

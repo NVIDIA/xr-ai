@@ -29,6 +29,7 @@ from PIL import Image
 from xr_ai_models import load_models_config_from_dict, make_vlm
 
 from _helpers import kill_orphan_vllm
+from _helpers_vlm_stream import require_complete_vlm_stream
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
@@ -94,7 +95,7 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
         pass
 
 
-async def test_vlm_server_chat_completions_smoke():
+async def test_vlm_server_chat_completions_smoke(monkeypatch):
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
     port = _pick_free_port()
@@ -155,13 +156,13 @@ async def test_vlm_server_chat_completions_smoke():
             vlm = make_vlm(models, "vlm")
             content_chunks = []
             try:
-                # HTTP 200 is insufficient: consume the entire first image stream.
-                async with asyncio.timeout(120):
-                    async for chunk in vlm.stream_images(
-                        [image.getvalue()], "What is the dominant color?",
-                        system_prompt="Answer with one word.", max_tokens=4, timeout=120,
-                    ):
-                        content_chunks.append(chunk)
+                with require_complete_vlm_stream(monkeypatch):
+                    async with asyncio.timeout(120):
+                        async for chunk in vlm.stream_images(
+                            [image.getvalue()], "What is the dominant color?",
+                            system_prompt="Answer with one word.", max_tokens=4, timeout=120,
+                        ):
+                            content_chunks.append(chunk)
             finally:
                 await vlm.close()
             content = "".join(content_chunks).strip()
