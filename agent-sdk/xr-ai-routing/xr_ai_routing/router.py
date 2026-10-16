@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-scoped routing across conversation and application destinations."""
+"""Participant-scoped agent routing and lifecycle coordination."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class AgentRouter:
     from one bounded reroute. If selected destinations decline through those
     attempts, the configured eligible default gets one final answer attempt
     without another admission check. If routing cannot select an eligible
-    destination, the front end asks for clarification. Destinations own their
+    destination, the router asks for clarification. Destinations own their
     model and application state.
 
     ``acknowledgment_llm`` and ``acknowledgment_delay_secs`` opt into a brief,
@@ -124,8 +124,8 @@ class AgentRouter:
     async def handle(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         """Route and answer one turn, emitting source-tagged text chunks.
 
-        The supplied ``turn.history`` seeds this participant when the front end
-        has no completed history of its own. Later turns use the front end's
+        The supplied ``turn.history`` seeds this participant when the router
+        has no completed history of its own. Later turns use the router's
         completed history rather than merging a new caller-supplied history.
         The participant's current turn is kept separate from that history.
 
@@ -224,6 +224,59 @@ class AgentRouter:
                 task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def participant_left(self, participant_id: str) -> None:
+        """Release one participant's state and history.
+
+        Attempts every destination used by the participant, calling its
+        ``participant_left()`` hook when present and otherwise ``release()``.
+        Failed releases remain tracked for a caller-triggered retry and are
+        raised together in an ``ExceptionGroup``. Until this method completes
+        successfully, ``handle()`` raises ``RuntimeError`` for that participant.
+        Retry after a failure or cancellation; successful cleanup reopens
+        admission for later turns.
+        """
+
+        # Keep new turns out until all overlapping departure callers finish.
+        self._departure_calls[participant_id] = self._departure_calls.get(participant_id, 0) + 1
+        self._departing.add(participant_id)
+        lock = self._locks.setdefault(participant_id, asyncio.Lock())
+        succeeded = False
+        try:
+            async with lock:
+                await self.interrupt(participant_id)
+                used = set(self._destinations_used.get(participant_id, ()))
+                focused = self._focus.pop(participant_id, None)
+                if focused is not None:
+                    used.add(focused)
+                if used:
+                    self._destinations_used.setdefault(participant_id, set()).update(used)
+                self._history.pop(participant_id, None)
+                self._history_times.pop(participant_id, None)
+                self._history_exchange_ids.pop(participant_id, None)
+                self._first_answer_samples.pop(participant_id, None)
+                errors = []
+                for destination_name in used:
+                    try:
+                        destination = self._destinations[destination_name]
+                        on_departure = getattr(destination, "participant_left", destination.release)
+                        await on_departure(participant_id)
+                    except Exception as error:
+                        errors.append(error)
+                    else:
+                        self._forget_destination(participant_id, destination_name)
+                if errors:
+                    raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+                succeeded = True
+        finally:
+            remaining_calls = self._departure_calls[participant_id] - 1
+            if remaining_calls:
+                self._departure_calls[participant_id] = remaining_calls
+            else:
+                self._departure_calls.pop(participant_id, None)
+                if succeeded:
+                    self._departing.discard(participant_id)
+                    self._locks.pop(participant_id, None)
 
     async def stop(self) -> None:
         """Cancel active work and attempt every owned destination release.
@@ -452,59 +505,6 @@ class AgentRouter:
                 self._record_first_answer(turn, destination_name, first_answer_duration)
             return result
         raise AssertionError("bounded routing loop exhausted")
-
-    async def participant_left(self, participant_id: str) -> None:
-        """Release one participant's state and history.
-
-        Attempts every destination used by the participant, calling its
-        ``participant_left()`` hook when present and otherwise ``release()``.
-        Failed releases remain tracked for a caller-triggered retry and are
-        raised together in an ``ExceptionGroup``. Until this method completes
-        successfully, ``handle()`` raises ``RuntimeError`` for that participant.
-        Retry after a failure or cancellation; successful cleanup reopens
-        admission for later turns.
-        """
-
-        # Keep new turns out until all overlapping departure callers finish.
-        self._departure_calls[participant_id] = self._departure_calls.get(participant_id, 0) + 1
-        self._departing.add(participant_id)
-        lock = self._locks.setdefault(participant_id, asyncio.Lock())
-        succeeded = False
-        try:
-            async with lock:
-                await self.interrupt(participant_id)
-                used = set(self._destinations_used.get(participant_id, ()))
-                focused = self._focus.pop(participant_id, None)
-                if focused is not None:
-                    used.add(focused)
-                if used:
-                    self._destinations_used.setdefault(participant_id, set()).update(used)
-                self._history.pop(participant_id, None)
-                self._history_times.pop(participant_id, None)
-                self._history_exchange_ids.pop(participant_id, None)
-                self._first_answer_samples.pop(participant_id, None)
-                errors = []
-                for destination_name in used:
-                    try:
-                        destination = self._destinations[destination_name]
-                        on_departure = getattr(destination, "participant_left", destination.release)
-                        await on_departure(participant_id)
-                    except Exception as error:
-                        errors.append(error)
-                    else:
-                        self._forget_destination(participant_id, destination_name)
-                if errors:
-                    raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
-                succeeded = True
-        finally:
-            remaining_calls = self._departure_calls[participant_id] - 1
-            if remaining_calls:
-                self._departure_calls[participant_id] = remaining_calls
-            else:
-                self._departure_calls.pop(participant_id, None)
-                if succeeded:
-                    self._departing.discard(participant_id)
-                    self._locks.pop(participant_id, None)
 
     def _forget_destination(self, participant_id: str, destination: str) -> None:
         used = self._destinations_used.get(participant_id)
