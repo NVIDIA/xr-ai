@@ -75,6 +75,13 @@ class Conversation:
     :param routing: Concise front-end metadata; defaults to a general description adjusted when vision is unavailable.
     :param frames: Native current-frame tool. Configure together with ``vision``.
     :param vision: Native streaming visual-query tool. Configure together with ``frames``.
+    :param context_budget_bytes: UTF-8 byte budget for prior context rendered into a request.
+    :param compaction_input_budget_bytes: UTF-8 byte budget for background compaction inputs.
+
+    Both budgets must be positive. ``frames`` and ``vision`` must either both
+    be configured or both be omitted.
+
+    :raises ValueError: If a budget is not positive or only one visual tool is configured.
     """
 
     def __init__(
@@ -123,7 +130,11 @@ class Conversation:
         return Admission("accept")
 
     async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
-        """Forward answer chunks with the general conversation source name."""
+        """Forward answer chunks with the general conversation source name.
+
+        Cancellation and stream errors propagate after the inner iterator is
+        closed.
+        """
 
         fragments: list[str] = []
         stream = self.stream(turn.query, turn.participant_id, history=turn.history)
@@ -234,7 +245,23 @@ class Conversation:
         *,
         history: tuple[ConversationExchange, ...] = (),
     ) -> AsyncIterator[str]:
-        """Yield one direct answer or stream a delegated current-view answer."""
+        """Yield answer text or streamed current-view output.
+
+        ``history`` is the completed dialogue context for this request. The
+        current request is kept separate and is not clipped to fit a context
+        budget. Close the iterator when the caller cancels consumption so the
+        underlying model or visual stream can be closed promptly.
+
+        :param request: Current user request.
+        :param participant_id: Participant whose transcript and named context apply.
+        :param history: Completed exchanges to reconcile with this participant's transcript.
+        :yields: Non-empty text chunks from the answer or current-view query.
+        :raises RuntimeError: If the model returns no answer, invalid tool arguments,
+            or an unavailable tool call.
+
+        Cancellation and service or tool errors propagate after active streams
+        are closed.
+        """
 
         self.activate_participant(participant_id)
         history_timestamps = _active_history_timestamps.get()

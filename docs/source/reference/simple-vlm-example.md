@@ -38,9 +38,11 @@ readiness, checks Clef health, and performs an image warmup through the VLM.
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` delegates each turn to
 `xr_ai_conversation.ConversationFrontEnd`. Clef selects general conversation,
-direct visual observation, background monitoring, foreground note-taking, or
-an acknowledgment/clarification path from routing aids and the current
-request/history. Admission stays with each destination: general conversation
+direct visual observation, background monitoring, or foreground note-taking
+from routing aids and the current request/history. Acknowledgments are optional
+front-end output after a destination accepts; clarification can come from the
+front end or a destination's admission. Admission stays with each destination:
+general conversation
 uses `Conversation.admit()`, direct observation accepts its current-frame
 requests, and monitoring and note-taking use their own typed control decisions.
 A decline produces no spoken output and gives the
@@ -56,8 +58,10 @@ window, and shares timestamped text through the configured context topic. Its
 routing aid exposes only active task scope, status, observation availability,
 and newest source time. When that task covers a request, general conversation
 can use the separate timestamped window context; a fresh-camera request goes to
-direct observation. The monitor destination handles start, stop, and status
-controls only and does not answer recorded-content questions. It does not take
+direct observation. The monitor destination handles start, retarget, stop,
+status, and handoff controls only and does not answer recorded-content questions.
+Retarget replaces the active task and rolling window; handoff declines so another
+destination can answer the same request. It does not take
 front-end focus. A distinct note-taking destination acquires focus
 on request. It stores user-authored notes verbatim, supports readback, and keeps
 focus through topic changes until a semantic finish or handoff. Finishing notes
@@ -79,9 +83,9 @@ streamed before a later tool call cannot be recalled.
 Camera bytes remain on the hub path, image locations are redacted from VLM
 telemetry, and the sample has no MCP path.
 
-The voice query therefore determines when a still is needed. A spoken “what is
-this?” does not require an always-on video publication, while clients that are
-already streaming do not receive a redundant capture request.
+For direct observation, the current voice or text query determines when a still
+is needed. The separately started monitor captures continuously while its task
+is active; it does not imply that ordinary queries need always-on video.
 
 A newer participant turn cancels superseded routing, answer, and vision work and
 interrupts its voice response. Participant departure releases cached frames,
@@ -95,9 +99,12 @@ publishes its rolling observation window as a replaceable summary, and the
 notes destination publishes each user-authored note incrementally. Publishers
 use the public `ConversationContextUpdate` contract. Only the general
 conversation subscribes to the note topic. Incremental updates are compacted in
-the background per participant and source, while summary updates replace that
-source section as-is. The context and compaction payload limits are UTF-8 byte
-budgets, not token limits.
+the background per participant and source, while a fitting summary replaces
+that source section. An oversized summary clears the previous section, an
+oversized incremental update is dropped whole, and oldest whole records are
+removed when accumulated updates exceed the budget. An oversized compaction
+summary clears that source's summary and pending records. The context and
+compaction payload limits are UTF-8 byte budgets, not token limits.
 
 Conversation prompts show the current time and coarse minute-rounded timestamps
 for completed exchanges and named context where available. FE-owned turns use

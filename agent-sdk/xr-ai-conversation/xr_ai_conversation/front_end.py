@@ -66,6 +66,16 @@ class ConversationFrontEnd:
     The delay and timing examples start after admission and measure when the
     destination produces its first nonblank text, excluding routing, admission,
     acknowledgment-output serialization, and audio playback.
+
+    :param destinations: Registered destinations keyed by their stable route names.
+    :param decisions: Typed Clef decision service used to select routes.
+    :param default_destination: Registered route used for exhausted-decline fallback.
+    :param context_budget_bytes: UTF-8 byte budget for completed history supplied to route decisions.
+    :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
+    :param acknowledgment_delay_secs: Finite positive delay before fallback
+        acknowledgment; requires ``acknowledgment_llm``.
+    :raises ValueError: If the default is unregistered, the history budget is
+        not positive, or acknowledgment settings are incomplete or invalid.
     """
 
     def __init__(
@@ -106,8 +116,19 @@ class ConversationFrontEnd:
     async def handle(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
         """Route and answer one turn, emitting source-tagged text chunks.
 
-        Destination failures propagate to the caller, which owns any
-        turn-level recovery after already-emitted progress text.
+        The supplied ``turn.history`` seeds this participant when the front end
+        has no completed history of its own. Later turns use the front end's
+        completed history rather than merging a new caller-supplied history.
+        The participant's current turn is kept separate from that history.
+
+        Destination failures propagate to the caller, which owns any turn-level
+        recovery after already-emitted progress text. Cancellation suppresses
+        future chunks from the interrupted turn but cannot retract chunks
+        already delivered to ``emit``.
+
+        :param turn: Current request and optional initial completed history.
+        :param emit: Callback that receives destination-attributed text chunks.
+        :return: The final answer, focus, release, or clarification disposition.
         """
 
         participant_id = turn.participant_id
@@ -155,7 +176,12 @@ class ConversationFrontEnd:
                 self._generation.pop(turn.participant_id, None)
 
     async def interrupt(self, participant_id: str | None = None) -> None:
-        """Cancel active response work while retaining completed history and focus."""
+        """Cancel active response work while retaining completed history and focus.
+
+        If ``participant_id`` is ``None``, cancel work for all participants.
+        Awaiting this method drains the canceled response tasks. Output already
+        delivered to a callback cannot be retracted.
+        """
 
         if participant_id is None:
             tasks = tuple(self._tasks.values())
@@ -394,9 +420,10 @@ class ConversationFrontEnd:
     async def participant_left(self, participant_id: str) -> None:
         """Release one participant's state and history.
 
-        Attempts every destination used by the participant. Failed releases
-        remain tracked for a caller-triggered retry and are raised together in
-        an ``ExceptionGroup``.
+        Attempts every destination used by the participant, calling its
+        ``participant_left()`` hook when present and otherwise ``release()``.
+        Failed releases remain tracked for a caller-triggered retry and are
+        raised together in an ``ExceptionGroup``.
         """
 
         await self.interrupt(participant_id)

@@ -17,7 +17,10 @@ class ConversationContextUpdate(BaseModel):
 
     The topic name identifies the source. Incremental updates are accumulated
     and may be compacted in the background; summaries replace that source's
-    current background verbatim.
+    current background as published when it fits the configured byte budget. An
+    oversized summary removes the existing section for that source; oversized
+    incremental updates are dropped as whole records. When accumulated
+    incremental records exceed the budget, the oldest whole records are removed.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -26,7 +29,7 @@ class ConversationContextUpdate(BaseModel):
     """Whether ``text`` adds source material or replaces its background."""
 
     text: str = Field(min_length=1)
-    """Source-owned text; interpretation remains the publisher's responsibility."""
+    """At least one source-owned character; interpretation remains the publisher's responsibility."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +40,7 @@ class ConversationExchange:
     """User request in the completed exchange."""
 
     assistant: str
-    """Completed destination answer, excluding progress acknowledgements."""
+    """Completed user-visible reply, excluding progress acknowledgments."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,30 +82,40 @@ class RoutingAid:
 
 @dataclass(frozen=True, slots=True)
 class Admission:
-    """Destination decision made before it speaks or starts work."""
+    """Destination decision made before it speaks or starts work.
+
+    ``accept`` permits work, ``decline`` returns control for another route,
+    ``clarify`` ends routing with a question, and ``release`` clears focus and
+    returns the same query to ordinary routing.
+    """
 
     disposition: Literal["accept", "decline", "clarify", "release"]
     """Whether the destination may begin work or should return control."""
 
     preamble: str = ""
-    """Optional short acknowledgment spoken only after acceptance."""
+    """Optional short acknowledgment emitted only after acceptance."""
 
     text: str = ""
-    """Clarification or release message when no answer work is accepted."""
+    """Optional text for clarification or release; release text precedes rerouting."""
 
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
-    """Front-end outcome with completed answer text and optional focus transition."""
+    """Completed answer plus the front end's post-answer focus transition."""
 
     disposition: Literal["answer", "focus", "release", "clarify"] = "answer"
-    """Front end outcome; destinations return answer, focus, or release after work."""
+    """Destinations return answer, focus, or release; the front end returns clarify before answer work.
+
+    A post-answer ``release`` consumes this turn and clears focus. It does not
+    reroute the request; use ``Admission("release")`` for that behavior.
+    """
 
     text: str = ""
     """Completed answer to retain in history; progress acknowledgements are excluded."""
 
 
 Emit = Callable[[str, str], Awaitable[None]]
+"""Async callback that emits a text chunk tagged with its destination source."""
 
 
 class ConversationDestination(Protocol):
@@ -123,6 +136,11 @@ class ConversationDestination(Protocol):
         destinations must support that standalone answer path.
 
         Destinations decline or clarify in ``admit()``, before output or work begins.
+        Returning ``DestinationResult("release")`` consumes the current request
+        after the answer and clears focus; it does not reroute that request.
+        Destination exceptions and task cancellation propagate to the caller.
+        The front end suppresses later chunks after interruption but cannot
+        retract output already delivered to ``emit``.
         If routing returns ``clarify`` with usable scores for eligible
         destinations, the front end tries the highest-scoring candidate through
         normal admission. Missing or invalid eligible scores, or no eligible
@@ -131,7 +149,7 @@ class ConversationDestination(Protocol):
         """
 
     async def release(self, participant_id: str) -> None:
-        """Release destination-owned foreground resources for one participant."""
+        """Release or clear destination-owned state and resources for one participant."""
 
 
 __all__ = [

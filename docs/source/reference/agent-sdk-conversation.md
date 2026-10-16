@@ -5,10 +5,11 @@
 
 # xr-ai-conversation
 
-`xr-ai-conversation` provides a streamed general conversation destination with
+`xr-ai-conversation` provides a streamed conversation destination with optional
 current-view visual question answering and a typed front end for routing to
-application destinations. The package depends on `xr_ai_models` and native
-`xr_ai_tools`; it adds no model client or transport.
+application destinations. Its key integrations are `xr_ai_models`,
+`xr_ai_runtime`, `xr_ai_hub_client`, native `xr_ai_tools`, Pydantic, and
+NeMo Relay; it adds no model client or transport.
 
 ## Streamed conversation and visual questions
 
@@ -57,14 +58,17 @@ Publish `ConversationContextUpdate(mode="incremental", text=...)` or
 `conversation.context_subscriber(topics)` with the same `AgentRuntime` before
 starting it. Runtime metadata supplies participant identity; unscoped updates
 are dropped. Incremental source updates are compacted asynchronously and
-independently per participant and source. A summary replaces that source's
-active background exactly as published and cancels older compaction work.
-After a participant leaves, updates for that session are dropped. Call
+independently per participant and source. A fitting summary replaces that
+source's active background and cancels older compaction work. If a summary is
+too large for the context budget, the source's prior section is cleared;
+oversized incremental updates are dropped whole. Compaction also drops an
+oversized summary for that source. After a participant leaves, updates for
+that session are dropped. Call
 `conversation.activate_participant(participant_id)` from the participant-joined
 lifecycle event before publishing that participant's context. The simple VLM
 sample wires the existing `VoiceParticipantJoined` topic for this purpose;
-`ConversationFrontEnd.handle()` also reopens a participant when a new turn
-arrives.
+selecting a `Conversation` destination through admission or calling
+`Conversation.stream()` also activates its participant state.
 
 `context_budget_bytes` and `compaction_input_budget_bytes` bound UTF-8 payload
 bytes, not model tokens; their 12,000-byte defaults reuse the former harness's
@@ -106,12 +110,15 @@ Each destination declares a `RoutingAid`, checks a `ConversationTurn` with
 stream chunks. `Conversation` implements that same contract for general
 conversation, alongside domain destinations such as a scene editor or a
 foreground guide. `ConversationFrontEnd` uses the typed `DecisionService` to
-select among real destinations, lets an explicitly focused destination receive
-the next turn first, and returns to route selection when it releases or declines.
-A declined route is excluded from one bounded reroute. If selected destinations
-decline through those attempts, the configured eligible default receives one
-final answer attempt without another admission check. If the router chooses
-`clarify` but returns usable scores for eligible destinations, the front end
+select among real destinations and lets an explicitly focused destination
+receive the next turn first. A declined route is excluded from one bounded
+reroute. `Admission("release")`
+clears that destination's focus and sends the same query back through routing.
+By contrast, `DestinationResult("release")` is returned after accepted answer
+work; it consumes the current query and clears focus without rerouting it. If
+selected destinations decline through those attempts, the configured eligible
+default receives one final answer attempt without another admission check. If
+the router chooses `clarify` but returns usable scores for eligible destinations, the front end
 tries the highest-scoring candidate through normal admission. Missing or
 invalid eligible scores, or no eligible candidate, still produce a clarification.
 Explicit destination clarifications also remain final; if the default is
@@ -124,10 +131,14 @@ only `answer`, `focus`, or `release`.
 The front end owns per-participant reply tasks and focus assignment. Each
 destination owns its persistent application state and cleanup. `interrupt()`
 cancels current work while preserving focus; `participant_left()` cancels the
-turn and calls `release()` on destinations that handled that participant;
-`stop()` drains work and releases all tracked participant state. Output
+turn and calls a destination's `participant_left()` hook when it has one,
+otherwise `release()`. `stop()` drains work and releases all tracked participant
+state. Output
 callbacks receive the destination name and text so applications can keep speech
-attribution aligned with the route.
+attribution aligned with the route. The first `handle()` call for a participant
+uses the supplied `ConversationTurn.history` as its initial seed. Once the front
+end has completed exchanges, later calls use its owned history instead of
+merging newly supplied history.
 
 ```python
 from xr_ai_conversation import ConversationFrontEnd
