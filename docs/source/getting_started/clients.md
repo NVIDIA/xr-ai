@@ -114,13 +114,22 @@ allocations. Camera stop during LiveKit reconnection reports not connected:
 the SDK can retain an unpublished track for republishing, so stop cannot safely
 release it until reconnection completes or the room disconnects. A reported
 partial native disposal failure prevents replacement rather than retrying an
-already partly disposed allocation. SDK-internal cleanup failures that LiveKit
+already partly disposed allocation. Retained camera failures do not prevent
+transport reconnection for audio or data. An explicit disconnect still reports
+cleanup failures after closing admission; a failed transport close is retained
+and is not silently treated as success. Android waits for the exact room's
+terminal event before reclaiming SDK-held capture, not merely its disconnected
+state or an absent publication. SDK-internal cleanup failures that LiveKit
 does not expose remain an SDK limitation; a capturer disposal callback is not
 proof that every private native source was released.
 
-Apple camera start, stop, and disconnect drain in-flight publication work.
+Apple camera transitions use one ordered queue. Every stop cancels earlier
+queued starts and drains cleanup, including a stop admitted after an intervening
+start. Repeated stop when already idle performs no capture work; a later explicit
+start remains a new request. First-frame publication uses the same queue.
 Failed capture cleanup retains the exact track for a later stop or disconnect
-attempt; late frames cannot replace it. A terminal room disconnect also attempts
+attempt, without preventing transport reconnect; input already admitted before
+or during stop cannot replace it. A terminal room disconnect also attempts
 that cleanup. Neither backend treats a removed publication as proof of completed
 capture release.
 

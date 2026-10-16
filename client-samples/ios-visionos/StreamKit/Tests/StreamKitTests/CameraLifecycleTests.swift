@@ -316,4 +316,76 @@ struct CameraLifecycleTests {
         try await f.backend.disconnect()
         #expect(f.tracks[1].capturer._state.startStopCounter == 0)
     }
+
+    @Test func stopStartStopCancelsInterveningStartInsteadOfJoiningOldIntent() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        try await f.backend.injectVideoFrame(f.frame())
+        let gate = CameraBoundaryGate()
+        f.unpublishGate = gate
+        let firstStop = Task { try await f.backend.stopCamera() }
+        defer { gate.release() }
+        await gate.waitUntilEntered()
+        var start: Task<Void, any Error>!
+        await withCheckedContinuation { (entered: CheckedContinuation<Void, Never>) in
+            start = Task { @MainActor in entered.resume(); try await f.backend.startCamera(config: .default) }
+        }
+        var lastStop: Task<Void, any Error>!
+        await withCheckedContinuation { (entered: CheckedContinuation<Void, Never>) in
+            lastStop = Task { @MainActor in entered.resume(); try await f.backend.stopCamera() }
+        }
+        gate.release()
+        try await firstStop.value
+        await #expect(throws: CancellationError.self) { try await start.value }
+        try await lastStop.value
+        #expect(f.starts.count == 1 && f.tracks.count == 1 && f.unpublishCount == 1)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 0)
+        try await f.backend.stopCamera() // idle stop is an observable no-op
+        #expect(f.unpublishCount == 1)
+        f.unpublishGate = nil
+        try await f.backend.disconnect()
+    }
+
+    @Test func startStopStartOnlyAllowsIntentAdmittedAfterStop() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        let gate = CameraBoundaryGate()
+        f.startGate = gate
+        let firstStart = Task { try await f.backend.startCamera(config: .default) }
+        defer { gate.release() }
+        await gate.waitUntilEntered()
+        var stop: Task<Void, any Error>!
+        await withCheckedContinuation { (entered: CheckedContinuation<Void, Never>) in
+            stop = Task { @MainActor in entered.resume(); try await f.backend.stopCamera() }
+        }
+        f.startGate = nil
+        var lastStart: Task<Void, any Error>!
+        await withCheckedContinuation { (entered: CheckedContinuation<Void, Never>) in
+            lastStart = Task { @MainActor in entered.resume(); try await f.backend.startCamera(config: .default) }
+        }
+        gate.release()
+        await #expect(throws: CancellationError.self) { try await firstStart.value }
+        try await stop.value
+        try await lastStart.value
+        #expect(f.starts.count == 2 && f.tracks.count == 1)
+        #expect(f.starts[0].capturer._state.startStopCounter == 0)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 1)
+        try await f.backend.disconnect()
+    }
+
+    @Test func persistentCameraCleanupDoesNotPreventTransportReconnect() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        try await f.backend.injectVideoFrame(f.frame())
+        f.failUnpublish = true
+        f.stopFailures = 3
+        await #expect(throws: CameraBoundaryFailure.self) { try await f.backend.stopCamera() }
+        try await f.backend.connect(config: .default)
+        #expect(f.rooms.count == 2 && f.rooms[1].connectionState == .connected)
+        await #expect(throws: CameraBoundaryFailure.self) { try await f.backend.startCamera(config: .default) }
+        #expect(f.tracks.count == 1) // no replacement discarded the failed owner
+        f.failUnpublish = false
+        try await f.backend.disconnect()
+        #expect(f.tracks[0].capturer._state.startStopCounter == 0)
+    }
 }

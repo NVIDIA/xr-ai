@@ -26,6 +26,8 @@ import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.CameraPosition
 import livekit.org.webrtc.RtpParameters
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -55,6 +57,9 @@ class CameraPublicationTests {
         var captureDefaults = LocalVideoTrackOptions()
         var active: LocalTrackPublication? = null
         var capturer: InjectedVideoCapturer? = null
+        var onDisconnect: () -> Unit = {}
+        val lifetime: Any = backend.javaClass.declaredClasses.single { it.simpleName == "RoomLifetime" }
+            .getDeclaredConstructor(Room::class.java).apply { isAccessible = true }.newInstance(room)
 
         init {
             Mockito.`when`(room.localParticipant).thenReturn(participant)
@@ -67,6 +72,7 @@ class CameraPublicationTests {
                     active = null
                 }
                 Mockito.`when`(room.state).thenReturn(Room.State.DISCONNECTED)
+                onDisconnect()
                 null
             }.`when`(room).disconnect()
             Mockito.`when`(participant.videoTrackCaptureDefaults).thenAnswer { captureDefaults }
@@ -82,6 +88,7 @@ class CameraPublicationTests {
             Mockito.`when`(participant.getOrCreateDefaultVideoTrack()).thenReturn(deviceTrack)
             Mockito.`when`(deviceTrack.dimensions).thenReturn(Track.Dimensions(1280, 960))
             setField("room", room)
+            setField("roomLifetime", lifetime)
             setField("isConnected", true)
             setField("cameraPublishBaseline", defaults)
         }
@@ -93,6 +100,12 @@ class CameraPublicationTests {
         suspend fun terminalEvent() = event(RoomEvent.Disconnected(room, null, DisconnectReason.SERVER_SHUTDOWN))
 
         suspend fun event(event: RoomEvent) = suspendCoroutine<Unit> { continuation ->
+            if (event is RoomEvent.Disconnected) {
+                @Suppress("UNCHECKED_CAST")
+                val terminal = lifetime.javaClass.getDeclaredField("terminal").apply { isAccessible = true }
+                    .get(lifetime) as kotlinx.coroutines.CompletableDeferred<Unit>
+                terminal.complete(Unit)
+            }
             val method = backend.javaClass.getDeclaredMethod(
                 "handleEvent", Room::class.java, RoomEvent::class.java, Continuation::class.java,
             ).apply { isAccessible = true }
@@ -120,6 +133,8 @@ class CameraPublicationTests {
         }
 
         suspend fun prepareInjection() {
+            val scope = CoroutineScope(currentCoroutineContext())
+            onDisconnect = { scope.launch(start = CoroutineStart.UNDISPATCHED) { terminalEvent() }; Unit }
             // Match native arguments without constructing a WebRTC capturer.
             // Java Mockito matchers register correctly but return null. Give
             // Kotlin's non-null call boundary a value after registration.
@@ -449,6 +464,7 @@ class CameraPublicationTests {
             val next = Fixture()
             next.prepareInjection()
             old.setField("room", next.room)
+            old.setField("roomLifetime", next.lifetime)
             old.setField("isConnected", true)
             old.setField("cameraPublishBaseline", next.defaults)
             old.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 1)
@@ -480,6 +496,9 @@ class CameraPublicationTests {
             catch (_: IllegalStateException) {}
             Mockito.verify(f.track, Mockito.times(1)).dispose()
             Mockito.verify(f.participant, Mockito.times(1)).unpublishTrack(f.track)
+            try { f.backend.connect(SessionConfig.DEFAULT); fail("Fixture has no token") }
+            catch (_: StreamError.MissingToken) { /* Camera quarantine must not block transport setup. */ }
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
         }
     }
 
@@ -572,5 +591,39 @@ class CameraPublicationTests {
             Mockito.verify(f.participant).unpublishTrack(f.track)
             Mockito.verify(f.track).dispose()
         }
+    }
+
+    @Test fun disconnectedStateDoesNotAuthorizeCleanupBeforeTerminalReceipt() = runBlocking {
+        val f = Fixture()
+        f.prepareInjection()
+        Mockito.mockConstruction(InjectedVideoCapturer::class.java).use {
+            f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0)
+            f.active = null // failed SDK republish dropped the private pool
+            Mockito.`when`(f.room.state).thenReturn(Room.State.DISCONNECTED)
+            f.onDisconnect = {} // SDK disconnect returns early, cleanup still in flight
+            val closed = launch(start = CoroutineStart.UNDISPATCHED) { f.backend.disconnect() }
+            assertFalse(closed.isCompleted)
+            Mockito.verify(f.track, Mockito.never()).dispose()
+            f.terminalEvent()
+            closed.join()
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+            f.backend.disconnect()
+            Mockito.verify(f.track, Mockito.times(1)).dispose()
+        }
+    }
+
+    @Test fun transportCloseFailureDetachesAdmissionButRetainsItsOwnFailure() = runBlocking {
+        val f = Fixture()
+        val states = mutableListOf<ConnectionState>()
+        f.backend.onConnectionStateChanged = { states.add(it) }
+        Mockito.doThrow(IllegalStateException("transport close failed")).`when`(f.room).disconnect()
+        try { f.backend.disconnect(); fail("Transport close failure must remain visible") }
+        catch (_: IllegalStateException) {}
+        assertEquals(listOf(ConnectionState.DISCONNECTED), states)
+        try { f.backend.injectVideoFrame(ByteBuffer.allocate(6), 2, 2, 0); fail("Admission must be closed") }
+        catch (_: StreamError.NotConnected) {}
+        try { f.backend.connect(SessionConfig.DEFAULT); fail("Transport fault cannot be hidden as camera quarantine") }
+        catch (_: IllegalStateException) {}
+        Mockito.verify(f.room, Mockito.times(2)).disconnect()
     }
 }
