@@ -4,10 +4,13 @@
 """CPU-only coverage for dense document indexing and retrieval."""
 
 import asyncio
+import hashlib
 import uuid
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
 from rag_service.index import _chunk_text
@@ -20,6 +23,10 @@ class _Embedding:
     def __init__(self, *, healthy: bool = True) -> None:
         self.healthy = healthy
         self.calls: list[list[str]] = []
+        self.identity: str | None = "test-model-v1"
+
+    async def model_identity(self):
+        return self.identity
 
     async def embed(self, texts, *, timeout=None):
         self.calls.append(list(texts))
@@ -92,6 +99,7 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
     changed_dimension = _Embedding()
     await DenseIndex.build(documents, changed_dimension, cache_dir=cache, embedding_dim=2)
     assert changed_dimension.calls
+    assert len(list(cache.glob("*.npz"))) == 2
 
     document.write_text("Count objects carefully from left to right.")
     changed_document = _Embedding()
@@ -112,6 +120,101 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
         cache_key="model-revision-2",
     )
     assert changed_key.calls
+
+
+async def test_cache_tracks_backing_model_and_skips_unknown_identity(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    embedder = _Embedding()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    original = next(cache.glob("*.npz")).read_bytes()
+
+    embedder.identity = "different-weights-same-alias"
+    embedder.calls.clear()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
+    embedder.identity = None
+    for _ in range(2):
+        embedder.calls.clear()
+        await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+        assert embedder.calls
+        assert len(list(cache.glob("*.npz"))) == 2
+    assert original in [path.read_bytes() for path in cache.glob("*.npz")]
+
+
+async def test_legacy_cache_without_model_identity_is_not_reused(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    # The previous format can contain valid-shaped vectors from different weights.
+    digest = hashlib.sha256(b"900:120:3:passage: :guide.mdReset the task.")
+    legacy = cache / f"{digest.hexdigest()}.npz"
+    np.savez_compressed(legacy, vectors=np.ones((1, 3), dtype=np.float32))
+    embedder = _Embedding()
+    await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3)
+    assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
+
+async def test_profile_identity_is_not_replaced_by_manual_cache_key(tmp_path, monkeypatch) -> None:
+    from rag_service import __main__ as main
+
+    profile = tmp_path / "models.json"
+    profile.write_text("profile-v1")
+    monkeypatch.setattr(main, "load_models_config", lambda _path: object())
+    monkeypatch.setattr(main, "make_embedding", lambda *_args: _Embedding())
+    captured = []
+
+    async def build(*args, **kwargs):
+        captured.append(kwargs)
+        raise RuntimeError("stop before serving")
+
+    monkeypatch.setattr(main.DenseIndex, "build", build)
+    config = {"models_config": "models.json", "documents_dir": ".", "cache_key": "manual-v1"}
+    for content in ("profile-v1", "profile-v2"):
+        profile.write_text(content)
+        with pytest.raises(RuntimeError, match="stop before serving"):
+            await main._serve(config, tmp_path / "rag.yaml", None)
+    assert captured[0]["embedding_dim"] == captured[1]["embedding_dim"] == 2048
+    assert captured[0]["cache_key"] == captured[1]["cache_key"] == "manual-v1"
+    assert captured[0]["profile_key"] != captured[1]["profile_key"]
+
+
+async def test_profile_change_invalidates_cache_with_same_manual_key(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    embedder = _Embedding()
+    for profile in ("profile-v1", "profile-v2"):
+        embedder.calls.clear()
+        await DenseIndex.build(
+            documents, embedder, cache_dir=cache, embedding_dim=3,
+            cache_key="manual-v1", profile_key=profile,
+        )
+        assert embedder.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
+
+async def test_default_dimension_is_native_in_index_and_standalone_yaml(tmp_path) -> None:
+    class NativeEmbedding(_Embedding):
+        async def embed(self, texts, *, timeout=None):
+            return [[0.1] * 2048 for _ in texts]
+
+    config = yaml.safe_load((Path(__file__).resolve().parents[1] /
+                             "services/rag-service/rag_service.yaml").read_text())
+    assert config["embedding_dim"] == 2048
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    index = await DenseIndex.build(documents, NativeEmbedding(), cache_dir=tmp_path / "cache")
+    assert index.vectors.shape == (1, 2048)
 
 
 async def test_invalid_cached_shape_is_rebuilt(tmp_path) -> None:

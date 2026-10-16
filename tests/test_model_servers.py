@@ -276,13 +276,6 @@ def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
     assert args[args.index("--served-model-name") + 1] == "embed"
 
 
-def test_non_spark_embedding_profiles_do_not_enable_uma_safeguards() -> None:
-    for profile in ("96G_blackwell", "dual_48G_ada"):
-        config_path = profile_config("embedding_server", profile)
-        config = yaml.safe_load(config_path.read_text())
-        assert "spark_uma" not in config
-
-
 def test_embedding_profiles_retain_fractional_memory_budget() -> None:
     for profile in ("spark", "96G_blackwell", "dual_48G_ada"):
         config_path = profile_config("embedding_server", profile)

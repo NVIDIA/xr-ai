@@ -115,6 +115,54 @@ async def test_embedding_batches_inputs_and_preserves_response_order() -> None:
     }
 
 
+@pytest.mark.parametrize("payload, expected", [
+    ({"data": [{"id": "other", "root": "wrong"}, {"id": "embed", "root": "weights-v2"}]}, "weights-v2"),
+    ({"data": [{"id": "embed"}]}, None),
+    ({"data": [{"id": "other", "root": "wrong"}]}, None),
+    ({"data": [{"id": "embed", "root": "a"}, {"id": "embed", "root": "b"}]}, None),
+    ({"data": [{"id": "embed", "root": " "}]}, None),
+    ({"data": [{"id": "embed", "root": 42}]}, None),
+    ({"data": [None]}, None),
+    ({"data": {}}, None),
+    ([], None),
+])
+async def test_embedding_identity_uses_matching_server_root(monkeypatch, payload, expected):
+    monkeypatch.setenv("EMBED_TEST_KEY", "test-token")
+
+    def handle(request):
+        assert request.method == "GET"
+        assert str(request.url) == "https://stub/v1/models"
+        assert request.headers["Authorization"] == "Bearer test-token"
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding(
+            "https://stub/", "embed", api_key_env="EMBED_TEST_KEY", client=client,
+        ) as embedding:
+            assert await embedding.model_identity() == expected
+        assert not client.is_closed
+
+
+@pytest.mark.parametrize("failure", ["timeout", "http", "json", "cancelled"])
+async def test_embedding_identity_lookup_failure_and_cancellation(failure):
+    def handle(request):
+        if failure == "timeout":
+            raise httpx.ReadTimeout("metadata unavailable", request=request)
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        if failure == "http":
+            return httpx.Response(404)
+        return httpx.Response(200, text="not JSON")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding("http://stub", "embed", client=client) as embedding:
+            if failure == "cancelled":
+                with pytest.raises(asyncio.CancelledError):
+                    await embedding.model_identity()
+            else:
+                assert await embedding.model_identity() is None
+
+
 # ── LLM: chat ─────────────────────────────────────────────────────────────
 
 

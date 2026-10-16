@@ -8,16 +8,47 @@
 ## Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
-consumer profile selects `nvidia/nemotron-3-embed-1b`. Stop the tea sample's model
-stack before updating, then restart it to load the new weights. The local
-endpoint remains on port 8109 with the served name `embed`.
+consumer profile selects `nvidia/nemotron-3-embed-1b`. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name `embed`.
 
-For copied tea configurations, change `embedding_dim` from `768` to `2048` in
-`rag_service.yaml` and restart the agent stack. The dimension change invalidates
-the cached index automatically. If retaining a custom dimension while replacing
-the model behind an unchanged endpoint profile, also change `cache_key` to
-rebuild its embeddings. Independently deployed NIM endpoints must serve the new
-model before using the updated NIM profile.
+1. Stop the agent and its persistent embedding server **before updating**.
+   For the tea sample, run from the repository root:
+
+   ```bash
+   uv run --project agent-samples/tea-making-sample/model-servers tea_making_sample_model_servers --stop
+   ```
+
+   For a standalone deployment, stop the embedding process or container through
+   the supervisor that started it. Check that its listener on port 8109 has
+   stopped. Stopping only RAG or the embedding launcher does not stop persistent
+   weights; the pip launcher reuses a healthy listener without comparing models.
+2. Update the checkout and change `embedding_dim: 768` to `embedding_dim: 2048`
+   in copied tea **and standalone** `rag_service.yaml` files. Restart the
+   embedding server before RAG. Verify the `embed` entry's `root` in
+   `/v1/models` identifies Nemotron 3 Embed, not the previous model.
+3. Restart the agent. RAG rebuilds legacy caches automatically. Its new cache
+   key includes the server-reported backing model, model-profile hash,
+   indexing settings, document content, and optional `cache_key`. The manual
+   key no longer replaces the profile hash. If backing-model metadata is
+   unavailable, RAG rebuilds without reading or writing a persistent cache.
+
+Earlier revisions could build a nominally 2048-dimensional cache from an old
+server still listening on port 8109, then reuse it after switching weights.
+To recover, stop that server, start the intended model, and restart RAG with
+a new `cache_key`, or delete the affected cache directory: normally
+`models/tea-making-rag-cache` for tea or `services/rag-service/.rag-cache` for
+standalone RAG. Deleting generated indexes loses no source documents. Old
+768-dimensional `.npz` caches are no longer used by the default configuration
+and can also be deleted to reclaim space.
+
+Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. A served ID alone is not a backing-model identity: endpoints
+without a `root` field rebuild on each RAG startup. If weights change under an
+unchanged `root`, bump `cache_key` and restart RAG. Do not change models while
+RAG is running; its in-memory document vectors must match query embeddings.
+Custom `EmbeddingService` implementations must provide `model_identity()`;
+return `None` when the backing model cannot be identified.
 
 ## Session recording flag
 

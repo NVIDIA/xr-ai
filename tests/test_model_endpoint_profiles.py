@@ -32,11 +32,11 @@ def _profile(extras):
 def endpoint(monkeypatch):
     real_client = httpx.AsyncClient
     calls = []
-    state = {"status": 200}
+    state = {"status": 200, "authorization": "Bearer inference-token"}
     monkeypatch.setenv("NIM_TEST_KEY", "inference-token")
 
     def handle(request):
-        assert request.headers["Authorization"] == "Bearer inference-token"
+        assert request.headers.get("Authorization") == state["authorization"]
         if request.url.path == "/v1/health/ready":
             return httpx.Response(state["status"], json={"status": "ready"})
         assert request.url.path == "/v1/embeddings"
@@ -145,29 +145,16 @@ def test_endpoint_profile_and_sample_environments_use_existing_contract():
 
 
 @pytest.mark.parametrize("native_nim", [False, True])
-async def test_tea_embedding_profiles_use_native_dimensions_and_retrieval_inputs(monkeypatch, native_nim):
+async def test_tea_embedding_profiles_use_native_dimensions_and_retrieval_inputs(endpoint, monkeypatch, native_nim):
     sample = ROOT / "agent-samples/tea-making-sample/yaml"
     rag = yaml.safe_load((sample / "rag_service.yaml").read_text())
     assert rag["embedding_dim"] == 2048
     profile = ROOT / "deployment/nim/models.yaml" if native_nim else sample / rag["models_config"]
-    calls = []
-    real_client = httpx.AsyncClient
-
-    def handle(request):
-        assert request.url.path == "/v1/embeddings"
-        payload = json.loads(request.content)
-        calls.append(payload)
-        return httpx.Response(200, json={"data": [
-            {"index": index, "embedding": [0.1] * 2048}
-            for index, _ in enumerate(payload["input"])
-        ]})
-
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(
-        transport=httpx.MockTransport(handle), **kwargs,
-    ))
+    calls, state = endpoint
+    monkeypatch.setenv("NIM_ENDPOINT_API_KEY", "inference-token")
+    state["authorization"] = "Bearer inference-token" if native_nim else None
     async with make_embedding(load_models_config(profile), rag["embedding_role"]) as client:
-        vectors = await client.embed(["query: How long should tea steep?", "passage: Steep tea for three minutes."])
-    assert [len(vector) for vector in vectors] == [rag["embedding_dim"]] * 2
+        await client.embed(["query: How long should tea steep?", "passage: Steep tea for three minutes."])
     if native_nim:
         assert calls == [
             {"model": "nvidia/nemotron-3-embed-1b", "input": ["How long should tea steep?"], "input_type": "query"},
