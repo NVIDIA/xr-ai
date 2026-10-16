@@ -32,12 +32,10 @@ from xr_ai_routing.front_end import (
 )
 
 
-def test_routable_agent_replaces_destination_protocol_export() -> None:
+def test_routable_agent_is_the_only_destination_protocol_export() -> None:
     assert RoutableAgent.__name__ == "RoutableAgent"
     assert routing_module.__all__ == [
         "Admission",
-        "Conversation",
-        "ConversationContextUpdate",
         "ConversationExchange",
         "ConversationFrontEnd",
         "ConversationTurn",
