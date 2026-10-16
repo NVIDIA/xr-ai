@@ -1,12 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# First-cut lint config. Conservative ruleset (E,F,W,I); no `ruff format`.
+# First-cut lint config. Conservative ruleset (E,F,W,I) plus the exception-handling
+# rules that enforce docs/source/guides/python-code-style.md; no `ruff format`.
 # 120 is the line-length ceiling chosen to cover existing code with minimal
 # grandfathering (most code wraps ~100). The per-file-ignores block below is a
 # generated grandfather snapshot of pre-existing violations at ruff
 # introduction: new code must pass clean, and the list burns down as cleanup
 # PRs land. Regenerate after a cleanup with `ruff check . --output-format=json`.
+
+# Pre-existing violations of the exception-handling rules are grandfathered in the
+# generated baseline, which only shrinks; see .github/scripts/ruff_baseline.py.
+extend = "ruff-baseline.toml"
 
 line-length = 120
 target-version = "py311"
@@ -24,7 +29,9 @@ extend-exclude = [
 ]
 
 [lint]
-select = ["E", "F", "W", "I"]
+# BLE001 blind except, S110/S112 try-except-pass/continue, B904 missing `raise from`.
+# Keep the last four in step with RATCHETED_RULES in .github/scripts/ruff_baseline.py.
+select = ["E", "F", "W", "I", "BLE001", "S110", "S112", "B904"]
 
 [lint.isort]
 # The test suite's shared helpers are local modules (sibling files on the
