@@ -18,7 +18,7 @@ from xr_ai_conversation import (
 )
 from xr_ai_routing import (
     Admission,
-    ConversationTurn,
+    AgentTurn,
     DestinationResult,
     RoutableAgent,
     RoutingAid,
@@ -107,7 +107,7 @@ class VisualMonitorAgent(RoutableAgent):
         eligibility = "active" if active else "available"
         return RoutingAid(name="monitor", description=description, eligibility=eligibility)
 
-    async def admit(self, turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         self._pending.pop(turn.participant_id, None)
         task = self._tasks.get(turn.participant_id)
         active = task is not None and not task.done()
@@ -167,7 +167,7 @@ class VisualMonitorAgent(RoutableAgent):
         self._pending[turn.participant_id] = (turn.turn_id, action)
         return Admission("accept")
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
         action = pending[1] if pending is not None and pending[0] == turn.turn_id else None
         if action == "stop":
@@ -186,7 +186,7 @@ class VisualMonitorAgent(RoutableAgent):
             return DestinationResult("answer", text)
         return DestinationResult("answer", "")
 
-    async def _start(self, turn: ConversationTurn) -> None:
+    async def _start(self, turn: AgentTurn) -> None:
         participant_id = turn.participant_id
         generation = self._generations.get(participant_id, 0) + 1
         self._generations[participant_id] = generation

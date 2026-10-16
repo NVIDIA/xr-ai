@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from xr_ai_routing import (
     Admission,
-    ConversationTurn,
+    AgentTurn,
     DestinationResult,
     RoutableAgent,
     RoutingAid,
@@ -44,11 +44,11 @@ class VisualObservationAgent(RoutableAgent):
             ),
         )
 
-    async def admit(self, _turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, _turn: AgentTurn, *, focused: bool) -> Admission:
         del focused
         return Admission("accept")
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         try:
             frame = await self._frames.execute(CurrentFrameRequest(participant_id=turn.participant_id))
         except (FrameUnavailable, RuntimeError) as error:

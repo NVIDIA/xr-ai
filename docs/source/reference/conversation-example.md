@@ -34,8 +34,8 @@ The sample's `ConversationExampleAgent` is the adapter between them:
 VoiceAgent
   -- UserQuery and participant lifecycle topics -->
 ConversationExampleAgent
-  -- ConversationTurn and source-tagged emit callback -->
-ConversationFrontEnd
+  -- AgentTurn and source-tagged emit callback -->
+AgentRouter
   -- route, admit, and answer -->
 Selected destination
   -- attributed text -->
@@ -45,7 +45,7 @@ VoiceAgent
 ```
 
 `app.py` is the composition root that constructs the voice agent, sample
-adapter, `ConversationFrontEnd`, and sample destinations. It registers the
+adapter, `AgentRouter`, and sample destinations. It registers the
 voice agent and sample adapter with one `AgentRuntime`; when context topics are
 configured, it also registers the conversation context subscriber.
 
@@ -66,7 +66,7 @@ readiness, checks Clef health, and performs an image warmup through the VLM.
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `ConversationExampleAgent` delegates each turn to
-`xr_ai_routing.ConversationFrontEnd`. Clef selects general conversation,
+`xr_ai_routing.AgentRouter`. Clef selects general conversation,
 direct visual observation, background monitoring, or foreground note-taking
 from routing aids and the current request/history. Acknowledgments are optional
 front-end output after a destination accepts; clarification can come from the

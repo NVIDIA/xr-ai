@@ -39,9 +39,9 @@ from xr_ai_conversation import (  # noqa: E402
     Conversation,
 )
 from xr_ai_routing import (  # noqa: E402
-    ConversationExchange,
-    ConversationFrontEnd,
-    ConversationTurn,
+    AgentExchange,
+    AgentRouter,
+    AgentTurn,
     RoutingAid,
 )
 from xr_ai_models import DecisionResponse, load_models_config, make_decision  # noqa: E402
@@ -312,7 +312,7 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
         ),
     }
     return (
-        ConversationFrontEnd(destinations, recorder, context_budget_bytes=context_budget),
+        AgentRouter(destinations, recorder, context_budget_bytes=context_budget),
         destinations,
         monitor,
         notes_conversation,
@@ -322,7 +322,7 @@ def _destinations(recorder: _DecisionRecorder, context_budget: int):
 
 
 async def run_decisions(flows, cases, recorder, *, context_budget: int):
-    front_end, destinations, monitor, notes_conversation, frames, context_updates = _destinations(
+    router, destinations, monitor, notes_conversation, frames, context_updates = _destinations(
         recorder, context_budget
     )
     turns_out: list[dict[str, Any]] = []
@@ -357,14 +357,14 @@ async def run_decisions(flows, cases, recorder, *, context_budget: int):
             for fixture in flow["turns"]:
                 pid = str(fixture.get("participant_id", default_pid))
                 history_rows = prior.setdefault(pid, [])
-                history = tuple(ConversationExchange(item["user"], item["assistant"]) for item in history_rows)
+                history = tuple(AgentExchange(item["user"], item["assistant"]) for item in history_rows)
                 item = await _evaluate_turn(
                     f"{flow['name']}/{fixture['name']}",
                     fixture,
                     pid,
                     history,
                     history_rows,
-                    front_end,
+                    router,
                     destinations,
                     recorder,
                     metrics,
@@ -405,7 +405,7 @@ async def run_decisions(flows, cases, recorder, *, context_budget: int):
                 {"user": row["user"], "assistant": row["assistant"], "provenance": "authored_single_case_history"}
                 for row in fixture.get("history", [])
             ]
-            history = tuple(ConversationExchange(row["user"], row["assistant"]) for row in history_rows)
+            history = tuple(AgentExchange(row["user"], row["assistant"]) for row in history_rows)
             turns_out.append(
                 await _evaluate_turn(
                     str(fixture["name"]),
@@ -413,7 +413,7 @@ async def run_decisions(flows, cases, recorder, *, context_budget: int):
                     f"decision-eval:{fixture['name']}",
                     history,
                     history_rows,
-                    front_end,
+                    router,
                     destinations,
                     recorder,
                     metrics,
@@ -423,7 +423,7 @@ async def run_decisions(flows, cases, recorder, *, context_budget: int):
             )
     finally:
         await monitor.stop()
-        await front_end.stop()
+        await router.stop()
         await notes_conversation.close()
     statuses = [item.get("run_status", "unknown") for item in turns_out]
     status_counts = {status: statuses.count(status) for status in sorted(set(statuses))}
@@ -463,14 +463,14 @@ async def _evaluate_turn(
     participant,
     history,
     history_rows,
-    front_end,
+    router,
     destinations,
     recorder,
     metrics,
     frames,
     context_updates,
 ):
-    turn = ConversationTurn(participant, name, fixture["query"], history)
+    turn = AgentTurn(participant, name, fixture["query"], history)
     record_requirement = fixture.get("context_record_required_before")
     if record_requirement is not None:
         records = destinations["monitor"]._records.get(participant, ())
@@ -482,12 +482,12 @@ async def _evaluate_turn(
     for update in context_updates[participant]:
         context_before[update["source"]] = update["text"]
     expected_focus_before = fixture.get("focus_before", ...)
-    actual_focus_before = front_end._focus.get(participant)
+    actual_focus_before = router._focus.get(participant)
     if expected_focus_before is not ... and actual_focus_before != expected_focus_before:
         metrics["focus_before"].append(False)
     elif expected_focus_before is not ...:
         metrics["focus_before"].append(True)
-    candidates = [front_end._focus[participant]] if participant in front_end._focus else list(destinations)
+    candidates = [router._focus[participant]] if participant in router._focus else list(destinations)
     attempts: list[dict[str, Any]] = []
     final_destination = None
     exhausted_declines = False
@@ -504,7 +504,7 @@ async def _evaluate_turn(
         if not candidate_list:
             break
         calls_before = len(recorder.calls)
-        selected = await front_end._select(turn, candidate_list)
+        selected = await router._select(turn, candidate_list)
         decision = recorder.calls[-1] if len(recorder.calls) > calls_before else None
         decision_answer = (decision or {}).get("response", {}).get("destination", {})
         raw_choice = decision_answer.get("choice")
@@ -520,9 +520,9 @@ async def _evaluate_turn(
         if selected is None:
             break
         final_destination = selected
-        front_end._destinations_used.setdefault(participant, set()).add(selected)
+        router._destinations_used.setdefault(participant, set()).add(selected)
         admission_call_count = len(recorder.calls)
-        admission = await destinations[selected].admit(turn, focused=selected == front_end._focus.get(participant))
+        admission = await destinations[selected].admit(turn, focused=selected == router._focus.get(participant))
         entry["admission"] = admission.disposition
         if len(recorder.calls) > admission_call_count:
             entry["admission_decision_call_index"] = admission_call_count
@@ -539,9 +539,9 @@ async def _evaluate_turn(
             continue
         if admission.disposition == "release":
             await destinations[selected].release(participant)
-            front_end._focus.pop(participant, None)
+            router._focus.pop(participant, None)
             if selected == "notes":
-                front_end._forget_destination(participant, selected)
+                router._forget_destination(participant, selected)
                 destinations[selected]._pending.pop(participant, None)
             final_destination = None
             final_disposition = "release"
@@ -571,15 +571,15 @@ async def _evaluate_turn(
                 entry["action"] = action
                 entry["action_decision_call_index"] = action_call_index
                 if result.disposition == "focus":
-                    front_end._focus[participant] = selected
+                    router._focus[participant] = selected
                 elif result.disposition == "release":
                     await destinations[selected].release(participant)
-                    front_end._focus.pop(participant, None)
-                    front_end._forget_destination(participant, selected)
+                    router._focus.pop(participant, None)
+                    router._forget_destination(participant, selected)
             elif action == "other":
                 destinations[selected]._pending.pop(participant, None)
-            if action == "other" and selected == front_end._focus.get(participant):
-                front_end._focus[participant] = selected
+            if action == "other" and selected == router._focus.get(participant):
+                router._focus[participant] = selected
         break
 
     expected = set(
@@ -589,10 +589,10 @@ async def _evaluate_turn(
         )
     )
     if exhausted_declines:
-        default = front_end._destinations[front_end._default_destination]
+        default = router._destinations[router._default_destination]
         aid = default.routing_aid(participant)
         if aid.eligible:
-            final_destination = front_end._default_destination
+            final_destination = router._default_destination
             attempts.append(
                 {
                     "candidate": final_destination,
@@ -694,7 +694,7 @@ async def _evaluate_turn(
         ) and not any(update["source"] in forbidden_sources for update in observed_updates)
         metrics["published_context_updates"].append(result["published_context_update_match"])
     if "focus_after" in fixture:
-        actual_focus = front_end._focus.get(participant)
+        actual_focus = router._focus.get(participant)
         result["focus_after"] = actual_focus
         result["focus_match"] = actual_focus == fixture["focus_after"]
         metrics["focus_transition"].append(result["focus_match"])

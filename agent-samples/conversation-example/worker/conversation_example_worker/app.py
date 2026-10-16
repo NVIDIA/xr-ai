@@ -20,7 +20,7 @@ from xr_ai_conversation import (
     Conversation,
     ConversationContextUpdate,
 )
-from xr_ai_routing import ConversationFrontEnd, RoutingAid
+from xr_ai_routing import AgentRouter, RoutingAid
 from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,
@@ -285,7 +285,7 @@ async def run_app(
         routing_context=monitor.routing_context,
         source_name="conversation",
     )
-    front_end = ConversationFrontEnd(
+    router = AgentRouter(
         {
             "conversation": conversation_agent,
             "observation": observation,
@@ -307,7 +307,7 @@ async def run_app(
         "conversation-example",
         ConversationExampleAgent(
             transport.endpoint.set_status,
-            front_end=front_end,
+            router=router,
             conversations=(conversation, notes_conversation),
             frames=frames,
             participant_left_handlers=(notes_agent.participant_left, monitor.participant_left),

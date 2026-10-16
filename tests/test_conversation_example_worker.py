@@ -74,9 +74,9 @@ from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingI
 )
 from xr_ai_routing import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     Admission,
-    ConversationExchange,
-    ConversationFrontEnd,
-    ConversationTurn,
+    AgentExchange,
+    AgentRouter,
+    AgentTurn,
     DestinationResult,
     RoutingAid,
 )
@@ -314,7 +314,7 @@ class _RouteDecisions:
         )
 
 
-def _make_front_end(
+def _make_router(
     llm,
     frames,
     vision,
@@ -345,11 +345,11 @@ def _make_front_end(
         destinations["vision"] = visual
         conversations.append(visual)
     decisions = _RouteDecisions(destination)
-    front_end = ConversationFrontEnd(
+    router = AgentRouter(
         destinations,
         decisions,  # type: ignore[arg-type]
     )
-    return front_end, tuple(conversations)
+    return router, tuple(conversations)
 
 
 def _make_agent(
@@ -360,7 +360,7 @@ def _make_agent(
     destination: str | tuple[str, ...] = "vision",
     include_vision: bool = True,
 ):
-    front_end, conversations = _make_front_end(
+    router, conversations = _make_router(
         llm,
         frames,
         vision,
@@ -369,7 +369,7 @@ def _make_agent(
     )
     return ConversationExampleAgent(
         _ignore_status,
-        front_end=front_end,
+        router=router,
         conversations=conversations,
         frames=frames,  # type: ignore[arg-type]
     )
@@ -390,7 +390,7 @@ async def test_conversation_delegates_native_current_view_without_speaking_pream
         async for chunk in conversation.stream(
             "Read its label",
             "alice",
-            history=(ConversationExchange("Which bottle is fullest?", "The bottle on the left."),),
+            history=(AgentExchange("Which bottle is fullest?", "The bottle on the left."),),
         )
     ]
 
@@ -481,7 +481,7 @@ async def test_completed_agent_exchange_refreshes_bounded_routing_cue_and_publis
         emitted.append((source, text))
 
     result = await destination.answer(
-        ConversationTurn("alice", "turn-1", "Can you explain that?"),
+        AgentTurn("alice", "turn-1", "Can you explain that?"),
         emit=emit,
     )
     aid = destination.routing_aid("alice")
@@ -540,23 +540,23 @@ async def test_notes_capture_readback_and_finish_preserve_context_until_departur
     async def emit(source, text):
         emitted.append((source, text))
 
-    start = ConversationTurn("alice", "start", "Take some notes.")
+    start = AgentTurn("alice", "start", "Take some notes.")
     assert (await destination.admit(start, focused=False)).disposition == "accept"
     started = await destination.answer(start, emit=emit)
     assert started.disposition == "focus"
 
-    continuation = ConversationTurn("alice", "continue", "The demo showed an AR overlay on the map.", history=())
+    continuation = AgentTurn("alice", "continue", "The demo showed an AR overlay on the map.", history=())
     assert (await destination.admit(continuation, focused=True)).disposition == "accept"
     continued = await destination.answer(continuation, emit=emit)
     assert continued.disposition == "focus"
 
-    readback = ConversationTurn("alice", "readback", "Read back my notes.", history=())
+    readback = AgentTurn("alice", "readback", "Read back my notes.", history=())
     assert (await destination.admit(readback, focused=True)).disposition == "accept"
     reviewed = await destination.answer(readback, emit=emit)
     assert reviewed.disposition == "focus"
     assert "AR overlay on the map" in reviewed.text
 
-    exit_turn = ConversationTurn("alice", "exit", "That's all for the notes.", history=())
+    exit_turn = AgentTurn("alice", "exit", "That's all for the notes.", history=())
     assert (await destination.admit(exit_turn, focused=True)).disposition == "accept"
     exited = await destination.answer(exit_turn, emit=emit)
     assert exited.disposition == "release"
@@ -602,7 +602,7 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
         context_budget_bytes=500,
         publish_context=publish_context,
     )
-    turn = ConversationTurn("alice", "capture", "The demo showed an AR overlay.")
+    turn = AgentTurn("alice", "capture", "The demo showed an AR overlay.")
     assert (await destination.admit(turn, focused=True)).disposition == "accept"
 
     async def emit(_source, _text):
@@ -647,7 +647,7 @@ async def test_over_budget_note_is_refused_without_partial_capture() -> None:
         context_budget_bytes=80,
         publish_context=publish_context,
     )
-    turn = ConversationTurn("alice", "large-note", "A" * 200)
+    turn = AgentTurn("alice", "large-note", "A" * 200)
     assert (await destination.admit(turn, focused=True)).disposition == "accept"
     output = []
 
@@ -662,8 +662,8 @@ async def test_over_budget_note_is_refused_without_partial_capture() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sample_departure_callback_clears_notes_after_front_end_release() -> None:
-    class FrontEndStub:
+async def test_sample_departure_callback_clears_notes_after_router_release() -> None:
+    class RouterStub:
         async def interrupt(self, _participant_id=None):
             return None
 
@@ -685,7 +685,7 @@ async def test_sample_departure_callback_clears_notes_after_front_end_release() 
     destination._append_note("alice", "The demo showed an AR overlay.")  # noqa: SLF001
     agent = ConversationExampleAgent(
         _ignore_status,
-        front_end=FrontEndStub(),  # type: ignore[arg-type]
+        router=RouterStub(),  # type: ignore[arg-type]
         conversations=(conversation,),
         participant_left_handlers=(destination.participant_left,),
     )
@@ -699,15 +699,15 @@ async def test_sample_departure_callback_clears_notes_after_front_end_release() 
 
 
 @pytest.mark.asyncio
-async def test_front_end_departure_error_does_not_skip_sample_cleanup() -> None:
+async def test_router_departure_error_does_not_skip_sample_cleanup() -> None:
     calls = []
 
-    class FrontEndStub:
+    class RouterStub:
         async def interrupt(self, _participant_id=None):
             return None
 
         async def participant_left(self, _participant_id):
-            calls.append("front_end")
+            calls.append("router")
             raise ExceptionGroup("destination cleanup failed", [RuntimeError("release failed")])
 
         async def stop(self):
@@ -726,7 +726,7 @@ async def test_front_end_departure_error_does_not_skip_sample_cleanup() -> None:
 
     agent = ConversationExampleAgent(
         _ignore_status,
-        front_end=FrontEndStub(),  # type: ignore[arg-type]
+        router=RouterStub(),  # type: ignore[arg-type]
         conversations=(ConversationStub(),),  # type: ignore[arg-type]
         frames=FramesStub(),  # type: ignore[arg-type]
         participant_left_handlers=(cleanup_notes,),
@@ -739,7 +739,7 @@ async def test_front_end_departure_error_does_not_skip_sample_cleanup() -> None:
             SimpleNamespace(metadata=SimpleNamespace(participant_id="alice")),
         )
 
-    assert calls == ["front_end", "notes", "conversation", "frames"]
+    assert calls == ["router", "notes", "conversation", "frames"]
     assert "alice" not in agent._participants  # noqa: SLF001
 
 
@@ -772,7 +772,7 @@ async def test_domain_visual_request_routes_to_configured_conversation_agent() -
         vision=vision,  # type: ignore[arg-type]
     )
     general = Conversation(_ConversationService(visual=False))  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd(
+    router = AgentRouter(
         {"conversation": general, "museum_guide": museum},
         decisions,  # type: ignore[arg-type]
     )
@@ -781,8 +781,8 @@ async def test_domain_visual_request_routes_to_configured_conversation_agent() -
     async def emit(source, text):
         output.append((source, text))
 
-    result = await front_end.handle(
-        ConversationTurn("alice", "museum-1", "Read the label on this exhibit."),
+    result = await router.handle(
+        AgentTurn("alice", "museum-1", "Read the label on this exhibit."),
         emit=emit,
     )
 
@@ -838,7 +838,7 @@ async def test_sample_destinations_share_cross_route_history_and_output_source()
         vision=vision,  # type: ignore[arg-type]
     )
     decisions = _RouteDecisions(("conversation", "vision"))
-    front_end = ConversationFrontEnd(
+    router = AgentRouter(
         {"conversation": general, "vision": visual},
         decisions,  # type: ignore[arg-type]
     )
@@ -847,12 +847,12 @@ async def test_sample_destinations_share_cross_route_history_and_output_source()
     async def emit(source, text):
         output.append((source, text))
 
-    first = await front_end.handle(
-        ConversationTurn("alice", "turn-1", "What is the capital of Portugal?"),
+    first = await router.handle(
+        AgentTurn("alice", "turn-1", "What is the capital of Portugal?"),
         emit=emit,
     )
-    second = await front_end.handle(
-        ConversationTurn("alice", "turn-2", "What color is the sign?"),
+    second = await router.handle(
+        AgentTurn("alice", "turn-2", "What color is the sign?"),
         emit=emit,
     )
 
@@ -1440,7 +1440,7 @@ async def test_vlm_warmup_failure_is_retried_by_readiness() -> None:
 @pytest.mark.asyncio
 async def test_participant_rejoin_reopens_context_before_topic_updates() -> None:
     llm = _ConversationService()
-    front_end, conversations = _make_front_end(
+    router, conversations = _make_router(
         llm,
         None,
         None,
@@ -1452,7 +1452,7 @@ async def test_participant_rejoin_reopens_context_before_topic_updates() -> None
     async def set_status(_status: str, _participant_id: str) -> None:
         return None
 
-    agent = ConversationExampleAgent(set_status, front_end=front_end, conversations=conversations)
+    agent = ConversationExampleAgent(set_status, router=router, conversations=conversations)
     context_topic = Topic("tea.status", ConversationContextUpdate)
     runtime = AgentRuntime()
     runtime.register("conversation-context", conversation.context_subscriber())
@@ -1539,13 +1539,13 @@ async def test_acknowledgment_publish_preserves_interrupt_slot(
             return None
 
     destination = Destination()
-    front_end = ConversationFrontEnd(
+    router = AgentRouter(
         {"conversation": destination},  # type: ignore[arg-type]
         Prediction(),  # type: ignore[arg-type]
         acknowledgment_llm=AckLLM(),  # type: ignore[arg-type]
         acknowledgment_delay_secs=10.0,
     )
-    agent = ConversationExampleAgent(_ignore_status, front_end=front_end, conversations=())
+    agent = ConversationExampleAgent(_ignore_status, router=router, conversations=())
 
     class Context:
         agent_name = "conversation-example"
@@ -1602,7 +1602,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     llm = _ConversationService()
     vlm = _Service()
     tts = _Service()
-    router = _RouteDecisions("observation")
+    decisions = _RouteDecisions("observation")
     transport = _Transport()
     sessions: list[VoiceSession] = []
     run_options = {}
@@ -1612,7 +1612,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     runtimes = []
     wired_front_ends = []
 
-    class RecordingFrontEnd(ConversationFrontEnd):
+    class RecordingRouter(AgentRouter):
         def __init__(self, destinations, decisions, **kwargs):
             wired_front_ends.append(destinations)
             super().__init__(destinations, decisions, **kwargs)
@@ -1623,7 +1623,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             runtimes.append(self)
 
     monkeypatch.setattr(app, "AgentRuntime", RecordingRuntime)
-    monkeypatch.setattr(app, "ConversationFrontEnd", RecordingFrontEnd)
+    monkeypatch.setattr(app, "AgentRouter", RecordingRouter)
 
     worker_log = tmp_path / "logs" / "worker.log"
     worker_log.parent.mkdir()
@@ -1632,7 +1632,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(voice_runtime_module, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_llm", lambda _models, _name: llm)
-    monkeypatch.setattr(app, "make_decision", lambda _models, _name: router)
+    monkeypatch.setattr(app, "make_decision", lambda _models, _name: decisions)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
     monkeypatch.setattr(app, "HubVoiceTransport", lambda: transport)

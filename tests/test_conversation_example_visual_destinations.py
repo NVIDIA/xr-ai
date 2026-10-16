@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from xr_ai_routing import (
-    ConversationTurn,
+    AgentTurn,
 )
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.vision import ImageQueryRequest
@@ -58,7 +58,7 @@ async def test_observation_asks_cosmos_directly_without_an_omni_planner() -> Non
         frames,  # type: ignore[arg-type]
         vision,  # type: ignore[arg-type]
     )
-    turn = ConversationTurn("alice", "turn-observe", "Is the monitor screen illuminated?")
+    turn = AgentTurn("alice", "turn-observe", "Is the monitor screen illuminated?")
     emitted = []
 
     async def emit(source: str, text: str) -> None:
@@ -84,7 +84,7 @@ async def test_observation_labels_the_actual_frame_timestamp() -> None:
         frames,  # type: ignore[arg-type]
         vision,  # type: ignore[arg-type]
     )
-    turn = ConversationTurn("alice", "turn-observe-time", "Is the screen illuminated?")
+    turn = AgentTurn("alice", "turn-observe-time", "Is the screen illuminated?")
 
     async def emit(_source: str, _text: str) -> None:
         pass

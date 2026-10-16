@@ -12,7 +12,7 @@ from contextlib import suppress
 import nemo_relay
 from loguru import logger
 from xr_ai_conversation import Conversation
-from xr_ai_routing import ConversationFrontEnd, ConversationTurn
+from xr_ai_routing import AgentRouter, AgentTurn
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -43,7 +43,7 @@ class ConversationExampleAgent(Agent):
     """Bridge voice runtime topics to the shared conversation front end.
 
     This sample adapter owns its streaming response tasks. The injected
-    ``ConversationFrontEnd`` owns route selection, destination work, and focus;
+    ``AgentRouter`` owns route selection, destination work, and focus;
     this class converts accepted voice queries to turns and attributed output
     back into ``VoiceOutput`` messages.
     """
@@ -52,14 +52,14 @@ class ConversationExampleAgent(Agent):
         self,
         set_status: Callable[[str, str], Awaitable[None]],
         *,
-        front_end: ConversationFrontEnd,
+        router: AgentRouter,
         conversations: tuple[Conversation, ...],
         frames: CurrentFrameTool | None = None,
         participant_left_handlers: tuple[Callable[[str], Awaitable[None]], ...] = (),
     ) -> None:
         super().__init__()
         self._set_status = set_status
-        self._front_end = front_end
+        self._router = router
         self._conversations = conversations
         self._participant_left_handlers = participant_left_handlers
         self._frames = frames
@@ -107,7 +107,7 @@ class ConversationExampleAgent(Agent):
         # Departure still releases every owner when an earlier hook fails.
         errors: list[Exception] = []
         try:
-            await self._front_end.participant_left(participant_id)
+            await self._router.participant_left(participant_id)
         except Exception as error:
             errors.append(error)
         for handler in self._participant_left_handlers:
@@ -206,8 +206,8 @@ class ConversationExampleAgent(Agent):
 
                 await self._set_status("processing", participant_id)
                 try:
-                    await self._front_end.handle(
-                        ConversationTurn(
+                    await self._router.handle(
+                        AgentTurn(
                             participant_id=participant_id,
                             turn_id=response_id,
                             query=request.text,
@@ -246,7 +246,7 @@ class ConversationExampleAgent(Agent):
                             )
 
     async def _cancel_response(self, participant_id: str) -> None:
-        await self._front_end.interrupt(participant_id)
+        await self._router.interrupt(participant_id)
         task = self._response_tasks.pop(participant_id, None)
         if task is None:
             return
@@ -254,7 +254,7 @@ class ConversationExampleAgent(Agent):
         await asyncio.gather(task, return_exceptions=True)
 
     async def _cancel_responses(self) -> None:
-        await self._front_end.interrupt()
+        await self._router.interrupt()
         tasks = tuple(self._response_tasks.values())
         self._response_tasks.clear()
         for task in tasks:
@@ -266,7 +266,7 @@ class ConversationExampleAgent(Agent):
         """Cancel turns and release participant history owned by this agent."""
 
         await self._cancel_responses()
-        await self._front_end.stop()
+        await self._router.stop()
         participants = tuple(self._participants)
         self._participants.clear()
         # Shutdown cleans each resource across participants concurrently and

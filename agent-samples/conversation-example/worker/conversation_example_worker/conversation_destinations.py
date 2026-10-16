@@ -16,7 +16,7 @@ from xr_ai_conversation import (
 )
 from xr_ai_routing import (
     Admission,
-    ConversationTurn,
+    AgentTurn,
     DestinationResult,
     RoutableAgent,
     RoutingAid,
@@ -65,16 +65,16 @@ class ContextualConversationAgent(RoutableAgent):
                 description = candidate
         return RoutingAid(name=self._source_name, description=description)
 
-    async def admit(self, turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         return await self._conversation.admit(turn, focused=focused)
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         result = await self._conversation.answer(turn, emit=emit)
         if result.disposition == "answer" and result.text.strip():
             await self._remember_completed_exchange(turn, result.text)
         return result
 
-    async def _remember_completed_exchange(self, turn: ConversationTurn, answer: str) -> None:
+    async def _remember_completed_exchange(self, turn: AgentTurn, answer: str) -> None:
         """Record the same bounded cue and optional update used by completed answers."""
         if not answer.strip():
             return
@@ -138,7 +138,7 @@ class NoteTakingAgent(ContextualConversationAgent):
                 description = candidate
         return RoutingAid(name="notes", description=description)
 
-    async def admit(self, turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         state = {
             "request": turn.query,
             "completed_history": [
@@ -199,7 +199,7 @@ class NoteTakingAgent(ContextualConversationAgent):
             self._pending.pop(turn.participant_id, None)
             raise
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         pending = self._pending.pop(turn.participant_id, None)
         action = pending[1] if pending is not None and pending[0] == turn.turn_id else "other"
         was_focused = pending[2] if pending is not None and pending[0] == turn.turn_id else False
