@@ -33,22 +33,31 @@ port 8109 with the served name `embed`.
    key no longer replaces the profile hash. If backing-model metadata is
    unavailable, RAG rebuilds without reading or writing a persistent cache.
 
-Earlier revisions could build a nominally 2048-dimensional cache from an old
-server still listening on port 8109, then reuse it after switching weights.
-To recover, stop that server, start the intended model, and restart RAG with
-a new `cache_key`, or delete the affected cache directory: normally
-`models/tea-making-rag-cache` for tea or `services/rag-service/.rag-cache` for
-standalone RAG. Deleting generated indexes loses no source documents. Old
-768-dimensional `.npz` caches are no longer used by the default configuration
-and can also be deleted to reclaim space.
+Old 768-dimensional `.npz` caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.
 
 Independently deployed NIM endpoints must serve the new model before using the
 updated NIM profile. A served ID alone is not a backing-model identity: endpoints
 without a `root` field rebuild on each RAG startup. If weights change under an
 unchanged `root`, bump `cache_key` and restart RAG. Do not change models while
 RAG is running; its in-memory document vectors must match query embeddings.
-Custom `EmbeddingService` implementations must provide `model_identity()`;
-return `None` when the backing model cannot be identified.
+If model identity changes or becomes unavailable during indexing, startup fails
+without saving or serving those vectors. Stabilize the endpoint and restart RAG.
+
+(embedding-service-identity-migration)=
+## Embedding SDK identity contract
+
+`EmbeddingService` now requires `async model_identity() -> str | None`.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or `None` when identity cannot be established; do not return a served
+alias that can silently switch weights. The built-in OpenAI-compatible client
+implements this lookup through `/v1/models`.
+
+Returning `None` permits embedding and retrieval, but disables persistent RAG
+cache reads and writes. Setting `cache_key` does not override this safeguard.
+Existing adapters without the method fail `isinstance(..., EmbeddingService)`
+checks and cannot be passed to `DenseIndex.build()` until updated.
 
 ## Session recording flag
 

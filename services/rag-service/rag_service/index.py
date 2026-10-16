@@ -119,6 +119,9 @@ class DenseIndex:
         ``cache_key`` is an additional operator-controlled revision. Neither
         replaces the server-reported identity. Unknown identity disables both
         persistent cache reads and writes, while still allowing retrieval.
+        If identity changes during embedding, fail startup rather than save or
+        serve potentially mixed-model vectors. Keep the endpoint stable for
+        the entire lifetime of the index.
         """
 
         if chunk_size <= 0 or not 0 <= overlap < chunk_size:
@@ -169,6 +172,11 @@ class DenseIndex:
             texts = [passage_prefix + chunk.text for chunk in chunks]
             for offset in range(0, len(texts), batch_size):
                 rows.extend(await embedder.embed(texts[offset:offset + batch_size]))
+            if await embedder.model_identity() != identity:
+                raise RuntimeError(
+                    "embedding model identity changed or became unavailable during indexing; "
+                    "stabilize the embedding server and restart RAG"
+                )
             vectors = np.asarray(rows, dtype=np.float32)
             if vectors.ndim != 2 or vectors.shape[1] < embedding_dim:
                 raise ValueError(

@@ -11,6 +11,7 @@ This checks embedding startup and retrieval, not full-stack memory coexistence.
 
 import asyncio
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,7 @@ import pytest
 import yaml
 from _helpers_model_servers import profile_config
 from rag_service import DenseIndex
-from xr_ai_launcher import detect_gpu_config
+from xr_ai_launcher import GPUInventoryError, detect_gpu_config
 from xr_ai_models import OpenAICompatEmbedding
 from xr_ai_vllm import stop_persistent_servers
 
@@ -29,11 +30,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 async def test_tea_embedding_startup_and_retrieval(tmp_path):
-    if shutil.which("uv") is None:
-        pytest.skip("uv not on PATH")
-    config = yaml.safe_load(profile_config("embedding_server", detect_gpu_config()).read_text())
+    if shutil.which("docker") is None:
+        pytest.skip("Docker not on PATH")
+    try:
+        profile = detect_gpu_config()
+    except GPUInventoryError as exc:
+        pytest.skip(str(exc))
+    config = yaml.safe_load(profile_config("embedding_server", profile).read_text())
     port = pick_free_port()
-    config.update(host="127.0.0.1", port=port)
+    # Docker ownership is discoverable even before inference binds its port.
+    # A persistent pip child can outlive the wrapper and evade port-based cleanup.
+    config.update(host="127.0.0.1", port=port, vllm_backend="docker")
     config_path = tmp_path / "embedding.yaml"
     config_path.write_text(yaml.safe_dump(config))
     ready_file = tmp_path / "ready"
@@ -41,8 +48,9 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
     rag = yaml.safe_load((sample / "yaml/rag_service.yaml").read_text())
 
     process = await asyncio.create_subprocess_exec(
-        "uv", "run", "--config-file", str(ROOT / "uv.toml"),
-        "--project", str(ROOT / "services/embedding-server"), "embedding_server",
+        # The Docker wrapper needs only dependencies already in the test
+        # environment; inference runs in the container, not a host vLLM install.
+        sys.executable, str(ROOT / "services/embedding-server/embedding_server/__main__.py"),
         "--config", str(config_path), "--ready-file", str(ready_file),
     )
     try:
@@ -74,7 +82,14 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
                 matches = await index.retrieve(query, top_k=1)
                 assert matches, f"No result above min_score={rag['min_score']} for {query!r}"
                 assert matches[0]["source"] == source, matches
-                assert matches[0]["score"] >= rag["min_score"]
+                print(f"Retrieval {query!r}: {matches[0]['source']} score={matches[0]['score']:.6f}")
+            query = "How do I configure BGP route advertisements between autonomous systems?"
+            # Record the unfiltered score as well, so a failure can be diagnosed
+            # without changing the threshold or rerunning a model load.
+            vector = np.asarray((await embedder.embed(["query: " + query]))[0])
+            scores = index.vectors @ (vector / np.linalg.norm(vector))
+            print(f"Off-topic {query!r}: max_score={scores.max():.6f}; min_score={rag['min_score']}")
+            assert await index.retrieve(query, top_k=2) == []
     finally:
         if process.returncode is None:
             process.terminate()

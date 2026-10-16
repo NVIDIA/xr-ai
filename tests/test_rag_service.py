@@ -162,6 +162,32 @@ async def test_legacy_cache_without_model_identity_is_not_reused(tmp_path) -> No
     assert len(list(cache.glob("*.npz"))) == 2
 
 
+@pytest.mark.parametrize("final_identity", ["different-weights", None])
+async def test_model_change_during_indexing_never_persists_or_serves_vectors(tmp_path, final_identity):
+    class ChangingEmbedding(_Embedding):
+        async def embed(self, texts, *, timeout=None):
+            rows = await super().embed(texts, timeout=timeout)
+            self.identity = final_identity
+            return rows
+
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    (documents / "count.md").write_text("Count the tasks.")
+    cache = tmp_path / "cache"
+    embedder = ChangingEmbedding()
+    with pytest.raises(RuntimeError, match="identity changed.*restart RAG"):
+        await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3, batch_size=1)
+    assert len(embedder.calls) == 2
+    assert not list(cache.glob("*.npz"))
+
+    # Retrying against the original model must embed again, never reuse the failed build.
+    stable = _Embedding()
+    await DenseIndex.build(documents, stable, cache_dir=cache, embedding_dim=3)
+    assert stable.calls
+    assert len(list(cache.glob("*.npz"))) == 1
+
+
 async def test_profile_identity_is_not_replaced_by_manual_cache_key(tmp_path, monkeypatch) -> None:
     from rag_service import __main__ as main
 

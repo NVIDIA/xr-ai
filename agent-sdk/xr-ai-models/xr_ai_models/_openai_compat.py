@@ -1069,24 +1069,38 @@ class OpenAICompatEmbedding:
         Missing, ambiguous, or unavailable metadata returns ``None``; the
         configured alias alone is not evidence of which weights are loaded.
         Endpoints exposing only an ID therefore cannot support cache reuse.
+        Uses the HTTP client's configured timeout and logs unavailable metadata
+        reasons at debug level without logging response bodies or credentials.
         """
 
         try:
             response = await self._client.get(
-                self._models_url, headers=_auth_headers(self._api_key), timeout=5.0,
+                self._models_url, headers=_auth_headers(self._api_key),
             )
             response.raise_for_status()
             payload = response.json()
-        except (httpx.HTTPError, ValueError):
+        except httpx.HTTPStatusError as exc:
+            logger.debug("Embedding identity unavailable: HTTP {}", exc.response.status_code)
+            return None
+        except httpx.HTTPError as exc:
+            logger.debug("Embedding identity unavailable: {}", type(exc).__name__)
+            return None
+        except ValueError:
+            logger.debug("Embedding identity unavailable: invalid JSON")
             return None
         rows = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
+            logger.debug("Embedding identity unavailable: missing or invalid model list")
             return None
         matches = [row for row in rows if isinstance(row, dict) and row.get("id") == self._model]
         if len(matches) != 1:
+            logger.debug("Embedding identity unavailable: {} matching model entries", len(matches))
             return None
         root = matches[0].get("root")
-        return root.strip() if isinstance(root, str) and root.strip() else None
+        if not isinstance(root, str) or not root.strip():
+            logger.debug("Embedding identity unavailable: matching model has no valid root")
+            return None
+        return root.strip()
 
     async def embed(
         self,

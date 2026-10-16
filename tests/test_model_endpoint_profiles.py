@@ -340,8 +340,6 @@ async def test_native_recognition_releases_rpc_before_returning(action):
 
 
 async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(monkeypatch, tmp_path):
-    import yaml
-
     real_client = httpx.AsyncClient
     calls = []
     source = yaml.safe_load((ROOT / "deployment/nim/models.yaml").read_text())
