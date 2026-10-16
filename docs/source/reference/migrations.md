@@ -86,7 +86,8 @@ SDK, change the dependency and move imports to `xr_ai_routing`. Rename
 `ConversationFrontEnd`, `ConversationTurn`, and `ConversationExchange` to
 `AgentRouter`, `AgentTurn`, and `AgentExchange`. Rename the protocol import
 from `ConversationDestination` to `RoutableAgent`. The routing package does
-not preserve the earlier import path.
+not preserve the earlier import path. If you imported the implementation module
+directly, update `xr_ai_routing.front_end` to `xr_ai_routing.router`.
 
 ### Session recording flag
 

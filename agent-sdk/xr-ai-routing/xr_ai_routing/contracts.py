@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed contracts shared by routable agents and their front end."""
+"""Typed contracts shared by routable agents and their router."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class AgentTurn:
     """Unmodified current user request."""
 
     history: tuple[AgentExchange, ...] = ()
-    """Newest whole completed exchanges that fit the front-end byte budget."""
+    """Newest whole completed exchanges that fit the router's byte budget."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,10 +79,10 @@ class Admission:
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
-    """Completed answer plus the front end's post-answer focus transition."""
+    """Completed answer plus the router's post-answer focus transition."""
 
     disposition: Literal["answer", "focus", "release", "clarify"] = "answer"
-    """Destinations return answer, focus, or release; the front end returns clarify before answer work.
+    """Destinations return answer, focus, or release; the router returns clarify before answer work.
 
     A post-answer ``release`` consumes this turn and clears focus. It does not
     reroute the request; use ``Admission("release")`` for that behavior.
@@ -99,7 +99,7 @@ Emit = Callable[[str, str], Awaitable[None]]
 class RoutableAgent(Protocol):
     """An agent that owns its state and handles admitted or fallback turns.
 
-    The front end calls ``release()`` when it releases a destination during
+    The router calls ``release()`` when it releases a destination during
     rerouting or clears its focus. On participant departure it calls an optional
     ``participant_left(participant_id)`` method when present, otherwise it calls
     ``release()``. Implement that optional hook when departure should clear
@@ -125,19 +125,19 @@ class RoutableAgent(Protocol):
         Returning ``DestinationResult("release")`` consumes the current request
         after the answer and clears focus; it does not reroute that request.
         Destination exceptions and task cancellation propagate to the caller.
-        The front end suppresses later chunks after interruption but cannot
+        The router suppresses later chunks after interruption but cannot
         retract output already delivered to ``emit``.
         If routing returns ``clarify`` with usable scores for eligible
-        destinations, the front end tries the highest-scoring candidate through
+        destinations, the router tries the highest-scoring candidate through
         normal admission. Missing or invalid eligible scores, or no eligible
         candidate, still produce a clarification. After exhausted declines,
         clarification is also used when the configured default is unavailable.
         """
 
     async def release(self, participant_id: str) -> None:
-        """Handle route release; the front end also uses it for departure fallback.
+        """Handle route release; the router also uses it for departure fallback.
 
-        This method runs when the front end releases a destination during
+        This method runs when the router releases a destination during
         rerouting or clears its focus. It is also the departure fallback when
         no ``participant_left()`` hook is present. A destination can clear
         active resources here while retaining completed participant data; use
