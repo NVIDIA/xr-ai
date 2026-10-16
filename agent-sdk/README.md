@@ -12,7 +12,7 @@ its own environment and concise entry-point README.
 |---|---|---|---|
 | [`xr-ai-hub`](xr-ai-hub/) | `xr_ai_hub` | `xr-ai-hub-client` | Minimal IPC with DeviceIOHub using msgpack over ZMQ |
 | [`xr-ai-models`](xr-ai-models/) | `xr_ai_models` | `xr-ai-models` | Typed model services and OpenAI-compatible clients |
-| [`xr-ai-conversation`](xr-ai-conversation/) | `xr_ai_conversation` | `xr-ai-conversation` | Participant-scoped routing and typed destination contracts |
+| [`xr-ai-conversation`](xr-ai-conversation/) | `xr_ai_conversation` | `xr-ai-conversation` | Streamed conversation, named context, optional current-view tools, and destination routing |
 | [`xr-ai-runtime`](xr-ai-runtime/) | `xr_ai_runtime` | `xr-ai-agent-runtime` | Agent registration and typed publish/fan-out |
 | [`xr-ai-tools`](xr-ai-tools/) | `xr_ai_tools` | `xr-ai-tools` | Relay-managed tools and model tool-call helpers |
 | [`xr-ai-voice`](xr-ai-voice/) | `xr_ai_voice` | `xr-ai-voice` | Voice agent, session, transport, and pipeline |

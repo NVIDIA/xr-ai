@@ -5,8 +5,8 @@
 
 # xr-ai-conversation
 
-Participant-scoped routing across application destinations, with typed turn,
-admission, answer, and focus contracts.
+Reusable streamed general conversation and current-view visual Q&A, with typed
+contracts for routing turns among conversation and application destinations.
 
-Refer to the [conversation routing reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-conversation.html)
-for the routing flow, lifecycle, and API behavior.
+Refer to the [conversation SDK reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-conversation.html)
+for API contracts and routing behavior.

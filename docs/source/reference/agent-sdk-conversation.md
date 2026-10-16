@@ -102,12 +102,16 @@ Admission preambles suppress the optional acknowledgment for that turn.
 
 | File | Responsibility |
 |---|---|
-| `__init__.py` | Lists the routing names exported by `xr_ai_conversation` |
-| `contracts.py` | Defines route metadata, turns, completed exchanges, admission results, and the destination protocol |
+| `__init__.py` | Lists the routing and conversation names exported by `xr_ai_conversation` |
+| `contracts.py` | Defines route metadata, turns, context text, admission results, and the destination protocol |
 | `front_end.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
 | `_history.py` | Shares private exchange timestamps and their display format |
+| `conversation.py` | Implements the application-instructed conversation destination and optional current-view tools |
+| `_context.py` | Stores participant/source context and performs bounded background compaction |
+| `_topics.py` | Binds configured runtime topics to participant-scoped context updates |
+| `prompts/core.txt` | Provides the default conversation system instructions |
 
-The front end does not depend on a voice transport or a particular application.
+The front end and conversation engine do not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a
 `ConversationTurn` and connects the callback to its output path.
 
@@ -115,3 +119,61 @@ An application adapter translates its incoming request into a
 
 The generated {doc}`Python reference </reference/python/xr_ai_conversation/index>`
 documents the exported names and their signatures, fields, and behavior.
+
+## Streamed conversation and visual questions
+
+`Conversation` implements `ConversationDestination` for application-instructed text
+conversation. It keeps model instructions and participant state in the conversation
+engine while the front end continues to own turn selection, admission, focus,
+stream attribution, and cancellation. Applications can configure an optional
+current-frame and streaming visual-query tool pair. When configured, the engine
+can answer present-view questions through those typed tools; it does not require a
+voice transport.
+
+```python
+from xr_ai_conversation import Conversation, ConversationFrontEnd
+
+conversation = Conversation(
+    llm,
+    instructions="Answer general questions and use current-view tools when needed.",
+    frames=current_frame_tool,
+    vision=streaming_image_query_tool,
+)
+front_end = ConversationFrontEnd({"conversation": conversation}, decisions)
+```
+
+The visual tools must be configured together. `Conversation` invokes the current
+frame tool and supplies the returned image reference to the streaming visual
+query tool. The current query and resolved visual referents are sent to that
+query; application-specific destinations remain responsible for capabilities
+outside the conversation engine.
+
+## Named context topics and history budgets
+
+`Conversation` can subscribe to named runtime topics that carry source-owned text.
+The constructor fixes each topic's update policy; `ConversationContextUpdate`
+contains only the non-empty `text` payload.
+
+```python
+conversation = Conversation(
+    llm,
+    summary_context_topics=("sample.monitor-window",),
+    incremental_context_topics=("sample.notes",),
+)
+context_agent = conversation.context_subscriber()
+```
+
+Register the returned context agent and the conversation's runtime consumer with
+the same `AgentRuntime` before it starts. The application owns registration and
+shutdown; close the conversation when its owner shuts down. Each configured topic
+is a separate participant-scoped source. A summary replaces that source's prior
+section, while incremental text appends to its source and can be compacted in the
+background. Updating one source does not replace another source.
+
+Background context is bounded by `context_budget_bytes` after UTF-8 rendering.
+Incremental input to the compactor is separately bounded by
+`compaction_input_budget_bytes`. An oversized summary clears its source rather
+than retaining stale information; an oversized incremental update is dropped
+whole. Compaction keeps source sections independent, and an oversized compacted
+summary removes only the affected source. Completed exchanges use the front-end
+history budget and remain separate from background context.
