@@ -111,14 +111,18 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
 
 
 def gpu_compute_major() -> int:
-    """Return the GPU's compute-capability major version, or 0 if unknown.
+    """Return the first selected GPU's compute-capability major, or 0 if unknown.
 
     Reads ``CUDA_VISIBLE_DEVICES`` from the env, so set the device filter
     before calling. Logs a warning on failure and falls back to 0.
     """
     try:
+        argv = ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"]
+        selected = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",", 1)[0].strip()
+        if selected:
+            argv += ["--id", selected]
         out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"],
+            argv,
             text=True, stderr=subprocess.DEVNULL,
         ).strip().splitlines()
         if out:

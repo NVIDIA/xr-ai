@@ -24,12 +24,70 @@ _LOCAL_VLM_CONFIGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def no_real_gpu_probe(monkeypatch):
+    monkeypatch.setattr("xr_ai_vllm.gpu_compute_major", lambda: 0)
+
+
 def _load_server_module():
     spec = importlib.util.spec_from_file_location("_test_vlm_server_main", _SERVER_MAIN)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    ("major", "overrides", "decoder", "encoder"),
+    [
+        (0, {}, None, None),
+        (8, {}, None, None),
+        (9, {}, None, None),
+        (10, {}, None, None),
+        (11, {}, None, None),
+        (12, {}, "TRITON_ATTN", "TRITON_ATTN"),
+        (12, {"attention_backend": "FLASHINFER"}, "FLASHINFER", "TRITON_ATTN"),
+        (12, {"mm_encoder_attn_backend": "TORCH_SDPA"}, "TRITON_ATTN", "TORCH_SDPA"),
+        (12, {"attention_backend": " auto "}, None, "TRITON_ATTN"),
+        (12, {"attention_backend": "auto", "mm_encoder_attn_backend": "auto"}, None, None),
+        (12, {"model": "other/model"}, None, None),
+        (12, {"vllm_backend": "pip"}, None, None),
+        (12, {"vllm_image": "custom/image:tag"}, None, None),
+        (12, {"vllm_backend": "pip", "attention_backend": "TRITON_ATTN"}, "TRITON_ATTN", None),
+        (8, {"attention_backend": "triton_attn"}, "TRITON_ATTN", None),
+    ],
+)
+def test_attention_defaults_and_explicit_overrides(monkeypatch, tmp_path, major, overrides, decoder, encoder):
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text()) | overrides
+    captured = {}
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(server, "load_config", lambda: (cfg, _SERVER_YAML.parent, None))
+    monkeypatch.setattr(server, "resolve_model_cache", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(server, "setup_hf_env", lambda *_a: None)
+    monkeypatch.setattr(server, "gpu_compute_major", lambda: major)
+    monkeypatch.setattr(server, "serve", lambda **kwargs: captured.update(kwargs))
+    server.run()
+    args = captured["extra_serve_args"]
+    for flag, expected in (("--attention-backend", decoder), ("--mm-encoder-attn-backend", encoder)):
+        if expected is None:
+            assert flag not in args
+        else:
+            assert args[args.index(flag) + 1] == expected
+
+
+@pytest.mark.parametrize("key", ["attention_backend", "mm_encoder_attn_backend"])
+@pytest.mark.parametrize("value", [None, "", " ", True, 1, []])
+def test_invalid_attention_override_fails_before_launch(monkeypatch, tmp_path, key, value):
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text()) | {key: value}
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(server, "load_config", lambda: (cfg, _SERVER_YAML.parent, None))
+    monkeypatch.setattr(server, "resolve_model_cache", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(server, "setup_hf_env", lambda *_a: None)
+    monkeypatch.setattr(server, "serve", lambda **_kw: pytest.fail("invalid config launched vLLM"))
+    with pytest.raises(ValueError, match=key):
+        server.run()
 
 
 def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) -> None:

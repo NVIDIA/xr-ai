@@ -566,6 +566,17 @@ cleanup.
   mapping. Cosmos-Reason1 remains available by pairing
   `model: nvidia/Cosmos-Reason1-7B` with the `cosmos_vlm` client preset. Hosting
   backend is selectable per YAML — refer to *Choosing the vLLM runtime* above.
+  With the default Docker image on SM12 GPUs, including RTX Blackwell and GB10,
+  the service selects Triton attention for both the decoder and vision encoder.
+  This avoids the pinned
+  image's FlashAttention-2 PTX fallback on the first uncached image request;
+  it does not depend on a previous container's compilation cache. Other GPUs,
+  custom images, and pip mode retain vLLM's backend selection. The optional
+  `attention_backend` and
+  `mm_encoder_attn_backend` YAML keys override each component independently;
+  explicit `auto` restores vLLM's selection. Cold starts still include model
+  loading and backend compilation. A healthy model HTTP endpoint is not a
+  guarantee that sample inference warmup has completed.
 - **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via

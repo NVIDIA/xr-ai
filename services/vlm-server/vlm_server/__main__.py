@@ -32,6 +32,10 @@ Config keys
     async_scheduling:        bool   Enable vLLM async scheduling (default: false).
     hf_overrides:            dict   Hugging Face config overrides passed as JSON.
     mm_encoder_tp_mode:      str    Multimodal encoder TP mode (optional).
+    attention_backend:      str    Decoder backend; explicit "auto" uses vLLM's default.
+    mm_encoder_attn_backend: str    Vision backend; explicit "auto" uses vLLM's default.
+                                    Both default to TRITON_ATTN for Cosmos3 on SM12
+                                    with the default Docker image; otherwise auto.
     max_images_per_prompt:   int    Max images per request (default: 1).
     max_videos_per_prompt:   int    Max video items per request (default: 0).
                                     Set >0 only if your worker sends video;
@@ -51,6 +55,7 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
+    gpu_compute_major,
     load_config,
     resolve_model_cache,
     serve,
@@ -157,6 +162,22 @@ def run() -> None:
         extra_serve_args.extend(["--hf-overrides", json.dumps(hf_overrides)])
     if mm_encoder_tp_mode:
         extra_serve_args.extend(["--mm-encoder-tp-mode", str(mm_encoder_tp_mode)])
+
+    # The pinned image's FA2 binary has only SM80 cubins: on SM12 it can
+    # spend minutes compiling PTX for kernels first selected during inference.
+    use_sm12_triton = (
+        model == _COSMOS3_NANO_MODEL and backend == "docker"
+        and image == DEFAULT_IMAGE and gpu_compute_major() == 12
+    )
+    default_attention = "TRITON_ATTN" if use_sm12_triton else "auto"
+    for key in ("attention_backend", "mm_encoder_attn_backend"):
+        value = cfg.get(key, default_attention)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} must be a non-empty backend name or 'auto'")
+        value = value.strip().upper()
+        if value != "AUTO":
+            extra_serve_args.extend(["--" + key.replace("_", "-"), value])
+            logger.info("{}={}", key, value)
 
     serve(
         backend=backend,

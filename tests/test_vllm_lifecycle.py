@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool, setup_hf_env
+from xr_ai_vllm._config import _gpu_is_dgx_spark, gpu_compute_major, parse_config_bool, setup_hf_env
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
 
 
@@ -36,6 +36,22 @@ class TestParseConfigBool:
     def test_rejects_other_values(self, value):
         with pytest.raises(ValueError, match="enforce_eager"):
             parse_config_bool(value, "enforce_eager")
+
+
+@pytest.mark.parametrize("selected", ["", "1", "1,0", "GPU-selected", "MIG-selected"])
+def test_compute_major_queries_selected_gpu(monkeypatch, selected):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", selected)
+    with patch("xr_ai_vllm._config.subprocess.check_output", return_value="12.1\n") as query:
+        assert gpu_compute_major() == 12
+    expected = ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"]
+    if selected:
+        expected += ["--id", selected.split(",")[0]]
+    assert query.call_args.args[0] == expected
+
+
+def test_compute_major_failure_is_unknown():
+    with patch("xr_ai_vllm._config.subprocess.check_output", side_effect=OSError("unavailable")):
+        assert gpu_compute_major() == 0
 
 
 @pytest.mark.parametrize(

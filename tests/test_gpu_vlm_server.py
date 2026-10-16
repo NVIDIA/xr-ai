@@ -4,29 +4,29 @@
 """GPU smoke test for services/vlm-server.
 
 Spawns the real ``vlm_server`` subprocess against a generated temp YAML, waits
-for the HTTP port to open, issues one chat-completions request with a tiny
-embedded PNG, and checks for a non-empty final answer without reasoning markup.
+for the HTTP port to open, and requires the first 1280x720 image stream to
+complete within the sample's 120-second inference budget. A fresh managed
+container must not depend on a previous container's compilation cache.
 
 Skipped automatically when ``uv`` is missing.
 """
 from __future__ import annotations
 
 import asyncio
-import base64
-import json
+import io
 import os
 import shutil
 import signal
 import socket
-import struct
 import sys
 import tempfile
 import time
-import zlib
 from pathlib import Path
 
 import pytest
 import yaml
+from PIL import Image
+from xr_ai_models import load_models_config_from_dict, make_vlm
 
 from _helpers import kill_orphan_vllm
 
@@ -37,8 +37,8 @@ _REPO_ROOT       = Path(__file__).resolve().parent.parent
 _VLM_SERVER_DIR  = _REPO_ROOT / "services" / "vlm-server"
 _DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos3-Nano").expanduser()
 
-# 30 min — enough for a cold first-time weights download plus vLLM compilation.
-# Cached runs complete in ~60 s.
+# Allow checkpoint downloads and cold backend initialization independently of
+# the bounded first-image inference check below.
 _STARTUP_TIMEOUT_S   = 1800.0
 _SHUTDOWN_TIMEOUT_S  = 30.0
 
@@ -47,20 +47,6 @@ def _pick_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-def _tiny_png_bytes(size: int = 32) -> bytes:
-    """Return a minimal valid 32x32 grayscale PNG (no external deps)."""
-    def _chunk(tag: bytes, data: bytes) -> bytes:
-        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
-
-    sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 0, 0, 0, 0)  # 8-bit grayscale
-    # one filter byte (0) + `size` pixels per row
-    raw = b"".join(b"\x00" + bytes([(i * 8) & 0xFF] * size) for i in range(size))
-    idat = zlib.compress(raw, 9)
-    return sig + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
 
 
 async def _tcp_open(host: str, port: int, timeout: float = 0.5) -> bool:
@@ -111,11 +97,6 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
 async def test_vlm_server_chat_completions_smoke():
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
-    try:
-        import httpx
-    except ImportError:
-        pytest.skip("httpx not installed")
-
     port = _pick_free_port()
 
     # Always point at the standard HF cache. vLLM uses cached weights if
@@ -165,49 +146,27 @@ async def test_vlm_server_chat_completions_smoke():
             deadline = time.monotonic() + _STARTUP_TIMEOUT_S
             await _wait_for_port("127.0.0.1", port, deadline, proc)
 
-            png_b64 = base64.b64encode(_tiny_png_bytes(32)).decode("ascii")
-            payload = {
-                "model": "vlm",
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url",
-                         "image_url": {"url": f"data:image/png;base64,{png_b64}"}},
-                        {"type": "text", "text": "describe this image"},
-                    ],
-                }],
-                "max_tokens": 20,
-                "temperature": 0,
-                "stream": True,
-            }
-            content_chunks: list[str] = []
-            saw_done = False
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream(
-                    "POST",
-                    f"http://127.0.0.1:{port}/v1/chat/completions",
-                    json=payload,
-                ) as response:
-                    if response.status_code != 200:
-                        await response.aread()
-                    assert response.status_code == 200, (
-                        f"HTTP {response.status_code}: {response.text[:500]}"
-                    )
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        event = line.removeprefix("data:").strip()
-                        if event == "[DONE]":
-                            saw_done = True
-                            break
-                        data = json.loads(event)
-                        delta = data["choices"][0]["delta"]
-                        if isinstance(delta.get("content"), str):
-                            content_chunks.append(delta["content"])
-
-            assert saw_done, "stream ended without the OpenAI [DONE] event"
+            image = io.BytesIO()
+            Image.new("RGB", (1280, 720), color=(128, 128, 128)).save(image, format="JPEG", quality=90)
+            models = load_models_config_from_dict({"vlm": {
+                "adapter": {"preset": "cosmos3_nano_reasoner"},
+                "endpoint": {"base_url": f"http://127.0.0.1:{port}"},
+            }})
+            vlm = make_vlm(models, "vlm")
+            content_chunks = []
+            try:
+                # HTTP 200 is insufficient: consume the entire first image stream.
+                async with asyncio.timeout(120):
+                    async for chunk in vlm.stream_images(
+                        [image.getvalue()], "What is the dominant color?",
+                        system_prompt="Answer with one word.", max_tokens=4, timeout=120,
+                    ):
+                        content_chunks.append(chunk)
+            finally:
+                await vlm.close()
             content = "".join(content_chunks).strip()
             assert content, "stream returned no content"
+            assert "gray" in content.casefold() or "grey" in content.casefold(), content
             assert "<think>" not in content.casefold(), (
                 "Cosmos3 Reasoner leaked reasoning markup into streamed content"
             )
