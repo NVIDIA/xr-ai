@@ -353,6 +353,7 @@ async def test_voice_agent_publishes_to_configured_query_topic() -> None:
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
+        assert session.run_options["query_topic"] == QUERY_TOPIC.name
         assert session.handler is not None
         assert await session.handler(
             VoiceQuery(
@@ -1272,3 +1273,82 @@ def test_voice_agent_does_not_expose_owned_media_internals() -> None:
     assert "_session" not in parameters
     assert "text_transform" not in parameters
     assert "text_ignore_topics" not in parameters
+
+
+def test_query_schema_has_no_display_only_speaker_metadata():
+    from dataclasses import fields
+    query = UserQuery(text="look around", timestamp_us=123)
+    assert not hasattr(query, "_speaker_id")
+    assert query.model_dump() == {"text": "look around", "timestamp_us": 123}
+    assert set(UserQuery.model_json_schema()["properties"]) == {"text", "timestamp_us"}
+    assert [field.name for field in fields(VoiceQuery)] == [
+        "participant_id", "text", "timestamp_us", "interrupted_output",
+    ]
+    with pytest.raises(ValidationError):
+        UserQuery(text="look around", timestamp_us=123, speaker_id=7)
+
+
+@pytest.mark.parametrize("speaker_id", [None, 0, 7])
+@pytest.mark.parametrize("display_state", ["ok", "fails", "blocked"])
+async def test_voice_owns_query_display_without_sample_adapter(speaker_id, display_state):
+    from pipecat.frames.frames import CancelFrame
+    from pipecat.processors.frame_processor import FrameDirection
+    from xr_ai_voice._frames import GatedQueryFrame, _SpeakerGatedQueryFrame
+    from xr_ai_voice._processors.io import _VoiceIOProcessor
+
+    session, recorder, runtime = _Session(), _InputRecorder(), AgentRuntime()
+    runtime.register("recorder", recorder)
+    voice = _voice_agent(session, text_input=False)
+    runtime.register("voice", voice)
+    messages = []
+    blocked, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def send(message):
+        messages.append(message)
+        if display_state == "fails":
+            raise RuntimeError("display unavailable")
+        if display_state == "blocked":
+            blocked.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+    session.transport.send_return_data = send
+    async with _running_voice(runtime, voice, session):
+        output = _VoiceIOProcessor(
+            session.handler, transport=session.transport, query_topic=session.run_options["query_topic"],
+        )
+        # Drive the actual I/O boundary and runtime publication directly; the
+        # gate-to-I/O normalization and authorization paths have separate coverage.
+        output.push_frame = _discard_frame
+        try:
+            for pid in ("alice", "bob"):
+                frame_type = GatedQueryFrame if speaker_id is None else _SpeakerGatedQueryFrame
+                extra = {} if speaker_id is None else {"speaker_id": speaker_id}
+                frame = frame_type(participant_id=pid, text="normalized query", pts_us=123, fresh_match=False, **extra)
+                recorder.changed.clear()
+                await output.process_frame(frame, FrameDirection.DOWNSTREAM)
+                await asyncio.wait_for(recorder.changed.wait(), 1)
+            assert [entry[0] for entry in recorder.messages] == ["alice", "bob"]
+            assert all(entry[2].text == "normalized query" for entry in recorder.messages)
+            if display_state == "blocked":
+                await asyncio.wait_for(blocked.wait(), 1)
+                assert output._input_tasks  # Pending display retains backpressure, not query authorization.
+            else:
+                await asyncio.gather(*output._input_tasks)
+            label = "User" if speaker_id is None else f"Speaker {speaker_id}"
+            assert [(m.participant_id, m.topic, m.pts_us, m.data.decode()) for m in messages] == [
+                (pid, QUERY_TOPIC.name, 123, f"{label}: normalized query") for pid in ("alice", "bob")
+            ]
+            await output.process_frame(CancelFrame(), FrameDirection.DOWNSTREAM)
+            assert not output._input_tasks
+            if display_state == "blocked":
+                assert cancelled.is_set()
+        finally:
+            await output._shutdown()
+            await output.cleanup()
+
+
+async def _discard_frame(*_args):
+    pass

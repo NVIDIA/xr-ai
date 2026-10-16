@@ -249,9 +249,10 @@ independently. `auto` may select batch STT at startup if the speaker endpoint is
 absent; protocol mismatch is an error, not a fallback. Required speaker ASR never
 silently switches to batch after reset.
 
-The speaker service and client use protocol **4** for explicit attributed
-one-turn authorization. Update/restart both together; protocol 3 peers are
-rejected rather than treating their transcripts as permissions. Refer to
+The speaker service and client use protocol **5** for diagnostics configuration
+and explicit attributed one-turn authorization. Update/restart both together;
+earlier peers are rejected rather than silently changing transcript display or
+authorization. Refer to
 {doc}`migrations` for configuration migration.
 
 ## Voice gating and early probes
@@ -352,7 +353,7 @@ each event response before sending the next frame. The service derives timestamp
 from accepted sample counts; reconnecting starts a fresh timeline and clears
 temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
-diarization and interference conditioning, but are not transcribed after
+diarization and interference conditioning, but by default are not transcribed after
 enrollment. Before enrollment, the service independently decodes each detected
 speaker and enrolls the one whose conditioned transcript completes the start
 phrase, including during overlapping speech. If multiple speakers complete the
@@ -366,6 +367,29 @@ Microphone stop and republish therefore cannot join old phrase fragments across
 tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
 do not establish capture continuity, and delivery jitter does not trigger guessed
 resets. Explicit same-track capture epochs are outside this integration.
+
+The annotated voice-gate configuration reference above documents
+`speaker.diagnostics`, which defaults to `false`. Setting it to `true` displays
+candidate transcripts before
+enrollment and additionally transcribes non-owner voices after enrollment. It
+returns activity and ignored text on `voice.speaker-diagnostic` through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. Before enrollment, display reuses the
+required candidate decoding without additional caches or decoding. After
+enrollment, diagnostics share model weights and encoded features but add decoding
+work and separate temporary ASR caches for non-owner speakers. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.
+
+The shared voice I/O layer also returns accepted, gate-normalized query text
+on the configured query topic's existing name. Speaker ASR uses `Speaker N`;
+ordinary STT and typed queries use `User`. The application receives the same
+typed query as before, without speaker-display metadata or a sample-specific
+echo subscriber. Disabling speaker diagnostics does not disable accepted-query
+display. The existing hub return path is best effort, not an end-to-end receipt
+acknowledgment. Display errors do not reject accepted queries; local transport
+backpressure remains unchanged. No additional display queue or dropping policy
+is introduced.
 
 Start the inference process separately from the repository root:
 

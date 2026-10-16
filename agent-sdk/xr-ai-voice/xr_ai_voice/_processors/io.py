@@ -22,12 +22,15 @@ from pipecat.frames.frames import (
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from xr_ai_hub import DataMessage
 
 from .._frames import (
     AssistantResponseEndFrame,
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    _SpeakerDiagnosticFrame,
+    _SpeakerGatedQueryFrame,
 )
 from .._types import VoiceInputSink, VoiceQuery, VoiceResponse
 
@@ -51,6 +54,7 @@ class _VoiceIOProcessor(FrameProcessor):
         input_sink: VoiceInputSink,
         *,
         transport: HubVoiceTransport | None = None,
+        query_topic: str = "",
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
@@ -59,6 +63,7 @@ class _VoiceIOProcessor(FrameProcessor):
         super().__init__()
         self._input_sink = input_sink
         self._transport = transport
+        self._query_topic = query_topic
         self._on_participant_joined = on_participant_joined
         self._on_participant_left = on_participant_left
         self._on_interrupted = on_interrupted
@@ -130,6 +135,15 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._spawn_query(frame)
             return
 
+        if isinstance(frame, _SpeakerDiagnosticFrame):
+            label = f"Speaker {frame.speaker_id} [{frame.status}]"
+            text = f"{label}: {frame.text}" if frame.text else f"{label} detected"
+            await self._display(DataMessage(
+                topic="voice.speaker-diagnostic", participant_id=frame.participant_id,
+                pts_us=frame.pts_us, data=text.encode("utf-8"),
+            ))
+            return
+
         if isinstance(frame, ParticipantJoinedFrame):
             logger.info("voice participant joined pid={!r}", frame.participant_id)
             if self._transport is not None:
@@ -179,18 +193,41 @@ class _VoiceIOProcessor(FrameProcessor):
         try:
             if interrupted_response is not None:
                 await asyncio.gather(interrupted_response, return_exceptions=True)
-            await self._input_sink(
-                VoiceQuery(
-                    participant_id=pid,
-                    text=frame.text,
-                    timestamp_us=frame.pts_us,
-                    interrupted_output=interrupted_response is not None,
-                )
+            query = VoiceQuery(
+                participant_id=pid,
+                text=frame.text,
+                timestamp_us=frame.pts_us,
+                interrupted_output=interrupted_response is not None,
             )
+            if not self._query_topic:
+                await self._input_sink(query)
+                return
+            speaker = f"Speaker {frame.speaker_id}" if isinstance(frame, _SpeakerGatedQueryFrame) else "User"
+            # Display and application delivery share the owned input task, but
+            # neither waits for the other to start. Transport backpressure is
+            # retained without detached sends or an additional buffering policy.
+            results = await asyncio.gather(
+                self._input_sink(query),
+                self._display(DataMessage(
+                    participant_id=pid, topic=self._query_topic,
+                    pts_us=frame.pts_us, data=f"{speaker}: {frame.text}".encode("utf-8"),
+                )),
+                return_exceptions=True,
+            )
+            if isinstance(results[0], BaseException):
+                raise results[0]
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("voice input sink raised pid={!r}", pid)
+
+    async def _display(self, message: DataMessage) -> None:
+        if self._transport is None:
+            return
+        try:
+            await self._transport.send_return_data(message)
+        except Exception:
+            logger.exception("voice input display failed pid={!r}", message.participant_id)
 
     async def _spawn_response(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
