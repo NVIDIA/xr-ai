@@ -117,7 +117,7 @@ private final class CameraLifecycleFixture {
         }
     }
 
-    func frame() throws -> CMSampleBuffer {
+    func frame() throws -> sending CMSampleBuffer {
         var pixel: CVPixelBuffer?
         #expect(CVPixelBufferCreate(kCFAllocatorDefault, 640, 480, kCVPixelFormatType_32BGRA, nil, &pixel) == kCVReturnSuccess)
         let image = try #require(pixel)
