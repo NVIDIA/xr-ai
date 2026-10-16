@@ -12,16 +12,6 @@ from pathlib import Path
 
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, LLMService, ToolDef
-from xr_ai_runtime import Agent, Topic
-from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
-from xr_ai_tools.types import StrictRequest
-from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
-
-from ._context import (
-    _ConversationContext,
-    _rendered_source_size,
-    _TranscriptEntry,
-)
 from xr_ai_routing import (
     Admission,
     ConversationExchange,
@@ -37,7 +27,16 @@ from xr_ai_routing._history import (
     _format_minute,
 )
 from xr_ai_routing.contracts import Emit
+from xr_ai_runtime import Agent, Topic
+from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
+from xr_ai_tools.types import StrictRequest
+from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
+from ._context import (
+    _ConversationContext,
+    _rendered_source_size,
+    _TranscriptEntry,
+)
 from ._topics import make_context_subscriber
 from .context import ConversationContextUpdate
 

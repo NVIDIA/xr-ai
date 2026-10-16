@@ -12,7 +12,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 
 import nemo_relay
-
 from xr_ai_routing._history import _format_minute
 
 

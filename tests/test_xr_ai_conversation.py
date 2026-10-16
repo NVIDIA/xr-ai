@@ -22,6 +22,8 @@ from xr_ai_conversation import (  # noqa: E402
     Conversation,
     ConversationContextUpdate,
 )
+from xr_ai_conversation._context import _ConversationContext  # noqa: E402
+from xr_ai_conversation.conversation import _messages  # noqa: E402
 from xr_ai_routing import (  # noqa: E402
     Admission,
     ConversationExchange,
@@ -31,8 +33,6 @@ from xr_ai_routing import (  # noqa: E402
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_conversation._context import _ConversationContext  # noqa: E402
-from xr_ai_conversation.conversation import _messages  # noqa: E402
 from xr_ai_routing.front_end import _is_valid_acknowledgment  # noqa: E402
 from xr_ai_runtime import AgentRuntime, Topic  # noqa: E402
 
