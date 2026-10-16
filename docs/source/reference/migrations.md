@@ -5,6 +5,20 @@
 
 # Release migration
 
+## Conversation routing package
+
+The participant-scoped routing API is now distributed as `xr-ai-routing` and
+imported from `xr_ai_routing`. If you used an earlier preview of the routing
+SDK, change the dependency and move imports such as `ConversationFrontEnd`,
+`ConversationTurn`, and `Admission` to `xr_ai_routing`. Rename the protocol
+import from `ConversationDestination` to `RoutableAgent`. The routing package
+does not preserve the earlier import path.
+
+The conversation engine is provided separately by `xr-ai-conversation` and
+imported from `xr_ai_conversation`. Import `Conversation` and
+`ConversationContextUpdate` there; import routing contracts and
+`ConversationFrontEnd` from `xr_ai_routing`.
+
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for

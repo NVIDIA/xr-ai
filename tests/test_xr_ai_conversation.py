@@ -16,11 +16,14 @@ from xr_ai_tools.vision import ImageQueryChunk, ImageQueryRequest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-sdk"))
 
-import xr_ai_conversation.front_end as front_end_module  # noqa: E402
+import xr_ai_conversation as conversation_package  # noqa: E402
+import xr_ai_routing.front_end as front_end_module  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
-    Admission,
     Conversation,
     ConversationContextUpdate,
+)
+from xr_ai_routing import (  # noqa: E402
+    Admission,
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,
@@ -30,7 +33,7 @@ from xr_ai_conversation import (  # noqa: E402
 )
 from xr_ai_conversation._context import _ConversationContext  # noqa: E402
 from xr_ai_conversation.conversation import _messages  # noqa: E402
-from xr_ai_conversation.front_end import _is_valid_acknowledgment  # noqa: E402
+from xr_ai_routing.front_end import _is_valid_acknowledgment  # noqa: E402
 from xr_ai_runtime import AgentRuntime, Topic  # noqa: E402
 
 
@@ -39,6 +42,10 @@ def test_conversation_explicitly_implements_routable_agent():
     assert all(
         callable(Conversation.__dict__.get(method)) for method in ("routing_aid", "admit", "answer", "release")
     )
+
+
+def test_conversation_package_exports_only_engine_types():
+    assert conversation_package.__all__ == ["Conversation", "ConversationContextUpdate"]
 
 
 class _Prediction:

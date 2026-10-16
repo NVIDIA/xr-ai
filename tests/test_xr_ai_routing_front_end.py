@@ -7,9 +7,10 @@ import asyncio
 from collections import deque
 
 import pytest
-import xr_ai_conversation as conversation_module
-import xr_ai_conversation.front_end as front_end_module
-from xr_ai_conversation import (
+import xr_ai_routing as routing_module
+import xr_ai_routing.front_end as front_end_module
+from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
+from xr_ai_routing import (
     Admission,
     ConversationExchange,
     ConversationFrontEnd,
@@ -18,14 +19,13 @@ from xr_ai_conversation import (
     RoutableAgent,
     RoutingAid,
 )
-from xr_ai_conversation._history import _active_history_timestamps
-from xr_ai_conversation.front_end import _bounded_history_with_times, _is_valid_acknowledgment
-from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
+from xr_ai_routing._history import _active_history_timestamps
+from xr_ai_routing.front_end import _bounded_history_with_times, _is_valid_acknowledgment
 
 
 def test_routable_agent_replaces_destination_protocol_export() -> None:
     assert RoutableAgent.__name__ == "RoutableAgent"
-    assert conversation_module.__all__ == [
+    assert routing_module.__all__ == [
         "Admission",
         "Conversation",
         "ConversationContextUpdate",
@@ -36,7 +36,7 @@ def test_routable_agent_replaces_destination_protocol_export() -> None:
         "RoutableAgent",
         "RoutingAid",
     ]
-    assert not hasattr(conversation_module, "ConversationDestination")
+    assert not hasattr(routing_module, "ConversationDestination")
 
 
 class _Prediction:
@@ -596,7 +596,7 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
 
     events = []
     monkeypatch.setattr(
-        "xr_ai_conversation.front_end.nemo_relay.scope.event",
+        "xr_ai_routing.front_end.nemo_relay.scope.event",
         lambda name, **kwargs: events.append((name, kwargs["data"])),
     )
     decisions = _RouteDecisions()

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import nemo_relay
 
-from ._history import _format_minute
+from xr_ai_routing._history import _format_minute
 
 
 @dataclass(frozen=True, slots=True)
