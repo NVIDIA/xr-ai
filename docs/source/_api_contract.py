@@ -12,6 +12,7 @@ from pathlib import Path
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-hub" / "xr_ai_hub",
+    _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-conversation" / "xr_ai_conversation",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-models" / "xr_ai_models",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-runtime" / "xr_ai_runtime",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-tools" / "xr_ai_tools",
@@ -25,6 +26,7 @@ API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "utils" / "xr-ai-voicegate" / "xr_ai_voicegate",
 )
 PUBLIC_API_MODULES = (
+    "xr_ai_conversation",
     "xr_ai_models.presets",
     "xr_ai_tools.async_tools",
     "xr_ai_tools.capture",
@@ -44,6 +46,9 @@ PUBLIC_API_MODULES = (
     "xr_ai_tools.vision",
 )
 PUBLIC_API_EXCLUSIONS = (
+    "xr_ai_conversation._history",
+    "xr_ai_conversation.contracts",
+    "xr_ai_conversation.front_end",
     "xr_ai_models.presets.cosmos3_nano_reasoner",
     "xr_ai_models.presets.cosmos_vlm",
     "xr_ai_models.presets.llama_nemotron",
