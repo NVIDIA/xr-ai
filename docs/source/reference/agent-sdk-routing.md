@@ -13,7 +13,7 @@ model calls, application state, and resources.
 
 ## Route a turn
 
-Pass a `ConversationTurn` to `ConversationFrontEnd.handle()` with an async
+Pass an `AgentTurn` to `AgentRouter.handle()` with an async
 callback that accepts the route name and text chunk. The front end applies
 these steps:
 
@@ -36,13 +36,13 @@ these steps:
    not send that query through routing again.
 
 ```python
-from xr_ai_routing import ConversationFrontEnd, ConversationTurn
+from xr_ai_routing import AgentRouter, AgentTurn
 
-front_end = ConversationFrontEnd(
+front_end = AgentRouter(
     {"conversation": general_destination, "scene": scene_destination},
     decision_service,
 )
-turn = ConversationTurn(
+turn = AgentTurn(
     participant_id="participant-1",
     turn_id="turn-42",
     query="Add a blue cube.",
@@ -50,7 +50,7 @@ turn = ConversationTurn(
 result = await front_end.handle(turn, emit=publish_chunk)
 ```
 
-`ConversationExchange` records a completed user request and its user-visible
+`AgentExchange` records a completed user request and its user-visible
 answer. The first turn for a participant uses the supplied `turn.history` as its
 initial history. Later turns use history retained by the front end. Only whole
 recent exchanges that fit `context_budget_bytes` are passed to route decisions;
@@ -115,7 +115,7 @@ Admission preambles suppress the optional acknowledgment for that turn.
 
 The front end does not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a
-`ConversationTurn` and connects the callback to its output path.
+`AgentTurn` and connects the callback to its output path.
 
 ## Python API reference
 
