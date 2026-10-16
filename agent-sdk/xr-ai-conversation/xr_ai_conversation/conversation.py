@@ -17,12 +17,12 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.types import StrictRequest
 from xr_ai_tools.vision import ImageQueryRequest, StreamingImageQueryTool
 
-from ._history import _active_history_timestamps, _format_minute
 from ._context import (
     _ConversationContext,
     _rendered_source_size,
     _TranscriptEntry,
 )
+from ._history import _active_history_timestamps, _format_minute
 from ._topics import make_context_subscriber
 from .contracts import (
     Admission,
