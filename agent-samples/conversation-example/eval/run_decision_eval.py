@@ -58,7 +58,7 @@ _TRACE_SOURCES = (
     _SAMPLE / "worker/conversation_example_worker/_conversation_agents.py",
     _SAMPLE / "worker/conversation_example_worker/_monitoring.py",
     _SAMPLE / "worker/conversation_example_worker/_visual_agents.py",
-    _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/router.py",
+    _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_router.py",
     _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py",
 )
 _MONITOR_SOURCE = "conversation-example.monitor-window"
