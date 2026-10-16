@@ -22,11 +22,7 @@ from xr_ai_routing import (
     DestinationResult,
     RoutableAgent,
     RoutingAid,
-)
-from xr_ai_routing._history import (
-    _active_exchange_id,
-    _active_history_exchange_ids,
-    _active_history_timestamps,
+    current_turn_context,
 )
 from xr_ai_runtime import Agent, Topic
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
@@ -229,10 +225,11 @@ class Conversation(RoutableAgent):
         """
 
         self.activate_participant(participant_id)
-        history_timestamps = _active_history_timestamps.get()
+        turn_context = current_turn_context()
+        history_timestamps = turn_context.history_timestamps
         if len(history_timestamps) != len(history):
             history_timestamps = (None,) * len(history)
-        history_exchange_ids = _active_history_exchange_ids.get()
+        history_exchange_ids = turn_context.history_exchange_ids
         if len(history_exchange_ids) != len(history):
             history_exchange_ids = (None,) * len(history)
         # The front end supplies a bounded recent window, not necessarily the
@@ -405,7 +402,7 @@ class Conversation(RoutableAgent):
             user,
             assistant,
             timestamp_us=time.time_ns() // 1_000,
-            exchange_id=_active_exchange_id.get(),
+            exchange_id=current_turn_context().exchange_id,
         )
         self._schedule_dialogue_compaction(participant_id)
 
