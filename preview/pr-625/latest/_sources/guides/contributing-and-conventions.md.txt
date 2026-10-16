@@ -12,6 +12,8 @@ for setup, testing, pull requests, and DCO sign-off. Refer to
 architecture and change constraints used by humans and coding agents. Refer to
 {doc}`Documentation style <documentation-style>` for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
+{doc}`Python code style <python-code-style>` for the public API, exception handling,
+and module layout conventions for Python code. Refer to
 [`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
 for the package dependency map.
 

@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
@@ -760,6 +761,19 @@ in the sample’s worker YAML (<code class="docutils literal notranslate"><span 
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
 owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
 </section>
+<section id="browser-reports-an-empty-response-on-the-hub-port">
+<span id="web-client-empty-response"></span><h3>Browser reports an empty response on the hub port<a class="headerlink" href="#browser-reports-an-empty-response-on-the-hub-port" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> opening the web client reports <code class="docutils literal notranslate"><span class="pre">ERR_EMPTY_RESPONSE</span></code>, or an HTTP
+client reports an empty reply.</p>
+<p><strong>Cause:</strong> plain HTTP sent to the hub’s HTTPS listener can produce this error.
+HTTPS is enabled by default. Check the URL scheme against the hub’s launch
+output.</p>
+<p><strong>Fix:</strong> open the full URL printed by DeviceIOHub, including <code class="docutils literal notranslate"><span class="pre">https://</span></code> and the
+configured web-server port. For example, the default HTTPS listener uses
+<code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080</span></code>. Refer to <a class="reference internal" href="../getting_started/networking.html#tls-for-the-web-client"><span class="std std-ref">TLS for clients</span></a> for trusting the
+development certificate on the client device. If the configured URL still
+fails, inspect the hub’s log using the failed-run procedure above.</p>
+</section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
@@ -1014,6 +1028,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-and-connection-issues">Runtime and connection issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle">Voice session drops or agent goes silent after a few minutes idle</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#browser-reports-an-empty-response-on-the-hub-port">Browser reports an empty response on the hub port</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#browser-client-connects-but-no-audio-or-no-video">Browser client connects but no audio or no video</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#https-web-client-ws-mixed-content-warning">HTTPS web client → <code class="docutils literal notranslate"><span class="pre">ws://</span></code> mixed-content warning</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#android-connection-fails-with-tls-or-certificate-errors">Android — connection fails with TLS or certificate errors</a></li>

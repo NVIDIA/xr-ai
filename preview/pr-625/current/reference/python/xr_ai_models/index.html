@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -1466,7 +1467,9 @@ injected HTTP client remains owned by the caller and is not closed here.</p>
 <p>vLLM reports its checkpoint here even when the served ID is an alias.
 Missing, ambiguous, or unavailable metadata returns <code class="docutils literal notranslate"><span class="pre">None</span></code>; the
 configured alias alone is not evidence of which weights are loaded.
-Endpoints exposing only an ID therefore cannot support cache reuse.</p>
+Endpoints exposing only an ID therefore cannot support cache reuse.
+Uses the HTTP client’s configured timeout and logs unavailable metadata
+reasons at debug level without logging response bodies or credentials.</p>
 </dd></dl>
 
 <dl class="py method">

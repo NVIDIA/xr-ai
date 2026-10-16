@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -458,21 +459,28 @@ indexing settings, document content, and optional <code class="docutils literal 
 key no longer replaces the profile hash. If backing-model metadata is
 unavailable, RAG rebuilds without reading or writing a persistent cache.</p></li>
 </ol>
-<p>Earlier revisions could build a nominally 2048-dimensional cache from an old
-server still listening on port 8109, then reuse it after switching weights.
-To recover, stop that server, start the intended model, and restart RAG with
-a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>, or delete the affected cache directory: normally
-<code class="docutils literal notranslate"><span class="pre">models/tea-making-rag-cache</span></code> for tea or <code class="docutils literal notranslate"><span class="pre">services/rag-service/.rag-cache</span></code> for
-standalone RAG. Deleting generated indexes loses no source documents. Old
-768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default configuration
-and can also be deleted to reclaim space.</p>
+<p>Old 768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.</p>
 <p>Independently deployed NIM endpoints must serve the new model before using the
 updated NIM profile. A served ID alone is not a backing-model identity: endpoints
 without a <code class="docutils literal notranslate"><span class="pre">root</span></code> field rebuild on each RAG startup. If weights change under an
 unchanged <code class="docutils literal notranslate"><span class="pre">root</span></code>, bump <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models while
 RAG is running; its in-memory document vectors must match query embeddings.
-Custom <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code> implementations must provide <code class="docutils literal notranslate"><span class="pre">model_identity()</span></code>;
-return <code class="docutils literal notranslate"><span class="pre">None</span></code> when the backing model cannot be identified.</p>
+If model identity changes or becomes unavailable during indexing, startup fails
+without saving or serving those vectors. Stabilize the endpoint and restart RAG.</p>
+</section>
+<section id="embedding-sdk-identity-contract">
+<span id="embedding-service-identity-migration"></span><h2>Embedding SDK identity contract<a class="headerlink" href="#embedding-sdk-identity-contract" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code> now requires <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">model_identity()</span> <span class="pre">-&gt;</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span></code>.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when identity cannot be established; do not return a served
+alias that can silently switch weights. The built-in OpenAI-compatible client
+implements this lookup through <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code>.</p>
+<p>Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> permits embedding and retrieval, but disables persistent RAG
+cache reads and writes. Setting <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> does not override this safeguard.
+Existing adapters without the method fail <code class="docutils literal notranslate"><span class="pre">isinstance(...,</span> <span class="pre">EmbeddingService)</span></code>
+checks and cannot be passed to <code class="docutils literal notranslate"><span class="pre">DenseIndex.build()</span></code> until updated.</p>
 </section>
 <section id="session-recording-flag">
 <h2>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h2>
@@ -939,6 +947,7 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-contract">Embedding SDK identity contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>

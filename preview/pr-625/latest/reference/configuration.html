@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -918,6 +919,8 @@ workflow.</p></li>
 <span class="nt">lk_port_tcp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7881</span>
 <span class="nt">lk_port_udp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7882</span>
 
+<span class="c1"># Update lk_internal_url together with lk_port_ws.</span>
+
 <span class="c1"># Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip</span>
 <span class="c1"># validation when the NAT does not support LiveKit's public-IP self-ping.</span>
 <span class="c1"># lk_use_external_ip: true</span>
@@ -933,6 +936,7 @@ workflow.</p></li>
 <span class="c1"># Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored</span>
 <span class="c1"># networking; see the note in services/device-io-hub/device_io_hub.yaml).</span>
 <span class="c1"># token_server_port: 8000</span>
+<span class="c1"># Update token_server_url together with token_server_port.</span>
 </pre></div>
 </div>
 </section>

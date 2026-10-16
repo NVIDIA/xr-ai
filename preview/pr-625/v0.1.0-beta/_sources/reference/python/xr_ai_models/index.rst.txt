@@ -858,6 +858,8 @@ Package Contents
       Missing, ambiguous, or unavailable metadata returns ``None``; the
       configured alias alone is not evidence of which weights are loaded.
       Endpoints exposing only an ID therefore cannot support cache reuse.
+      Uses the HTTP client's configured timeout and logs unavailable metadata
+      reasons at debug level without logging response bodies or credentials.
 
 
 

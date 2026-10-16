@@ -395,6 +395,22 @@ in the sample's worker YAML (`simple_vlm_example_worker.yaml` or
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
 owned by `xr_ai_voice.VoiceAgent`.
 
+(web-client-empty-response)=
+### Browser reports an empty response on the hub port
+
+**Symptom:** opening the web client reports `ERR_EMPTY_RESPONSE`, or an HTTP
+client reports an empty reply.
+
+**Cause:** plain HTTP sent to the hub's HTTPS listener can produce this error.
+HTTPS is enabled by default. Check the URL scheme against the hub's launch
+output.
+
+**Fix:** open the full URL printed by DeviceIOHub, including `https://` and the
+configured web-server port. For example, the default HTTPS listener uses
+`https://<host>:8080`. Refer to {ref}`tls-for-the-web-client` for trusting the
+development certificate on the client device. If the configured URL still
+fails, inspect the hub's log using the failed-run procedure above.
+
 ### Browser client connects but no audio or no video
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
