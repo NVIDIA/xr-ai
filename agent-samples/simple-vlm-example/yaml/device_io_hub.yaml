@@ -17,6 +17,8 @@ lk_port_ws:  7880
 lk_port_tcp: 7881
 lk_port_udp: 7882
 
+# Update lk_internal_url together with lk_port_ws.
+
 # Cloud VMs behind NAT may need STUN-based public-IP discovery. Also skip
 # validation when the NAT does not support LiveKit's public-IP self-ping.
 # lk_use_external_ip: true
@@ -32,3 +34,4 @@ enable_token_server: true
 # Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored
 # networking; see the note in services/device-io-hub/device_io_hub.yaml).
 # token_server_port: 8000
+# Update token_server_url together with token_server_port.
