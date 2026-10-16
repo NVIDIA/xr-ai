@@ -3,9 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# xr-ai-conversation
+# xr-ai-routing
 
-`xr-ai-conversation` provides typed contracts and a participant-scoped front end
+`xr-ai-routing` provides typed contracts and a participant-scoped front end
 for routing turns among application destinations. Each registered destination
 implements the public `RoutableAgent` protocol. It uses the typed
 `DecisionService` for route selection. Destinations keep ownership of their
@@ -36,7 +36,7 @@ these steps:
    not send that query through routing again.
 
 ```python
-from xr_ai_conversation import ConversationFrontEnd, ConversationTurn
+from xr_ai_routing import ConversationFrontEnd, ConversationTurn
 
 front_end = ConversationFrontEnd(
     {"conversation": general_destination, "scene": scene_destination},
@@ -103,7 +103,7 @@ Admission preambles suppress the optional acknowledgment for that turn.
 
 | File | Responsibility |
 |---|---|
-| `__init__.py` | Lists the routing names exported by `xr_ai_conversation` |
+| `__init__.py` | Lists the routing names exported by `xr_ai_routing` |
 | `contracts.py` | Defines route metadata, turns, completed exchanges, admission results, and the `RoutableAgent` protocol |
 | `front_end.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
 | `_history.py` | Shares private exchange timestamps and their display format |
@@ -114,5 +114,5 @@ An application adapter translates its incoming request into a
 
 ## Python API reference
 
-The generated {doc}`Python reference </reference/python/xr_ai_conversation/index>`
+The generated {doc}`Python reference </reference/python/xr_ai_routing/index>`
 documents the exported names and their signatures, fields, and behavior.

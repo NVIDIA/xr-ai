@@ -6,9 +6,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "xr-ai-conversation"
+name = "xr-ai-routing"
 version = "0.1.0"
-description = "Participant-scoped conversation routing and destination contracts."
+description = "Participant-scoped agent routing and destination contracts."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "nemo-relay>=0.7.2,<0.8",
@@ -19,4 +19,4 @@ dependencies = [
 xr-ai-models = { path = "../xr-ai-models", editable = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["xr_ai_conversation"]
+packages = ["xr_ai_routing"]
