@@ -141,7 +141,7 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     config = load_config(_SAMPLE / "yaml/worker.yaml")
     models = load_models_config(config.models_config)
     services = {process.name: process for process in launched}
-    assert tuple(services) == ("stt", "tts", "omni", "vlm")
+    assert tuple(services) == ("speaker-stt", "stt", "tts", "omni", "vlm")
     assert set(models.entries) == {"stt", "tts", "llm", "vlm"}
     for name, model in models.entries.items():
         service = services["omni" if name == "llm" else name]
@@ -156,6 +156,13 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     gate = load_voice_gate_config(config.voice_gate_yaml)
     assert gate._speaker is None
     assert gate._conversation is None
+    replay_gate = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.replay.yaml")
+    assert replay_gate._speaker.mode == "conversation"
+    assert replay_gate._speaker.backend == "required"
+    assert urlsplit(replay_gate._speaker.base_url).port == services["speaker-stt"].port
+    assert services["speaker-stt"].command == "speaker_stt"
+    assert Path(services["speaker-stt"].project) == _SAMPLE.parents[1] / "services/speaker-stt"
+    assert services["speaker-stt"].launch_mode == "persist"
 
     stopped = []
     monkeypatch.setattr(sys, "argv", [str(server_main), "--stop", "--gpu-profile", gpu_profile])

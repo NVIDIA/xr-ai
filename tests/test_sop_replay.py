@@ -1232,8 +1232,9 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
         voice_gate_yaml=_SAMPLE / "yaml/voice_gate.replay.yaml", replay=ReplayConfig(tmp_path, "Align Parts"),
     )
     llm = Mock(health=AsyncMock(return_value=True), close=AsyncMock())
-    for name in ("make_llm", "make_vlm", "make_stt", "make_tts"):
+    for name in ("make_llm", "make_vlm", "make_tts"):
         monkeypatch.setattr(app, name, lambda *_args: llm)
+    monkeypatch.setattr(app, "make_stt", lambda *_args: pytest.fail("Replay must not construct batch STT"))
     async def receive():
         await asyncio.Future()
     endpoint = Mock(run=receive, wait_until_running=AsyncMock())
@@ -1249,11 +1250,23 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
         return agent
 
     class Voice(Agent):
+        @classmethod
+        def from_models(cls, **kwargs):
+            from xr_ai_voice import VoiceAgent
+
+            # Exercise the real factory: the batch role in the shared model
+            # profile must not create a client or readiness dependency here.
+            configured = VoiceAgent.from_models(**kwargs)
+            assert configured._session.stt is None
+            return cls(**kwargs)
+
         def __init__(self, **kwargs):
             super().__init__()
-            assert set(kwargs["probes"]) == {"llm", "vlm", "stt", "tts"}
+            assert set(kwargs["probes"]) == {"llm", "vlm", "tts"}
             assert not kwargs["voice_gate"].magic_phrases
             assert not kwargs["voice_gate"].stop_commands_enabled
+            assert kwargs["voice_gate"]._speaker.mode == "conversation"
+            assert kwargs["voice_gate"]._speaker.backend == "required"
 
         async def run(self, runtime):
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id="alice")
@@ -1267,6 +1280,72 @@ async def test_replay_app_composition_starts_and_cleans_up(tmp_path, document, m
     assert agents[0]._aggregation._stopping
     capture.assert_not_called()
     endpoint.close.assert_called_once()
+
+
+async def test_replay_speaker_enrollment_filters_input_before_guide_controls():
+    from pipecat.frames.frames import InterruptionFrame
+    from pipecat.processors.frame_processor import FrameDirection
+    from speaker_stt._selection import _Selection
+    from xr_ai_voice._frames import GatedQueryFrame, ParticipantLeftFrame
+    from xr_ai_voice._processors.speaker_stt import _SpeakerSttProcessor
+    from xr_ai_voice._processors.voice_gate import VoiceGateProcessor
+    from xr_ai_voicegate import load_voice_gate_config
+
+    cfg = load_voice_gate_config(_SAMPLE / "yaml/voice_gate.replay.yaml")
+    selection = _Selection(cfg._speaker)
+    gate = VoiceGateProcessor(cfg=cfg, tts=SimpleNamespace())
+    gate._use_speaker_asr = True
+    gate.push_frame = AsyncMock()
+    audio = _SpeakerSttProcessor(cfg=cfg._speaker)
+
+    async def forward(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    audio.push_frame = forward
+    now = 0
+
+    async def speak(text, speaker=7):
+        nonlocal now
+        now += 100_000
+        gate.push_frame.reset_mock()
+        if selection.owner is None:
+            events = selection._enroll_completed([(speaker, text, now, False)], completed_at_us=now + 10_000)
+        else:
+            selected, _, _ = selection._activity({speaker}, 0.1, now)
+            events = selection._finish(text) if selected is not None else []
+        for event in events:
+            await audio._event("alice", event)
+        frames = [call.args[0] for call in gate.push_frame.call_args_list]
+        # Generic STOP handling must not swallow the replay cancellation command.
+        assert any(isinstance(frame, InterruptionFrame) for frame in frames) == (
+            text == cfg._conversation.stop_phrase
+        )
+        return [frame.text for frame in frames if isinstance(frame, GatedQueryFrame)]
+
+    try:
+        assert await speak("start replay") == []
+        assert await speak(cfg._conversation.start_phrase) == []
+        assert selection.owner == 7
+        assert await speak("start replay") == ["start replay"]
+        # Synthetic speaker labels exercise routing, not acoustic accuracy.
+        assert await speak("Show the packet so I can read the brand", speaker=2) == []
+        assert await speak("stop replay", speaker=2) == []
+        assert await speak("stop replay") == ["stop replay"]
+        assert selection.owner == 7
+        assert await speak("start replay") == ["start replay"]
+        assert await speak(cfg._conversation.stop_phrase) == []
+        assert selection.owner is None
+        assert await speak("start replay") == []
+        assert await speak(cfg._conversation.start_phrase) == []
+        await gate.process_frame(ParticipantLeftFrame("alice"), FrameDirection.DOWNSTREAM)
+        await audio._reset("alice", retry=False)
+        selection = _Selection(cfg._speaker)
+        assert await speak("start replay") == []
+        assert await speak(cfg._conversation.start_phrase) == []
+        assert await speak("start replay") == ["start replay"]
+    finally:
+        await audio.cleanup()
+        await gate.cleanup()
 
 
 async def test_actual_runtime_and_aggregation_deliver_replay_and_release(document):

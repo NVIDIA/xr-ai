@@ -49,8 +49,9 @@ uv run main.py --mode replay "Tea Making"
 Use Numi Chamomile Lemon tea, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
 reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
-The guide must have `task.status: approved`. Replay uses the same model servers;
-say **start replay** to begin and **stop replay** to cancel. Say **start replay**
+The guide must have `task.status: approved`. Replay uses the same model stack.
+After connecting, say **Hey agent, let's start talking** to enroll your voice,
+then **start replay** to begin and **stop replay** to cancel. Say **start replay**
 again to begin a fresh run of the same command-line-selected guide.
 Refer to the [replay reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#replay-an-approved-guide)
 for verification and step-advance controls. Capture and replay run separately.
@@ -71,7 +72,7 @@ uv run --project model-servers procedure_capture_replay_model_servers --stop
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
-| `yaml/voice_gate.replay.yaml` | Wake-word-free guide questions and controls |
+| `yaml/voice_gate.replay.yaml` | Speaker enrollment, conversation controls, and speaker-STT endpoint |
 | `yaml/device_io_hub.yaml` | Room, ports, and web client |
 
 For example, increase the interval between captions in `yaml/capture-agent-config.yaml`:

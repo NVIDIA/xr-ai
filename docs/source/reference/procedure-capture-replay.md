@@ -21,11 +21,15 @@ uv run main.py --mode capture
 ```
 
 The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
-Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
+speaker-conditioned STT on 8102, Pocket TTS on 8105, Nemotron Omni LLM on 8108,
+and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
 or generate guides automatically. Replay uses Omni for guide questions and
-model-driven observations, alongside the same STT, TTS, and Cosmos services.
+model-driven observations, alongside speaker-conditioned STT, TTS, and Cosmos.
+Both speech services are launched so either mode can use the same stack. Account
+for the additional speech models when sizing GPU memory; the profile settings
+are not an acoustic, latency, or GPU-capacity qualification.
 The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
 profile explicitly. The worker's `yaml/models.json` configures its client
@@ -222,18 +226,38 @@ Quote names containing spaces:
 uv run main.py --mode replay "Guide Name"
 ```
 
-Start the shared models first, as for capture. Replay uses the LLM, VLM, STT,
-and TTS endpoints in `yaml/models.json`. Connect using the hub's web
-client URL and enable microphone and camera access. The command line selects
-the guide, but connecting does not start it. Say **start replay** to begin step
-one with independent progress for that participant. No wake phrase is required.
+Start the shared models first, as for capture. Replay uses the LLM, VLM,
+and TTS endpoints in `yaml/models.json`, and the speaker-STT endpoint in
+`yaml/voice_gate.replay.yaml`. Connect using the hub's web client URL and enable
+microphone and camera access. Say **Hey agent, let's start talking** to enroll
+your voice for this connection, as in {doc}`tea-making-sample`. After enrollment,
+speak naturally without repeating a wake phrase; only the enrolled speaker's
+speech is admitted as replay input. The command line selects the guide, but
+connecting and enrollment do not start it. Say **start replay** to begin step
+one with independent progress for that participant.
 Until then, no verification or timer is running. Say **stop replay** at any time
 to cancel guidance, then **start replay** to begin a fresh run of the same guide.
 Turning off live video does not reset the guide. The shared current
 frame tool may request a still image from clients that support on-demand capture;
 if no fresh image is available, visual verification waits. Timer checks continue
 without a camera. Disconnect releases
-that participant's progress and pending work; reconnect waits for start replay.
+that participant's progress and pending work; reconnect requires enrollment
+and a new **start replay**.
+
+**Stop replay** cancels guide execution without releasing speaker enrollment,
+so **start replay** can begin another run. **Hey agent, let's stop talking**
+instead closes speech admission; it does not cancel the guide's background
+verification or timers. Say **stop replay** first when you want both to stop.
+Conversation phrases are consumed by the voice layer, not sent to the replay
+agent. Typed guide controls remain available without enrollment.
+
+Replay waits for speaker-STT readiness and does not fall back to unfiltered
+batch STT. A speech-stream reset requires enrollment again. Keep the worker and
+speaker service on compatible versions. Capture remains on batch STT without
+enrollment. Speaker filtering can reject agent playback picked up by the
+microphone when it is recognized as another speaker, but it is not acoustic
+echo cancellation. Keep client echo cancellation enabled and verify genuine
+user interruptions and rejected playback on the target microphone and speakers.
 
 Like {doc}`tea-making-sample`, replay separates foreground conversation from
 background verification. The foreground answers guide questions using the
@@ -285,7 +309,8 @@ Start the sample's shared models, then run:
 uv run main.py --mode replay "Tea Making"
 ```
 
-Connect and say **start replay**. Say **next** after each verified visual step
+Connect, say **Hey agent, let's start talking**, then **start replay**.
+Say **next** after each verified visual step
 and **stop replay** to cancel. The guide finishes automatically when the
 five-minute timer expires. Say **start replay** to repeat.
 
@@ -471,7 +496,7 @@ cannot cancel its own response.
 | `yaml/replay-agent-config.yaml` | Local guide directory and visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
-| `yaml/voice_gate.replay.yaml` | Wake-word-free replay questions and guide controls |
+| `yaml/voice_gate.replay.yaml` | Speaker enrollment, conversation controls, and speaker-STT endpoint |
 | `yaml/device_io_hub.yaml` | Room and web server |
 
 `worker.yaml` selects the capture YAML through `capture_config`, resolved relative

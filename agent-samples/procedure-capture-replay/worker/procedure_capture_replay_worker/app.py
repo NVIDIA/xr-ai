@@ -49,7 +49,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     elif config.capture is None:
         raise ValueError("capture mode requires capture configuration")
     models = load_models_config(config.models_config)
-    stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
+    tts, vlm = make_tts(models, "tts"), make_vlm(models, "vlm")
     llm = make_llm(models, "llm") if guide is not None else None
     # Capture must finish draining after voice stops. Its frame and participant
     # endpoint therefore has a lifetime controlled by this composition layer.
@@ -61,8 +61,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     runtime = AgentRuntime()
     capture = replay = aggregation = None
     voice_options = {}
-    probes = {"stt": stt.health, "tts": tts.health, "vlm": vlm.health}
+    probes = {"tts": tts.health, "vlm": vlm.health}
     if guide is None:
+        stt = make_stt(models, "stt")
+        probes["stt"] = stt.health
+        voice_options["stt"] = stt
         capture_backend = _Capture(
             sessions_dir=config.capture.artifacts_dir / "sessions",
             current_frame=frames,
@@ -88,6 +91,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         replay.bind_runtime(runtime)
         probes["llm"] = llm.health
         voice_options = {
+            "models": models,
             "participant_joined_topic": PARTICIPANT_JOINED_TOPIC,
             "participant_left_topic": PARTICIPANT_LEFT_TOPIC,
             "interrupted_topic": INTERRUPTED_TOPIC,
@@ -95,9 +99,11 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         }
     # Accepted voice input is delivered after prior speech is cancelled, so
     # each capture command cannot interrupt its own acknowledgement.
-    voice = VoiceAgent(
+    # Replay's factory selects and waits for speaker ASR without requiring the
+    # batch client retained for capture's ungated narration.
+    make_voice = VoiceAgent if capture is not None else VoiceAgent.from_models
+    voice = make_voice(
         query_topic=CAPTURE_INPUT_TOPIC if capture is not None else USER_QUERY_TOPIC,
-        stt=stt,
         tts=tts,
         vad=VadConfig(
             silence_duration=config.silence_duration,
