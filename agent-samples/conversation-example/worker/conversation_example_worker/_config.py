@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed configuration for the conversation example worker."""
+"""Load and validate configuration owned by the conversation example worker.
+
+Only worker-package modules and repository tests import this module.
+"""
 
 from __future__ import annotations
 

@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Routable conversation agents with participant-owned context."""
+"""Own the sample's general-conversation and note-taking route agents.
+
+Only the worker app, sample evaluator, and repository tests import this module.
+"""
 
 from __future__ import annotations
 

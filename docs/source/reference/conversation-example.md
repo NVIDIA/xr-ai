@@ -44,7 +44,7 @@ ConversationExampleAgent
 VoiceAgent
 ```
 
-`app.py` is the composition root that constructs the voice agent, sample
+`_app.py` is the composition root that constructs the voice agent, sample
 adapter, `AgentRouter`, and sample destinations. It registers the
 voice agent and sample adapter with one `AgentRuntime`; when context topics are
 configured, it also registers the conversation context subscriber.
@@ -150,12 +150,12 @@ The worker package is under
 | File | Responsibility |
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
-| `app.py` | Composition root for `VoiceAgent`, `ConversationExampleAgent`, `AgentRouter`, route agents, services, and readiness |
-| `agent.py` | Adapts subscribed voice events to `AgentRouter` and publishes attributed voice output |
-| `config.py` | Resolves worker, model, voice-gate, and prompt settings |
-| `conversation_agents.py` | Wraps `Conversation` with the routing contract, bounded context, and the foreground note-taking role |
-| `monitoring.py` | Owns the explicitly started background monitor and rolling text window |
-| `visual_agents.py` | Implements direct current-image observation |
+| `_app.py` | Composition root for `VoiceAgent`, `ConversationExampleAgent`, `AgentRouter`, route agents, services, and readiness |
+| `_agent.py` | Adapts subscribed voice events to `AgentRouter` and publishes attributed voice output |
+| `_config.py` | Resolves worker, model, voice-gate, and prompt settings |
+| `_conversation_agents.py` | Wraps `Conversation` with bounded context and the foreground note-taking role |
+| `_monitoring.py` | Owns the explicitly started background monitor and rolling text window |
+| `_visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 | `prompts/note_taking.txt` | Instructions for the focused note-taking destination |

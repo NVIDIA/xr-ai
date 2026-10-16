@@ -28,13 +28,13 @@ _ROOT = Path(__file__).resolve().parents[3]
 _SAMPLE = _ROOT / "agent-samples/conversation-example"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from conversation_example_worker.app import _CONVERSATION_SCOPE  # noqa: E402
-from conversation_example_worker.conversation_agents import (  # noqa: E402
+from conversation_example_worker._app import _CONVERSATION_SCOPE  # noqa: E402
+from conversation_example_worker._conversation_agents import (  # noqa: E402
     ContextualConversationAgent,
     NoteTakingAgent,
 )
-from conversation_example_worker.monitoring import VisualMonitorAgent  # noqa: E402
-from conversation_example_worker.visual_agents import VisualObservationAgent  # noqa: E402
+from conversation_example_worker._monitoring import VisualMonitorAgent  # noqa: E402
+from conversation_example_worker._visual_agents import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
     Conversation,
 )
@@ -54,10 +54,10 @@ _CASE_FILE = _SAMPLE / "eval/conversation-cases.yaml"
 _MODELS_FILE = _SAMPLE / "yaml/models.json"
 _MAX_CALLS = 100
 _TRACE_SOURCES = (
-    _SAMPLE / "worker/conversation_example_worker/app.py",
-    _SAMPLE / "worker/conversation_example_worker/conversation_agents.py",
-    _SAMPLE / "worker/conversation_example_worker/monitoring.py",
-    _SAMPLE / "worker/conversation_example_worker/visual_agents.py",
+    _SAMPLE / "worker/conversation_example_worker/_app.py",
+    _SAMPLE / "worker/conversation_example_worker/_conversation_agents.py",
+    _SAMPLE / "worker/conversation_example_worker/_monitoring.py",
+    _SAMPLE / "worker/conversation_example_worker/_visual_agents.py",
     _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/router.py",
     _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py",
 )

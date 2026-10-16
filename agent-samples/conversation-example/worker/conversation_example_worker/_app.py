@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose the conversation example assistant from shared SDK primitives."""
+"""Compose shared SDK primitives into the conversation example worker.
+
+Only the worker entry point, sample evaluator, and repository tests import this
+module.
+"""
 
 from __future__ import annotations
 
@@ -39,17 +43,17 @@ from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
 from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
-from .agent import (
+from ._agent import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     ConversationExampleAgent,
 )
-from .config import WorkerConfig
-from .conversation_agents import ContextualConversationAgent, NoteTakingAgent
-from .monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorAgent
-from .visual_agents import VisualObservationAgent
+from ._config import WorkerConfig
+from ._conversation_agents import ContextualConversationAgent, NoteTakingAgent
+from ._monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorAgent
+from ._visual_agents import VisualObservationAgent
 
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4

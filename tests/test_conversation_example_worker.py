@@ -51,8 +51,8 @@ _WORKER_DIR = _SAMPLE_DIR / "worker"
 sys.path.insert(0, str(_WORKER_DIR))
 
 from conversation_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker.agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker import _app as app  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker._agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -60,11 +60,11 @@ from conversation_example_worker.agent import (  # noqa: E402  # pyright: ignore
     VOICE_OUTPUT_TOPIC,
     ConversationExampleAgent,
 )
-from conversation_example_worker.app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker._app import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     _CONVERSATION_INSTRUCTIONS,
 )
-from conversation_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker.conversation_agents import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker._config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker._conversation_agents import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     ContextualConversationAgent,
     NoteTakingAgent,
 )
@@ -1026,9 +1026,12 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert {
         "__init__.py",
         "__main__.py",
-        "agent.py",
-        "app.py",
-        "config.py",
+        "_agent.py",
+        "_app.py",
+        "_config.py",
+        "_conversation_agents.py",
+        "_monitoring.py",
+        "_visual_agents.py",
         "prompts/system.txt",
     } <= {str(path.relative_to(package)) for path in package.rglob("*") if path.is_file()}
     assert not (_WORKER_DIR / "agent.py").exists()

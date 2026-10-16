@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sample-owned background visual monitor with a bounded observation window."""
+"""Own background visual-monitor tasks and their bounded observation window.
+
+Only the worker app, sample evaluator, and repository tests import this module.
+"""
 
 from __future__ import annotations
 

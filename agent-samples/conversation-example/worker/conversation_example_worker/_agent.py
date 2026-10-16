@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Bridge voice runtime events, routed answers, and voice output."""
+"""Own voice subscriptions and streamed response tasks for the worker app.
+
+Only the worker app, sample evaluator, and repository tests import this module.
+"""
 
 from __future__ import annotations
 
