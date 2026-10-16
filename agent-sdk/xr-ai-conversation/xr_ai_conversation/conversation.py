@@ -199,77 +199,6 @@ class Conversation(RoutableAgent):
 
         return make_context_subscriber(self, self._summary_context_topics, self._incremental_context_topics)
 
-    @staticmethod
-    def _validate_topic_names(parameter: str, topic_names: Sequence[str]) -> tuple[str, ...]:
-        if isinstance(topic_names, (str, bytes)) or not isinstance(topic_names, Sequence):
-            raise ValueError(f"{parameter} must be a sequence of topic names")
-        names = tuple(topic_names)
-        if any(not isinstance(name, str) or not name.strip() for name in names):
-            raise ValueError(f"{parameter} entries must be non-empty strings")
-        if len(set(names)) != len(names):
-            raise ValueError(f"{parameter} entries must be unique")
-        return names
-
-    async def _update_context(
-        self,
-        participant_id: str | None,
-        source: str,
-        update: ConversationContextUpdate,
-        *,
-        mode: str,
-        timestamp_us: int | None = None,
-    ) -> None:
-        """Apply one configured topic update to a participant's background."""
-
-        if participant_id is None:
-            _logger.error("dropping context update without participant source=%r", source)
-            return
-        if self._closing or participant_id in self._closed_participants:
-            _logger.error("dropping context update for closed participant=%r source=%r", participant_id, source)
-            return
-        stored, trimmed = await self._context.update(
-            participant_id,
-            source,
-            mode,
-            update.text,
-            context_budget_bytes=self._context_budget_bytes,
-            timestamp_us=timestamp_us,
-        )
-        if trimmed:
-            if mode == "summary":
-                _logger.error(
-                    "dropping oversized context summary participant=%r source=%r size_bytes=%d budget_bytes=%d",
-                    participant_id,
-                    source,
-                    _rendered_source_size(source, update.text, timestamp_us),
-                    self._context_budget_bytes,
-                )
-                return
-            _logger.error(
-                "context records dropped to fit participant=%r source=%r size_bytes=%d budget_bytes=%d",
-                participant_id,
-                source,
-                len(update.text.encode("utf-8")),
-                self._context_budget_bytes,
-            )
-        if not stored:
-            return
-        if mode == "incremental":
-            task = self._context.schedule_context_compaction(
-                participant_id,
-                source,
-                payload_budget_bytes=self._compaction_input_budget_bytes,
-                summary_budget_bytes=self._context_budget_bytes,
-                compact=self._compact_source,
-            )
-            if task is None:
-                _logger.error(
-                    "context compaction deferred participant=%r source=%r budget_bytes=%d",
-                    participant_id,
-                    source,
-                    self._compaction_input_budget_bytes,
-                )
-
     async def stream(
         self,
         request: str,
@@ -392,6 +321,77 @@ class Conversation(RoutableAgent):
             if close is not None:
                 await close()
         self._record_completed_exchange(participant_id, request, "".join(response_fragments))
+
+    @staticmethod
+    def _validate_topic_names(parameter: str, topic_names: Sequence[str]) -> tuple[str, ...]:
+        if isinstance(topic_names, (str, bytes)) or not isinstance(topic_names, Sequence):
+            raise ValueError(f"{parameter} must be a sequence of topic names")
+        names = tuple(topic_names)
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError(f"{parameter} entries must be non-empty strings")
+        if len(set(names)) != len(names):
+            raise ValueError(f"{parameter} entries must be unique")
+        return names
+
+    async def _update_context(
+        self,
+        participant_id: str | None,
+        source: str,
+        update: ConversationContextUpdate,
+        *,
+        mode: str,
+        timestamp_us: int | None = None,
+    ) -> None:
+        """Apply one configured topic update to a participant's background."""
+
+        if participant_id is None:
+            _logger.error("dropping context update without participant source=%r", source)
+            return
+        if self._closing or participant_id in self._closed_participants:
+            _logger.error("dropping context update for closed participant=%r source=%r", participant_id, source)
+            return
+        stored, trimmed = await self._context.update(
+            participant_id,
+            source,
+            mode,
+            update.text,
+            context_budget_bytes=self._context_budget_bytes,
+            timestamp_us=timestamp_us,
+        )
+        if trimmed:
+            if mode == "summary":
+                _logger.error(
+                    "dropping oversized context summary participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                    participant_id,
+                    source,
+                    _rendered_source_size(source, update.text, timestamp_us),
+                    self._context_budget_bytes,
+                )
+                return
+            _logger.error(
+                "context records dropped to fit participant=%r source=%r size_bytes=%d budget_bytes=%d",
+                participant_id,
+                source,
+                len(update.text.encode("utf-8")),
+                self._context_budget_bytes,
+            )
+        if not stored:
+            return
+        if mode == "incremental":
+            task = self._context.schedule_context_compaction(
+                participant_id,
+                source,
+                payload_budget_bytes=self._compaction_input_budget_bytes,
+                summary_budget_bytes=self._context_budget_bytes,
+                compact=self._compact_source,
+            )
+            if task is None:
+                _logger.error(
+                    "context compaction deferred participant=%r source=%r budget_bytes=%d",
+                    participant_id,
+                    source,
+                    self._compaction_input_budget_bytes,
+                )
 
     def _record_completed_exchange(self, participant_id: str, user: str, assistant: str) -> None:
         if not assistant.strip():
