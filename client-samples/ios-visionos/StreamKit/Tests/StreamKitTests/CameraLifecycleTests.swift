@@ -11,10 +11,12 @@ import Testing
 @MainActor
 private final class CameraBoundaryGate {
     private var entered = false
+    private var released = false
     private var observer: CheckedContinuation<Void, Never>?
     private var pending: CheckedContinuation<Void, Never>?
 
     func hold() async {
+        if released { return }
         entered = true
         observer?.resume()
         observer = nil
@@ -22,11 +24,14 @@ private final class CameraBoundaryGate {
     }
 
     func waitUntilEntered() async {
-        if entered { return }
+        if entered || released { return }
         await withCheckedContinuation { observer = $0 }
     }
 
     func release() {
+        released = true
+        observer?.resume()
+        observer = nil
         pending?.resume()
         pending = nil
     }
@@ -87,6 +92,7 @@ private final class CameraLifecycleFixture {
         }
         operations.unpublish = { [weak self] room, publication in
             guard let self else { return }
+            try Task.checkCancellation()
             self.unpublishCount += 1
             // Match the SDK: its registry entry is removed BEFORE track.stop.
             room.localParticipant._state.mutate { $0.trackPublications.removeValue(forKey: publication.sid) }
@@ -137,9 +143,16 @@ private final class CameraLifecycleFixture {
     }
 }
 
-@Suite("Camera backend lifecycle", .serialized)
+@Suite("Camera backend lifecycle", .serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct CameraLifecycleTests {
+    @Test func releasedBoundaryGateStaysOpenForCounterexampleCleanup() async {
+        let gate = CameraBoundaryGate()
+        gate.release()
+        await gate.hold()
+        await gate.waitUntilEntered()
+    }
+
     @Test func failedUnpublishAndDisconnectKeepStartedCaptureUntilRetry() async throws {
         let f = CameraLifecycleFixture()
         try await f.backend.connect(config: .default)
@@ -337,6 +350,7 @@ struct CameraLifecycleTests {
             lastStop = Task { @MainActor in entered.resume(); try await f.backend.stopCamera() }
         }
         gate.release()
+        f.unpublishGate = nil
         try await firstStop.value
         await #expect(throws: CancellationError.self) { try await start.value }
         try await lastStop.value

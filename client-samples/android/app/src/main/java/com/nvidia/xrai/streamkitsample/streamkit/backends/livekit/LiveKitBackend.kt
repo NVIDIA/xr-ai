@@ -51,6 +51,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +87,8 @@ import kotlin.coroutines.resume
 internal class LiveKitBackend(
     private val config: LiveKitConfig,
     private val appContext: Context,
+    private val createRoom: (Context) -> Room = { LiveKit.create(it) },
+    private val eventContext: CoroutineContext = Dispatchers.Main,
 ) : StreamingBackend {
 
     // ── Event hooks ────────────────────────────────────────────────────────────
@@ -137,6 +142,7 @@ internal class LiveKitBackend(
     @Volatile private var connectionScope: CoroutineScope? = null
     private class RoomLifetime(val room: Room) {
         val terminal = CompletableDeferred<Unit>()
+        @Volatile var connectEntered = false
     }
     @Volatile private var roomLifetime: RoomLifetime? = null
     private var failedRoomClose: Pair<RoomLifetime, Throwable>? = null
@@ -179,13 +185,13 @@ internal class LiveKitBackend(
         }
         if (connectionGeneration.get() != generation) throw StreamError.NotConnected
 
-        val newRoom = LiveKit.create(appContext)
+        val newRoom = createRoom(appContext)
         val lifetime = RoomLifetime(newRoom)
         roomLifetime = lifetime
         room = newRoom
         cameraPublishBaseline = newRoom.localParticipant.videoTrackPublishDefaults
 
-        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        val scope = CoroutineScope(eventContext + SupervisorJob())
         connectionScope = scope
 
         // Collect all room events for state changes and data.
@@ -193,20 +199,40 @@ internal class LiveKitBackend(
         // DISCONNECTED events that arrive immediately after a connect.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             newRoom.events.collect { event ->
-                if (event is RoomEvent.Disconnected) lifetime.terminal.complete(Unit)
-                handleEvent(newRoom, event)
-                if (event is RoomEvent.Disconnected) scope.cancel()
+                if (event is RoomEvent.Disconnected) {
+                    lifetime.terminal.complete(Unit)
+                    try { handleEvent(newRoom, event) } finally { scope.cancel() }
+                }
+            }
+        }
+        // Application event delivery keeps its existing error policy, but a
+        // throwing callback cannot remove the independent custody observer.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            newRoom.events.collect { event ->
+                if (event !is RoomEvent.Disconnected) handleEvent(newRoom, event)
             }
         }
 
         // Emit CONNECTING before the async handshake.
-        onConnectionStateChanged?.invoke(ConnectionState.CONNECTING)
+        try {
+            onConnectionStateChanged?.invoke(ConnectionState.CONNECTING)
+            coroutineContext.ensureActive()
+        } catch (error: Throwable) {
+            // The SDK was never entered: it cannot owe a terminal event and
+            // no application camera allocation was admitted for this room.
+            if (room === newRoom) room = null
+            if (roomLifetime === lifetime) roomLifetime = null
+            if (connectionScope === scope) connectionScope = null
+            scope.cancel()
+            throw error
+        }
 
         // room.connect() suspends until the room is fully connected or throws.
         // Audio isolation: when hubIdentity is set, disable auto-subscribe and
         // subscribe only to the hub participant's tracks (below + in
         // handleTrackPublished), so a client never receives another
         // participant's microphone.
+        lifetime.connectEntered = true
         newRoom.connect(
             wsUrl,
             token,
@@ -841,12 +867,10 @@ internal class LiveKitBackend(
                     if (room === closingRoom || room == null) cameraPublishBaseline = null
                 }
             }
-            // Never wait for the event while holding the camera mutex: its
-            // collector publishes receipt first, then reclaims that same owner.
+            // An observer is not a producer promise: SDK entry can fail or
+            // cancel without a terminal event. Unknown capture remains owned;
+            // a later actual receipt reconciles it independently.
             val retained = allocation
-            if (failure == null) {
-                closingLifetime?.terminal?.await()
-            }
             cameraMutex.withLock {
                 if (retained != null) {
                     try { releaseFailedCamera(retained.participant, retained.track) }
@@ -857,9 +881,10 @@ internal class LiveKitBackend(
                     }
                 }
             }
-            if (closingLifetime?.terminal?.isCompleted == true) oldScope?.cancel()
-            // The event collector was cancelled before cleanup, so teardown
-            // remains the sole notification even when release reports failure.
+            if (closingLifetime?.connectEntered != true || closingLifetime.terminal.isCompleted ||
+                (retained == null && failure == null)) oldScope?.cancel()
+            // Exact room detachment and generation own this notification; the
+            // independent receipt observer may still be awaiting SDK completion.
             if (room == null && connectionGeneration.get() == generation) {
                 onConnectionStateChanged?.invoke(ConnectionState.DISCONNECTED)
             }

@@ -12,6 +12,8 @@ import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.DisconnectReason
+import io.livekit.android.events.BroadcastEventBus
+import io.livekit.android.ConnectOptions
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
@@ -28,6 +30,8 @@ import livekit.org.webrtc.RtpParameters
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -46,13 +50,20 @@ import kotlinx.coroutines.CancellationException
  * Continuations force the original interleaving without sleeps or a device.
  */
 class CameraPublicationTests {
-    private class Fixture {
+    private class Fixture(token: String? = null) {
         val participant = Mockito.mock(LocalParticipant::class.java)
         val room = Mockito.mock(Room::class.java)
         val track = Mockito.mock(LocalVideoTrack::class.java)
         val deviceTrack = Mockito.mock(LocalVideoTrack::class.java)
         val publication = Mockito.mock(LocalTrackPublication::class.java)
-        val backend = LiveKitBackend(LiveKitConfig(host = "test"), Mockito.mock(Context::class.java))
+        val events = BroadcastEventBus<RoomEvent>()
+        val callbackFailures = mutableListOf<Throwable>()
+        val callbackFailureObserved = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val backend = LiveKitBackend(LiveKitConfig(host = "test", token = token), Mockito.mock(Context::class.java),
+            createRoom = { room }, eventContext = Dispatchers.Unconfined + CoroutineExceptionHandler { _, error ->
+                callbackFailures.add(error)
+                callbackFailureObserved.complete(Unit)
+            })
         var defaults = VideoTrackPublishDefaults(simulcast = false, videoCodec = "h264")
         var captureDefaults = LocalVideoTrackOptions()
         var active: LocalTrackPublication? = null
@@ -63,6 +74,7 @@ class CameraPublicationTests {
 
         init {
             Mockito.`when`(room.localParticipant).thenReturn(participant)
+            Mockito.`when`(room.events).thenReturn(events.readOnly())
             Mockito.`when`(room.state).thenReturn(Room.State.CONNECTED)
             Mockito.doAnswer {
                 if (active?.track === track) {
@@ -91,6 +103,14 @@ class CameraPublicationTests {
             setField("roomLifetime", lifetime)
             setField("isConnected", true)
             setField("cameraPublishBaseline", defaults)
+            lifetime.javaClass.getDeclaredField("connectEntered").apply { isAccessible = true }.setBoolean(lifetime, true)
+        }
+
+        fun beforeConnect() {
+            setField("room", null)
+            setField("roomLifetime", null)
+            setField("isConnected", false)
+            Mockito.`when`(room.state).thenReturn(Room.State.DISCONNECTED)
         }
 
         fun setField(name: String, value: Any?) {
@@ -601,11 +621,10 @@ class CameraPublicationTests {
             f.active = null // failed SDK republish dropped the private pool
             Mockito.`when`(f.room.state).thenReturn(Room.State.DISCONNECTED)
             f.onDisconnect = {} // SDK disconnect returns early, cleanup still in flight
-            val closed = launch(start = CoroutineStart.UNDISPATCHED) { f.backend.disconnect() }
-            assertFalse(closed.isCompleted)
+            try { f.backend.disconnect(); fail("Absent receipt must report pending camera cleanup, not wait") }
+            catch (_: IllegalStateException) {}
             Mockito.verify(f.track, Mockito.never()).dispose()
             f.terminalEvent()
-            closed.join()
             Mockito.verify(f.track, Mockito.times(1)).dispose()
             f.backend.disconnect()
             Mockito.verify(f.track, Mockito.times(1)).dispose()
@@ -625,5 +644,82 @@ class CameraPublicationTests {
         try { f.backend.connect(SessionConfig.DEFAULT); fail("Transport fault cannot be hidden as camera quarantine") }
         catch (_: IllegalStateException) {}
         Mockito.verify(f.room, Mockito.times(2)).disconnect()
+    }
+
+    @Test(timeout = 60_000) fun preconnectCallbackFailureAndEarlySDKFailureDoNotInventTerminalPromises() = runBlocking {
+        val f = Fixture(token = "test")
+        f.beforeConnect()
+        val callbackFailure = IllegalStateException("application callback")
+        f.backend.onConnectionStateChanged = { if (it == ConnectionState.CONNECTING) throw callbackFailure }
+        try { f.backend.connect(SessionConfig.DEFAULT); fail("Original callback error must propagate") }
+        catch (error: IllegalStateException) { assertSame(callbackFailure, error) }
+        Mockito.verify(f.room, Mockito.never()).connect(Mockito.anyString(), Mockito.anyString(),
+            Mockito.any(ConnectOptions::class.java) ?: ConnectOptions())
+        f.backend.disconnect() // never entered; SDK emits no terminal event
+        f.backend.onConnectionStateChanged = null
+        val sdkFailure = IllegalStateException("SDK init before transport")
+        Mockito.doThrow(sdkFailure).`when`(f.room).connect(Mockito.anyString(), Mockito.anyString(),
+            Mockito.any(ConnectOptions::class.java) ?: ConnectOptions())
+        try { f.backend.connect(SessionConfig.DEFAULT); fail("Original SDK error must propagate") }
+        catch (error: IllegalStateException) { assertSame(sdkFailure, error) }
+        f.backend.disconnect() // SDK entered != SDK owes a terminal event
+    }
+
+    @Test(timeout = 60_000) fun callbackCancellationBeforeSDKEntryCanBeFollowedByIdleDisconnect() = runBlocking {
+        val f = Fixture(token = "test")
+        f.beforeConnect()
+        lateinit var attempt: Job
+        f.backend.onConnectionStateChanged = { if (it == ConnectionState.CONNECTING) attempt.cancel() }
+        attempt = launch(start = CoroutineStart.LAZY) { f.backend.connect(SessionConfig.DEFAULT) }
+        attempt.start()
+        attempt.join()
+        assertTrue(attempt.isCancelled)
+        Mockito.verify(f.room, Mockito.never()).connect(Mockito.anyString(), Mockito.anyString(),
+            Mockito.any(ConnectOptions::class.java) ?: ConnectOptions())
+        f.backend.onConnectionStateChanged = null
+        f.backend.disconnect()
+    }
+
+    @Test(timeout = 60_000) fun callbackFailureCannotRemoveIndependentTerminalObserver() = runBlocking {
+        val f = Fixture(token = "test")
+        f.beforeConnect()
+        var pending: Continuation<Unit>? = null
+        Mockito.doAnswer {
+            @Suppress("UNCHECKED_CAST")
+            pending = it.rawArguments.last() as Continuation<Unit>
+            COROUTINE_SUSPENDED
+        }.`when`(f.room).connect(Mockito.anyString(), Mockito.anyString(),
+            Mockito.any(ConnectOptions::class.java) ?: ConnectOptions())
+        val states = mutableListOf<ConnectionState>()
+        var terminalSeen: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        f.backend.onConnectionStateChanged = {
+            states.add(it)
+            if (it == ConnectionState.DISCONNECTED) terminalSeen?.complete(Unit)
+            if (it == ConnectionState.RECONNECTING) throw IllegalStateException("application callback")
+        }
+        val attempt = launch(start = CoroutineStart.UNDISPATCHED) {
+            try { f.backend.connect(SessionConfig.DEFAULT) } catch (_: CancellationException) {}
+        }
+        try {
+            assertNotNull(pending)
+            f.events.postEvent(RoomEvent.Reconnecting(f.room))
+            f.callbackFailureObserved.await()
+            assertEquals(1, f.callbackFailures.size)
+            val observed = kotlinx.coroutines.CompletableDeferred<Unit>()
+            terminalSeen = observed
+            Mockito.`when`(f.room.state).thenReturn(Room.State.DISCONNECTED)
+            f.events.postEvent(RoomEvent.Disconnected(f.room, null, DisconnectReason.SERVER_SHUTDOWN))
+            observed.await()
+            assertEquals(ConnectionState.DISCONNECTED, states.last())
+            val resumed = pending
+            pending = null
+            resumed?.resumeWithException(CancellationException())
+            attempt.join()
+            f.backend.disconnect()
+        } finally {
+            pending?.resumeWithException(CancellationException())
+            pending = null
+            attempt.cancel()
+        }
     }
 }

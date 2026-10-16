@@ -117,9 +117,11 @@ partial native disposal failure prevents replacement rather than retrying an
 already partly disposed allocation. Retained camera failures do not prevent
 transport reconnection for audio or data. An explicit disconnect still reports
 cleanup failures after closing admission; a failed transport close is retained
-and is not silently treated as success. Android waits for the exact room's
-terminal event before reclaiming SDK-held capture, not merely its disconnected
-state or an absent publication. SDK-internal cleanup failures that LiveKit
+and is not silently treated as success. Android reclaims SDK-held capture only
+after actual custody evidence from that room, not merely its disconnected state
+or an absent publication. It does not wait for an event the SDK may never emit:
+an unentered room has no terminal obligation, and unknown entered-room capture
+remains quarantined until an actual receipt arrives. SDK-internal cleanup failures that LiveKit
 does not expose remain an SDK limitation; a capturer disposal callback is not
 proof that every private native source was released.
 

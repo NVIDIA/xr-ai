@@ -343,7 +343,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 // can retry instead of treating a failed task as released.
                 if track === bufferTrack { bufferPublication = publication }
                 else { cameraPublication = publication }
-                try await sdk.unpublish(room, publication)
+                try await Task { try await sdk.unpublish(room, publication) }.value
                 if bufferPublication === publication { bufferPublication = nil }
                 if cameraPublication === publication { cameraPublication = nil }
                 throw CancellationError()
