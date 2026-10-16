@@ -68,6 +68,7 @@ curl -fsSL --create-dirs -o "$SKILLS_DIR/$SKILL/agents/openai.yaml" \
   "https://raw.githubusercontent.com/NVIDIA/xr-ai/$REF/skills/$SKILL/agents/openai.yaml"
 ```
 
-If the selected release predates the skill bank, use `main` for both the skill
-and your checkout. An agent without a skill installation mechanism can read the
-downloaded `SKILL.md` and follow it directly in the current session.
+If the selected release predates the skill bank, ask the user before using
+`main` for both the skill and the checkout. An agent without a skill
+installation mechanism can read the downloaded `SKILL.md` and follow it
+directly in the current session.
