@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed contracts and router for participant-scoped agent routing."""
+"""Public contracts and router for participant-scoped agent routing."""
 
-from .contracts import (
+from ._contracts import (
     Admission,
     AgentExchange,
     AgentTurn,
@@ -11,7 +11,7 @@ from .contracts import (
     RoutableAgent,
     RoutingAid,
 )
-from .router import AgentRouter
+from ._router import AgentRouter
 
 __all__ = [
     "Admission",

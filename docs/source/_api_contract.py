@@ -48,8 +48,6 @@ PUBLIC_API_MODULES = (
     "xr_ai_tools.vision",
 )
 PUBLIC_API_EXCLUSIONS = (
-    "xr_ai_routing.contracts",
-    "xr_ai_routing.router",
     "xr_ai_models.presets.cosmos3_nano_reasoner",
     "xr_ai_models.presets.cosmos_vlm",
     "xr_ai_models.presets.llama_nemotron",

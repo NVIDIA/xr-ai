@@ -3,8 +3,9 @@
 
 name: lint
 
-# First-cut ruff lint, governed by the root `ruff.toml` (E,F,W,I; line-length
-# 120; pre-existing violations grandfathered via per-file-ignores). This is
+# First-cut ruff lint, governed by the root `ruff.toml` (E,F,W,I plus the
+# exception-handling rules; line-length 120; pre-existing violations
+# grandfathered via per-file-ignores and the generated ruff-baseline.toml). This is
 # check-only — it does NOT run `ruff format`. Repo-wide formatting is a
 # separate human-gated decision (touches every file); enable it in a follow-up
 # once the format commit lands.
@@ -42,3 +43,21 @@ jobs:
         with:
           version: 0.15.16
           args: check .
+
+      # The ratcheted exception-handling rules grandfather existing violations
+      # in ruff-baseline.toml. This fails when the baseline drifts from the code
+      # (a fix that forgot to lower its entry, or a new violation in a
+      # grandfathered file) and publishes the enforcement coverage summary.
+      - name: Check ratcheted Ruff baseline
+        run: python3 .github/scripts/ruff_baseline.py
+
+      # The baseline tests run the real linter, so they run here, where the
+      # pinned Ruff is on PATH, instead of in the test matrix. They need only
+      # pytest, so skip the test suite's conftest and its package imports.
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+
+      - name: Test ratcheted Ruff baseline
+        env:
+          UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
+        run: uv run --no-project --with 'pytest>=8.0' --with 'pytest-asyncio>=0.23' pytest --noconftest -p no:cacheprovider tests/test_ruff_baseline.py

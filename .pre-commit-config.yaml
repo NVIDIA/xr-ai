@@ -22,6 +22,17 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-ruff-baseline
+        name: check ruff baseline
+        description: >
+          Fails when ruff-baseline.toml no longer matches the code: a fix whose
+          entry was not lowered, or a new violation in a grandfathered file.
+          Run the script with --write to regenerate the baseline.
+        entry: python3 .github/scripts/ruff_baseline.py
+        language: system
+        pass_filenames: false
+        files: \.py$|^ruff(-baseline)?\.toml$
+
       - id: generate-dependency-manifest
         name: generate dependency manifest
         description: >
