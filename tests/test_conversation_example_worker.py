@@ -623,9 +623,13 @@ async def test_note_capture_commits_after_acceptance_and_drains_context_publish_
 
 
 @pytest.mark.asyncio
-async def test_note_capture_logs_child_publish_failure_and_preserves_caller_cancellation() -> None:
+@pytest.mark.parametrize("release_before_cancel", [False, True])
+async def test_note_capture_logs_child_publish_failure_and_preserves_caller_cancellation(
+    release_before_cancel: bool,
+) -> None:
     entered_publish = asyncio.Event()
     release_publisher = asyncio.Event()
+    publisher_failed = asyncio.Event()
     log_stream = io.StringIO()
 
     class CaptureDecision:
@@ -641,6 +645,7 @@ async def test_note_capture_logs_child_publish_failure_and_preserves_caller_canc
     async def failing_publisher(_participant_id, _update):
         entered_publish.set()
         await release_publisher.wait()
+        publisher_failed.set()
         raise RuntimeError("child publisher failed")
 
     destination = NoteTakingAgent(
@@ -662,8 +667,13 @@ async def test_note_capture_logs_child_publish_failure_and_preserves_caller_canc
     try:
         task = asyncio.create_task(destination.answer(turn, emit=emit))
         await entered_publish.wait()
-        task.cancel()
-        release_publisher.set()
+        if release_before_cancel:
+            release_publisher.set()
+            await publisher_failed.wait()
+            task.cancel()
+        else:
+            task.cancel()
+            release_publisher.set()
         with pytest.raises(asyncio.CancelledError):
             await task
     finally:
