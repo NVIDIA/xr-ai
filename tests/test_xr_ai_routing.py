@@ -9,7 +9,7 @@ from collections import deque
 
 import pytest
 import xr_ai_routing as routing_module
-import xr_ai_routing.router as router_module
+import xr_ai_routing._router as router_module
 from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
@@ -25,7 +25,7 @@ from xr_ai_routing._history import (
     _active_history_exchange_ids,
     _active_history_timestamps,
 )
-from xr_ai_routing.router import (
+from xr_ai_routing._router import (
     _bounded_history_with_metadata,
     _bounded_history_with_times,
     _is_valid_acknowledgment,
@@ -606,7 +606,7 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
 
     events = []
     monkeypatch.setattr(
-        "xr_ai_routing.router.nemo_relay.scope.event",
+        "xr_ai_routing._router.nemo_relay.scope.event",
         lambda name, **kwargs: events.append((name, kwargs["data"])),
     )
     decisions = _RouteDecisions()
@@ -1431,28 +1431,55 @@ async def test_completed_focus_and_release_answers_train_first_answer_timing(dis
 
 
 @pytest.mark.asyncio
-async def test_prediction_failure_or_hang_does_not_delay_real_answer():
-    for decisions in (_Prediction(error=RuntimeError("prediction failed")), _Prediction(blocked=True)):
-        destination = _AckDestination(blocked=True)
-        llm = _AcknowledgmentLLM(error=RuntimeError("acknowledgment failed"))
-        front_end = AgentRouter(
-            {"destination": destination},
-            decisions,  # type: ignore[arg-type]
-            default_destination="destination",
-            acknowledgment_llm=llm,  # type: ignore[arg-type]
-            acknowledgment_delay_secs=0.001,
-        )
-        output = []
-        task = asyncio.create_task(_ack_output(front_end, "Quick answer while prediction runs.", output))
-        await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
-        await asyncio.wait_for(decisions.called.wait(), timeout=1)
-        await asyncio.wait_for(llm.started.wait(), timeout=1)
-        destination.release_answer.set()
-        await asyncio.wait_for(task, timeout=1)
-        assert output == [("destination", "Here is the answer.")]
-        if decisions.blocked:
-            assert decisions.cancelled.is_set()
-        assert len(llm.calls) == 1
+async def test_unexpected_prediction_failure_is_logged_without_failing_answer(caplog):
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction(error=RuntimeError("prediction bug"))
+    llm = _AcknowledgmentLLM()
+    front_end = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    task = asyncio.create_task(_ack_output(front_end, "Quick answer while prediction runs.", output))
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.called.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert output == [("destination", "Here is the answer.")]
+    assert not llm.calls
+    failure = next(record for record in caplog.records if "optional acknowledgment task failed" in record.message)
+    assert failure.exc_info is not None
+    assert isinstance(failure.exc_info[1], RuntimeError)
+    assert "prediction bug" in str(failure.exc_info[1])
+
+
+@pytest.mark.asyncio
+async def test_prediction_hang_does_not_delay_answer_and_starts_ack_after_delay():
+    destination = _AckDestination(blocked=True)
+    decisions = _Prediction(blocked=True)
+    llm = _AcknowledgmentLLM(error=RuntimeError("acknowledgment bug"))
+    front_end = AgentRouter(
+        {"destination": destination},
+        decisions,  # type: ignore[arg-type]
+        default_destination="destination",
+        acknowledgment_llm=llm,  # type: ignore[arg-type]
+        acknowledgment_delay_secs=0.001,
+    )
+    output = []
+    task = asyncio.create_task(_ack_output(front_end, "Quick answer while prediction runs.", output))
+    await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
+    await asyncio.wait_for(decisions.called.wait(), timeout=1)
+    await asyncio.wait_for(llm.started.wait(), timeout=1)
+    destination.release_answer.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert output == [("destination", "Here is the answer.")]
+    assert decisions.cancelled.is_set()
+    assert len(llm.calls) == 1
 
 
 @pytest.mark.asyncio

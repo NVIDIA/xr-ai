@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Share private completed-exchange identity, timestamps, and display format."""
+"""Share private history metadata within the ``xr_ai_routing`` package."""
 
 from __future__ import annotations
 

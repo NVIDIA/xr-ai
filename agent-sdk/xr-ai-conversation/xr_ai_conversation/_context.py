@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private participant dialogue and bounded source-context storage."""
+"""Private participant dialogue and bounded source-context storage.
+
+Only modules in ``xr_ai_conversation`` use this implementation.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +13,15 @@ import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 import nemo_relay
-from xr_ai_routing._history import _format_minute
+
+
+def _format_minute(timestamp_us: int) -> str:
+    """Format an exchange timestamp at the conversation's display precision."""
+
+    return datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 @dataclass(frozen=True, slots=True)
