@@ -69,6 +69,40 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
 
 
+def test_clef_ownership_requires_command_and_matching_managed_port(tmp_path, monkeypatch) -> None:
+    proc_root = tmp_path / "proc" / "1234"
+    proc_root.mkdir(parents=True)
+    (proc_root / "cmdline").write_text("python\0-m\0clef_server\0--config\0clef.yaml")
+    (proc_root / "environ").write_bytes(b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0")
+    monkeypatch.setattr(xr_ai_vllm._docker, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
+
+    assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8120)
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8121)
+    (proc_root / "cmdline").write_text("python\0unrelated.py")
+    assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "clef", 8120)
+
+
+def test_clef_stop_uses_owned_process_not_vllm_container(monkeypatch) -> None:
+    signaled = []
+    monkeypatch.setattr(
+        xr_ai_vllm._docker,
+        "container_on_port_checked",
+        lambda _port: (_ for _ in ()).throw(AssertionError("Clef is not a vLLM container")),
+    )
+    monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (1234, True, True))
+    monkeypatch.setattr(xr_ai_vllm._docker, "is_xr_ai_server_process", lambda *_args: True)
+
+    def kill(pid, sig):
+        signaled.append((pid, sig))
+        if sig == 0:
+            raise ProcessLookupError
+
+    monkeypatch.setattr(xr_ai_vllm.os, "kill", kill)
+
+    assert xr_ai_vllm.stop_persistent_servers([("clef", 8120)])
+    assert signaled == [(1234, signal.SIGTERM), (1234, 0)]
+
+
 def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:
     proc_root = tmp_path / "proc" / "1234"
     proc_root.mkdir(parents=True)
