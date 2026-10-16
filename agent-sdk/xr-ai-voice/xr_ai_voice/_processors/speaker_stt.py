@@ -22,7 +22,13 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_voicegate._phrases import STOP_RE
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
-from .._frames import ParticipantJoinedFrame, ParticipantLeftFrame, _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+from .._frames import (
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+    _SpeakerEnrollmentFrame,
+    _SpeakerTranscriptionFrame,
+    _SpeakerTurnFrame,
+)
 from .._speaker_client import _SpeakerClient
 
 
@@ -41,6 +47,7 @@ class _SpeakerSttProcessor(FrameProcessor):
         self._retry_after: dict[str, float] = {}
         self._closed = False
         self._participants: set[str] = set()
+        self._lifecycles: dict[str, object] = {}
         self._tracks: dict[str, str] = {}
 
     async def cleanup(self) -> None:
@@ -50,6 +57,7 @@ class _SpeakerSttProcessor(FrameProcessor):
     async def _shutdown(self) -> None:
         self._closed = True
         self._participants.clear()
+        self._lifecycles.clear()
         for task in list(self._tasks.values()):
             task.cancel()
         await asyncio.gather(*list(self._tasks.values()), return_exceptions=True)
@@ -64,14 +72,18 @@ class _SpeakerSttProcessor(FrameProcessor):
         if isinstance(frame, (EndFrame, CancelFrame)):
             await self._shutdown()
         elif isinstance(frame, ParticipantJoinedFrame):
+            if self._closed:
+                return
             pid = frame.participant_id
-            await self._cancel_worker(pid)
+            replacing = pid in self._lifecycles
+            self._lifecycles[pid] = object()
+            if not await self._replace_worker(pid, reset=replacing):
+                return
             self._retry_after.pop(pid, None)
             self._tracks.pop(pid, None)
-            if not self._closed:
-                self._participants.add(pid)
         elif isinstance(frame, ParticipantLeftFrame):
             pid = frame.participant_id
+            self._lifecycles.pop(pid, None)
             self._participants.discard(pid)
             await self._cancel_worker(pid)
             self._retry_after.pop(pid, None)
@@ -88,10 +100,8 @@ class _SpeakerSttProcessor(FrameProcessor):
                 raise ValueError("speaker ASR expects at most one second of signed 16-bit PCM")
             track = getattr(frame, "track_id", "")
             if track and self._tracks.get(pid, track) != track:
-                await self._cancel_worker(pid)
-                if self._closed or pid not in self._participants:
+                if not await self._replace_worker(pid):
                     return
-                await self._reset(pid, retry=False)
             if track:
                 self._tracks[pid] = track
             if time.monotonic() < self._retry_after.get(pid, 0):
@@ -109,8 +119,7 @@ class _SpeakerSttProcessor(FrameProcessor):
             # phrases after overload could enroll or release the wrong session.
             if queue.full() or self._queued_bytes[pid] + len(frame.audio) > 64000:
                 logger.warning("speaker ASR overloaded; enrollment reset pid={!r}", pid)
-                await self._cancel_worker(pid)
-                await self._reset(pid)
+                await self._replace_worker(pid, retry=True)
                 return
             self._queued_bytes[pid] += len(frame.audio)
             queue.put_nowait((frame.audio, pts_us))
@@ -124,12 +133,15 @@ class _SpeakerSttProcessor(FrameProcessor):
                 audio, pts_us = await queue.get()
                 self._queued_bytes[pid] -= len(audio)
                 for event in await self._client._feed(pid, audio, pts_us):
+                    if self._closed or pid not in self._participants or self._tasks.get(pid) is not task:
+                        return
                     await self._event(pid, event)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("speaker ASR unavailable; enrollment reset pid={!r}", pid)
-            await self._reset(pid)
+            if not self._closed and pid in self._participants and self._tasks.get(pid) is task:
+                await self._reset(pid)
         finally:
             try:
                 # Best-effort cleanup must not hold up disconnect or overload
@@ -151,6 +163,22 @@ class _SpeakerSttProcessor(FrameProcessor):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
+    async def _replace_worker(self, pid: str, *, reset: bool = True, retry: bool = False) -> bool:
+        """Revoke the old worker before draining; readmit only its current join."""
+        lifecycle = self._lifecycles.get(pid)
+        self._participants.discard(pid)
+        self._enrolled.discard(pid)
+        self._interrupted.discard(pid)
+        await self._cancel_worker(pid)
+        if self._closed or lifecycle is None or self._lifecycles.get(pid) is not lifecycle:
+            return False
+        if reset:
+            await self._reset(pid, retry=retry)
+        if self._closed or self._lifecycles.get(pid) is not lifecycle:
+            return False
+        self._participants.add(pid)
+        return True
+
     async def _reset(self, pid: str, *, retry: bool = True) -> None:
         if retry:
             self._retry_after[pid] = time.monotonic() + 2.0
@@ -162,6 +190,22 @@ class _SpeakerSttProcessor(FrameProcessor):
 
     async def _event(self, pid: str, event: dict) -> None:
         kind = event["kind"]
+        if kind in {"one_shot", "wake_ready"}:
+            if self._cfg.mode not in {"always_on", "wake_only", "hybrid"} or pid in self._enrolled:
+                raise ValueError("one-turn authorization is invalid for the current speaker state")
+            speaker, pts = event.get("speaker_id"), event.get("pts_us")
+            text = event.get("text") if kind == "one_shot" else ""
+            fresh = event.get("fresh_match") if kind == "one_shot" else True
+            if (
+                type(speaker) is not int or speaker < 0 or type(pts) is not int or pts < 0
+                or not isinstance(text, str) or (kind == "one_shot" and not text.strip())
+                or not isinstance(fresh, bool)
+            ):
+                raise ValueError("malformed speaker one-turn authorization")
+            if text and self._on_final is not None:
+                await self._on_final(pid, text, pts)
+            await self.push_frame(_SpeakerTurnFrame(pid, speaker, text, pts, fresh))
+            return
         if kind in {"enrolled", "released", "reset"}:
             if kind == "enrolled":
                 self._enrolled.add(pid)

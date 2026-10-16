@@ -311,15 +311,18 @@ proxy in front of it.
 
 Each non-empty final STT result delivered on `voice.transcript` is written to
 `transcript.jsonl` during an active conversation, before optional wake gating.
-Conversation controls and closed-conversation speech are withheld. Transcript
+With `mode: hybrid`, accepted closed-state one-off queries are also delivered;
+ignored closed-state speech and conversation controls are withheld. Transcript
 delivery is bounded and best effort; overflow drops the oldest pending
 transcript, and shutdown discards pending items. Speech rejected by a wake
 phrase during an active conversation is still persisted.
 
 After connecting, say `Hey agent, let's start talking`, then speak without a
 wake phrase until `Hey agent, let's stop talking`. Set
-`conversation.require_wake_phrase: true` to require `agent` or `hey agent`,
-with the optional chime and five-second follow-up window. Accepted speech reaches
+`conversation.require_wake_phrase: true` to require `agent` or `hey agent` inside
+the open conversation, with the optional chime and five-second bare-wake
+follow-up window. Set `mode: hybrid` to additionally accept wake-addressed
+one-off questions while the conversation is closed. Accepted speech reaches
 the foreground as a `UserQuery`. Typed text reaches the foreground but is not an
 STT transcript. Refer to {ref}`voice-conversation-controls`.
 

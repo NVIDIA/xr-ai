@@ -263,11 +263,11 @@ def test_config_loads_packaged_prompts_and_file_output_defaults() -> None:
     assert models["models"]["vlm"]["endpoint"]["base_url"].endswith(":8100")
     assert config.voice_gate_yaml == _SAMPLE / "yaml" / "voice_gate.yaml"
     assert yaml.safe_load(config.voice_gate_yaml.read_text()) == {
+        "mode": "conversation",
         "magic_phrases": ["agent", "hey agent"],
         "listening_chime": True,
         "followup_grace_s": 5.0,
         "conversation": {
-            "enabled": True,
             "start_phrase": "Hey agent, let's start talking",
             "stop_phrase": "Hey agent, let's stop talking",
             "require_wake_phrase": False,

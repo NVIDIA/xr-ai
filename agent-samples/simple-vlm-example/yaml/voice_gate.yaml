@@ -11,6 +11,7 @@
 # other mid-sentence mentions do not match. The same stripped tail is used for
 # early global-STOP detection; the complete final transcript still determines
 # whether a stop-like opening is a global stop or a scoped agent command.
+mode: conversation
 magic_phrases:
   - "agent"
   - "hey agent"
@@ -25,7 +26,7 @@ listening_chime: false
 # Scoped commands such as "stop recording" remain ordinary agent queries.
 stop_commands_enabled: true
 
-# Follow-up grace window. After a successful magic-phrase match, the
+# Follow-up grace window. After a bare magic phrase without a question, the
 # next utterance from the same participant within this many seconds
 # bypasses the gate so "hey agent" → pause → "what am I looking at?"
 # works as one natural interaction. Set to 0 to disable.
@@ -34,7 +35,6 @@ followup_grace_s: 5.0
 # Start once, then speak naturally until the full stop phrase.
 # A short "stop" interrupts the response without closing the conversation.
 conversation:
-  enabled: true
   start_phrase: "Hey agent, let's start talking"
   stop_phrase: "Hey agent, let's stop talking"
   # false: speak naturally after starting. true: keep wake and follow-up rules.
@@ -43,7 +43,7 @@ conversation:
   phrase_window_s: 6.0
 
 # The default stack supplies speaker ASR; wait for it before worker readiness.
-# For explicit batch STT, disable speaker enrollment and add an stt model entry.
+# For explicit batch STT, set speaker.enabled false and add an stt model entry.
 speaker:
   enabled: true
   backend: required

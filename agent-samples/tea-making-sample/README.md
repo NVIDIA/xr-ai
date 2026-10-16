@@ -26,18 +26,17 @@ automatically:
 |---|---|
 | `yaml/tea_making_worker.yaml` | Selected configuration files, observation cadence, VAD, timeouts, artifacts, and event viewer |
 | `yaml/workflow.yaml` | Workflow state, steps, evidence rules, tools, and messages |
-| `yaml/voice_gate*.yaml` | Conversation controls and optional wake phrases |
+| `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Documents, embedding role, cache, chunking, and retrieval threshold |
 | `yaml/models.local.json` | Reused model adapters and endpoint addresses |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 
-For example, use the preset that accepts speech without a wake phrase during an
-active conversation by changing this line in
-`yaml/tea_making_worker.yaml`:
+For example, accept wake-addressed one-off questions as well as natural
+conversations by changing this line in `yaml/voice_gate.yaml`:
 
 ```yaml
-voice_gate_yaml: voice_gate.always-on.yaml
+mode: hybrid
 ```
 
 Restart the sample after an edit. Refer to the

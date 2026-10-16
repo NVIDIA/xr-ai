@@ -223,7 +223,10 @@ Edit the owning file, preserve the field's YAML type, and restart
 example, lower `silero_threshold` in the worker YAML if quieter speech is being
 missed, or change `conversation.start_phrase` and `conversation.stop_phrase`
 in the voice-gate YAML. Set `conversation.require_wake_phrase: true` to require
-its configured `magic_phrases` during an active conversation. Relative paths in the worker YAML are resolved from `yaml/`, not
+its configured `magic_phrases` during an active conversation. Set `mode: hybrid`
+to also accept wake-addressed one-off questions while closed, or `mode: wake_only`
+to use wake-addressed turns without a persistent conversation. Refer to
+{ref}`voice-conversation-controls`. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
 The optional `acknowledgment_delay_secs` setting enables route-aware intention

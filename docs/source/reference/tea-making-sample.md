@@ -74,11 +74,13 @@ The launcher options are:
 
 Speech uses the reused TTS endpoint in `yaml/models.local.json`. Voice-gate
 behavior comes from `voice_gate_yaml` in `yaml/tea_making_worker.yaml`.
-Both presets now require `Hey agent, let's start talking` after connecting,
+The default requires `Hey agent, let's start talking` after connecting,
 then accept speech without a wake phrase until `Hey agent, let's stop talking`.
-Set `conversation.require_wake_phrase: true` in the normal preset to require its
-configured wake phrases. Disable conversation controls in the always-on preset
-to restore immediate speech dispatch. Refer to {ref}`voice-conversation-controls`.
+Set `mode: hybrid` to also accept wake-addressed one-off questions before a
+conversation starts, or `mode: always_on` for immediate, ungated speech dispatch.
+The advanced `conversation.require_wake_phrase: true` policy applies only inside an open
+conversation. Backend selection is independent of these modes. Refer to
+{ref}`voice-conversation-controls`.
 
 The live event viewer is available at `http://127.0.0.1:8092` on the XR-AI
 host. With `--expose-web-events`, use `http://<xr-host>:8092` from a trusted
@@ -204,13 +206,13 @@ temporary worker configuration with absolute paths. Edit the files under
 |---|---|
 | `yaml/tea_making_worker.yaml` | Selected subordinate configuration files, frame and model timeouts, background cadence, VAD, output directory, and event-viewer port and history |
 | `yaml/workflow.yaml` | Typed state, steps, triggers, evidence, tool access, transitions, and user messages |
-| `yaml/voice_gate.yaml` and `yaml/voice_gate.always-on.yaml` | Conversation controls and optional wake phrases |
+| `yaml/voice_gate.yaml` | Interaction mode, conversation controls and optional wake phrases |
 | `yaml/rag_service.yaml` | Document path, model configuration, cache, chunking, embedding dimensions, and score threshold |
 | `yaml/models.local.json` | Model adapters, shared endpoints, and explicit RAG embedding health settings |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 
-Choose a voice preset through `voice_gate_yaml` in
-`tea_making_worker.yaml`. Change observation and summary frequency in that
+Set the interaction mode directly in `voice_gate.yaml`; `voice_gate_yaml` in
+`tea_making_worker.yaml` selects that file. Change observation and summary frequency in that
 worker file, retrieval behavior in `rag_service.yaml`, and the procedure itself
 in `workflow.yaml`. Relative paths declared in each configuration file resolve
 from that file's directory. Workflow state and step references are validated at
