@@ -7,11 +7,13 @@
 
 This sample is the smallest complete voice-and-vision application in the
 repository. Its reusable `xr_ai_conversation.ConversationFrontEnd` routes each
-turn through Clef to general conversation, direct visual observation, or
-environment reasoning. The environment destination asks Omni for focused
-visual evidence from Cosmos before synthesizing a response. The worker uses an
-existing live video frame when the client is streaming; otherwise it asks the
-client to take one picture for that turn.
+turn through Clef to general conversation and direct visual observation. It
+also includes an explicitly started background visual monitor and a
+foreground note-taking session that can hold focus and share participant-
+authored notes with general conversation. General conversation covers text
+questions across subjects, including AR/VR knowledge.
+The worker uses an existing live video frame when the client is streaming;
+otherwise it asks the client to take one picture for that turn.
 Responses stream to Pocket TTS and the `vlm.response` data topic.
 
 The sample launches DeviceIOHub and its worker. It can also launch opt-in
@@ -29,13 +31,12 @@ files before starting the sample:
 
 | File | Common changes |
 |---|---|
-| `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, or prompt override |
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness, VAD sensitivity, idle timeout, optional route-aware acknowledgment delay, context topics (including shared notes), monitor window size, or prompt override |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | Reused model adapters, Clef router endpoint, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | Room, ports, web client, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in session recording output, NVENC, audio, captions, and retention |
-| `worker/simple_vlm_example_worker/prompts/environment_planner.txt` | Environment destination's targeted visual-evidence planning instructions |
-| `worker/simple_vlm_example_worker/prompts/environment_reasoning.txt` | Environment destination's answer synthesis instructions |
+| `worker/simple_vlm_example_worker/prompts/` | Separate conversation, current-view, monitor, and note-taking instructions |
 
 For example, change `followup_grace_s` in `yaml/voice_gate.yaml` to control how
 long a second utterance can omit “Hey Agent”:

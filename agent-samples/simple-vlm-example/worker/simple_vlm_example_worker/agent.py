@@ -39,8 +39,8 @@ INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
 PARTICIPANT_JOINED_TOPIC = Topic("simple-vlm.participant-joined", VoiceParticipantJoined)
 _PROMPTS = Path(__file__).parent / "prompts"
 _CONVERSATION_INSTRUCTIONS = (_PROMPTS / "conversation.txt").read_text(encoding="utf-8").strip()
-_VISION_INSTRUCTIONS = (_PROMPTS / "vision.txt").read_text(encoding="utf-8").strip()
-_ENVIRONMENT_INSTRUCTIONS = (_PROMPTS / "environment_reasoning.txt").read_text(encoding="utf-8").strip()
+_NOTES_INSTRUCTIONS = (_PROMPTS / "note_taking.txt").read_text(encoding="utf-8").strip()
+_MONITOR_VLM_INSTRUCTIONS = (_PROMPTS / "monitor_observation.txt").read_text(encoding="utf-8").strip()
 
 
 class SimpleVlmAgent(Agent):
@@ -53,11 +53,13 @@ class SimpleVlmAgent(Agent):
         front_end: ConversationFrontEnd,
         conversations: tuple[Conversation, ...],
         frames: CurrentFrameTool | None = None,
+        participant_left_handlers: tuple[Callable[[str], Awaitable[None]], ...] = (),
     ) -> None:
         super().__init__()
         self._set_status = set_status
         self._front_end = front_end
         self._conversations = conversations
+        self._participant_left_handlers = participant_left_handlers
         self._frames = frames
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._participants: set[str] = set()
@@ -91,12 +93,29 @@ class SimpleVlmAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel(participant_id)
-        await self._front_end.participant_left(participant_id)
+        errors: list[Exception] = []
+        try:
+            await self._front_end.participant_left(participant_id)
+        except Exception as error:
+            errors.append(error)
+        for handler in self._participant_left_handlers:
+            try:
+                await handler(participant_id)
+            except Exception as error:
+                errors.append(error)
         for conversation in self._conversations:
-            await conversation.participant_left(participant_id)
+            try:
+                await conversation.participant_left(participant_id)
+            except Exception as error:
+                errors.append(error)
         self._participants.discard(participant_id)
         if self._frames is not None:
-            self._frames.release(participant_id)
+            try:
+                self._frames.release(participant_id)
+            except Exception as error:
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup(f"failed to clean up participant {participant_id!r}", errors)
 
     @subscribe(PARTICIPANT_JOINED_TOPIC)
     async def participant_joined(
@@ -252,6 +271,8 @@ class SimpleVlmAgent(Agent):
         await self._front_end.stop()
         participants = tuple(self._participants)
         self._participants.clear()
+        for handler in self._participant_left_handlers:
+            await asyncio.gather(*(handler(pid) for pid in participants))
         for conversation in self._conversations:
             await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
         if self._frames is not None:

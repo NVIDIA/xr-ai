@@ -29,12 +29,19 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # after that long idle. Applied by VoiceAgent.
 idle_timeout_secs: 0
 
-# Optional runtime context topics. The topic name becomes a source section;
-# publishers send `mode: incremental|summary` plus `text`. Budgets are UTF-8
-# bytes, not model tokens. Incremental updates compact asynchronously per source.
-context_topics: []
+# Runtime context topics shared with general conversation. The topic name becomes
+# a source section; publishers send `mode: incremental|summary` plus `text`.
+# Budgets are UTF-8 bytes, not model tokens. Incremental updates compact
+# asynchronously per source. Remove a topic to disable that source feed.
+context_topics:
+  - simple-vlm.monitor-window
+  - simple-vlm.foreground-notes
 context_budget_bytes: 12000
 compaction_input_budget_bytes: 12000
+
+# Background visual monitor keeps the newest timestamped text observations.
+# It takes the next frame as soon as each previous observation completes.
+monitor_window_size: 20
 
 # Optional route-aware intention acknowledgment. When omitted, prediction and
 # acknowledgment are disabled. Set a positive delay in seconds to enable it.

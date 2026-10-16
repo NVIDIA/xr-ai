@@ -509,6 +509,21 @@ async def test_uncertain_router_with_no_eligible_scores_still_clarifies():
 
 
 @pytest.mark.asyncio
+async def test_uncertain_router_with_zero_probability_mass_still_clarifies():
+    decisions = _Decisions(DecisionAnswer("clarify", 1.0, {"clarify": 1.0, "conversation": 0.0, "observation": 0.0}))
+    conversation = _Destination("conversation")
+    observation = _Destination("observation")
+    front_end = ConversationFrontEnd({"conversation": conversation, "observation": observation}, decisions)
+
+    result, output = await _run(front_end, query="What is in the current view?")
+
+    assert result == DestinationResult("clarify", "Which part would you like help with?")
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert conversation.calls == []
+    assert observation.calls == []
+
+
+@pytest.mark.asyncio
 async def test_route_prompt_exposes_unavailable_destination_eligibility():
     decisions = _Decisions("xr")
     conversation = _Destination("conversation", results=(DestinationResult("answer", "I can help generally."),))

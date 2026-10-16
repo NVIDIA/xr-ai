@@ -7,10 +7,14 @@
 
 The simple VLM example is the smallest complete voice-and-vision application in
 the repository. It uses Clef to route ordinary spoken or typed questions among
-a general conversation destination, a direct visual-observation destination,
-and an environment-reasoning destination. Environment reasoning asks Omni for
-focused evidence from Cosmos before the conversation component synthesizes an
-answer. Conversation destinations use the reusable
+general conversation, direct visual observation, and an explicitly started
+background visual monitor. General conversation answers text questions across
+subjects, including AR/VR knowledge and shared-context recall. A separate
+foreground note-taking session captures and reads back participant-authored
+notes, then shares them with general conversation. The background monitor
+continuously records a bounded window of timestamped visual observations and
+publishes its text summary to configured conversation context. Conversation
+destinations use the reusable
 `xr_ai_conversation.Conversation` component and stream through the same voice
 output path to Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` to run the sample. This reference owns the
@@ -34,20 +38,36 @@ readiness, checks Clef health, and performs an image warmup through the VLM.
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `SimpleVlmAgent` delegates each turn to
 `xr_ai_conversation.ConversationFrontEnd`. Clef selects general conversation,
-direct visual observation, or environment reasoning from their routing aids
-and the current request/history. Each selected destination asks Clef to accept,
-decline, or clarify before it starts answering. A decline produces no spoken
-output and gives the front end one bounded reroute; ambiguity produces one
-clarifying question. The general destination has no frame or VLM tools. Direct
-observation sends the current image and user's question to Cosmos. Environment
-reasoning lets Omni decide whether current-scene evidence is needed. If needed,
-Omni requests one focused visual question, the worker queries Cosmos, adds that
-result as turn-scoped context, and asks the conversation component to synthesize
-the answer. Otherwise the conversation component answers with its subscribed
-context and completed history. Planner text and Cosmos evidence are not spoken
-or stored as user or assistant turns. Scope admission is based on the request,
-not whether the camera will return a usable frame. Visual tool calls include
-standalone questions with follow-up references resolved from completed history. The
+direct visual observation, background monitoring, foreground note-taking, or
+an acknowledgment/clarification path from routing aids and the current
+request/history. Admission stays with each destination: general conversation
+uses `Conversation.admit()`, direct observation accepts its current-frame
+requests, and monitoring and note-taking use their own typed control decisions.
+A decline produces no spoken output and gives the
+front end one bounded reroute. A selected destination can ask a
+task-specific question through its normal answer path; unresolved routing or
+exhausted declines use the front end's clarification. General conversation
+answers text questions across subjects and has no frame or VLM tools. Direct
+observation sends the fresh image and current user question only to Cosmos; it
+does not include completed conversation history in that request. The
+background monitor is explicitly started and stopped through ordinary routed
+turns; it samples sequentially without a cadence delay, keeps a bounded rolling
+window, and shares timestamped text through the configured context topic. Its
+routing aid exposes only active task scope, status, observation availability,
+and newest source time. When that task covers a request, general conversation
+can use the separate timestamped window context; a fresh-camera request goes to
+direct observation. The monitor destination handles start, stop, and status
+controls only and does not answer recorded-content questions. It does not take
+front-end focus. A distinct note-taking destination acquires focus
+on request. It stores user-authored notes verbatim, supports readback, and keeps
+focus through topic changes until a semantic finish or handoff. Finishing notes
+consumes that request and releases focus; an explicit handoff releases focus and
+runs the same request through normal routing. Captured notes remain available to
+general conversation afterward. Observation records are never converted into
+notes. Scope admission is based on the request,
+not whether the camera will return a usable frame. Direct visual requests must
+identify their target in the current request because prior conversation is not
+sent to Cosmos. The
 `CurrentFrameTool` uses
 the hub's fresh frame when DeviceIOHub is already observing video for that
 participant. When video is off, the same tool asks StreamKit to capture one
@@ -69,12 +89,13 @@ conversation destination state, front-end history, and source-context
 tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
-Both conversation destinations can subscribe to named runtime context topics
-configured in `yaml/simple_vlm_example_worker.yaml`. Environment reasoning also
-receives its Cosmos result through a private turn-scoped summary topic and clears
-that section after synthesis or interruption. Publishers use the public
-`ConversationContextUpdate` contract; incremental updates are compacted in the
-background per participant and source, while summary updates replace that
+Conversation destinations can subscribe to named runtime context topics
+configured in `yaml/simple_vlm_example_worker.yaml`. The background monitor
+publishes its rolling observation window as a replaceable summary, and the
+notes destination publishes each user-authored note incrementally. Publishers
+use the public `ConversationContextUpdate` contract. Only the general
+conversation subscribes to the note topic. Incremental updates are compacted in
+the background per participant and source, while summary updates replace that
 source section as-is. The context and compaction payload limits are UTF-8 byte
 budgets, not token limits.
 
@@ -95,16 +116,80 @@ The worker package is under
 | `__main__.py` | Parses launcher arguments and starts the worker |
 | `app.py` | Composes `VoiceAgent`, `SimpleVlmAgent`, services, and readiness |
 | `agent.py` | Owns participant-scoped routed turns, voice streaming, cancellation, and cleanup |
-| `admission.py` | Applies Clef accept/decline/clarify checks before a destination answers |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
-| `xr_ai_conversation.Conversation` | Streams general answers and synthesizes environment answers from bounded history and named context |
-| `visual_destinations.py` | Implements direct Cosmos observation and Omni-planned Cosmos evidence |
+| `conversation_destinations.py` | Adds bounded continuation cues and participant-scoped foreground note-taking to `Conversation` destinations |
+| `monitoring.py` | Owns the explicitly started background monitor and rolling text window |
+| `visual_destinations.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
-| `prompts/vision.txt` | Application instructions for the visual destination |
-| `prompts/environment_planner.txt` | Guides the environment destination to answer from history when sufficient, or request focused evidence from the current view |
-| `prompts/environment_reasoning.txt` | Guides synthesis from current-turn visual evidence and conversation history |
-| `eval/conversation-cases.yaml` | Clef routing and admission, direct-answer, observation, follow-up, and environment-reasoning evaluation inputs |
+| `prompts/note_taking.txt` | Instructions for the focused note-taking destination |
+| `prompts/monitor_observation.txt` | Produces concise observations for the rolling monitor window |
+| `eval/conversation-cases.yaml` | Single-turn Clef routing and direct-answer evaluation inputs |
+| `eval/conversation-flows.yaml` | Ordered multi-turn routing, focus, and context-update cases |
+
+## Behavior validation
+
+The sample's deterministic tests divide the contract by layer. Run them from the
+repository root with the `tests` project environment:
+
+```bash
+uv --config-file uv.toml run --project tests pytest \
+  tests/test_xr_ai_conversation.py \
+  tests/test_simple_vlm_front_end.py \
+  tests/test_simple_vlm_example_worker.py \
+  tests/test_simple_vlm_visual_destinations.py \
+  tests/test_simple_vlm_monitoring.py \
+  tests/test_simple_vlm_conversation_flows.py \
+  tests/test_simple_vlm_decision_eval.py
+```
+
+| Behavior | Deterministic contract | Corpus/model layer |
+|---|---|---|
+| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_simple_vlm_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
+| Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
+| Current-frame-only observation and camera/tool failures | `test_simple_vlm_visual_destinations.py`, `test_simple_vlm_example_worker.py` | Current-view tool/evidence expectations in both corpora |
+| Monitor task scope, hot sampling, retarget, failure, stop, participant isolation | `test_simple_vlm_monitoring.py` | Monitor controls, active/stopped scope, route and evidence expectations |
+| Note capture, readback, focus, release/handoff, overflow, context sharing | `test_simple_vlm_example_worker.py`, `test_simple_vlm_monitoring.py` | Note actions, focus transitions, and context-source expectations |
+| Decision evaluator fixture loading, call limits, teacher-forced history, and not-scored output | `test_simple_vlm_decision_eval.py` | Typed Clef route and control decisions |
+| Sample wiring, readiness, Relay attribution and voice-stream boundaries | `test_simple_vlm_example_worker.py` | Not scored unless the run captures those stages |
+
+The ordered flow corpus separates raw router choice, effective destination,
+invoked admission and control decisions, evidence/tool use, and answer checks.
+A layer with no captured trace is reported as not scored.
+
+Run the bounded decision-only pass from the repository root when the configured
+Clef router is available:
+
+```bash
+uv --config-file uv.toml run --project agent-samples/simple-vlm-example/worker \
+  python agent-samples/simple-vlm-example/eval/run_decision_eval.py \
+  --output /tmp/simple-vlm-decision-eval.jsonl
+```
+
+Add `--preflight-only` to validate fixture counts, required authored context,
+and the decision-call cap without contacting a model. The JSONL output contains
+typed decision requests/responses and per-turn raw choice, effective selection,
+invoked native admissions/actions, and explicit not-scored fields. Histories
+marked as authored are teacher-forced inputs; they are not model outputs. This
+pass does not invoke answer generation, image tools, voice services, or
+compaction, so those layers remain unscored. Per-turn `published_context_*`
+fields record updates emitted by sample destinations; the decision-only runner
+does not start an `AgentRuntime` subscriber and does not claim those updates were
+consumed by a conversation prompt. Prior authored conversation completions seed
+the same bounded private routing cue used after a completed production answer.
+If a run stops after a fixture precondition fails, `--resume-from` can preserve
+its raw decisions and continue untouched flows. It requires matching fixture,
+model-config, and production-source hashes; the output records both evaluator
+hashes when resume handling itself changed.
+
+Flow histories are teacher-forced inputs. A seeded exchange is labeled as
+authored state, not as an answer generated during the evaluation. Between turns,
+focus and monitor state follow the actual native control decisions; fixture
+expectations for those states are scored separately. The corpus's
+answer checks are lexical smoke checks; they do not establish semantic answer
+quality. Model-decision runs do not establish camera grounding unless they
+include a completed frame/query result, and the deterministic image fixtures do
+not reproduce a participant's live camera stream.
 
 ## Readiness and warmup
 
@@ -126,13 +211,12 @@ layout works without command-line configuration arguments.
 
 | File | Owns |
 |---|---|
-| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics and byte budgets, route-aware acknowledgment delay, and prompt overrides |
+| `yaml/simple_vlm_example_worker.yaml` | Frame freshness and wait limits, VAD, idle timeout, optional context topics (including note sharing) and byte budgets, route-aware acknowledgment delay, and prompt overrides |
 | `yaml/voice_gate.yaml` | Conversation controls, optional wake phrases, listening chime, and follow-up window |
 | `yaml/models.json` | LLM/VLM/STT/TTS/Clef adapters, endpoints, and conversation generation defaults |
 | `yaml/device_io_hub.yaml` | LiveKit room and ports, web and token servers, and network behavior |
 | `yaml/media_capture.yaml` | Opt-in media-hub capture, NVENC output, caption layout, and retention |
 | `worker/simple_vlm_example_worker/prompts/system.txt` | Default VLM instruction |
-| `worker/simple_vlm_example_worker/prompts/vision.txt` | Visual destination instructions |
 
 Edit the owning file, preserve the field's YAML type, and restart
 `simple_vlm_example`; configuration is loaded only at process startup. For
@@ -154,6 +238,10 @@ sample uses a separate typed client for acknowledgments, with reasoning disabled
 and a 64-token output limit; the conversation model settings are unchanged.
 Acknowledgment text is restricted to a short “Let me think through …” goal
 restatement. Nonconforming generated text is dropped without retrying.
+
+The default `context_topics` list includes `simple-vlm.foreground-notes`.
+Remove that entry to disable sharing captured notes with general conversation;
+focused capture and readback continue to use the note destination's local state.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.

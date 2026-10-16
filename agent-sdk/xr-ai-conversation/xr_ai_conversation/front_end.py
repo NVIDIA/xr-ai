@@ -691,6 +691,8 @@ class ConversationFrontEnd:
                         continue
                     if math.isfinite(probability) and 0.0 <= probability <= 1.0:
                         eligible_scores[name] = probability
+            if not any(eligible_scores.values()):
+                eligible_scores.clear()
 
             selected_probability = None
             if answer.choice in eligible:

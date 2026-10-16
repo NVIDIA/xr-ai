@@ -4,8 +4,6 @@
 - name: general_question_without_camera
   image: blank
   destination: conversation
-  admission: accept
-  declined_alternative: observation
   route: direct
   query: What is twice eleven?
   any_of: ["22", twenty-two]
@@ -20,8 +18,6 @@
 - name: read_visible_sign_text
   image: closed_sign
   destination: observation
-  admission: accept
-  declined_alternative: conversation
   route: current_view
   query: Read the large word on the sign.
   any_of: [closed]
@@ -66,6 +62,16 @@
   query: What was that again?
   any_of: [Lisbon]
 
+- name: incomplete_followup_uses_completed_history
+  image: blank
+  destination: conversation
+  route: direct
+  history:
+    - user: I'm preparing for an interview. How should I organize my examples?
+      assistant: Use a situation, action, and result structure for each example.
+  query: Okay, what should I do next?
+  any_of: [practice, aloud]
+
 - name: direct_howto_after_repeated_visual_clarifications
   image: blank
   destination: conversation
@@ -81,8 +87,6 @@
       assistant: I can help clarify what's visible in your current camera view. Could you specify what you'd like me to check? For example, I can identify objects, text, or spatial relationships in the scene.
   query: Stop repeating, just show me how to make pasta.
   any_of: ["add the pasta", "cook according to the package directions"]
-  admission: accept
-  declined_alternative: observation
 
 - name: direct_howto_after_visual_clarification
   image: blank
@@ -93,13 +97,10 @@
       assistant: Could you clarify what you would like me to check in the scene?
   query: How do I tie a bowline knot?
   any_of: [rope, loop]
-  admission: accept
-  declined_alternative: observation
 
 - name: ambiguous_reference_clarifies_before_camera_access
   image: red_left_blue_right
   destination: observation
-  admission: clarify
   route: clarify
   history:
     - user: I am trying to compare these with the earlier example.
@@ -114,37 +115,29 @@
   query: For my exhibit notes, what color is the circle on the right?
   any_of: [blue]
 
-- name: recommend_visible_place_for_reminder
-  image: whiteboard_room
-  destination: environment
-  admission: accept
-  route: inspect_current_view_then_synthesize
-  query: Where would be a good place to write a short reminder in this room?
-  any_of: [whiteboard, reminder]
+- name: explain_ar_display_tradeoff
+  destination: conversation
+  route: direct
+  query: What is one tradeoff between optical see-through and video see-through AR displays?
+  any_of: [camera, optical, see-through]
 
 - name: recommend_how_to_improve_sign_visibility
-  image: closed_sign
-  destination: environment
-  admission: accept
-  route: inspect_current_view_then_synthesize
-  query: What could I do to make this sign easier to notice from farther away?
-  any_of: [larger, higher, visible, contrast]
+  destination: conversation
+  route: direct
+  query: Why can high contrast improve text legibility in an AR heads-up display?
+  any_of: [contrast, background, readable]
 
 - name: recommendation_does_not_assume_unseen_surface
-  image: red_left_blue_right
-  destination: environment
-  admission: accept
-  route: inspect_current_view_then_synthesize
-  query: Where could I set a small cup down in this scene?
-  any_of: [no clearly visible surface, cannot identify a suitable surface, not enough visual evidence]
+  destination: conversation
+  route: direct
+  query: What is a common cause of motion discomfort in virtual reality?
+  any_of: [motion, latency, mismatch]
 
 - name: use_completed_visual_context_without_rechecking
-  image: whiteboard_room
-  destination: environment
-  admission: accept
+  destination: conversation
   route: direct
   history:
-    - user: What writing surface is visible?
-      assistant: A whiteboard is visible beside the table.
-  query: Based on that earlier observation, where could I write a short reminder?
-  any_of: [whiteboard]
+    - user: What is the main advantage of optical see-through AR?
+      assistant: It lets the wearer see the real world directly through the display.
+  query: What was its main advantage?
+  any_of: [real world, directly, see-through]

@@ -40,10 +40,10 @@ from xr_ai_tools.vision import ImageQueryTool, StreamingImageQueryTool
 from xr_ai_voice import HubVoiceTransport, VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
-from .admission import ClefAdmissionDestination
 from .agent import (
     _CONVERSATION_INSTRUCTIONS,
-    _ENVIRONMENT_INSTRUCTIONS,
+    _MONITOR_VLM_INSTRUCTIONS,
+    _NOTES_INSTRUCTIONS,
     INTERRUPTED_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
@@ -51,15 +51,21 @@ from .agent import (
     SimpleVlmAgent,
 )
 from .config import WorkerConfig
-from .visual_destinations import EnvironmentReasoningDestination, VisualObservationDestination
+from .conversation_destinations import ContextualConversationDestination, NoteTakingDestination
+from .monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorDestination
+from .visual_destinations import VisualObservationDestination
 
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4
 _VLM_WARMUP_TIMEOUT_S = 120.0
-_ENVIRONMENT_EVIDENCE_TOPIC = Topic(
-    "simple-vlm.environment-evidence",
-    ConversationContextUpdate,
+_CONVERSATION_SCOPE = (
+    "Provide text assistance across subjects and recall relevant conversation history and participant-authored "
+    "notes. Use active monitor observations only when the current request is covered by the participant's active "
+    "monitor task. If answering depends on what the camera shows now, use direct observation even when prior "
+    "turns contain the same or a similar question and answer. Historical monitor records are not current-camera "
+    "evidence. This destination does not inspect the camera."
 )
+_NOTES_CONTEXT_TOPIC = Topic("simple-vlm.foreground-notes", ConversationContextUpdate)
 
 
 def _vlm_warmup_jpeg() -> bytes:
@@ -209,53 +215,75 @@ async def run_app(
     conversation = Conversation(
         llm,
         instructions=_CONVERSATION_INSTRUCTIONS,
-        routing=RoutingAid(
-            name="conversation",
-            description="General conversation, explanations, calculations, and recall from completed exchanges.",
-        ),
+        routing=RoutingAid(name="conversation", description=_CONVERSATION_SCOPE),
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
-    environment_conversation = Conversation(
+    notes_conversation = Conversation(
         llm,
-        instructions=_ENVIRONMENT_INSTRUCTIONS,
+        instructions=_NOTES_INSTRUCTIONS,
         routing=RoutingAid(
-            name="environment",
-            description=("Explain, compare, recommend, or plan using current-scene evidence and conversation context."),
+            name="notes",
+            description=(
+                "An explicitly started note-taking session for capturing and reviewing participant-authored notes. "
+                "It does not provide general knowledge or inspect current-camera content."
+            ),
         ),
         context_budget_bytes=config.context_budget_bytes,
         compaction_input_budget_bytes=config.compaction_input_budget_bytes,
     )
 
-    async def publish_environment_evidence(
+    async def publish_note_context(
         participant_id: str,
         update: ConversationContextUpdate,
     ) -> None:
         await runtime.publish(
-            _ENVIRONMENT_EVIDENCE_TOPIC,
+            _NOTES_CONTEXT_TOPIC,
             update,
             participant_id=participant_id,
-            source="simple-vlm.environment",
+        )
+
+    async def publish_monitor_window(
+        participant_id: str,
+        update: ConversationContextUpdate,
+    ) -> None:
+        await runtime.publish(
+            MONITOR_WINDOW_TOPIC,
+            update,
+            participant_id=participant_id,
         )
 
     observation = VisualObservationDestination(
         frames,
         vision,
+    )
+    notes_destination = NoteTakingDestination(
+        notes_conversation,
+        router,
+        context_budget_bytes=config.context_budget_bytes,
+        publish_context=publish_note_context,
+    )
+    monitor = VisualMonitorDestination(
+        frames,
+        ImageQueryTool(images=images, vlm=vlm, system_prompt=_MONITOR_VLM_INSTRUCTIONS),
+        router,
+        publish_monitor_window,
+        window_size=config.monitor_window_size,
         context_budget_bytes=config.context_budget_bytes,
     )
-    environment = EnvironmentReasoningDestination(
-        llm,
-        frames,
-        ImageQueryTool(images=images, vlm=vlm, system_prompt=config.system_prompt),
-        environment_conversation,
-        publish_environment_evidence,
+    conversation_destination = ContextualConversationDestination(
+        conversation,
+        static_description=_CONVERSATION_SCOPE,
         context_budget_bytes=config.context_budget_bytes,
+        routing_context=monitor.routing_context,
+        source_name="conversation",
     )
     front_end = ConversationFrontEnd(
         {
-            "conversation": ClefAdmissionDestination(conversation, router),
-            "observation": ClefAdmissionDestination(observation, router),
-            "environment": ClefAdmissionDestination(environment, router),
+            "conversation": conversation_destination,
+            "observation": observation,
+            "monitor": monitor,
+            "notes": notes_destination,
         },
         router,
         acknowledgment_llm=acknowledgment_llm,
@@ -264,20 +292,14 @@ async def run_app(
     configured_topics = tuple(Topic(name, ConversationContextUpdate) for name in config.context_topics)
     if configured_topics:
         runtime.register("conversation-context", conversation.context_subscriber(configured_topics))
-    environment_topics = tuple(
-        {topic.name: topic for topic in (*configured_topics, _ENVIRONMENT_EVIDENCE_TOPIC)}.values()
-    )
-    runtime.register(
-        "environment-context",
-        environment_conversation.context_subscriber(environment_topics),
-    )
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
             transport.endpoint.set_status,
             front_end=front_end,
-            conversations=(conversation, environment_conversation),
+            conversations=(conversation, notes_conversation),
             frames=frames,
+            participant_left_handlers=(notes_destination.participant_left, monitor.participant_left),
         ),
     )
     runtime.register("voice", voice)
@@ -293,7 +315,8 @@ async def run_app(
                     await simple_vlm.stop()
     finally:
         await conversation.close()
-        await environment_conversation.close()
+        await notes_conversation.close()
+        await monitor.stop()
         if acknowledgment_llm is not None:
             await acknowledgment_llm.close()
         await llm.close()
