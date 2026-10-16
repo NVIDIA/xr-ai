@@ -5,64 +5,85 @@
 
 # Python code style
 
-This reference governs Python code throughout the repository: where the public
-API ends, how failures are represented, and how modules are laid out. It covers
-the SDK, utilities, services, samples, and tests. Application-owned projects
-under `apps/` are outside repository tooling and outside this page. Package
-surfaces and their documented behavior live in each package's `__all__` and
-docstrings; this page covers only the conventions that keep them consistent.
+This reference governs new and changed Python code throughout the repository:
+where the public API ends, how failures are represented, and how modules are
+laid out. It covers the SDK, utilities, services, samples, and tests.
+Application-owned projects under `apps/` are outside repository tooling and
+outside this reference. Package surfaces and their documented behavior live in
+each package's `__all__` and docstrings; this reference covers only the
+conventions that keep them consistent.
+
+These rules are prospective. They do not withdraw support for an existing
+public import, name, signature, or behavior, and they do not require rewriting
+existing code. Bring existing code in line when a change touches it. Renaming,
+moving, or removing a supported name is a breaking change that needs a
+migration entry.
 
 A package that other projects import, such as everything under `agent-sdk/` and
 `utils/` and any library a service or sample publishes, follows every section.
 A runnable service, orchestrator, or sample worker publishes no API: keep its
-modules private to the project and do not import them from elsewhere. The
-exception rules apply to all of them, and its entry point is a sanctioned
-broad-catch site.
+modules private to the project and do not import them from elsewhere, except
+from its own tests. The exception rules apply to all of them, and each entry
+point is a sanctioned broad-catch site.
 
-The rules apply established Python guidance, cited rule by rule. This page does
-not adopt any external style guide wholesale; for example, the repository's
-worker packages use relative imports, which the Google guide discourages. Each section ends with its
-**Basis**, which names the standard it comes from. A rule marked **Repository
+The rules apply established Python guidance, cited rule by rule. This reference
+does not adopt any external style guide wholesale; for example, the
+repository's worker packages use relative imports, which the Google guide
+discourages. Each section ends with its **Basis**, which names the standard it
+comes from. A rule marked **Repository
 convention** goes beyond a published standard to settle a pattern that the
 SDK handled inconsistently, and it has no external source.
 
-Review feedback on an SDK change cites a rule from this page. A preference that
-is not written here is raised as a change to this page, in its own pull
-request, so that every contributor works from the same rules.
+Review feedback on a change cites a rule from this reference. A preference
+that is not written here is raised as a change to this reference, in its own
+pull request, so that every contributor works from the same rules.
 
 ## Public and private code
 
-The public surface of a package is exactly the names in `__all__` of its
-top-level `__init__.py`. Nothing else is supported.
+The public surface of a package is the names in `__all__` of its top-level
+`__init__.py`, plus the names in `__all__` of each module enrolled in the public
+API inventory (`PUBLIC_API_MODULES` in `docs/source/_api_contract.py`). Imports
+from an enrolled module, such as `xr_ai_tools.current_frame`,
+`xr_ai_tools.vision`, `xr_ai_tools.rpc`, and `xr_ai_models.presets`, remain
+supported. Nothing else is supported.
 
-- Name every module that is not re-exported with a leading underscore. A module
-  that mixes public and internal code is split so the public names are the only
+- Give a new public name a package-root `__all__` entry. Add a public submodule
+  only by enrolling it in the inventory with its own `__all__`.
+- Name every other module with a leading underscore: one that is neither
+  exported from the package root nor enrolled in the inventory. A module that
+  mixes public and internal code is split so the public names are the only
   ones a consumer needs to import.
 - Document every public name with a docstring, because the generated Python
   reference is rendered from it. Give a private name a docstring only when its
   invariant is not obvious.
-- Start each private module with a short module docstring that states what it
-  owns and which packages can import it.
+- Start each new private module with a short module docstring that states what
+  it owns and which packages can import it.
 - Use only public types in public signatures. Keep internal state in
   `_`-prefixed attributes that no other package reads. If a consumer needs
   that state, publish a deliberate accessor.
-- Never import a private name or module of another package. When a neighbouring
-  package needs something, the owning package publishes it first.
-- Import public names from the package root. Treat a name that consumers need
-  from a submodule as a missing `__all__` entry.
+- Production code never imports a private name or module of another package.
+  When a neighbouring package needs something, the owning package publishes it
+  first. Implementation tests of the owning package can import private names.
+- Import a public name from the package root when the root exports it, and
+  otherwise from the enrolled module that documents it.
 - Keep transport and vendor details out of public names and documentation.
   Agent-facing text never mentions LiveKit or StreamKit.
 
 **Basis:**
 [PEP 8, Public and Internal Interfaces](https://peps.python.org/pep-0008/#public-and-internal-interfaces)
-defines the public surface as the names declared in `__all__`, requires a
-leading underscore on internal interfaces, and treats an interface as internal
-when any containing namespace is internal. The repository's
+says "Documented interfaces are considered public" and that modules "should
+explicitly declare the names in their public API using the `__all__`
+attribute". It requires a leading underscore on internal interfaces and treats
+an interface as internal when any containing namespace is internal. The public
+API inventory and the contributing page's statement that public references are
+generated from "each enrolled module's literal `__all__`" define which modules
+are enrolled. The repository's
 [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#architecture-boundaries)
 requires that LiveKit not appear in agent APIs and that workers use public SDK
 packages, and its change contract places public API documentation in
-`__all__` and co-located docstrings. Importing from the package root and the
-private-module docstring are **repository conventions**.
+`__all__` and co-located docstrings, and it keeps private imports inside their
+owning packages or implementation tests. Preferring the package root for new
+public names and the private-module docstring are **repository conventions**.
 
 ## Exceptions
 
@@ -73,10 +94,11 @@ obvious.
 is unreachable, a remote service returns an error status, external or
 configuration input is malformed, a timeout fires, or a peer closes.
 
-- Define a package's failures in one `_errors.py` module rooted at a single
+- Define a new package's failures in one `_errors.py` module rooted at a single
   package base class, such as `ModelServiceError`, with a few meaningful
-  subclasses. End every exception name in `Error`. Re-export the public ones in
-  `__all__`.
+  subclasses. End every new exception name in `Error`. Re-export the public
+  ones in `__all__`. Supported exception names and import locations, such as
+  `xr_ai_tools.rpc.RPCError`, stay as they are.
 - List the SDK errors a public function raises in its docstring `Raises:`
   section. Do not list the `ValueError` or `TypeError` raised for a caller
   mistake, because that would make behavior under misuse part of the API.
@@ -102,23 +124,31 @@ swallowed error.
 These rules follow:
 
 1. Do not write a bare `except:`, and do not catch `Exception` or
-   `BaseException` outside the sanctioned sites below.
+   `BaseException` unless the handler re-raises or is a sanctioned site below.
 2. Do not silence an error with `pass`, `continue`, or a bare `return` in an
    `except` clause. Where ignoring a failure is correct, catch the specific
    type and explain why in a `# ignored:` comment.
 3. The sanctioned broad-catch sites each carry a `# isolation boundary:`
-   comment, log with `logger.exception`, and either re-raise or end the unit of
-   work they supervise:
+   comment and either consume the failure or re-raise it. A site that consumes
+   the failure logs it once with its traceback through the package's logger,
+   and ends the unit of work or continues the loop it supervises. A site that
+   re-raises does not log; the owner that finally consumes the failure logs it.
+   The sites are:
    - calling a user-supplied callback from a loop the SDK owns, so one handler
      cannot stop the loop;
    - a background-task supervisor or done callback that records the failure and
      surfaces it to the task's owner;
    - the process entry point.
-4. Do not suppress `asyncio.CancelledError`. When code catches it to clean up,
-   it propagates the error afterward. Prefer `try/finally` or `async with` for
-   cleanup.
-5. Log or raise at one layer, not both. A re-raised error is logged once, at
-   the top.
+4. Propagate a cancellation directed at the current task. Code that catches
+   `asyncio.CancelledError` to clean up propagates it afterward, and prefers
+   `try/finally` or `async with`. An owner that cancels a child task and awaits
+   it can consume the child's `CancelledError` as the child's completion and
+   continue its own cleanup or callback. Outside a block that is already
+   propagating the owner's own cancellation, the owner first checks that
+   `asyncio.current_task().cancelling()` is zero and otherwise re-raises,
+   because the error can then come from the owner's own cancellation.
+5. Log or raise at one layer, not both. A re-raised error is logged once, by
+   the owner that consumes it.
 6. Always preserve the cause with `raise ... from exc`. Make the message match
    the actual error condition, and say what the caller can do.
 7. Cleanup that must not mask the primary error uses
@@ -133,7 +163,7 @@ These rules follow:
   propagated but are recorded and suppressed instead, such as protecting a
   thread from crashing by guarding its outermost block". The same section
   says a library's own exceptions "must inherit from an existing exception
-  class" and that names should end in `Error`; calls for `finally` for cleanup;
+  class" and that names end in `Error`; calls for `finally` for cleanup;
   advises raising `ValueError` for a violated precondition; and says not to use
   `assert` to validate preconditions. Its
   [function docstring rules](https://google.github.io/styleguide/pyguide.html#s3.8.3-functions-and-methods)
@@ -146,7 +176,7 @@ These rules follow:
   (rule 8), and use `raise X from Y` to replace an exception without losing the
   traceback (rule 6). [PEP 20](https://peps.python.org/pep-0020/) states the
   principle: "Errors should never pass silently. Unless explicitly silenced."
-- Ruff enforces the same rules mechanically:
+- Ruff has matching rules:
   [`BLE001`](https://docs.astral.sh/ruff/rules/blind-except/) (blind except),
   [`S110`](https://docs.astral.sh/ruff/rules/try-except-pass/) (try-except-pass),
   and [`B904`](https://docs.astral.sh/ruff/rules/raise-without-from-inside-except/)
@@ -156,7 +186,12 @@ These rules follow:
   it recommends `try/finally` for cleanup, says a caught `CancelledError`
   "should generally be propagated when clean-up is complete", and warns that
   `asyncio.TaskGroup` and `asyncio.timeout()` "might misbehave if a coroutine
-  swallows" it.
+  swallows" it. The documentation defines
+  [`Task.cancelling()`](https://docs.python.org/3/library/asyncio-task.html#asyncio.Task.cancelling)
+  as "the number of pending cancellation requests to this Task", which is what
+  the owner check reads. Letting an owner consume a child's completion is a
+  **repository convention**; the existing shutdown paths in `xr_ai_voice` and
+  `xr_ai_tools` cancel and await child tasks this way.
 - Rule 7 follows the
   [`contextlib.suppress` documentation](https://docs.python.org/3/library/contextlib.html#contextlib.suppress),
   which limits it to "very specific errors where silently continuing with
@@ -178,7 +213,8 @@ These rules follow:
   repeated cancellation. A constructor does not perform I/O or start tasks.
 - Return an unsubscribe callable from every `on_*` registration. State in the
   docstring which loop runs the callback and what happens if it raises.
-- Do not return `None` to mean failure. Raise a typed error, or offer an
+- Do not return `None` to mean a failed operation; a lookup that can find
+  nothing can return `None`. Raise a typed error, or offer an
   explicit `try_*` variant that returns a `bool`.
 - Expose attributes read-only unless mutation is the documented purpose.
 - Do not add a second way to do something, such as a synchronous twin or a
@@ -219,7 +255,8 @@ limits comments to non-obvious invariants and failure modes. The tags are a
   `git diff -M` shows it as a pure rename.
 - When splitting a module, keep the old import path working through a
   re-export until every in-repository importer, including tests, has moved.
-  Remove the re-export in a follow-up change.
+  Remove the re-export in a follow-up change. Removing an import path that is
+  supported, such as an enrolled module, is a breaking change.
 - State in the pull request whether the change alters behavior. A refactor that
   must not change behavior passes the existing tests unmodified.
 - Add a migration entry for a breaking change.
