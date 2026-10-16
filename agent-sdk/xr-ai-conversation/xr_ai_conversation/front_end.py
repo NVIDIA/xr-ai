@@ -379,12 +379,12 @@ class ConversationFrontEnd:
                 and self._acknowledgment_delay_secs is not None
                 and not admission.preamble
             ):
-                aid = destination.routing_aid(turn.participant_id)
+                routing_aid = destination.routing_aid(turn.participant_id)
                 acknowledgment_task = asyncio.create_task(
                     self._acknowledge_if_needed(
                         turn,
-                        aid.name,
-                        aid.description,
+                        routing_aid.name,
+                        routing_aid.description,
                         answer_started_at,
                         answer_started,
                         prediction_trace,
@@ -657,20 +657,20 @@ class ConversationFrontEnd:
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
                 )
             return candidate_name if route_aid.eligible else None
-        aids = []
+        route_aids = []
         for candidate_name in candidates:
             route_aid = self._destinations[candidate_name].routing_aid(turn.participant_id)
             if route_aid.name != candidate_name:
                 raise ValueError(
                     f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
                 )
-            aids.append(route_aid)
+            route_aids.append(route_aid)
         criteria = {
-            aid.name: (
-                f"{aid.name} has routing description={aid.description!r}; "
-                f"eligible={aid.eligible}; eligibility={aid.eligibility}; priority={aid.priority}."
+            route_aid.name: (
+                f"{route_aid.name} has routing description={route_aid.description!r}; "
+                f"eligible={route_aid.eligible}; eligibility={route_aid.eligibility}; priority={route_aid.priority}."
             )
-            for aid in aids
+            for route_aid in route_aids
         }
         criteria["clarify"] = "The request cannot safely be assigned to one available destination."
         state = {
@@ -687,13 +687,13 @@ class ConversationFrontEnd:
             ],
             "destinations": [
                 {
-                    "name": aid.name,
-                    "description": aid.description,
-                    "eligible": aid.eligible,
-                    "eligibility": aid.eligibility,
-                    "priority": aid.priority,
+                    "name": route_aid.name,
+                    "description": route_aid.description,
+                    "eligible": route_aid.eligible,
+                    "eligibility": route_aid.eligibility,
+                    "priority": route_aid.priority,
                 }
-                for aid in aids
+                for route_aid in route_aids
             ],
         }
         question = DecisionQuestion(
@@ -706,7 +706,7 @@ class ConversationFrontEnd:
             ),
             criteria=criteria,
         )
-        eligible = [aid.name for aid in aids if aid.eligible]
+        eligible = [route_aid.name for route_aid in route_aids if route_aid.eligible]
         with nemo_relay.scope.scope(
             "conversation.destination-route",
             nemo_relay.ScopeType.Agent,
