@@ -220,6 +220,7 @@ class _Replay:
                 )
             context = {
                 "active": session.active,
+                "finish_on_complete": step.finish_on_complete if session.active else False,
                 "guide_order": guide_order,
                 "state": copy.deepcopy(workflow.project(step, session.state)) if session.active else {},
                 "active_trigger": active_trigger,
@@ -687,6 +688,15 @@ class _Replay:
             session.notices.clear()
             if (not session.active or not self._connected(session.participant_id)
                     or self._sessions.get(session.participant_id) is not session):
+                return
+            if session.step.finish_on_complete and self._is_complete(session):
+                # Finish under the same lock as controls and notice delivery so
+                # a racing stop/restart cannot publish an old run's completion.
+                await self._invalidate(session.participant_id)
+                message = ("Replay ended with skipped steps." if session.skipped
+                           else session.workflow.complete_message)
+                self._reset_progress(session, active=False)
+                await self._announce(session.participant_id, f"{message} Say start replay to begin again.")
                 return
             # A transition invalidates already queued speech under this same lock.
             for message in notices:

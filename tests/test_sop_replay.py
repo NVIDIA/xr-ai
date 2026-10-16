@@ -128,24 +128,27 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
     guide = select_guide(_SAMPLE / "guides", name)
     assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
     assert guide.workflow.runnable
-    original = yaml.safe_load((_SAMPLE.parent / "tea-making-sample/yaml/workflow.yaml").read_text())
     workflow = guide.workflow
     chain = []
     step_id = workflow.start_step
     while step_id is not None:
         chain.append(step_id)
         step_id = workflow.steps[step_id].next_step
-    assert chain == [step["id"] for step in original["steps"]]
+    assert chain == ["identify", "heat_water", "start_steeping", "steep_timer"]
     for step in workflow.steps.values():
         assert not step.agent.tools
         assert not step.is_complete(workflow.initial_state())
         assert "{{" not in step.enter_message  # Replay messages are not Jinja templates.
         if step.trigger.function == "current_view":
-            assert step.evidence.pattern == "^YES$" and step.evidence.consecutive == 2
+            assert not step.finish_on_complete
+            expected = {"identify": "^NUMI \\| CHAMOMILE LEMON$",
+                        "heat_water": "^(100 C|212 F)$", "start_steeping": "^YES$"}
+            assert step.evidence.pattern == expected[step.id] and step.evidence.consecutive == 2
             assert step.voice.tools == ("current_view",)
             assert step.complete_on_skip  # Do not silently bypass a brewing prerequisite.
         else:
-            assert step.trigger.arguments == {"duration_s": 180}
+            assert step.trigger.arguments == {"duration_s": 300}
+            assert step.finish_on_complete
             assert step.trigger.result_field == "expired"
             assert step.evidence.pattern == "^true$"
             assert step.voice.tools == ("clock__timer",)
@@ -174,14 +177,16 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
         session.next_tick = 0
         await backend._tick(session)
 
-    for step_id in ("identify", "fill_water", "heat_water", "start_steeping"):
+    for step_id in ("identify", "heat_water", "start_steeping"):
         assert session.step_id == step_id and session.timer is None
-        for answer in ("NO", "UNKNOWN", "YES"):
+        positive = {"identify": "NUMI | CHAMOMILE LEMON", "heat_water": "100 C", "start_steeping": "YES"}[step_id]
+        negative = {"identify": "NUMI | MOROCCAN MINT", "heat_water": "80 C", "start_steeping": "NO"}[step_id]
+        for answer in (negative, "UNKNOWN", positive):
             await observe(answer)
             assert not backend._is_complete(session)
-        await observe("YES", repeat_frame=True)
+        await observe(positive, repeat_frame=True)
         assert session.evidence_hits == 1 and not backend._is_complete(session)
-        await observe("YES")
+        await observe(positive)
         assert backend._is_complete(session)
         assert session.timer is None  # Even confirmed immersion does not start a timer.
         now += 10
@@ -191,26 +196,32 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
     backend._current_frame.execute.reset_mock()
     backend._image_query.execute.reset_mock()
     timer = backend._timer_tool("alice")
-    assert (await timer.execute(EmptyRequest())).remaining_s == 180
-    now += 179
+    assert (await timer.execute(EmptyRequest())).remaining_s == 300
+    now += 299
     session.next_tick = 0
     await backend._tick(session)
     assert not backend._is_complete(session)
     assert "not complete" in await control(backend, "advance", skip=False)
     now += 1
     session.next_tick = 0
+    backend._announce = AsyncMock()
     await backend._tick(session)
-    assert backend._is_complete(session)
+    assert not session.active and not any(session.state.values())
+    backend._announce.assert_awaited_once_with(
+        "alice", f"{session.workflow.complete_message} Say start replay to begin again.",
+    )
+    await backend._tick(session)
+    await backend._publish_notices(session)
+    assert backend._announce.await_count == 1
     backend._current_frame.execute.assert_not_awaited()
     backend._image_query.execute.assert_not_awaited()
     engine._llm.chat.assert_not_called()
-    assert "Tea guidance complete" in await control(backend, "advance", skip=False)
     assert not session.active and session.timer is None
     await control(backend, "restart")
     assert session.step_id == "identify" and not any(session.state.values())
 
 
-@pytest.mark.parametrize("step_id", ["identify", "fill_water", "heat_water", "start_steeping", "steep_timer"])
+@pytest.mark.parametrize("step_id", ["identify", "heat_water", "start_steeping", "steep_timer"])
 async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, step_id):
     backend = engine._backend
     backend._guide = select_guide(_SAMPLE / "guides", "Tea Making")
@@ -219,8 +230,59 @@ async def test_shipped_tea_guide_skip_never_claims_verified_completion(engine, s
     session.step_id = step_id
     backend._enter_step(session)
     response = await control(backend, "advance", skip=True)
-    assert "skipped steps" in response and "Tea guidance complete" not in response
+    assert "skipped steps" in response and session.workflow.complete_message not in response
     assert not session.active and session.timer is None
+
+
+def test_finish_on_complete_is_opt_in_and_terminal(document):
+    assert not any(step.finish_on_complete for step in selected(document).workflow.steps.values())
+    document["steps"][-1]["finish_on_complete"] = True
+    assert selected(document).workflow.steps["lid"].finish_on_complete
+    document["steps"][0]["finish_on_complete"] = True
+    with pytest.raises(ValueError, match="requires a terminal step"):
+        selected(document)
+
+
+@pytest.mark.parametrize("value", [1, "true", None, [], {}])
+def test_finish_on_complete_requires_boolean(document, value):
+    document["steps"][-1]["finish_on_complete"] = value
+    with pytest.raises(ValueError, match="finish_on_complete must be boolean"):
+        selected(document)
+
+
+@pytest.mark.parametrize("transition", ["reset", "restart"])
+async def test_automatic_finish_does_not_survive_transition(engine, document, transition):
+    document["steps"][-1]["finish_on_complete"] = True
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    session = backend._sessions["alice"]
+    session.step_id = "lid"
+    backend._enter_step(session)
+    session.evidence_hits = 2
+    backend._commit(session, session.step, {"lid": True}, "")
+    await control(backend, transition)
+    backend._announce = AsyncMock()
+    await backend._publish_notices(session)
+    backend._announce.assert_not_awaited()
+    assert session.active == (transition == "restart")
+
+
+async def test_automatic_finish_reports_skipped_prerequisite(engine, document):
+    document["steps"][-1]["finish_on_complete"] = True
+    backend = engine._backend
+    backend._guide = selected(document)
+    backend._start("alice")
+    await control(backend, "advance", skip=True)
+    session = backend._sessions["alice"]
+    session.evidence_hits = 2
+    backend._commit(session, session.step, {"lid": True}, "")
+    backend._announce = AsyncMock()
+    await backend._publish_notices(session)
+    backend._announce.assert_awaited_once_with(
+        "alice", "Replay ended with skipped steps. Say start replay to begin again.",
+    )
+    assert not session.active
 
 
 def test_approved_exact_name_and_id_are_pinned(tmp_path, document):
@@ -743,7 +805,10 @@ async def test_read_only_filter_does_not_grant_undeclared_tools(engine, document
 
 @pytest.mark.parametrize("state_references", [False, True])
 @pytest.mark.parametrize("query", ["How much time remains?", "Check the remaining time"])
-async def test_timer_question_uses_configured_arguments(engine, document, monkeypatch, state_references, query):
+@pytest.mark.parametrize("automatic_finish", [False, True])
+async def test_timer_question_uses_configured_arguments(
+    engine, document, monkeypatch, state_references, query, automatic_finish,
+):
     now = 100.0
     arguments = {"duration_s": 25}
     monkeypatch.setattr("procedure_capture_replay_worker.replay.replaying.time.monotonic", lambda: now)
@@ -751,6 +816,10 @@ async def test_timer_question_uses_configured_arguments(engine, document, monkey
     step["trigger"] = {"function": "clock__timer", "interval_s": 1, "result_field": "expired",
                        "arguments": dict(arguments)}
     step["voice"] = {"prompt": "Answer questions about this step's timer.", "tools": ["clock__timer"]}
+    if automatic_finish:
+        document["steps"] = [step]
+        step["next"] = None
+        step["finish_on_complete"] = True
     if state_references:
         for name, value in arguments.items():
             document["state"][name] = {"type": "integer", "description": name, "initial": value}
@@ -770,9 +839,14 @@ async def test_timer_question_uses_configured_arguments(engine, document, monkey
         assert "call clock__timer with no arguments ({})" in system
         assert "active_trigger.arguments" not in system
         assert "Answer questions about this step's timer." in system
+        assert "If finish_on_complete is true, the runtime ends the run" in system
+        assert "completion clears progress and leaves the selected guide\ninactive" in system
+        assert "Only a new start replay request begins another run." in system
+        assert "can\nbe repeated until disconnection" not in system
         timer_definition = next(tool for tool in tools if tool.name == "clock__timer")
         assert not timer_definition.parameters.get("properties")
         context = json.loads(messages[1].content)
+        assert context["finish_on_complete"] == automatic_finish
         assert context["active_trigger"] == {
             "function": "clock__timer", "duration_s": 25,
             "status": {"elapsed_s": 7, "remaining_s": 18, "expired": False},

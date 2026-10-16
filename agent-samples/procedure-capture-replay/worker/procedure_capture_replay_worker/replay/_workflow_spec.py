@@ -48,6 +48,7 @@ _STEP_KEYS = frozenset(
         "complete_when",
         "next",
         "complete_on_skip",
+        "finish_on_complete",
         "state_on_skip",
         "messages",
     }
@@ -125,6 +126,7 @@ class Step:
     complete_when: dict[str, Any]
     next_step: str | None
     complete_on_skip: bool
+    finish_on_complete: bool
     state_on_skip: dict[str, Any]
     enter_message: str
     complete_message: str
@@ -303,6 +305,11 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     complete_on_skip = raw.get("complete_on_skip", False)
     if not isinstance(complete_on_skip, bool):
         raise ValueError(f"steps.{step_id}.complete_on_skip must be boolean")
+    finish_on_complete = raw.get("finish_on_complete", False)
+    if not isinstance(finish_on_complete, bool):
+        raise ValueError(f"steps.{step_id}.finish_on_complete must be boolean")
+    if finish_on_complete and raw.get("next") is not None:
+        raise ValueError(f"steps.{step_id}.finish_on_complete requires a terminal step")
     return Step(
         id=step_id,
         title=_required_text(raw.get("title"), f"steps.{step_id}.title"),
@@ -315,6 +322,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         complete_when=dict(completion),
         next_step=str(raw["next"]) if raw.get("next") is not None else None,
         complete_on_skip=complete_on_skip,
+        finish_on_complete=finish_on_complete,
         state_on_skip=dict(skip),
         enter_message=_required_text(messages.get("enter"), f"steps.{step_id}.messages.enter"),
         complete_message=_required_text(messages.get("complete"), f"steps.{step_id}.messages.complete"),

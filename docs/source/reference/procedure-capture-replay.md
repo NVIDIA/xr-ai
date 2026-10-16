@@ -275,9 +275,9 @@ This demo is not a safety interlock. A still image cannot prove a hidden action.
 ### Included tea-making guide
 
 `guides/tea-making.guide.yaml` is a hand-authored, approved example with task
-name **Tea Making** and ID `tea_making`. It follows the five stages of
-{doc}`tea-making-sample`: identify tea, fill the heating vessel, heat water,
-immerse the tea, and wait for steeping. It is not generated from a user recording.
+name **Tea Making** and ID `tea_making`. Its four stages are specific to Numi
+Chamomile Lemon: read the packet, verify the water temperature, put the tea in
+water, and start the steeping timer. It is not generated from a user recording.
 
 Start the sample's shared models, then run:
 
@@ -285,33 +285,42 @@ Start the sample's shared models, then run:
 uv run main.py --mode replay "Tea Making"
 ```
 
-Connect and say **start replay**. Say **next** after each verified step and
-**stop replay** to cancel. After completion, say **start replay** to repeat.
+Connect and say **start replay**. Say **next** after each verified visual step
+and **stop replay** to cancel. The guide finishes automatically when the
+five-minute timer expires. Say **start replay** to repeat.
 
-Use green tea with compatible package instructions, a stable heat-safe vessel,
+Use Numi Chamomile Lemon tea, a stable heat-safe vessel,
 and a kettle or thermometer with a readable **current** water-temperature
-display. The example uses 80°C (176°F) water and a three-minute steep, within
-the green-tea ranges in the tea sample's brewing reference. Its visual target
-check accepts 78–82°C or 172–180°F. If the package requires a different recipe,
-stop and adapt a local copy before using it. Do not tilt or lift hot vessels
-to satisfy a camera check.
+display. [Numi's product instructions](https://numitea.com/products/chamomile-lemon)
+specify a 5–6 minute steep; this example chooses five minutes. Numi's
+[general herbal-tea guidance](https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits)
+calls for boiling water. The example verifies a displayed 100°C (212°F) current
+reading. If the packet requires a different recipe or local boiling temperature
+cannot reach that target, stop and adapt a local copy before using it. Do not
+tilt or lift hot vessels to satisfy a camera check.
 
 The example is adapted to replay's existing tools, not a drop-in copy of the
 tea sample's workflow YAML:
 
-- It uses a fixed green-tea recipe, not package-dependent settings or RAG lookup.
-- Its four visual steps require two distinct fresh frames whose VLM responses
-  exactly match `YES`. `NO`, `UNKNOWN`, missing frames, and malformed responses
+- It verifies both the Numi brand and Chamomile Lemon blend name. The recipe is
+  fixed in the guide, not inferred from packaging colors or retrieved by the LLM.
+- Its three visual steps require two distinct fresh frames. The first reads
+  `BRAND | BLEND` and matches `NUMI | CHAMOMILE LEMON`; the second reads a current
+  measurement and matches `100 C` or `212 F`; immersion requires `YES` for
+  visible bag contact with visible water, including a floating bag.
+  Other readings, `NO`, `UNKNOWN`, missing frames, and malformed responses
   cannot complete a step. These bounded evidence commits do not use an
   observation LLM; the foreground LLM still handles questions and controls.
-- The heating check verifies a displayed current temperature in the recipe
-  range, rather than the tea sample's “heating underway” threshold. Replay
+- The heating check verifies a displayed current temperature at the brewing
+  target, not a target setting or a “heating underway” threshold. Replay
   does not expose the tea sample's typed temperature tools: this is a VLM
   judgment, not a deterministic temperature measurement or safety guarantee.
 - Immersion detection does not start the timer. Say **next** promptly after
   immersion is confirmed to enter the timer step. The runtime then measures a
-  full 180 seconds; time spent waiting at the immersion step is not subtracted.
+  full 300 seconds; time spent waiting at the immersion step is not subtracted.
   Timer verification does not inspect images or prove continued immersion.
+- The final step sets `finish_on_complete: true`, so expiry ends the active run,
+  clears progress, and announces completion without another **next** command.
 - Skipping a visual prerequisite ends the run as skipped instead of assuming
   the prerequisite was satisfied. Skipping the timer also cannot produce a
   verified-completion announcement.
@@ -319,6 +328,38 @@ tea sample's workflow YAML:
 Regression tests load this exact example and exercise its state transitions,
 distinct-frame evidence, skip behavior, and timer with simulated observations.
 Those tests do not establish accuracy on real tea-making images or appliances.
+
+#### Local-model replay evaluation
+
+`eval/replay.py` exercises a visual-step sequence followed by a timer through
+the actual replay agent, runtime, voice aggregation, frame selection, and model
+tools. It uses the sample's configured LLM and VLM. Fixture images replace the
+hub camera endpoint, and typed requests enter the same runtime topic as
+transcribed speech. Microphones, STT, network camera delivery, and audible TTS
+are not covered. The script never manages external model-server processes.
+
+Prepare a JSON manifest with one entry per visual step, in execution order.
+Each entry has `step` and a `cases` list. Each case has `name`, `image` (relative
+to the manifest), acceptable `answers`, expected `complete`, and optional
+`observations` and `source`. Put incomplete cases before the completing case.
+The script sends a continuing frame stream, checks actual observations and
+progress, and asks the foreground model to advance each verified step. It
+also checks that an early **next** cannot bypass the timer.
+
+From the sample directory, with its model servers already running:
+
+```bash
+uv run --project worker python eval/replay.py \
+  --guide "Tea Making" --manifest /path/to/manifest.json \
+  --output artifacts/tea-replay-eval --wait-timer
+```
+
+Use a new output directory for each run. `--wait-timer` waits the actual configured
+duration and checks automatic completion, another **start replay**, and
+**stop replay**. Without it, the run cancels after checking the unexpired timer.
+Outputs include the exact guide, manifest, image hashes, model tool calls, visual
+answers, speech text, and result JSON. Synthetic controls can isolate label or
+setpoint mistakes but do not establish accuracy on a user's actual camera views.
 
 ### Guide structure
 
@@ -356,6 +397,10 @@ even when their `task.status` is `approved`.
   observations reset the consecutive evidence count.
 - Optional `state_on_skip` writes only declared step fields;
   `complete_on_skip: true` ends the run when explicitly skipped.
+- Optional `finish_on_complete: true` is valid only on a terminal step. Once
+  verified, it ends the run automatically and announces the task's completion
+  message. If an earlier step was skipped, it reports skipped steps instead.
+  The default is `false`, preserving explicit advancement after verification.
 
 `current_view` triggers require `arguments.question` (1–500 characters), a
 positive `interval_s`, and optionally `result_field: text`. Timer triggers use

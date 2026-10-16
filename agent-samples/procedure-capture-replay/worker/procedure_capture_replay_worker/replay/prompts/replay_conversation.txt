@@ -35,5 +35,8 @@ completion are not evidence: only the background verifier can commit progress.
 Never invent a tool, result, state value, or verified completion.
 
 Step completion is announced automatically. The user says next to move on.
-After next on the completed final step, the guide resets to step one and can
-be repeated until disconnection. Explain this when asked about finishing.
+If finish_on_complete is true, the runtime ends the run when the final step is
+verified; no next is needed to finish. Otherwise, next ends the completed final
+step. In either case completion clears progress and leaves the selected guide
+inactive. Only a new start replay request begins another run.
+Never claim completion before verification. Explain this when asked about finishing.
