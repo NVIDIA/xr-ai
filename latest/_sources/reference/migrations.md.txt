@@ -35,6 +35,34 @@ identity do not identify the running application code version: an already
 running text-only listener cannot accept images. Image requests require the
 updated service; there is no silent text-only fallback.
 
+## Explicit voice interaction modes
+
+Choose `mode: conversation`, `hybrid`, `wake_only`, or `always_on` at the top of
+the selected voice-gate YAML. Remove `conversation.enabled` when setting mode.
+The four conversation samples select `conversation` to preserve their closed-until-start
+workflow. Tea's redundant alternate preset is removed; change `mode` in its
+normal `voice_gate.yaml` to choose another interaction policy.
+`hybrid` adds one-off addressed questions without persistent enrollment before
+starting a natural conversation. `wake_only` and `hybrid` require non-empty
+`magic_phrases`. `always_on` explicitly preserves the ungated baseline.
+
+Existing mode-less inputs normalize their present conversation and phrase
+settings at the loader boundary, but new configurations must use the explicit
+mode rather than combining old activation flags. Speaker-only controls must
+move to the `conversation` mapping when adding an
+explicit mode; otherwise the loader reports an error rather than replacing
+custom phrases. The advanced setting
+`conversation.require_wake_phrase` applies only after a conversation opens.
+Speaker backend selection is now independent: disabling conversation controls
+does not disable a configured speaker backend. To use batch STT, explicitly set
+`speaker.enabled: false` and supply the batch STT model client/service.
+
+Speaker streaming protocol 4 carries explicit interaction policy and attributed
+one-turn events. Restart/update the service and client together; old peers fail
+the identity check rather than silently changing speech authorization. There
+is no cross-version service reuse, anonymous transcript fallback, or upgrade
+reconciliation machinery.
+
 ## Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.
@@ -166,7 +194,7 @@ unconditional worker `make_stt` calls with `VoiceAgent.from_models`, passing
 the loaded models and voice-gate settings. To serve batch STT, explicitly select
 `stt` in the sample's launcher and hardware overrides and configure the consuming
 worker's batch adapter. For batch-only speech omit `speaker-stt` from that
-selection and disable speaker enrollment.
+selection and set `speaker.enabled: false` in the worker's voice-gate YAML.
 Refer to {doc}`/guides/customizing-model-servers` for serving both paths.
 
 ## Voice sample conversation defaults
@@ -178,15 +206,16 @@ within the configured window. The existing STT adapters and NIM model stack
 remain unchanged.
 
 Set `conversation.require_wake_phrase: true` in the sample's voice-gate YAML to
-keep wake phrases during an active conversation. Set
-`conversation.enabled: false` to restore the original wake-only behavior, or
-always-on dispatch when `magic_phrases` is empty. Restart workers after editing
+keep wake phrases during an active conversation. Select `mode: wake_only` for
+addressed turns without a persistent session, `mode: hybrid` to combine addressed
+one-off questions with natural conversations, or `mode: always_on` for ungated
+dispatch. Restart workers after editing
 these settings. Refer to {ref}`voice-conversation-controls`.
 
-Only final transcripts during an active conversation reach
-`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Applications
-that need all final transcripts retain that behavior by disabling conversation
-controls.
+In conversation mode only final transcripts during an active conversation reach
+`VOICE_TRANSCRIPT_TOPIC`; start and stop controls are withheld. Hybrid mode also
+delivers its accepted closed-state one-off questions. Applications that need
+ungated final transcripts can select `mode: always_on` explicitly.
 
 ## Local model-server CLI
 

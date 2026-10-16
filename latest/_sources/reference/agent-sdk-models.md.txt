@@ -85,6 +85,21 @@ A client profile names logical roles and declares adapters and endpoints:
   outside the sample, whether locally or remotely. Existing explicit `reused`
   and `external` entries remain supported for compatibility.
 
+## Annotated consumer configuration
+
+The package reference below shows local endpoint examples, not a default launch
+stack. Copy `models.yaml.sample` to your application's `models.yaml`, keep only
+the roles it uses, and pass that file explicitly to `load_models_config`.
+Loading it does not connect to or launch a model server.
+The launcher requires JSON deployment profiles; this worker-side YAML reference
+does not replace a launcher's `models.json`.
+Refer to {doc}`/guides/deploying-with-nim` for the separate annotated NIM profile
+and its transport-specific settings.
+
+```{literalinclude} ../../../agent-sdk/xr-ai-models/models.yaml.sample
+:language: yaml
+```
+
 (deployment-profiles)=
 Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, `health_check: true` or `health_check: false`,

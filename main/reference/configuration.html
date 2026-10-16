@@ -661,6 +661,7 @@ workflow.</p></li>
 
 <span class="c1"># Final transcripts during an active conversation are recorded before any</span>
 <span class="c1"># optional wake gate. Only accepted turns reach the foreground agent.</span>
+<span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conversation</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
@@ -669,14 +670,13 @@ workflow.</p></li>
 
 <span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
 <span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 
 <span class="c1"># The default stack supplies speaker ASR; wait for it before worker readiness.</span>
-<span class="c1"># For explicit batch STT, disable speaker enrollment and add an stt model entry.</span>
+<span class="c1"># For explicit batch STT, set speaker.enabled false and add an stt model entry.</span>
 <span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
@@ -1039,6 +1039,7 @@ workflow.</p></li>
 <span class="c1"># other mid-sentence mentions do not match. The same stripped tail is used for</span>
 <span class="c1"># early global-STOP detection; the complete final transcript still determines</span>
 <span class="c1"># whether a stop-like opening is a global stop or a scoped agent command.</span>
+<span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conversation</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"agent"</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"hey</span><span class="nv"> </span><span class="s">agent"</span>
@@ -1053,7 +1054,7 @@ workflow.</p></li>
 <span class="c1"># Scoped commands such as "stop recording" remain ordinary agent queries.</span>
 <span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 
-<span class="c1"># Follow-up grace window. After a successful magic-phrase match, the</span>
+<span class="c1"># Follow-up grace window. After a bare magic phrase without a question, the</span>
 <span class="c1"># next utterance from the same participant within this many seconds</span>
 <span class="c1"># bypasses the gate so "hey agent" → pause → "what am I looking at?"</span>
 <span class="c1"># works as one natural interaction. Set to 0 to disable.</span>
@@ -1062,7 +1063,6 @@ workflow.</p></li>
 <span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
 <span class="c1"># A short "stop" interrupts the response without closing the conversation.</span>
 <span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="c1"># false: speak naturally after starting. true: keep wake and follow-up rules.</span>
@@ -1071,7 +1071,7 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 
 <span class="c1"># The default stack supplies speaker ASR; wait for it before worker readiness.</span>
-<span class="c1"># For explicit batch STT, disable speaker enrollment and add an stt model entry.</span>
+<span class="c1"># For explicit batch STT, set speaker.enabled false and add an stt model entry.</span>
 <span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
@@ -1278,36 +1278,12 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-tea-making-sample-yaml-voice-gate-always-on-yaml">
-<h3>yaml/voice_gate.always-on.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
-<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
-
-<span class="c1"># Continuous dispatch after the start phrase, until the full stop phrase.</span>
-<span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
-<span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
-<span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
-
-<span class="c1"># Require the shared speaker-ASR service, as in the normal local preset.</span>
-<span class="nt">speaker</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
-</pre></div>
-</div>
-</section>
 <section id="config-tea-making-sample-yaml-voice-gate-yaml">
 <h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-tea-making-sample-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
+<span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conversation</span>
 <span class="nt">magic_phrases</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agent</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hey agent</span>
@@ -1316,14 +1292,13 @@ workflow.</p></li>
 
 <span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
 <span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># true keeps magic_phrases and followup_grace_s</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 
 <span class="c1"># The default stack supplies speaker ASR; wait for it before worker readiness.</span>
-<span class="c1"># For explicit batch STT, disable speaker enrollment and add an stt model entry.</span>
+<span class="c1"># For explicit batch STT, set speaker.enabled false and add an stt model entry.</span>
 <span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
@@ -1843,22 +1818,22 @@ workflow.</p></li>
 <span class="c1"># listening_chime — when true AND magic_phrases is non-empty, a short two-tone</span>
 <span class="c1">#                   chime plays on fresh magic-phrase matches. Inert while</span>
 <span class="c1">#                   magic_phrases is empty (no match can occur).</span>
-<span class="c1"># followup_grace_s — seconds after a phrase match during which the next</span>
-<span class="c1">#                    utterance from the same participant bypasses the gate.</span>
+<span class="c1"># followup_grace_s — after a bare wake phrase, the next utterance may begin</span>
+<span class="c1">#                    within this window. Applies when wake gating is required.</span>
+<span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conversation</span>
 <span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">  </span><span class="c1"># no wake word during the conversation</span>
 <span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
 
 <span class="c1"># Start once, then speak naturally until the full stop phrase.</span>
 <span class="nt">conversation</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">start_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">stop_phrase</span><span class="p">:</span><span class="w"> </span><span class="s">"Hey</span><span class="nv"> </span><span class="s">agent,</span><span class="nv"> </span><span class="s">let's</span><span class="nv"> </span><span class="s">stop</span><span class="nv"> </span><span class="s">talking"</span>
 <span class="w">  </span><span class="nt">require_wake_phrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">phrase_window_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
 
 <span class="c1"># The default stack supplies speaker ASR; wait for it before worker readiness.</span>
-<span class="c1"># For explicit batch STT, disable speaker enrollment and add an stt model entry.</span>
+<span class="c1"># For explicit batch STT, set speaker.enabled false and add an stt model entry.</span>
 <span class="nt">speaker</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
@@ -1875,9 +1850,8 @@ workflow.</p></li>
 <span class="c1"># Paths resolve relative to this file's directory.</span>
 
 <span class="c1"># ── Voice gate ────────────────────────────────────────────────────────────────</span>
-<span class="c1"># Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with</span>
-<span class="c1"># `magic_phrases: []` (always-on) to preserve the pre-migration behavior;</span>
-<span class="c1"># operators populate the list to enable wake-word gating.</span>
+<span class="c1"># Interaction mode and optional wake phrases live in voice_gate.yaml.</span>
+<span class="c1"># The sample starts with a closed conversation; the start phrase opens it.</span>
 <span class="nt">voice_gate_yaml</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">voice_gate.yaml</span>
 
 <span class="c1"># ── Native capability services ───────────────────────────────────────────────</span>
@@ -2147,7 +2121,6 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-models-local-json">yaml/models.local.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-rag-service-yaml">yaml/rag_service.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-tea-making-worker-yaml">yaml/tea_making_worker.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-always-on-yaml">yaml/voice_gate.always-on.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-tea-making-sample-yaml-workflow-yaml">yaml/workflow.yaml</a></li>
 </ul>
