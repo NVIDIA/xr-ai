@@ -104,15 +104,6 @@ destination produces its first nonblank text. It excludes route selection,
 admission, acknowledgment-output serialization, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
 
-## Package files
-
-| File | Responsibility |
-|---|---|
-| `__init__.py` | Lists the routing names exported by `xr_ai_routing` |
-| `contracts.py` | Defines route metadata, turns, completed exchanges, admission results, and the `RoutableAgent` protocol |
-| `router.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
-| `_history.py` | Shares private exchange timestamps and their display format |
-
 The router does not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a
 `AgentTurn` and connects the callback to its output path.
