@@ -566,8 +566,9 @@ cleanup.
   mapping. Cosmos-Reason1 remains available by pairing
   `model: nvidia/Cosmos-Reason1-7B` with the `cosmos_vlm` client preset. Hosting
   backend is selectable per YAML — refer to *Choosing the vLLM runtime* above.
-  With the default Docker image on SM12 GPUs, including RTX Blackwell and GB10,
-  the service selects Triton attention for both the decoder and vision encoder.
+  When serving `nvidia/Cosmos3-Nano` with the default Docker image on SM12 GPUs,
+  including RTX Blackwell and GB10, the service selects Triton attention for
+  both the decoder and vision encoder.
   This reduces cold image latency without depending on a previous container's
   compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image's
   FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,

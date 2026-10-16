@@ -80,6 +80,7 @@ def test_dgx_spark_detection_uses_selected_gpu(
 
 class TestSetupHfEnv:
     _ENV_KEYS = (
+        "CUDA_VISIBLE_DEVICES",
         "HF_TOKEN",
         "HF_XET_HIGH_PERFORMANCE",
         "HF_HUB_DISABLE_XET",
@@ -97,6 +98,25 @@ class TestSetupHfEnv:
         yield
         for key in self._ENV_KEYS:
             os.environ.pop(key, None)
+
+    @pytest.mark.parametrize(
+        ("inherited", "configured", "expected"),
+        [
+            (None, None, None),
+            ("1", None, "1"),
+            ("1,0", None, "1,0"),
+            ("GPU-selected", None, "GPU-selected"),
+            ("1", 0, "0"),
+            ("0", "1", "1"),
+        ],
+    )
+    def test_returns_effective_device_selection(self, monkeypatch, tmp_path, inherited, configured, expected):
+        if inherited is not None:
+            monkeypatch.setenv("CUDA_VISIBLE_DEVICES", inherited)
+        cfg = {} if configured is None else {"cuda_visible_devices": configured}
+
+        assert setup_hf_env(cfg, tmp_path) == expected
+        assert os.environ.get("CUDA_VISIBLE_DEVICES") == expected
 
     def test_env_token_beats_yaml_token(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HF_TOKEN", "env_tok")

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import re
 import shutil
 import signal
 import socket
@@ -117,7 +118,7 @@ async def test_vlm_server_chat_completions_smoke(monkeypatch):
             "model_cache": str(model_cache),
             "max_num_seqs": 1,
             "tensor_parallel_size": 1,
-            "max_model_len": 4096,
+            "max_model_len": 8192,
             "gpu_memory_utilization": 0.80,
             "enforce_eager": True,  # skip CUDA graph capture for faster smoke
             "async_scheduling": True,
@@ -125,7 +126,7 @@ async def test_vlm_server_chat_completions_smoke(monkeypatch):
                 "architectures": ["Cosmos3ForConditionalGeneration"],
             },
             "mm_encoder_tp_mode": "data",
-            "max_images_per_prompt": 1,
+            "max_images_per_prompt": 4,
             "max_videos_per_prompt": 0,
             # docker backend: nvcc + flashinfer are pre-built in the NGC image.
             "vllm_backend": "docker",
@@ -163,14 +164,37 @@ async def test_vlm_server_chat_completions_smoke(monkeypatch):
                             system_prompt="Answer with one word.", max_tokens=4, timeout=120,
                         ):
                             content_chunks.append(chunk)
+                content = "".join(content_chunks).strip()
+                assert content, "stream returned no content"
+                assert "gray" in content.casefold() or "grey" in content.casefold(), content
+                assert "<think>" not in content.casefold(), (
+                    "Cosmos3 Reasoner leaked reasoning markup into streamed content"
+                )
+
+                # Keep multi-image requests after the measured cold request.
+                colors = ["red", "green", "blue", "yellow"]
+                images = []
+                for color in colors:
+                    image = io.BytesIO()
+                    Image.new("RGB", (256, 256), color=color).save(image, format="JPEG", quality=90)
+                    images.append(image.getvalue())
+                for ordered_images, expected in (
+                    (images, colors),
+                    (list(reversed(images)), list(reversed(colors))),
+                ):
+                    content_chunks = []
+                    with require_complete_vlm_stream(monkeypatch):
+                        async with asyncio.timeout(120):
+                            async for chunk in vlm.stream_images(
+                                ordered_images, "Name the dominant color of each image in order.",
+                                system_prompt="Answer with color names only, separated by commas.",
+                                max_tokens=24, temperature=0, timeout=120,
+                            ):
+                                content_chunks.append(chunk)
+                    content = "".join(content_chunks).casefold()
+                    assert re.findall(r"\b(?:red|green|blue|yellow)\b", content) == expected, content
             finally:
                 await vlm.close()
-            content = "".join(content_chunks).strip()
-            assert content, "stream returned no content"
-            assert "gray" in content.casefold() or "grey" in content.casefold(), content
-            assert "<think>" not in content.casefold(), (
-                "Cosmos3 Reasoner leaked reasoning markup into streamed content"
-            )
         finally:
             await _terminate(proc)
             kill_orphan_vllm(port)
