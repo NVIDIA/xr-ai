@@ -43,6 +43,7 @@ private final class CameraLifecycleFixture {
     var starts: [LocalVideoTrack] = []
     var connectGate: CameraBoundaryGate?
     var unpublishGate: CameraBoundaryGate?
+    var publishGate: CameraBoundaryGate?
     var stopFailures = 0
     var failPartialStart = false
     var startGate: CameraBoundaryGate?
@@ -81,6 +82,7 @@ private final class CameraLifecycleFixture {
             let publication = LocalTrackPublication(info: info, participant: room.localParticipant)
             _ = await publication.set(track: track)
             room.localParticipant.add(publication: publication)
+            await self.publishGate?.hold()
             return publication
         }
         operations.unpublish = { [weak self] room, publication in
@@ -387,5 +389,24 @@ struct CameraLifecycleTests {
         f.failUnpublish = false
         try await f.backend.disconnect()
         #expect(f.tracks[0].capturer._state.startStopCounter == 0)
+    }
+
+    @Test func callerCancellationAfterSDKPublicationRetainsExactRollbackOwner() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        let gate = CameraBoundaryGate()
+        f.publishGate = gate
+        let publication = Task { try await f.backend.injectVideoFrame(f.frame()) }
+        defer { gate.release() }
+        await gate.waitUntilEntered()
+        #expect(f.tracks.count == 1 && !f.rooms[0].localParticipant.trackPublications.isEmpty)
+        publication.cancel() // no stop/generation change hides caller cancellation
+        gate.release()
+        await #expect(throws: CancellationError.self) { try await publication.value }
+        #expect(f.rooms[0].localParticipant.trackPublications.isEmpty)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 0)
+        #expect(f.unpublishCount == 1)
+        f.publishGate = nil
+        try await f.backend.disconnect()
     }
 }

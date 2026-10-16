@@ -337,7 +337,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                   connectionGeneration == connection else { throw StreamError.notConnected }
             guard cameraGeneration == generation else { throw CancellationError() }
             let publication = try await sdk.publish(room, track, options)
-            guard self.room === room, connectionGeneration == connection,
+            guard !Task.isCancelled, self.room === room, connectionGeneration == connection,
                   cameraGeneration == generation else {
                 // Retain the exact artifact if its unpublish fails, so stop
                 // can retry instead of treating a failed task as released.
