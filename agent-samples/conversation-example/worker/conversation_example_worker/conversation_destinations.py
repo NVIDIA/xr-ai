@@ -11,9 +11,11 @@ from datetime import UTC, datetime
 
 import nemo_relay
 from xr_ai_conversation import (
-    Admission,
     Conversation,
     ConversationContextUpdate,
+)
+from xr_ai_routing import (
+    Admission,
     ConversationTurn,
     DestinationResult,
     RoutableAgent,

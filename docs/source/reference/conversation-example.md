@@ -15,8 +15,10 @@ notes, then shares them with general conversation. The background monitor
 continuously records a bounded window of timestamped visual observations and
 publishes its text summary to configured conversation context. Conversation
 destinations use the reusable
-`xr_ai_conversation.Conversation` component and stream through the same voice
-output path to Pocket TTS and the `vlm.response` data topic. Refer to the {doc}`quickstart
+`xr_ai_conversation.Conversation` component for answer/context behavior. The
+sample composes it with `xr_ai_routing` contracts and front-end routing, then
+streams through the same voice output path to Pocket TTS and the `vlm.response`
+data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` for client setup. The sample README contains the
 exact run commands. This reference owns the sample's design and operational
 details.
@@ -64,7 +66,7 @@ readiness, checks Clef health, and performs an image warmup through the VLM.
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `UserQuery`. `ConversationExampleAgent` delegates each turn to
-`xr_ai_conversation.ConversationFrontEnd`. Clef selects general conversation,
+`xr_ai_routing.ConversationFrontEnd`. Clef selects general conversation,
 direct visual observation, background monitoring, or foreground note-taking
 from routing aids and the current request/history. Acknowledgments are optional
 front-end output after a destination accepts; clarification can come from the
@@ -169,7 +171,7 @@ repository root with the `tests` project environment:
 ```bash
 uv --config-file uv.toml run --project tests pytest \
   tests/test_xr_ai_conversation.py \
-  tests/test_xr_ai_conversation_front_end.py \
+  tests/test_xr_ai_routing_front_end.py \
   tests/test_conversation_example_worker.py \
   tests/test_conversation_example_visual_destinations.py \
   tests/test_conversation_example_monitoring.py \
@@ -179,7 +181,7 @@ uv --config-file uv.toml run --project tests pytest \
 
 | Behavior | Deterministic contract | Corpus/model layer |
 |---|---|---|
-| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_conversation_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
+| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
 | Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
 | Current-frame-only observation and camera/tool failures | `test_conversation_example_visual_destinations.py`, `test_conversation_example_worker.py` | Current-view tool/evidence expectations in both corpora |
 | Monitor task scope, hot sampling, retarget, failure, stop, participant isolation | `test_conversation_example_monitoring.py` | Monitor controls, active/stopped scope, route and evidence expectations |

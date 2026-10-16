@@ -6,7 +6,7 @@
 # Conversation example
 
 This sample is a runnable voice-and-vision application in the repository. Its
-reusable `xr_ai_conversation.ConversationFrontEnd` routes each
+reusable `xr_ai_routing.ConversationFrontEnd` routes each
 turn through Clef to general conversation and direct visual observation. It
 also includes an explicitly started background visual monitor and a
 foreground note-taking session that can hold focus and share participant-

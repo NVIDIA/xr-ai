@@ -37,6 +37,8 @@ from conversation_example_worker.monitoring import VisualMonitorAgent  # noqa: E
 from conversation_example_worker.visual_destinations import VisualObservationAgent  # noqa: E402
 from xr_ai_conversation import (  # noqa: E402
     Conversation,
+)
+from xr_ai_routing import (  # noqa: E402
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,
@@ -56,8 +58,8 @@ _TRACE_SOURCES = (
     _SAMPLE / "worker/conversation_example_worker/conversation_destinations.py",
     _SAMPLE / "worker/conversation_example_worker/monitoring.py",
     _SAMPLE / "worker/conversation_example_worker/visual_destinations.py",
-    _ROOT / "agent-sdk/xr-ai-conversation/xr_ai_conversation/front_end.py",
-    _ROOT / "agent-sdk/xr-ai-conversation/xr_ai_conversation/_history.py",
+    _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/front_end.py",
+    _ROOT / "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py",
 )
 _MONITOR_SOURCE = "conversation-example.monitor-window"
 _NOTES_SOURCE = "conversation-example.foreground-notes"

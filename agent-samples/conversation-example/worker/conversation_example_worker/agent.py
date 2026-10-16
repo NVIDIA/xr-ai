@@ -11,7 +11,8 @@ from contextlib import suppress
 
 import nemo_relay
 from loguru import logger
-from xr_ai_conversation import Conversation, ConversationFrontEnd, ConversationTurn
+from xr_ai_conversation import Conversation
+from xr_ai_routing import ConversationFrontEnd, ConversationTurn
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,

@@ -19,9 +19,8 @@ from PIL import Image
 from xr_ai_conversation import (
     Conversation,
     ConversationContextUpdate,
-    ConversationFrontEnd,
-    RoutingAid,
 )
+from xr_ai_routing import ConversationFrontEnd, RoutingAid
 from xr_ai_logging import setup_logging
 from xr_ai_models import (
     DecisionService,

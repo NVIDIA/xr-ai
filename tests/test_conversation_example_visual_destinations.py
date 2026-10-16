@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 
-from xr_ai_conversation import (
+from xr_ai_routing import (
     ConversationTurn,
 )
 from xr_ai_tools.image import ImageReference

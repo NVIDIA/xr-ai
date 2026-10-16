@@ -174,7 +174,7 @@ def test_resume_preserves_prior_calls_and_runs_only_unattempted_flows():
 
 def test_resume_accepts_harness_only_change_but_rejects_changed_decision_inputs(tmp_path):
     evaluator_path = str(Path(evaluator.__file__).resolve().relative_to(evaluator._ROOT))
-    history_source = "agent-sdk/xr-ai-conversation/xr_ai_conversation/_history.py"
+    history_source = "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py"
     hashes = {
         evaluator_path: "old-harness",
         "yaml/models.json": "same-config",
@@ -199,7 +199,7 @@ def test_resume_accepts_harness_only_change_but_rejects_changed_decision_inputs(
 
 def test_preflight_fingerprints_shared_conversation_history_source():
     flows, cases = evaluator.load_fixtures()
-    source = "agent-sdk/xr-ai-conversation/xr_ai_conversation/_history.py"
+    source = "agent-sdk/xr-ai-routing/xr_ai_routing/_history.py"
 
     assert source in evaluator.preflight(flows, cases)["sha256"]
 

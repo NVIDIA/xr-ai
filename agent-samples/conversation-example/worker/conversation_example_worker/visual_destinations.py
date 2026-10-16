@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from xr_ai_conversation import (
+from xr_ai_routing import (
     Admission,
     ConversationTurn,
     DestinationResult,

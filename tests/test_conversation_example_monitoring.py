@@ -31,9 +31,11 @@ from conversation_example_worker.visual_destinations import (  # noqa: E402
     VisualObservationAgent,
 )
 from xr_ai_conversation import (  # noqa: E402
-    Admission,
     Conversation,
     ConversationContextUpdate,
+)
+from xr_ai_routing import (  # noqa: E402
+    Admission,
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,

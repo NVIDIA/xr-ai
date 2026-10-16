@@ -69,9 +69,11 @@ from conversation_example_worker.conversation_destinations import (  # noqa: E40
     NoteTakingAgent,
 )
 from xr_ai_conversation import (  # noqa: E402  # pyright: ignore[reportMissingImports]
-    Admission,
     Conversation,
     ConversationContextUpdate,
+)
+from xr_ai_routing import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    Admission,
     ConversationExchange,
     ConversationFrontEnd,
     ConversationTurn,
@@ -1006,9 +1008,12 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert "xr-ai-hub-client" in dependencies
     assert "xr-ai-agent-runtime" in dependencies
     assert "xr-ai-conversation" in dependencies
+    assert "xr-ai-routing" in dependencies
     assert project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"] == ("../../../agent-sdk/xr-ai-runtime")
     assert project["tool"]["uv"]["sources"]["xr-ai-conversation"]["path"] == ("../../../agent-sdk/xr-ai-conversation")
+    assert project["tool"]["uv"]["sources"]["xr-ai-routing"]["path"] == ("../../../agent-sdk/xr-ai-routing")
     assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-conversation"]["path"]).resolve().is_dir()
+    assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-routing"]["path"]).resolve().is_dir()
     assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"]).resolve().is_dir()
     assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == ("../../../agent-sdk/xr-ai-hub")
     assert (_WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"]).resolve().is_dir()
