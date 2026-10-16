@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private participant memory primitives for lossless transcript retention."""
+"""Private participant dialogue and bounded source-context storage."""
 
 from __future__ import annotations
 
@@ -69,6 +69,15 @@ _DialogueCompactor = Callable[[str, Sequence[_TranscriptEntry]], Awaitable[str]]
 _logger = logging.getLogger(__name__)
 
 
+def _contains_exchange_window(existing: tuple[tuple[str, str], ...], incoming: tuple[tuple[str, str], ...]) -> bool:
+    """Return whether a bounded input window is already retained verbatim."""
+
+    return len(incoming) <= len(existing) and any(
+        existing[start : start + len(incoming)] == incoming
+        for start in range(len(existing) - len(incoming) + 1)
+    )
+
+
 class _ConversationContext:
     """Retain exact turns and compact old entries independently by source.
 
@@ -97,7 +106,7 @@ class _ConversationContext:
     def reconcile_transcript(
         self, participant: str, exchanges: Sequence[tuple[str, str] | tuple[str, str, int | None]]
     ) -> None:
-        """Append only a caller-provided complete-history suffix, never duplicates."""
+        """Merge a front-end history window without replaying retained exchanges."""
 
         memory = self._participants.setdefault(participant, _ParticipantMemory())
         existing = tuple((entry.user, entry.assistant) for entry in memory.transcript)
@@ -105,16 +114,19 @@ class _ConversationContext:
             (exchange[0], exchange[1], exchange[2] if len(exchange) == 3 else None) for exchange in exchanges
         )
         incoming = tuple((user, assistant) for user, assistant, _ in normalized)
-        if len(existing) <= len(incoming) and existing == incoming[: len(existing)]:
-            for user, assistant, timestamp_us in normalized[len(existing) :]:
-                self.append(participant, user, assistant, timestamp_us=timestamp_us)
+        if not incoming:
             return
-        if len(incoming) <= len(existing) and incoming == existing[: len(incoming)]:
+
+        # FE history is a bounded recent window and can start after every turn
+        # retained here. Match its overlap with our tail; a non-overlapping
+        # window is new completed context, not a divergent transcript to drop.
+        if _contains_exchange_window(existing, incoming):
             return
-        _logger.warning(
-            "caller history diverged from retained dialogue participant=%r; keeping retained transcript",
-            participant,
-        )
+        overlap = min(len(existing), len(incoming))
+        while overlap and existing[-overlap:] != incoming[:overlap]:
+            overlap -= 1
+        for user, assistant, timestamp_us in normalized[overlap:]:
+            self.append(participant, user, assistant, timestamp_us=timestamp_us)
 
     def transcript(self, participant: str) -> tuple[_TranscriptEntry, ...]:
         memory = self._participants.get(participant)
@@ -219,6 +231,8 @@ class _ConversationContext:
     ) -> bool:
         summary = await compact(previous_input, batch)
         memory = self._participants.get(participant)
+        # Do not commit a result if newer turns or a replacement summary won
+        # while the asynchronous compaction request was running.
         if memory is None or memory.dialogue_revision != revision:
             return False
         if memory.dialogue_background != previous:
@@ -415,6 +429,8 @@ class _ConversationContext:
     ) -> bool:
         summary = await compact(source, previous_input, entries)
         memory = self._participants.get(participant)
+        # Source revisions and record prefixes make this commit conditional on
+        # the exact snapshot passed to the compactor.
         if memory is None or memory.revisions[source] != revision:
             return False
         if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:

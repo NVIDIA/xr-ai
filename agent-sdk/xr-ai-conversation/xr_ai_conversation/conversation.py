@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-independent conversation and current-view tool routing."""
+"""Application-instructed conversation destination and optional current-view tools."""
 
 from __future__ import annotations
 
@@ -213,7 +213,7 @@ class Conversation:
         mode: str,
         timestamp_us: int | None = None,
     ) -> None:
-        """Apply one runtime context update to a participant's background."""
+        """Apply one configured topic update to a participant's background."""
 
         if participant_id is None:
             _logger.error("dropping context update without participant source=%r", source)
@@ -293,6 +293,8 @@ class Conversation:
         history_timestamps = _active_history_timestamps.get()
         if len(history_timestamps) != len(history):
             history_timestamps = (None,) * len(history)
+        # The front end supplies a bounded recent window, not necessarily the
+        # complete prefix retained by this engine.
         self._context.reconcile_transcript(
             participant_id,
             tuple(

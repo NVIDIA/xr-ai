@@ -8,7 +8,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
+from xr_ai_hub import FrameUnavailable
+from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse, ToolCall
+from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
+from xr_ai_tools.image import ImageReference
+from xr_ai_tools.vision import ImageQueryChunk, ImageQueryRequest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-sdk"))
 
@@ -159,6 +163,76 @@ class _LLM:
         )
 
 
+class _CurrentViewLLM:
+    def __init__(self, arguments='{"query":"What color is the sign?"}'):
+        self.arguments = arguments
+        self.messages = []
+        self.tools = []
+        self.closed = asyncio.Event()
+
+    def stream_events(self, messages, *, tools=(), **_kwargs):
+        self.messages.append(messages)
+        self.tools.append(tools)
+
+        async def events():
+            try:
+                yield ChatStreamEvent(
+                    kind="tool_call",
+                    tool_call=ToolCall("call-1", "current_view", self.arguments),
+                )
+                yield ChatStreamEvent(kind="finish", finish_reason="tool_calls")
+            finally:
+                self.closed.set()
+
+        return events()
+
+
+class _CurrentFrame:
+    def __init__(self, *, error=None):
+        self.error = error
+        self.requests = []
+
+    async def execute(self, request):
+        assert isinstance(request, CurrentFrameRequest)
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return ImageFrame(
+            image=ImageReference(uri="xr-image://current-frame"),
+            width=640,
+            height=480,
+            timestamp_us=1_790_856_000_000_000,
+            sequence=3,
+            participant_id=request.participant_id,
+            track_id="camera-1",
+        )
+
+
+class _StreamingVision:
+    def __init__(self, *, blocked=False):
+        self.blocked = blocked
+        self.requests = []
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.closed = asyncio.Event()
+
+    def stream(self, request):
+        assert isinstance(request, ImageQueryRequest)
+        self.requests.append(request)
+
+        async def chunks():
+            self.started.set()
+            try:
+                yield ImageQueryChunk(text="The sign is blue")
+                if self.blocked:
+                    await self.release.wait()
+                yield ImageQueryChunk(text=" and says EXIT.")
+            finally:
+                self.closed.set()
+
+        return chunks()
+
+
 @pytest.mark.asyncio
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
@@ -183,6 +257,157 @@ async def test_conversation_is_a_normal_front_end_destination_with_completed_his
     assert "max_tokens" not in llm.calls[0]
     assert "temperature" not in llm.calls[0]
     assert "enable_thinking" not in llm.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_conversation_reconciles_recent_front_end_window_after_another_destination_answers():
+    class Decisions:
+        def __init__(self):
+            self.choices = iter(("conversation", "scene", "conversation", "conversation"))
+
+        async def decide(self, _state, _questions, **_kwargs):
+            choice = next(self.choices)
+            return DecisionResponse(
+                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                model="fake",
+                usage={},
+                raw={},
+            )
+
+    class Scene:
+        def routing_aid(self, _participant_id):
+            return RoutingAid("scene", "Applies requested changes to the current scene.")
+
+        async def admit(self, _turn, *, focused):
+            return Admission("accept")
+
+        async def answer(self, _turn, *, emit):
+            answer = "Added the blue cube to the room."
+            await emit("scene", answer)
+            return DestinationResult("answer", answer)
+
+        async def release(self, _participant_id):
+            pass
+
+    llm = _LLM()
+    conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd(
+        {"conversation": conversation, "scene": Scene()},
+        Decisions(),  # type: ignore[arg-type]
+        context_budget_bytes=160,
+    )
+
+    async def emit(_source, _text):
+        pass
+
+    long_opening = "Please keep this opening exchange out of the front-end window. " * 4
+    await front_end.handle(ConversationTurn("alice", "turn-1", long_opening), emit=emit)
+    await front_end.handle(ConversationTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await front_end.handle(ConversationTurn("alice", "turn-3", "What did you add?"), emit=emit)
+
+    context = llm.messages[1][1].content
+    assert "Turn 2: user asked: Add a blue cube." in context
+    assert "Turn 2: assistant said: “Added the blue cube to the room.”" in context
+
+    await front_end.handle(ConversationTurn("alice", "turn-4", "What color was it?"), emit=emit)
+    repeated_context = llm.messages[2][1].content
+    assert repeated_context.count("Added the blue cube to the room.") == 1
+    assert "Turn 2: user asked: Add a blue cube." in repeated_context
+
+
+@pytest.mark.asyncio
+async def test_optional_current_view_tool_uses_typed_frame_and_streaming_vision_requests():
+    llm = _CurrentViewLLM()
+    frames = _CurrentFrame()
+    vision = _StreamingVision()
+    conversation = Conversation(llm, frames=frames, vision=vision)  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    output = []
+
+    async def emit(source, text):
+        output.append((source, text))
+
+    result = await front_end.handle(ConversationTurn("alice", "view-1", "What color is the sign?"), emit=emit)
+
+    assert result.text == "The sign is blue and says EXIT."
+    assert output == [
+        ("conversation", "The sign is blue"),
+        ("conversation", " and says EXIT."),
+    ]
+    assert llm.tools[0][0].name == "current_view"
+    assert frames.requests == [CurrentFrameRequest(participant_id="alice")]
+    assert vision.requests == [
+        ImageQueryRequest(image=ImageReference(uri="xr-image://current-frame"), query="What color is the sign?")
+    ]
+    assert llm.closed.is_set()
+    assert vision.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_current_view_rejects_invalid_tool_arguments_and_reports_frame_unavailability():
+    invalid_llm = _CurrentViewLLM(arguments="not-json")
+    invalid_frames = _CurrentFrame()
+    invalid_conversation = Conversation(
+        invalid_llm,
+        frames=invalid_frames,
+        vision=_StreamingVision(),
+    )  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="invalid current_view arguments"):
+        _ = [
+            chunk
+            async for chunk in invalid_conversation.stream("Look here.", "alice")
+        ]
+    assert invalid_frames.requests == []
+    assert invalid_llm.closed.is_set()
+
+    unavailable_llm = _CurrentViewLLM()
+    unavailable_frames = _CurrentFrame(error=FrameUnavailable("No camera frame is available."))
+    unavailable_conversation = Conversation(
+        unavailable_llm,
+        frames=unavailable_frames,
+        vision=_StreamingVision(),
+    )  # type: ignore[arg-type]
+    output = [
+        chunk
+        async for chunk in unavailable_conversation.stream("Look here.", "alice")
+    ]
+
+    assert output == ["No camera frame is available."]
+    assert len(unavailable_frames.requests) == 1
+    assert unavailable_llm.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_current_view_rejects_tool_calls_when_visual_tools_are_not_configured():
+    llm = _CurrentViewLLM()
+    conversation = Conversation(llm)
+
+    with pytest.raises(RuntimeError, match="without a configured tool"):
+        _ = [chunk async for chunk in conversation.stream("Look here.", "alice")]
+    assert llm.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_current_view_cancellation_closes_model_and_visual_streams():
+    llm = _CurrentViewLLM()
+    vision = _StreamingVision(blocked=True)
+    conversation = Conversation(llm, frames=_CurrentFrame(), vision=vision)  # type: ignore[arg-type]
+    front_end = ConversationFrontEnd({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+
+    async def emit(_source, _text):
+        pass
+
+    task = asyncio.create_task(
+        front_end.handle(ConversationTurn("alice", "view-cancel", "Look here."), emit=emit)
+    )
+    await asyncio.wait_for(vision.started.wait(), timeout=1)
+    await front_end.interrupt("alice")
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert llm.closed.is_set()
+    assert vision.closed.is_set()
 
 
 def test_message_history_keeps_full_exchanges_and_latest_request_separate():
@@ -645,6 +870,42 @@ async def test_private_dialogue_compaction_keeps_full_transcript_and_commits_old
         ("Keep the facilities check open.", "I will keep it open.")
     ]
     assert len(context.transcript("alice")) == 2
+
+
+def test_private_transcript_reconciles_overlapping_windows_and_keeps_timestamp_provenance():
+    context = _ConversationContext()
+    context.reconcile_transcript(
+        "alice",
+        (
+            ("First request", "First reply", 10),
+            ("Scene request", "Scene reply", 20),
+        ),
+    )
+
+    # The front end may send a recent suffix with one new completed exchange.
+    context.reconcile_transcript(
+        "alice",
+        (
+            ("Scene request", "Scene reply", 20),
+            ("Latest request", "Latest reply", None),
+        ),
+    )
+    # Replaying the same bounded window must not duplicate either exchange.
+    context.reconcile_transcript(
+        "alice",
+        (
+            ("Scene request", "Scene reply", 20),
+            ("Latest request", "Latest reply", None),
+        ),
+    )
+
+    transcript = context.transcript("alice")
+    assert [(entry.user, entry.assistant) for entry in transcript] == [
+        ("First request", "First reply"),
+        ("Scene request", "Scene reply"),
+        ("Latest request", "Latest reply"),
+    ]
+    assert [entry.timestamp_us for entry in transcript] == [10, 20, None]
 
 
 @pytest.mark.asyncio
