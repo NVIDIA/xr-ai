@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed contracts shared by routable agents and their router."""
+"""Define routing contracts for imports within the ``xr_ai_routing`` package."""
 
 from __future__ import annotations
 
@@ -92,10 +92,6 @@ class DestinationResult:
     """Completed answer to retain in history; progress acknowledgements are excluded."""
 
 
-Emit = Callable[[str, str], Awaitable[None]]
-"""Async callback that emits a text chunk tagged with its destination source."""
-
-
 class RoutableAgent(Protocol):
     """An agent that owns its state and handles admitted or fallback turns.
 
@@ -113,7 +109,12 @@ class RoutableAgent(Protocol):
     async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         """Accept, decline, clarify, or release before producing spoken output."""
 
-    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(
+        self,
+        turn: AgentTurn,
+        *,
+        emit: Callable[[str, str], Awaitable[None]],
+    ) -> DestinationResult:
         """Answer a turn after admission or as the configured default fallback.
 
         Stream chunks and return answer, focus, or release. After selected
@@ -143,14 +144,3 @@ class RoutableAgent(Protocol):
         active resources here while retaining completed participant data; use
         the optional departure hook for stronger cleanup.
         """
-
-
-__all__ = [
-    "Admission",
-    "AgentExchange",
-    "AgentTurn",
-    "DestinationResult",
-    "Emit",
-    "RoutableAgent",
-    "RoutingAid",
-]

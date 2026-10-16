@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Participant-scoped agent routing and lifecycle coordination."""
+"""Implement routing lifecycle operations for the ``xr_ai_routing`` package."""
 
 from __future__ import annotations
 
@@ -10,25 +10,24 @@ import json
 import logging
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from functools import partial
 
 import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
 
+from ._contracts import (
+    Admission,
+    AgentExchange,
+    AgentTurn,
+    DestinationResult,
+    RoutableAgent,
+)
 from ._history import (
     _active_exchange_id,
     _active_history_exchange_ids,
     _active_history_timestamps,
     _format_minute,
-)
-from .contracts import (
-    Admission,
-    AgentExchange,
-    AgentTurn,
-    DestinationResult,
-    Emit,
-    RoutableAgent,
 )
 
 _DEFAULT_CONTEXT_BUDGET_BYTES = 12_000
@@ -44,6 +43,7 @@ _ACKNOWLEDGMENT_PROMPT = (
 _ACKNOWLEDGMENT_PREFIX = "Let me think through "
 _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
 _logger = logging.getLogger(__name__)
+_Emit = Callable[[str, str], Awaitable[None]]
 
 
 class AgentRouter:
@@ -121,7 +121,12 @@ class AgentRouter:
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
 
-    async def handle(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
+    async def handle(
+        self,
+        turn: AgentTurn,
+        *,
+        emit: Callable[[str, str], Awaitable[None]],
+    ) -> DestinationResult:
         """Route and answer one turn, emitting source-tagged text chunks.
 
         The supplied ``turn.history`` seeds this participant when the router
@@ -261,7 +266,8 @@ class AgentRouter:
                         destination = self._destinations[destination_name]
                         on_departure = getattr(destination, "participant_left", destination.release)
                         await on_departure(participant_id)
-                    except Exception as error:
+                    except Exception as error:  # noqa: BLE001
+                        # Failure-only aggregation ensures every used destination is attempted before re-raising.
                         errors.append(error)
                     else:
                         self._forget_destination(participant_id, destination_name)
@@ -291,12 +297,13 @@ class AgentRouter:
         for participant_id in tuple(participants):
             try:
                 await self.participant_left(participant_id)
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001
+                # Failure-only aggregation ensures every participant is attempted before re-raising.
                 errors.append(error)
         if errors:
             raise ExceptionGroup("failed to release conversation destinations", errors)
 
-    async def _handle(self, turn: AgentTurn, *, emit: Emit, generation: object) -> DestinationResult:
+    async def _handle(self, turn: AgentTurn, *, emit: _Emit, generation: object) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
         focused = self._focus.get(turn.participant_id)
         candidates = [focused] if focused in self._destinations else list(self._destinations)
@@ -477,6 +484,14 @@ class AgentRouter:
                     name=f"conversation-acknowledgment:{turn.participant_id}",
                     context=nemo_relay.fork_asyncio_context(),
                 )
+                acknowledgment_task.add_done_callback(
+                    partial(
+                        _report_acknowledgment_failure,
+                        participant_id=turn.participant_id,
+                        destination=destination_name,
+                        prediction_trace=prediction_trace,
+                    )
+                )
             try:
                 result = await destination.answer(
                     turn,
@@ -577,7 +592,7 @@ class AgentRouter:
         answer_started_at: float,
         answer_started: asyncio.Event,
         prediction_trace: dict[str, object],
-        emit: Emit,
+        emit: _Emit,
     ) -> None:
         assert self._acknowledgment_llm is not None
         assert self._acknowledgment_delay_secs is not None
@@ -594,16 +609,7 @@ class AgentRouter:
             )
             predicted_slow = False
             if prediction_task in done:
-                try:
-                    predicted_slow = prediction_task.result()
-                except Exception:
-                    prediction_trace["choice"] = "failed"
-                    _logger.warning(
-                        "acknowledgment prediction failed participant=%r destination=%r",
-                        turn.participant_id,
-                        destination,
-                        exc_info=True,
-                    )
+                predicted_slow = prediction_task.result()
             if not predicted_slow and not delay_task.done():
                 await delay_task
             if answer_started.is_set():
@@ -656,15 +662,6 @@ class AgentRouter:
                 },
             ):
                 await emit(_ACKNOWLEDGMENT_FALLBACK + " ")
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _logger.warning(
-                "intent acknowledgment failed participant=%r destination=%r",
-                turn.participant_id,
-                destination,
-                exc_info=True,
-            )
         finally:
             for task in (delay_task, prediction_task):
                 if not task.done():
@@ -854,8 +851,33 @@ class AgentRouter:
         return selected
 
 
-async def _emit_from(emit: Emit, destination: str, _source: str, text: str) -> None:
+async def _emit_from(emit: _Emit, destination: str, _source: str, text: str) -> None:
     await emit(destination, text)
+
+
+def _report_acknowledgment_failure(
+    task: asyncio.Task[None],
+    *,
+    participant_id: str,
+    destination: str,
+    prediction_trace: dict[str, object],
+) -> None:
+    """Record and log an optional acknowledgment task failure at its owner."""
+
+    # isolation boundary: acknowledgment work is auxiliary and must not fail the destination answer.
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is None:
+        return
+    prediction_trace["choice"] = "failed"
+    prediction_trace["failure"] = f"{type(error).__name__}: {error}"
+    _logger.warning(
+        "optional acknowledgment task failed participant=%r destination=%r",
+        participant_id,
+        destination,
+        exc_info=(type(error), error, error.__traceback__),
+    )
 
 
 def _bounded_history(
@@ -955,6 +977,3 @@ def _is_valid_acknowledgment(text: str) -> bool:
         return False
     body = text[len(_ACKNOWLEDGMENT_PREFIX) : -1]
     return bool(body.strip()) and not any(mark in body for mark in ".!?\n")
-
-
-__all__ = ["AgentRouter"]
