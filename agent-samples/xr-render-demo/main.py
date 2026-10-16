@@ -7,7 +7,7 @@ xr-render-demo orchestrator. Runs the process stack for this sample.
 Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► DeviceIOHub ──IPC──► worker (this sample's agent)
-                                      └─IPC──► capture (with --capture)
+                                      └─IPC──► session recording (with --session-recording)
   Web client ── WebRTC ──► cloudxr-runtime
                         worker ──native tool──► scene ──► LOVR (OpenXR)
 
@@ -89,11 +89,11 @@ def _parser() -> argparse.ArgumentParser:
         description="Conversational agent for a live CloudXR scene.",
     )
     parser.add_argument(
-        "--capture",
+        "--session-recording",
         action="store_true",
         help=(
-            "record participant video, bidirectional audio, and data-channel "
-            "traffic"
+            "enable session recording of participant video, bidirectional audio, "
+            "and data-channel traffic"
         ),
     )
     return parser
@@ -325,7 +325,7 @@ def run(argv: Sequence[str] | None = None) -> None:
     else:
         _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(capture=args.capture), _BASE)
+    run_stack(_build_processes(capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

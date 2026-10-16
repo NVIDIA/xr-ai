@@ -15,7 +15,7 @@ from websockets.asyncio.client import ClientConnection, connect
 
 
 def _check_identity(status: dict[str, Any]) -> None:
-    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 3:
+    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 4:
         raise RuntimeError("speaker endpoint belongs to an incompatible service")
 
 
@@ -34,7 +34,7 @@ async def _speaker_available(base_url: str, timeout_s: float) -> bool | None:
 
 
 class _SpeakerStream:
-    """One connection owns one enrollment and ordered PCM timeline."""
+    """One connection owns interaction state and an ordered PCM timeline."""
 
     def __init__(self, base_url: str, timeout_s: float) -> None:
         origin = urlsplit(base_url)

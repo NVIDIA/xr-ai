@@ -236,9 +236,11 @@ uv run main.py
 
 Open the DeviceIOHub connection page at `https://localhost:8080`, accept the
 development certificate on first use, allow camera and microphone access, and
-connect. The checked-in voice-gate YAML requires “Agent” or “Hey Agent.” Set
-`voice_gate_yaml: voice_gate.always-on.yaml` in `yaml/tea_making_worker.yaml`
-to dispatch every finalized utterance without a wake phrase.
+connect. Say “Hey agent, let's start talking” to open the conversation, then
+speak naturally; say “Hey agent, let's stop talking” to close it.
+The Tea sample uses this `conversation` workflow. Set `mode: hybrid` with a wake
+phrase to also ask addressed one-off questions while closed, or `always_on`
+for an explicitly ungated microphone.
 
 Open `http://127.0.0.1:8092` on the XR-AI host for the live event viewer. To
 view it directly from another trusted machine, add `--expose-web-events` and
@@ -347,9 +349,9 @@ Microphone**. In the **XR Stream** section, follow the **accept the CloudXR
 cert** link to accept the second development certificate, return to the client,
 and click **Launch XR**.
 
-With the default always-on setting, ordinary finalized speech is dispatched
-without a wake phrase; stop commands are intercepted by the voice gate. Try
-this first spoken interaction:
+After saying “Hey agent, let's start talking,” ordinary finalized speech is
+dispatched without a wake phrase; stop commands interrupt the response without
+closing the conversation. Try this first spoken interaction:
 
 ```text
 You: Make the sphere red.

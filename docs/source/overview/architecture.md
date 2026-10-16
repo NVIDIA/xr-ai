@@ -135,6 +135,15 @@ text instead of speech, omit models, execute deterministic tools locally, call
 typed capability services, or publish events for another in-process agent
 registered with the same `AgentRuntime` to consume.
 
+Voice interaction policy is separate from ASR selection. `always_on` accepts
+all recognized speech, `wake_only` accepts addressed turns, `conversation`
+requires a start phrase before natural dialogue, and `hybrid` also accepts
+closed-state addressed one-off questions without enrolling an owner. With
+speaker ASR, the service attributes each candidate before authorizing a turn;
+only an unambiguous start phrase establishes the persistent conversation owner.
+Batch ASR applies the same interaction policy without individual speaker
+identity. Refer to {ref}`voice-conversation-controls`.
+
 Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 `xr_ai_models`. Model profiles keep three concerns separate:
 

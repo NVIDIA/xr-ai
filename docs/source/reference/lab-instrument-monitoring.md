@@ -117,7 +117,7 @@ command syntax.
 
 ## Opt-in session capture
 
-Capture is disabled by default. Run `uv run lab_instrument_monitoring --capture`
+Capture is disabled by default. Run `uv run lab_instrument_monitoring --session-recording`
 from `agent-samples/lab-instrument-monitoring/` to start `device_io_capture`
 immediately after DeviceIOHub. It records participant video, device and agent
 audio, and inbound and outbound data in a separate process. The option can be
@@ -131,7 +131,7 @@ AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
 requires an NVIDIA GPU with NVENC support and `ffmpeg` on `PATH`.
 
 Capture uses bounded queues and drops pending capture frames if encoding falls
-behind, so recording does not backpressure the hub or worker. Omit `--capture`
+behind, so recording does not backpressure the hub or worker. Omit `--session-recording`
 when the deployment must not retain device media. Refer to
 {doc}`../components/server-runtime` for the capture bundle and renderer contract.
 
@@ -311,15 +311,18 @@ proxy in front of it.
 
 Each non-empty final STT result delivered on `voice.transcript` is written to
 `transcript.jsonl` during an active conversation, before optional wake gating.
-Conversation controls and closed-conversation speech are withheld. Transcript
+With `mode: hybrid`, accepted closed-state one-off queries are also delivered;
+ignored closed-state speech and conversation controls are withheld. Transcript
 delivery is bounded and best effort; overflow drops the oldest pending
 transcript, and shutdown discards pending items. Speech rejected by a wake
 phrase during an active conversation is still persisted.
 
 After connecting, say `Hey agent, let's start talking`, then speak without a
 wake phrase until `Hey agent, let's stop talking`. Set
-`conversation.require_wake_phrase: true` to require `agent` or `hey agent`,
-with the optional chime and five-second follow-up window. Accepted speech reaches
+`conversation.require_wake_phrase: true` to require `agent` or `hey agent` inside
+the open conversation, with the optional chime and five-second bare-wake
+follow-up window. Set `mode: hybrid` to additionally accept wake-addressed
+one-off questions while the conversation is closed. Accepted speech reaches
 the foreground as a `UserQuery`. Typed text reaches the foreground but is not an
 STT transcript. Refer to {ref}`voice-conversation-controls`.
 

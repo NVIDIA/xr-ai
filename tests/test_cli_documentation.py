@@ -40,14 +40,14 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     )
     assert [argument.flags for argument in commands["lab_instrument_monitoring"].arguments] == [
         ("--expose-web-events",),
-        ("--capture",),
+        ("--session-recording",),
     ]
     for sample in ("simple-vlm-example", "lab-instrument-monitoring", "tea-making-sample", "xr-render-demo"):
         command = commands[sample.replace("-", "_") + "_model_servers"]
         assert [argument.flags for argument in command.arguments] == [("--stop",), ("--gpu-profile",)]
         assert command.project_dir == Path("agent-samples") / sample / "model-servers"
     assert [argument.flags for argument in commands["simple_vlm_example"].arguments] == [
-        ("--capture",),
+        ("--session-recording",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_replay"].arguments] == [
         ("--mode",), ("guide_name",), ("--output-root",),
@@ -60,10 +60,10 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
     )
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
-        ("--capture",),
+        ("--session-recording",),
     ]
     assert [argument.flags for argument in commands["xr_render_demo"].arguments] == [
-        ("--capture",),
+        ("--session-recording",),
     ]
 
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from xr_ai_voicegate._conversation import _ControlMatcher
+from xr_ai_voicegate._phrases import STOP_RE, build_magic_pattern, strip_magic
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 
@@ -20,27 +21,77 @@ class _Selection:
         self.text = ""
         self._controls = _ControlMatcher(cfg)
         self._enrollment_controls: dict[int, _ControlMatcher] = {}
+        self._wake_pattern = build_magic_pattern(cfg.magic_phrases)
+        self._wake_until: dict[int, int] = {}
 
-    def _enroll_completed(self, completed: list[tuple[int, str, int, bool]]) -> list[dict]:
-        """Resolve all phrase candidates at one accepted audio-step boundary."""
+    def _enroll_completed(
+        self, completed: list[tuple[int, str, int, bool]], *, completed_at_us: int | None = None,
+    ) -> list[dict]:
+        """Resolve attributed controls and turns at one accepted audio boundary."""
         if self.owner is not None:
             return []
-        matches = []
+        matches, turns, wakes = [], [], []
         for speaker, text, pts_us, truncated in completed:
+            # Every completed utterance consumes the prior one-turn permission,
+            # including a withheld control. A fresh bare wake can renew it below.
+            until = self._wake_until.pop(speaker, None)
             matcher = self._enrollment_controls.setdefault(speaker, _ControlMatcher(self.cfg))
             if truncated:
                 matcher._reset()
+                self._wake_until.pop(speaker, None)
                 continue
-            if matcher._feed(text, key=speaker, at_s=pts_us / 1_000_000) == "start":
+            action = matcher._feed(text, key=speaker, at_s=pts_us / 1_000_000)
+            if self.cfg.mode in {"conversation", "hybrid"} and action == "start":
                 matches.append(speaker)
-        if len(matches) != 1:
-            if matches:
+                continue
+            if self.cfg.mode == "conversation":
+                continue
+            if self.cfg.mode == "hybrid" and action == "stop":
+                self._wake_until.pop(speaker, None)
+                continue
+            if not text.strip():
+                self._wake_until.pop(speaker, None)
+                continue
+            tail = strip_magic(self._wake_pattern, text)
+            if self.cfg.mode == "hybrid" and action == "pending" and tail != "":
+                continue
+            followup = until is not None and pts_us < until
+            global_stop = self.cfg.mode == "wake_only" and self.cfg.stop_commands_enabled and STOP_RE.match(text)
+            if tail == "" and self.cfg.mode != "always_on":
+                wakes.append((speaker, pts_us))
+            elif self.cfg.mode == "always_on" or tail is not None or followup or global_stop:
+                turns.append({
+                    "kind": "one_shot",
+                    "text": (text.strip() if self.cfg.mode == "always_on" or tail is None else tail),
+                    "pts_us": pts_us, "speaker_id": speaker,
+                    "fresh_match": self.cfg.mode == "always_on" or tail is not None,
+                })
+        if matches:
+            self._wake_until.clear()
+            if len(matches) != 1:
                 self._enrollment_controls.clear()
+                return []
+            self.owner = matches[0]
+            self._enrollment_controls.clear()
+            self._clear_utterance()
+            return [{"kind": "enrolled"}]
+        if self.cfg.mode == "always_on":
+            return turns
+        if len(turns) + len(wakes) != 1:
+            # Never choose a same-boundary speaker by label or decoder order.
+            if turns or wakes:
+                self._wake_until.clear()
             return []
-        self.owner = matches[0]
-        self._enrollment_controls.clear()
-        self._clear_utterance()
-        return [{"kind": "enrolled"}]
+        if turns:
+            return turns
+        if wakes:
+            if completed_at_us is None:
+                raise ValueError("candidate completion requires its accepted audio boundary")
+            speaker, pts_us = wakes[0]
+            if self.cfg.followup_grace_s > 0:
+                self._wake_until[speaker] = completed_at_us + round(self.cfg.followup_grace_s * 1_000_000)
+            return [{"kind": "wake_ready", "speaker_id": speaker, "pts_us": pts_us}]
+        return []
 
     def _activity(self, active: set[int], seconds: float, pts_us: int) -> tuple[int | None, list[dict], bool]:
         events = []

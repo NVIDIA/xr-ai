@@ -14,8 +14,8 @@ Text in (data ch.) ─────→ text query ──┴→ latest video frame
 Model deployment
 ----------------
 STT, VLM, and TTS are reused from services started outside this sample. The
-sample launches its hub and worker, plus optional capture, and never starts or
-stops model servers.
+sample launches its hub and worker, plus optional session recording, and never
+starts or stops model servers.
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
@@ -45,11 +45,11 @@ def _parser() -> argparse.ArgumentParser:
         description="Vision question answering over voice or text.",
     )
     parser.add_argument(
-        "--capture",
+        "--session-recording",
         action="store_true",
         help=(
-            "record participant video, bidirectional audio, and data-channel "
-            "traffic"
+            "enable session recording of participant video, bidirectional audio, "
+            "and data-channel traffic"
         ),
     )
     return parser
@@ -85,7 +85,7 @@ PROCESSES = _build_processes()
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     setup_logging("orchestrator", namespace="simple-vlm-example")
-    run_stack(_build_processes(capture=args.capture), _BASE)
+    run_stack(_build_processes(capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

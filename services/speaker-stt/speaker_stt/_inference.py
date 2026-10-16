@@ -223,7 +223,9 @@ class _Session:
             self._candidate_completed.append((speaker, _CompletedStream(stream.pts_us, stream.duration, stream.text)))
             if truncated:
                 self._truncated_episodes[speaker] = 0.0
-        events = self.selection._enroll_completed(completed)
+        events = self.selection._enroll_completed(
+            completed, completed_at_us=pts_us + round(self.models.hop_samples * 1_000_000 / 16000),
+        )
         if self.selection.owner is not None:
             self._candidate_streams.clear()
             self._truncated_episodes.clear()

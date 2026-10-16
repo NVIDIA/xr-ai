@@ -28,7 +28,7 @@ from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
-_PROTOCOL = 3
+_PROTOCOL = 4
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8102
 _STREAM_PATH = "/v1/audio/transcriptions/stream"
