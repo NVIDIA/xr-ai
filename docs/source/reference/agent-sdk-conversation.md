@@ -14,11 +14,11 @@ are provided by [`xr-ai-routing`](agent-sdk-routing.md).
 ## Compose a conversation
 
 `Conversation` implements `xr_ai_routing.RoutableAgent`, so it can be passed to
-`ConversationFrontEnd` alongside application-specific agents.
+`AgentRouter` alongside application-specific agents.
 
 ```python
 from xr_ai_conversation import Conversation
-from xr_ai_routing import ConversationFrontEnd, ConversationTurn
+from xr_ai_routing import AgentRouter, AgentTurn
 
 conversation = Conversation(
     llm,
@@ -26,9 +26,9 @@ conversation = Conversation(
     frames=current_frame_tool,
     vision=streaming_image_query_tool,
 )
-front_end = ConversationFrontEnd({"conversation": conversation}, decisions)
+front_end = AgentRouter({"conversation": conversation}, decisions)
 result = await front_end.handle(
-    ConversationTurn("participant-1", "turn-1", "What color is the sign?"),
+    AgentTurn("participant-1", "turn-1", "What color is the sign?"),
     emit=publish_chunk,
 )
 ```

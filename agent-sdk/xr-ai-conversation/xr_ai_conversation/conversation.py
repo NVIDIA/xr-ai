@@ -14,8 +14,8 @@ from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, LLMService, ToolDef
 from xr_ai_routing import (
     Admission,
-    ConversationExchange,
-    ConversationTurn,
+    AgentExchange,
+    AgentTurn,
     DestinationResult,
     RoutableAgent,
     RoutingAid,
@@ -139,14 +139,14 @@ class Conversation(RoutableAgent):
 
         return self._routing
 
-    async def admit(self, turn: ConversationTurn, *, focused: bool) -> Admission:
+    async def admit(self, turn: AgentTurn, *, focused: bool) -> Admission:
         """Accept ordinary turns without retaining participant focus."""
 
         del focused
         self.activate_participant(turn.participant_id)
         return Admission("accept")
 
-    async def answer(self, turn: ConversationTurn, *, emit: Emit) -> DestinationResult:
+    async def answer(self, turn: AgentTurn, *, emit: Emit) -> DestinationResult:
         """Forward answer chunks with the general conversation source name.
 
         Cancellation and stream errors propagate after the inner iterator is
@@ -275,7 +275,7 @@ class Conversation(RoutableAgent):
         request: str,
         participant_id: str,
         *,
-        history: tuple[ConversationExchange, ...] = (),
+        history: tuple[AgentExchange, ...] = (),
     ) -> AsyncIterator[str]:
         """Yield answer text or streamed current-view output.
 
@@ -314,7 +314,7 @@ class Conversation(RoutableAgent):
         )
         self._schedule_dialogue_compaction(participant_id)
         dialogue_summary, dialogue_entries = self._context.dialogue_snapshot(participant_id)
-        recent_history = tuple(ConversationExchange(entry.user, entry.assistant) for entry in dialogue_entries)
+        recent_history = tuple(AgentExchange(entry.user, entry.assistant) for entry in dialogue_entries)
         background = self._context.sections_with_recency(participant_id)
         if dialogue_summary:
             background += (
@@ -480,7 +480,7 @@ class Conversation(RoutableAgent):
 
 def _messages(
     request: str,
-    history: tuple[ConversationExchange, ...],
+    history: tuple[AgentExchange, ...],
     *,
     instructions: str,
     vision_available: bool,

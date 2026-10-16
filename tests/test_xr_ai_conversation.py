@@ -26,9 +26,9 @@ from xr_ai_conversation._context import _ConversationContext  # noqa: E402
 from xr_ai_conversation.conversation import _messages  # noqa: E402
 from xr_ai_routing import (  # noqa: E402
     Admission,
-    ConversationExchange,
-    ConversationFrontEnd,
-    ConversationTurn,
+    AgentExchange,
+    AgentRouter,
+    AgentTurn,
     DestinationResult,
     RoutableAgent,
     RoutingAid,
@@ -142,7 +142,7 @@ async def _ack_output(front_end, query, output, *, participant="alice"):
         output.append((source, text))
 
     return await front_end.handle(
-        ConversationTurn(participant, f"turn-{participant}-{query}", query),
+        AgentTurn(participant, f"turn-{participant}-{query}", query),
         emit=emit,
     )
 
@@ -252,15 +252,15 @@ class _StreamingVision:
 async def test_conversation_is_a_normal_front_end_destination_with_completed_history():
     llm = _LLM()
     conversation = Conversation(llm)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
     output = []
 
     async def emit(source, text):
         output.append((source, text))
 
-    first = await front_end.handle(ConversationTurn("alice", "turn-1", "Hello."), emit=emit)
+    first = await front_end.handle(AgentTurn("alice", "turn-1", "Hello."), emit=emit)
     await conversation.participant_left("alice")
-    second = await front_end.handle(ConversationTurn("alice", "turn-2", "Say that again."), emit=emit)
+    second = await front_end.handle(AgentTurn("alice", "turn-2", "Say that again."), emit=emit)
 
     assert first.text == second.text == "Hello there."
     assert output == [("conversation", "Hello there."), ("conversation", "Hello there.")]
@@ -306,7 +306,7 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
 
     llm = _LLM()
     conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
         context_budget_bytes=160,
@@ -316,23 +316,23 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         pass
 
     long_opening = "Please keep this opening exchange out of the front-end window. " * 4
-    await front_end.handle(ConversationTurn("alice", "turn-1", long_opening), emit=emit)
-    await front_end.handle(ConversationTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(ConversationTurn("alice", "turn-3", "What did you add?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-1", long_opening), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-3", "What did you add?"), emit=emit)
 
     context = llm.messages[1][1].content
     assert "Turn 2: user asked: Add a blue cube." in context
     assert "Turn 2: assistant said: “Added the blue cube to the room.”" in context
 
-    await front_end.handle(ConversationTurn("alice", "turn-4", "What color was it?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-4", "What color was it?"), emit=emit)
     repeated_context = llm.messages[2][1].content
     assert repeated_context.count("Added the blue cube to the room.") == 1
     assert "Turn 2: user asked: Add a blue cube." in repeated_context
 
     # The same scene result can happen again immediately. Causal exchange
     # identity, not timestamp distance or text equality, keeps both turns.
-    await front_end.handle(ConversationTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
-    await front_end.handle(ConversationTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-5", "Add a blue cube."), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-6", "What did you add this time?"), emit=emit)
     latest_context = llm.messages[3][1].content
     assert latest_context.count("Added the blue cube to the room.") == 2
 
@@ -369,7 +369,7 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
 
     llm = _LLM()
     conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
         context_budget_bytes=1_000,
@@ -378,12 +378,12 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
     async def emit(_source, _text):
         pass
 
-    seed = ConversationExchange("Add a blue cube.", "Added the blue cube to the room.")
+    seed = AgentExchange("Add a blue cube.", "Added the blue cube to the room.")
     await front_end.handle(
-        ConversationTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit
+        AgentTurn("alice", "turn-1", "What should I do next?", history=(seed,)), emit=emit
     )
-    await front_end.handle(ConversationTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
-    await front_end.handle(ConversationTurn("alice", "turn-3", "What did I add?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-2", "Add a blue cube."), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-3", "What did I add?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Added the blue cube to the room.") == 2
@@ -419,7 +419,7 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
 
     llm = _LLM()
     conversation = Conversation(llm, context_budget_bytes=1_000)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"conversation": conversation, "scene": Scene()},
         Decisions(),  # type: ignore[arg-type]
         context_budget_bytes=1_000,
@@ -428,8 +428,8 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
     async def emit(_source, _text):
         pass
 
-    await front_end.handle(ConversationTurn("alice", "turn-1", "What should happen next?"), emit=emit)
-    await front_end.handle(ConversationTurn("alice", "turn-2", "What did we decide?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-1", "What should happen next?"), emit=emit)
+    await front_end.handle(AgentTurn("alice", "turn-2", "What did we decide?"), emit=emit)
 
     prompt_context = llm.messages[1][1].content
     assert prompt_context.count("Leaving the scene task.") == 1
@@ -447,13 +447,13 @@ async def test_optional_current_view_tool_uses_typed_frame_and_streaming_vision_
     frames = _CurrentFrame()
     vision = _StreamingVision()
     conversation = Conversation(llm, frames=frames, vision=vision)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
     output = []
 
     async def emit(source, text):
         output.append((source, text))
 
-    result = await front_end.handle(ConversationTurn("alice", "view-1", "What color is the sign?"), emit=emit)
+    result = await front_end.handle(AgentTurn("alice", "view-1", "What color is the sign?"), emit=emit)
 
     assert result.text == "The sign is blue and says EXIT."
     assert output == [
@@ -519,13 +519,13 @@ async def test_current_view_cancellation_closes_model_and_visual_streams():
     llm = _CurrentViewLLM()
     vision = _StreamingVision(blocked=True)
     conversation = Conversation(llm, frames=_CurrentFrame(), vision=vision)  # type: ignore[arg-type]
-    front_end = ConversationFrontEnd({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
+    front_end = AgentRouter({"conversation": conversation}, _Decisions())  # type: ignore[arg-type]
 
     async def emit(_source, _text):
         pass
 
     task = asyncio.create_task(
-        front_end.handle(ConversationTurn("alice", "view-cancel", "Look here."), emit=emit)
+        front_end.handle(AgentTurn("alice", "view-cancel", "Look here."), emit=emit)
     )
     await asyncio.wait_for(vision.started.wait(), timeout=1)
     await front_end.interrupt("alice")
@@ -537,7 +537,7 @@ async def test_current_view_cancellation_closes_model_and_visual_streams():
 
 
 def test_message_history_keeps_full_exchanges_and_latest_request_separate():
-    history = tuple(ConversationExchange(f"Question {index}", f"Answer {index}") for index in range(6))
+    history = tuple(AgentExchange(f"Question {index}", f"Answer {index}") for index in range(6))
     messages = _messages("Current question", history, instructions="", vision_available=True)
 
     assert [message.role for message in messages] == ["system", "user", "user"]
@@ -553,7 +553,7 @@ def test_message_history_keeps_full_exchanges_and_latest_request_separate():
 def test_message_history_renders_coarse_known_recency_and_source_ranges():
     messages = _messages(
         "Current question",
-        (ConversationExchange("Earlier question", "Earlier answer"),),
+        (AgentExchange("Earlier question", "Earlier answer"),),
         instructions="",
         vision_available=True,
         history_timestamps=(1_790_856_000_000_000,),
@@ -575,7 +575,7 @@ def test_message_history_renders_coarse_known_recency_and_source_ranges():
 
 def test_message_history_drops_whole_old_context_to_byte_budget_without_truncating_query():
     history = tuple(
-        ConversationExchange(f"Question {index}: " + "q" * 160, f"Answer {index}: " + "a" * 160) for index in range(6)
+        AgentExchange(f"Question {index}: " + "q" * 160, f"Answer {index}: " + "a" * 160) for index in range(6)
     )
     query = "Current question " + "z" * 300
     messages = _messages(
@@ -601,7 +601,7 @@ async def test_acknowledgment_is_disabled_by_default_and_fast_answer_cancels_pre
     destination = _AckDestination()
     decisions = _Prediction()
     llm = _AcknowledgmentLLM()
-    front_end = ConversationFrontEnd({"destination": destination}, decisions, default_destination="destination")  # type: ignore[arg-type]
+    front_end = AgentRouter({"destination": destination}, decisions, default_destination="destination")  # type: ignore[arg-type]
     output = []
 
     await _ack_output(front_end, "Quick request.", output)
@@ -610,7 +610,7 @@ async def test_acknowledgment_is_disabled_by_default_and_fast_answer_cancels_pre
     assert not decisions.calls
     assert not llm.calls
 
-    enabled = ConversationFrontEnd(
+    enabled = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -631,7 +631,7 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
         {"slow": 0.8, "within_delay": 0.1, "uncertain": 0.1},
     )
     llm = _AcknowledgmentLLM()
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -645,7 +645,7 @@ async def test_confident_slow_prediction_acknowledges_then_records_only_real_ans
         output.append((source, text))
         emitted.set()
 
-    task = asyncio.create_task(front_end.handle(ConversationTurn("alice", "turn-1", "Explain the request."), emit=emit))
+    task = asyncio.create_task(front_end.handle(AgentTurn("alice", "turn-1", "Explain the request."), emit=emit))
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(decisions.called.wait(), timeout=1)
     await asyncio.wait_for(llm.started.wait(), timeout=1)
@@ -676,7 +676,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
     destination = _AckDestination(blocked=True)
     decisions = _Prediction()
     llm = _AcknowledgmentLLM()
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -691,7 +691,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
         emitted.set()
 
     task = asyncio.create_task(
-        front_end.handle(ConversationTurn("alice", "turn-1", "An unfamiliar request."), emit=emit)
+        front_end.handle(AgentTurn("alice", "turn-1", "An unfamiliar request."), emit=emit)
     )
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(emitted.wait(), timeout=1)
@@ -700,7 +700,7 @@ async def test_uncertain_prediction_uses_delay_fallback_and_admission_preamble_s
     await asyncio.wait_for(task, timeout=1)
 
     preamble_destination = _AckDestination(preamble="I will check.")
-    preamble_front_end = ConversationFrontEnd(
+    preamble_front_end = AgentRouter(
         {"destination": preamble_destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -723,7 +723,7 @@ async def test_real_answer_cancels_pending_ack_generation_without_waiting():
     destination = _AckDestination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM(blocked=True)
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -745,7 +745,7 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
     destination = _AckDestination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM()
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -767,7 +767,7 @@ async def test_answer_does_not_reuse_interrupt_slot_after_ack_was_delivered():
             await acknowledgment_emit_release.wait()
 
     task = asyncio.create_task(
-        front_end.handle(ConversationTurn("alice", "turn-1", "Wait on model output."), emit=emit)
+        front_end.handle(AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
     )
     await asyncio.wait_for(acknowledgment_emit_started.wait(), timeout=1)
     destination.release_answer.set()
@@ -787,7 +787,7 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
     destination = _AckDestination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM()
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -805,7 +805,7 @@ async def test_answer_timing_excludes_committed_acknowledgment_output(monkeypatc
             await acknowledgment_emit_release.wait()
 
     task = asyncio.create_task(
-        front_end.handle(ConversationTurn("alice", "turn-1", "Wait on model output."), emit=emit)
+        front_end.handle(AgentTurn("alice", "turn-1", "Wait on model output."), emit=emit)
     )
     await asyncio.wait_for(acknowledgment_emit_started.wait(), timeout=1)
     now = 1.0
@@ -846,7 +846,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
     destination = _AckDestination(blocked=True)
     decisions = _Prediction()
     llm = _AcknowledgmentLLM(content=generated)
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -862,7 +862,7 @@ async def test_invalid_acknowledgment_uses_neutral_fallback_without_recording_it
             fallback_emitted.set()
 
     task = asyncio.create_task(
-        front_end.handle(ConversationTurn("alice", "turn-1", "Continue with the next request."), emit=emit)
+        front_end.handle(AgentTurn("alice", "turn-1", "Continue with the next request."), emit=emit)
     )
     await asyncio.wait_for(destination.answer_started.wait(), timeout=1)
     await asyncio.wait_for(fallback_emitted.wait(), timeout=1)
@@ -886,7 +886,7 @@ async def test_completed_focus_and_release_answers_train_first_answer_timing(dis
             return DestinationResult(disposition, self.answer_text)
 
     destination = Destination()
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         _Decisions(),
         default_destination="destination",
@@ -896,7 +896,7 @@ async def test_completed_focus_and_release_answers_train_first_answer_timing(dis
         pass
 
     result = await front_end.handle(
-        ConversationTurn("alice", "turn-1", "Wait on model output."),
+        AgentTurn("alice", "turn-1", "Wait on model output."),
         emit=emit,
     )
 
@@ -909,7 +909,7 @@ async def test_prediction_failure_or_hang_does_not_delay_real_answer():
     for decisions in (_Prediction(error=RuntimeError("prediction failed")), _Prediction(blocked=True)):
         destination = _AckDestination(blocked=True)
         llm = _AcknowledgmentLLM(error=RuntimeError("acknowledgment failed"))
-        front_end = ConversationFrontEnd(
+        front_end = AgentRouter(
             {"destination": destination},
             decisions,  # type: ignore[arg-type]
             default_destination="destination",
@@ -934,7 +934,7 @@ async def test_turn_cancellation_cancels_ack_and_departure_drops_timing_examples
     destination = _AckDestination(blocked=True)
     decisions = _Prediction("slow", {"slow": 0.9, "within_delay": 0.05, "uncertain": 0.05})
     llm = _AcknowledgmentLLM(blocked=True)
-    front_end = ConversationFrontEnd(
+    front_end = AgentRouter(
         {"destination": destination},
         decisions,  # type: ignore[arg-type]
         default_destination="destination",
@@ -1073,8 +1073,8 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
     llm = _DialogueLLM()
     conversation = Conversation(llm, context_budget_bytes=700, compaction_input_budget_bytes=4096)  # type: ignore[arg-type]
     old_history = (
-        ConversationExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
-        ConversationExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
+        AgentExchange("The label is copper." + " x" * 160, "The label was observed." + " y" * 160),
+        AgentExchange("Check the facilities later." + " z" * 160, "That request remains open." + " w" * 160),
     )
     first_output = [chunk async for chunk in conversation.stream("What is the label?", "alice", history=old_history)]
     assert first_output == ["Hello there."]
@@ -1089,7 +1089,7 @@ async def test_conversation_uses_dialogue_summary_and_keeps_newer_exchanges_verb
         "The user identified a copper label and left the facilities check open."
     )
 
-    current = ConversationExchange("What is the label?", "Hello there.")
+    current = AgentExchange("What is the label?", "Hello there.")
     second_output = [
         chunk
         async for chunk in conversation.stream(
