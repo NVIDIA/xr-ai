@@ -50,3 +50,14 @@ jobs:
       # grandfathered file) and publishes the enforcement coverage summary.
       - name: Check ratcheted Ruff baseline
         run: python3 .github/scripts/ruff_baseline.py
+
+      # The baseline tests run the real linter, so they run here, where the
+      # pinned Ruff is on PATH, instead of in the test matrix. They need only
+      # pytest, so skip the test suite's conftest and its package imports.
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+
+      - name: Test ratcheted Ruff baseline
+        env:
+          UV_CONFIG_FILE: ${{ github.workspace }}/uv.toml
+        run: uv run --no-project --with 'pytest>=8.0' --with 'pytest-asyncio>=0.23' pytest --noconftest -p no:cacheprovider tests/test_ruff_baseline.py

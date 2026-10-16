@@ -41,7 +41,8 @@ generated `ruff-baseline.toml`, which records the exact count per file and rule
 and can only shrink. When a change fixes violations, run
 `uv run --script .github/scripts/ruff_baseline.py --write` and commit the
 lowered entries. Running the script without `--write` checks that the baseline
-matches the code and prints how much of the repository each rule covers. To keep
+matches the code and prints how much of the repository each rule covers; the
+pre-commit hook runs that check when Python files change. To keep
 a deliberate broad catch in new code, add an inline `# noqa: BLE001` comment with
 the reason.
 

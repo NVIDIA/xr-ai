@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,9 +21,20 @@ ruff_baseline = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = ruff_baseline
 _SPEC.loader.exec_module(ruff_baseline)
 
+
+def _pinned_ruff_on_path() -> bool:
+    ruff = shutil.which("ruff")
+    if ruff is None:
+        return False
+    version = subprocess.run([ruff, "--version"], capture_output=True, text=True, check=True).stdout
+    return version.split()[-1] == ruff_baseline.RUFF_VERSION
+
+
+# These tests run the real linter. The lint workflow runs them where the pinned
+# Ruff is installed; elsewhere they skip rather than download it.
 needs_ruff = pytest.mark.skipif(
-    shutil.which("ruff") is None and shutil.which("uv") is None,
-    reason="requires ruff or uv to run the pinned linter",
+    not _pinned_ruff_on_path(),
+    reason=f"requires ruff {ruff_baseline.RUFF_VERSION} on PATH; lint.yml runs these tests",
 )
 
 _BLIND_EXCEPT = "try:\n    pass\nexcept Exception:\n    pass\n"
