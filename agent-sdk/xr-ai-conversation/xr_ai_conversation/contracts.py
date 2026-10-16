@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed contracts shared by conversation destinations and their front end."""
+"""Typed contracts shared by routable agents and their front end."""
 
 from __future__ import annotations
 
@@ -107,8 +107,8 @@ Emit = Callable[[str, str], Awaitable[None]]
 """Async callback that emits a text chunk tagged with its destination source."""
 
 
-class ConversationDestination(Protocol):
-    """A destination that owns its state and handles admitted or fallback turns.
+class RoutableAgent(Protocol):
+    """An agent that owns its state and handles admitted or fallback turns.
 
     The front end calls ``release()`` when it releases a destination during
     rerouting or clears its focus. On participant departure it calls an optional
@@ -159,10 +159,10 @@ class ConversationDestination(Protocol):
 __all__ = [
     "Admission",
     "ConversationContextUpdate",
-    "ConversationDestination",
     "ConversationExchange",
     "ConversationTurn",
     "DestinationResult",
     "Emit",
+    "RoutableAgent",
     "RoutingAid",
 ]

@@ -6,7 +6,8 @@
 # xr-ai-conversation
 
 `xr-ai-conversation` provides typed contracts and a participant-scoped front end
-for routing turns among application destinations. It uses the typed
+for routing turns among application destinations. Each registered destination
+implements the public `RoutableAgent` protocol. It uses the typed
 `DecisionService` for route selection. Destinations keep ownership of their
 model calls, application state, and resources.
 
@@ -103,7 +104,7 @@ Admission preambles suppress the optional acknowledgment for that turn.
 | File | Responsibility |
 |---|---|
 | `__init__.py` | Lists the routing and conversation names exported by `xr_ai_conversation` |
-| `contracts.py` | Defines route metadata, turns, context text, admission results, and the destination protocol |
+| `contracts.py` | Defines route metadata, turns, context text, admission results, and the `RoutableAgent` protocol |
 | `front_end.py` | Coordinates selection, admission, focus, streamed answers, history, cancellation, and cleanup |
 | `_history.py` | Shares private exchange timestamps and their display format |
 | `conversation.py` | Implements the application-instructed conversation destination and optional current-view tools |
@@ -122,7 +123,7 @@ documents the exported names and their signatures, fields, and behavior.
 
 ## Streamed conversation and visual questions
 
-`Conversation` implements `ConversationDestination` for application-instructed text
+`Conversation` implements `RoutableAgent` for application-instructed text
 conversation. It keeps model instructions and participant state in the conversation
 engine while the front end continues to own turn selection, admission, focus,
 stream attribution, and cancellation. Applications can configure an optional

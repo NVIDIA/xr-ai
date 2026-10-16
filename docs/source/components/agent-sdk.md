@@ -13,7 +13,7 @@ installation.
 |---|---|---|
 | `xr-ai-hub` | `xr_ai_hub` | Minimal IPC with DeviceIOHub using msgpack over ZMQ |
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
-| `xr-ai-conversation` | `xr_ai_conversation` | Streamed conversation, named context, optional current-view tools, and destination routing |
+| `xr-ai-conversation` | `xr_ai_conversation` | Participant-scoped routing, the `RoutableAgent` contract, and a streamed conversation/context engine |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
