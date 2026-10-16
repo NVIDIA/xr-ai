@@ -33,6 +33,8 @@ dependencies = [
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    # Measures which SDK and service code the suite exercises; see [tool.coverage].
+    "coverage>=7.10",
     "numpy>=1.24",
     # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "audioop-lts; python_version >= '3.13'",
@@ -75,4 +77,37 @@ pythonpath   = ["../services/openxr-service", "../services/stt-server", "../serv
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     "integration: spawns a real server subprocess (CPU-only); runs in CI",
+]
+
+# Coverage is measured for the shared SDK, utilities, and hub service the suite
+# targets, not for samples. `patch = ["subprocess"]` records the hub and worker
+# subprocesses the integration tests spawn. Run from tests/ as CI does:
+#   coverage run -m pytest -m "not gpu" && coverage combine && coverage json
+# then `python3 ../.github/scripts/coverage_summary.py coverage.json`.
+[tool.coverage.run]
+branch = true
+parallel = true
+patch = ["subprocess"]
+source_pkgs = [
+    "device_io_hub",
+    "xr_ai_hub",
+    "xr_ai_launcher",
+    "xr_ai_logging",
+    "xr_ai_models",
+    "xr_ai_runtime",
+    "xr_ai_tools",
+    "xr_ai_vad",
+    "xr_ai_vllm",
+    "xr_ai_voice",
+    "xr_ai_voicegate",
+    "xr_ai_web_events",
+]
+
+[tool.coverage.report]
+skip_empty = true
+# Type-only and abstract code that has no runtime behavior to test.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    '^\s*\.\.\.$',
 ]
