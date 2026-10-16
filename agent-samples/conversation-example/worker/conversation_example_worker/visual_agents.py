@@ -35,6 +35,7 @@ class VisualObservationAgent(RoutableAgent):
         self._frames = frames
         self._vision = vision
 
+    # RoutableAgent contract: answer uses one captured current frame per request.
     def routing_aid(self, _participant_id: str) -> RoutingAid:
         return RoutingAid(
             name="observation",
@@ -84,6 +85,7 @@ class VisualObservationAgent(RoutableAgent):
         """The sample adapter releases shared frame state on participant departure."""
 
 
+# Private timestamp and unavailable-frame classifiers support the public route above.
 def _frame_time_label(timestamp_us: int) -> str:
     timestamp = datetime.fromtimestamp(timestamp_us / 1_000_000, UTC).replace(second=0, microsecond=0)
     return timestamp.strftime("%Y-%m-%d %H:%M UTC")

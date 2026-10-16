@@ -29,7 +29,7 @@ Emit = Callable[[str, str], Awaitable[None]]
 
 
 class ContextualConversationAgent(RoutableAgent):
-    """Add a bounded last-completed-exchange cue to a Conversation route."""
+    """Expose Conversation as a route with bounded participant context."""
 
     def __init__(
         self,
@@ -51,6 +51,7 @@ class ContextualConversationAgent(RoutableAgent):
         self._source_name = source_name
         self._last_completed: dict[str, str] = {}
 
+    # RoutableAgent contract: the methods below define this role's routing behavior.
     def routing_aid(self, participant_id: str) -> RoutingAid:
         description = self._static_description
         routing_context = self._routing_context(participant_id) if self._routing_context is not None else None
@@ -74,6 +75,14 @@ class ContextualConversationAgent(RoutableAgent):
             await self._remember_completed_exchange(turn, result.text)
         return result
 
+    async def release(self, _participant_id: str) -> None:
+        """Keep completed context when the router tries another destination."""
+
+    async def participant_left(self, participant_id: str) -> None:
+        self._last_completed.pop(participant_id, None)
+        await self._conversation.participant_left(participant_id)
+
+    # Private context helper; release and departure remain in the public contract above.
     async def _remember_completed_exchange(self, turn: AgentTurn, answer: str) -> None:
         """Record the same bounded cue and optional update used by completed answers."""
         if not answer.strip():
@@ -93,14 +102,6 @@ class ContextualConversationAgent(RoutableAgent):
                 # The destination answer is already complete; optional context fan-out
                 # must not turn it into a failed user-facing turn.
                 pass
-
-    async def release(self, _participant_id: str) -> None:
-        """Keep completed context when the router tries another destination."""
-
-    async def participant_left(self, participant_id: str) -> None:
-        self._last_completed.pop(participant_id, None)
-        await self._conversation.participant_left(participant_id)
-
 
 class NoteTakingAgent(ContextualConversationAgent):
     """Keep participant-authored notes in an explicit, focused session."""
@@ -128,6 +129,7 @@ class NoteTakingAgent(ContextualConversationAgent):
         self._pending: dict[str, tuple[str, str, bool]] = {}
         self._notes: dict[str, list[str]] = {}
 
+    # RoutableAgent contract: note-specific routing and lifecycle behavior.
     def routing_aid(self, participant_id: str) -> RoutingAid:
         notes = self._notes.get(participant_id, ())
         description = self._static_description
@@ -241,6 +243,15 @@ class NoteTakingAgent(ContextualConversationAgent):
             return DestinationResult("focus", result.text)
         return result
 
+    async def release(self, participant_id: str) -> None:
+        self._pending.pop(participant_id, None)
+
+    async def participant_left(self, participant_id: str) -> None:
+        self._pending.pop(participant_id, None)
+        self._notes.pop(participant_id, None)
+        await super().participant_left(participant_id)
+
+    # Private note storage and context publication helpers.
     def _append_note(self, participant_id: str, text: str) -> bool:
         timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         note = f"{timestamp} — {text.strip()}"
@@ -275,14 +286,6 @@ class NoteTakingAgent(ContextualConversationAgent):
                 if not publisher.cancelled():
                     publisher.exception()
                 raise
-
-    async def release(self, participant_id: str) -> None:
-        self._pending.pop(participant_id, None)
-
-    async def participant_left(self, participant_id: str) -> None:
-        self._pending.pop(participant_id, None)
-        self._notes.pop(participant_id, None)
-        await super().participant_left(participant_id)
 
 
 def _fit_utf8(text: str, budget_bytes: int) -> str:

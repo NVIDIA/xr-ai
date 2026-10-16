@@ -47,9 +47,9 @@ from .agent import (
     ConversationExampleAgent,
 )
 from .config import WorkerConfig
-from .conversation_destinations import ContextualConversationAgent, NoteTakingAgent
+from .conversation_agents import ContextualConversationAgent, NoteTakingAgent
 from .monitoring import MONITOR_WINDOW_TOPIC, VisualMonitorAgent
-from .visual_destinations import VisualObservationAgent
+from .visual_agents import VisualObservationAgent
 
 _VLM_WARMUP_SIZE = (1280, 720)
 _VLM_WARMUP_MAX_TOKENS = 4
@@ -215,7 +215,7 @@ async def run_app(
         vlm=vlm,
         system_prompt=config.system_prompt,
     )
-    # General answers and focused notes use distinct instructions; the front end supplies shared turn history.
+    # General answers and focused notes use distinct instructions; AgentRouter supplies shared turn history.
     conversation = Conversation(
         llm,
         instructions=_CONVERSATION_INSTRUCTIONS,
@@ -299,10 +299,10 @@ async def run_app(
     # Only general conversation consumes the configured shared context sources.
     if config.summary_context_topics or config.incremental_context_topics:
         runtime.register("conversation-context", conversation.context_subscriber())
-    # The front end cleans destinations used on turns. These direct callbacks
+    # AgentRouter cleans routes used on turns. These direct callbacks
     # also clear participant-joined conversation and sample-owned state when a
     # participant leaves without routing through every destination.
-    # This adapter translates voice queries into typed front-end turns.
+    # This adapter translates voice queries into typed AgentRouter turns.
     conversation_example = runtime.register(
         "conversation-example",
         ConversationExampleAgent(

@@ -20,14 +20,14 @@ from xr_ai_runtime import AgentRuntime, Topic
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "agent-samples/conversation-example/worker"))
 
-from conversation_example_worker.conversation_destinations import (  # noqa: E402
+from conversation_example_worker.conversation_agents import (  # noqa: E402
     ContextualConversationAgent,
     NoteTakingAgent,
 )
 from conversation_example_worker.monitoring import (  # noqa: E402
     VisualMonitorAgent,
 )
-from conversation_example_worker.visual_destinations import (  # noqa: E402
+from conversation_example_worker.visual_agents import (  # noqa: E402
     VisualObservationAgent,
 )
 from xr_ai_conversation import (  # noqa: E402

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Adapt runtime voice queries and destination output to voice topics."""
+"""Bridge voice runtime events, routed answers, and voice output."""
 
 from __future__ import annotations
 
@@ -40,12 +40,11 @@ PARTICIPANT_JOINED_TOPIC = Topic("conversation-example.participant-joined", Voic
 
 
 class ConversationExampleAgent(Agent):
-    """Bridge voice runtime topics to the shared conversation front end.
+    """Bridge subscribed voice events to AgentRouter and attributed voice output.
 
     This sample adapter owns its streaming response tasks. The injected
-    ``AgentRouter`` owns route selection, destination work, and focus;
-    this class converts accepted voice queries to turns and attributed output
-    back into ``VoiceOutput`` messages.
+    ``AgentRouter`` owns route selection, destination work, and focus. This
+    class converts voice queries to turns and routed output to ``VoiceOutput``.
     """
 
     def __init__(
@@ -63,10 +62,11 @@ class ConversationExampleAgent(Agent):
         self._conversations = conversations
         self._participant_left_handlers = participant_left_handlers
         self._frames = frames
-        # The adapter owns response tasks; the front end owns its route tasks.
+        # The adapter owns response tasks; the router owns its route tasks.
         self._response_tasks: dict[str, asyncio.Task[None]] = {}
         self._participants: set[str] = set()
 
+    # Runtime topic callbacks define the adapter's subscribed interface.
     @subscribe(USER_QUERY_TOPIC)
     async def answer_user(self, request: UserQuery, ctx: RuntimeContext) -> None:
         """Supersede and start one participant's streamed response."""
@@ -94,7 +94,7 @@ class ConversationExampleAgent(Agent):
     ) -> None:
         """Release participant state owned across the sample adapter.
 
-        The front end cleans destinations it used for turns. The explicit
+        The router cleans destinations it used for turns. The explicit
         handlers and conversation tuple also clean join-activated resources for
         participants who have not used a route. Cleanup can therefore reach a
         used destination twice; its departure hooks are idempotent.
@@ -158,6 +158,24 @@ class ConversationExampleAgent(Agent):
             return
         await self._cancel_response(participant_id)
 
+    async def stop(self) -> None:
+        """Cancel turns and release participant history owned by this agent."""
+
+        await self._cancel_responses()
+        await self._router.stop()
+        participants = tuple(self._participants)
+        self._participants.clear()
+        # Shutdown cleans each resource across participants concurrently and
+        # stops at the first failing cleanup stage.
+        for handler in self._participant_left_handlers:
+            await asyncio.gather(*(handler(pid) for pid in participants))
+        for conversation in self._conversations:
+            await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
+        if self._frames is not None:
+            for participant_id in participants:
+                self._frames.release(participant_id)
+
+    # Response work is detached from topic delivery and remains owned here.
     async def _stream(self, request: UserQuery, ctx: RuntimeContext) -> None:
         response_id = ctx.metadata.message_id or ctx.metadata.correlation_id
         participant_id = ctx.metadata.participant_id
@@ -261,23 +279,6 @@ class ConversationExampleAgent(Agent):
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def stop(self) -> None:
-        """Cancel turns and release participant history owned by this agent."""
-
-        await self._cancel_responses()
-        await self._router.stop()
-        participants = tuple(self._participants)
-        self._participants.clear()
-        # Shutdown cleans each resource across participants concurrently and
-        # stops at the first failing cleanup stage.
-        for handler in self._participant_left_handlers:
-            await asyncio.gather(*(handler(pid) for pid in participants))
-        for conversation in self._conversations:
-            await asyncio.gather(*(conversation.participant_left(pid) for pid in participants))
-        if self._frames is not None:
-            for participant_id in participants:
-                self._frames.release(participant_id)
 
     def _discard_response(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._response_tasks.get(participant_id) is task:

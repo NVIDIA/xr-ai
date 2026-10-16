@@ -16,7 +16,7 @@ continuously records a bounded window of timestamped visual observations and
 publishes its text summary to configured conversation context. Conversation
 destinations use the reusable
 `xr_ai_conversation.Conversation` component for answer/context behavior. The
-sample composes it with `xr_ai_routing` contracts and front-end routing, then
+sample composes it with `xr_ai_routing.AgentRouter`, then
 streams through the same voice output path to Pocket TTS and the `vlm.response`
 data topic. Refer to the {doc}`quickstart
 </getting_started/quickstart>` for client setup. The sample README contains the
@@ -25,8 +25,8 @@ details.
 
 ## Runtime boundary
 
-The routing front end is already separate from `VoiceAgent`. The front end
-accepts typed turns and a source-tagged text callback; it does not subscribe to
+`AgentRouter` is separate from `VoiceAgent`. It accepts typed turns and a
+source-tagged text callback; it does not subscribe to
 voice topics. `VoiceAgent` owns the voice session and publishes runtime events.
 The sample's `ConversationExampleAgent` is the adapter between them:
 
@@ -69,15 +69,15 @@ and cleanup. It publishes accepted speech and typed text as a participant-scoped
 `xr_ai_routing.AgentRouter`. Clef selects general conversation,
 direct visual observation, background monitoring, or foreground note-taking
 from routing aids and the current request/history. Acknowledgments are optional
-front-end output after a destination accepts; clarification can come from the
-front end or a destination's admission. Admission stays with each destination:
+router output after a destination accepts; clarification can come from the
+router or a route agent's admission. Admission stays with each route agent:
 general conversation
 uses `Conversation.admit()`, direct observation accepts its current-frame
 requests, and monitoring and note-taking use their own typed control decisions.
 A decline produces no spoken output and gives the
-front end one bounded reroute. A selected destination can ask a
+router one bounded reroute. A selected destination can ask a
 task-specific question through its normal answer path; unresolved routing or
-exhausted declines use the front end's clarification. General conversation
+exhausted declines use the router's clarification. General conversation
 answers text questions across subjects and has no frame or VLM tools. Direct
 observation sends the fresh image and current user question only to Cosmos; it
 does not include completed conversation history in that request. The
@@ -91,7 +91,7 @@ direct observation. The monitor destination handles start, retarget, stop,
 status, and handoff controls only and does not answer recorded-content questions.
 Retarget replaces the active task and rolling window; handoff declines so another
 destination can answer the same request. It does not take
-front-end focus. A distinct note-taking destination acquires focus
+router focus. A distinct note-taking destination acquires focus
 on request. It stores user-authored notes verbatim, supports readback, and keeps
 focus through topic changes until a semantic finish or handoff. Finishing notes
 consumes that request and releases focus; an explicit handoff releases focus and
@@ -118,7 +118,7 @@ is active; it does not imply that ordinary queries need always-on video.
 
 A newer participant turn cancels superseded routing, answer, and vision work and
 interrupts its voice response. Participant departure releases cached frames,
-conversation destination state, front-end history, and source-context
+conversation destination state, AgentRouter history, and source-context
 tasks. This is the reference composition for streamed conversation and
 current-view visual questions.
 
@@ -150,12 +150,12 @@ The worker package is under
 | File | Responsibility |
 |---|---|
 | `__main__.py` | Parses launcher arguments and starts the worker |
-| `app.py` | Composition root for `VoiceAgent`, `ConversationExampleAgent`, the front end, destinations, services, and readiness |
-| `agent.py` | Adapts runtime user queries and lifecycle events to the front end and publishes attributed voice output |
+| `app.py` | Composition root for `VoiceAgent`, `ConversationExampleAgent`, `AgentRouter`, route agents, services, and readiness |
+| `agent.py` | Adapts subscribed voice events to `AgentRouter` and publishes attributed voice output |
 | `config.py` | Resolves worker, model, voice-gate, and prompt settings |
-| `conversation_destinations.py` | Adds bounded continuation cues and participant-scoped foreground note-taking to `Conversation` destinations |
+| `conversation_agents.py` | Wraps `Conversation` with the routing contract, bounded context, and the foreground note-taking role |
 | `monitoring.py` | Owns the explicitly started background monitor and rolling text window |
-| `visual_destinations.py` | Implements direct current-image observation |
+| `visual_agents.py` | Implements direct current-image observation |
 | `prompts/system.txt` | Defines the default VLM instruction |
 | `prompts/conversation.txt` | Application instructions for the conversation destination |
 | `prompts/note_taking.txt` | Instructions for the focused note-taking destination |
@@ -171,7 +171,7 @@ repository root with the `tests` project environment:
 ```bash
 uv --config-file uv.toml run --project tests pytest \
   tests/test_xr_ai_conversation.py \
-  tests/test_xr_ai_routing_front_end.py \
+  tests/test_xr_ai_routing.py \
   tests/test_conversation_example_worker.py \
   tests/test_conversation_example_visual_destinations.py \
   tests/test_conversation_example_monitoring.py \
@@ -181,7 +181,7 @@ uv --config-file uv.toml run --project tests pytest \
 
 | Behavior | Deterministic contract | Corpus/model layer |
 |---|---|---|
-| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing_front_end.py` | Raw choice, effective destination, disposition, and invoked admissions |
+| Routing, native admission, decline/reroute, default fallback, focus, cancellation | `test_xr_ai_routing.py` | Raw choice, effective destination, disposition, and invoked admissions |
 | Completed history, named context, byte budgets, compaction, acknowledgment races | `test_xr_ai_conversation.py` | Context sources and answer checks when captured |
 | Current-frame-only observation and camera/tool failures | `test_conversation_example_visual_destinations.py`, `test_conversation_example_worker.py` | Current-view tool/evidence expectations in both corpora |
 | Monitor task scope, hot sampling, retarget, failure, stop, participant isolation | `test_conversation_example_monitoring.py` | Monitor controls, active/stopped scope, route and evidence expectations |

@@ -64,7 +64,7 @@ from conversation_example_worker.app import (  # noqa: E402  # pyright: ignore[r
     _CONVERSATION_INSTRUCTIONS,
 )
 from conversation_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from conversation_example_worker.conversation_destinations import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+from conversation_example_worker.conversation_agents import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     ContextualConversationAgent,
     NoteTakingAgent,
 )

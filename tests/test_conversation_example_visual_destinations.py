@@ -20,7 +20,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _WORKER = _ROOT / "agent-samples" / "conversation-example" / "worker"
 sys.path.insert(0, str(_WORKER))
 
-from conversation_example_worker.visual_destinations import (  # noqa: E402
+from conversation_example_worker.visual_agents import (  # noqa: E402
     VisualObservationAgent,
 )
 

@@ -97,6 +97,7 @@ class VisualMonitorAgent(RoutableAgent):
         self._pending: dict[str, tuple[str, str]] = {}
         self._routing_cues: dict[str, MonitorRoutingCue] = {}
 
+    # RoutableAgent and runtime lifecycle contract for this participant-scoped monitor.
     def routing_aid(self, participant_id: str) -> RoutingAid:
         task = self._tasks.get(participant_id)
         active = task is not None and not task.done()
@@ -186,6 +187,27 @@ class VisualMonitorAgent(RoutableAgent):
             return DestinationResult("answer", text)
         return DestinationResult("answer", "")
 
+    def routing_context(self, participant_id: str) -> str | None:
+        cue = self._routing_cues.get(participant_id)
+        return cue.render() if cue is not None else None
+
+    async def release(self, participant_id: str) -> None:
+        """Keep independently requested background monitoring running on reroute."""
+
+    async def participant_left(self, participant_id: str) -> None:
+        self._instructions.pop(participant_id, None)
+        await self._cancel(participant_id)
+        self._records.pop(participant_id, None)
+        self._failures.pop(participant_id, None)
+        self._routing_cues.pop(participant_id, None)
+        self._generations.pop(participant_id, None)
+        self._pending.pop(participant_id, None)
+
+    async def stop(self) -> None:
+        for participant_id in tuple(self._tasks):
+            await self._stop_monitor(participant_id)
+
+    # Private sampling, task, and summary-state helpers.
     async def _start(self, turn: AgentTurn) -> None:
         participant_id = turn.participant_id
         generation = self._generations.get(participant_id, 0) + 1
@@ -285,10 +307,6 @@ class VisualMonitorAgent(RoutableAgent):
             ConversationContextUpdate(text=text or _NEUTRAL_WINDOW),
         )
 
-    def routing_context(self, participant_id: str) -> str | None:
-        cue = self._routing_cues.get(participant_id)
-        return cue.render() if cue is not None else None
-
     def _refresh_routing_cue(self, participant_id: str) -> None:
         records = self._records.get(participant_id, ())
         active = participant_id in self._instructions
@@ -329,9 +347,6 @@ class VisualMonitorAgent(RoutableAgent):
             return "Background monitoring is active; no observation has completed yet."
         return cue.render()
 
-    async def release(self, participant_id: str) -> None:
-        """Keep independently requested background monitoring running on reroute."""
-
     async def _stop_monitor(self, participant_id: str, *, publish: bool = True) -> None:
         self._instructions.pop(participant_id, None)
         self._generations[participant_id] = self._generations.get(participant_id, 0) + 1
@@ -340,19 +355,6 @@ class VisualMonitorAgent(RoutableAgent):
         await self._cancel(participant_id)
         if publish:
             await self._publish(participant_id)
-
-    async def participant_left(self, participant_id: str) -> None:
-        self._instructions.pop(participant_id, None)
-        await self._cancel(participant_id)
-        self._records.pop(participant_id, None)
-        self._failures.pop(participant_id, None)
-        self._routing_cues.pop(participant_id, None)
-        self._generations.pop(participant_id, None)
-        self._pending.pop(participant_id, None)
-
-    async def stop(self) -> None:
-        for participant_id in tuple(self._tasks):
-            await self._stop_monitor(participant_id)
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
