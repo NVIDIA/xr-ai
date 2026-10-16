@@ -216,7 +216,7 @@ async def run_app(
         vlm=vlm,
         system_prompt=config.system_prompt,
     )
-    # General answers and focused notes keep separate instructions and history.
+    # General answers and focused notes use distinct instructions; the front end supplies shared turn history.
     conversation = Conversation(
         llm,
         instructions=_CONVERSATION_INSTRUCTIONS,
