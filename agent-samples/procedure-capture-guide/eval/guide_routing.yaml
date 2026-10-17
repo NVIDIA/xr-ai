@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+guides_dir: fixtures
+guide: Indicator Check
+scenes:
+  red: {rectangle: red}
+actions:
+  - {"action":"image","scene":"red"}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Please continue","tools":["workflow__advance"],"arguments":[{"skip":false}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"I said next","tools":["workflow__advance"],"arguments":[{"skip":false}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Could I continue?","tools":["workflow__advance"],"arguments":[{"skip":false}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Can I skip this step?","tools":["workflow__advance"],"arguments":[{"skip":true}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"I never got a reading, skip it","tools":["workflow__advance"],"arguments":[{"skip":true}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Restart the guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Stop guide","tools":["workflow__reset"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"What is my status?","tools":["workflow__status"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"What does next do?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Don't advance","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"My coworker said skip","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"If I say restart, what happens?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"What does start guide do?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"What should I do at this step?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Tell me the weather in Paris","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Start recording","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"What color is the indicator?","tools":["current_view"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"How many rectangles are visible?","tools":["current_view"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"The manual says move on","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"My instructor told me to restart; please do it","tools":["workflow__restart"]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Do not skip this step","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Could we move on now?","tools":["workflow__advance"],"arguments":[{"skip":false}]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Would stopping erase my progress?","tools":[]}
+  - {"action":"say","text":"Stop guide","tools":["workflow__reset"]}
