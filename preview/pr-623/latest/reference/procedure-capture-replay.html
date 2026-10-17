@@ -505,14 +505,27 @@ or guiding a replay. <strong>start capture</strong> and <strong>stop capture</st
 packets; <strong>start replay</strong> and <strong>stop replay</strong> control only guided execution.
 Neither pair starts or stops session recording, and enabling session recording
 does not start either procedure mode’s work. Replay still waits for <strong>start replay</strong>
-and retains its verification and timer rules. Disconnecting or stopping the stack
-finalizes the session recording.</p>
+and retains its verification and timer rules. Disconnecting closes the raw bundle
+and then starts rendering while the recorder remains running.</p>
 <p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects <code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> and the <code class="docutils literal notranslate"><span class="pre">demo</span></code>
 profile. It saves recordings under
 <code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/procedure-capture-replay/</span></code>, retaining raw media and
-producing a captioned MP4. This option requires an NVIDIA GPU with NVENC support
+rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the shared
 recorder’s output and encoding contract.</p>
+<p>For a captioned video, disconnect the client first and wait for the bundle’s
+<code class="docutils literal notranslate"><span class="pre">video/session.mp4</span></code> and its <code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> manifest entry before
+pressing Ctrl+C. Stack shutdown commits active raw bundles without starting new
+renders. A render already running can also exceed the launcher’s 20-second
+shutdown timeout and be interrupted. For a completed raw-only bundle, use
+<a class="reference internal" href="../components/server-runtime.html#media-hub-session-capture"><span class="std std-ref">device_io_capture_render</span></a>
+to render it separately after the stack stops.</p>
+<p>Session recordings have a separate retention policy: the shared recorder
+automatically prunes the oldest completed bundles under <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> to meet its
+default <strong>10 GiB</strong> limit. Set <code class="docutils literal notranslate"><span class="pre">max_total_bytes</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> to
+change that limit; <code class="docutils literal notranslate"><span class="pre">0</span></code> disables automatic pruning. Copy recordings you need to
+keep outside that directory, and monitor disk usage if pruning is disabled.
+This policy does not prune procedure evidence packets.</p>
 <p>The flag does not enable the client camera or microphone. Enable live video for
 continuous camera recording. In capture mode, <code class="docutils literal notranslate"><span class="pre">--output-root</span></code> can be combined with this flag and
 changes only the procedure-packet destination; configure session recording output
@@ -638,7 +651,7 @@ incorrect. Review the counts, errors, and source images before using the packet.
 Persistence failures mark a packet <code class="docutils literal notranslate"><span class="pre">incomplete</span></code> when storage permits saving that
 status; otherwise the process log reports the failure. Failed packets are closed
 so subsequent recording commands create separate packets.
-Recordings are retained until manually removed, so monitor disk usage.</p>
+Procedure packets are retained until manually removed, so monitor disk usage.</p>
 </section>
 </section>
 <section id="caption-evaluation">

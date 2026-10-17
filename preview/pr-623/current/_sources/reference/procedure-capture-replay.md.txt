@@ -92,15 +92,30 @@ or guiding a replay. **start capture** and **stop capture** control only procedu
 packets; **start replay** and **stop replay** control only guided execution.
 Neither pair starts or stops session recording, and enabling session recording
 does not start either procedure mode's work. Replay still waits for **start replay**
-and retains its verification and timer rules. Disconnecting or stopping the stack
-finalizes the session recording.
+and retains its verification and timer rules. Disconnecting closes the raw bundle
+and then starts rendering while the recorder remains running.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
 `~/.local/share/xr-ai/captures/procedure-capture-replay/`, retaining raw media and
-producing a captioned MP4. This option requires an NVIDIA GPU with NVENC support
+rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
 and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
 recorder's output and encoding contract.
+
+For a captioned video, disconnect the client first and wait for the bundle's
+`video/session.mp4` and its `renderings.captioned_mp4` manifest entry before
+pressing Ctrl+C. Stack shutdown commits active raw bundles without starting new
+renders. A render already running can also exceed the launcher's 20-second
+shutdown timeout and be interrupted. For a completed raw-only bundle, use
+[device_io_capture_render](../components/server-runtime.md#media-hub-session-capture)
+to render it separately after the stack stops.
+
+Session recordings have a separate retention policy: the shared recorder
+automatically prunes the oldest completed bundles under `out_dir` to meet its
+default **10 GiB** limit. Set `max_total_bytes` in `yaml/media_capture.yaml` to
+change that limit; `0` disables automatic pruning. Copy recordings you need to
+keep outside that directory, and monitor disk usage if pruning is disabled.
+This policy does not prune procedure evidence packets.
 
 The flag does not enable the client camera or microphone. Enable live video for
 continuous camera recording. In capture mode, `--output-root` can be combined with this flag and
@@ -218,7 +233,7 @@ incorrect. Review the counts, errors, and source images before using the packet.
 Persistence failures mark a packet `incomplete` when storage permits saving that
 status; otherwise the process log reports the failure. Failed packets are closed
 so subsequent recording commands create separate packets.
-Recordings are retained until manually removed, so monitor disk usage.
+Procedure packets are retained until manually removed, so monitor disk usage.
 
 ## Caption evaluation
 
