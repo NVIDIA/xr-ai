@@ -177,8 +177,9 @@ class ReplayAgent(Agent):
             response = await self._route(query.text, participant_id)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.opt(exception=True).error("SOP query failed pid={!r}", participant_id)
+        except Exception:  # noqa: BLE001 — Loguru traceback at the foreground-task boundary.
+            # isolation boundary: fail this foreground turn, not other participants' turns.
+            logger.exception("SOP query failed pid={!r}", participant_id)
             response = "I couldn't complete that guide request. Please try again."
         runtime = self._runtime
         if not response or runtime is None or not runtime.running or participant_id not in self._connected:

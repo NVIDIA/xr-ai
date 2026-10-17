@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 import yaml
+from loguru import logger
 from PIL import Image, ImageDraw
 from procedure_capture_replay_worker.replay.agent import ReplayAgent
 from procedure_capture_replay_worker.replay.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
@@ -227,7 +228,9 @@ async def evaluate(manifest_path: Path, output: Path) -> bool:
                     raise ValueError(f"unknown action: {kind}")
                 passed &= action_passed
                 log("check", index=index, action=kind, passed=action_passed)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — Loguru traceback at the evaluation boundary.
+        # isolation boundary: report a failed evaluation without losing its artifacts.
+        logger.exception("Replay evaluation failed")
         passed = False
         log("error", error=repr(exc))
     finally:

@@ -488,7 +488,8 @@ class _Replay:
                 await self._tick(session)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001 — Loguru traceback at the observation-task boundary.
+                # isolation boundary: surface a failed observation and keep supervising this replay.
                 logger.opt(exception=True).warning("SOP observation failed pid={!r}", participant_id)
             await asyncio.sleep(_POLL_INTERVAL_S)
 
