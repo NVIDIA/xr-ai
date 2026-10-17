@@ -27,8 +27,8 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         "tea_making_sample_model_servers",
         "xr_render_demo_model_servers",
         "simple_vlm_example",
-        "procedure_capture_replay",
-        "procedure_capture_replay_model_servers",
+        "procedure_capture_guide",
+        "procedure_capture_guide_model_servers",
         "tea_making_sample",
         "xr_render_demo",
     }
@@ -51,14 +51,14 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--session-recording",),
         ("--hub-config",),
     ]
-    assert [argument.flags for argument in commands["procedure_capture_replay"].arguments] == [
+    assert [argument.flags for argument in commands["procedure_capture_guide"].arguments] == [
         ("--mode",), ("guide_name",), ("--output-root",), ("--hub-config",),
     ]
-    assert [argument.flags for argument in commands["procedure_capture_replay_model_servers"].arguments] == [
+    assert [argument.flags for argument in commands["procedure_capture_guide_model_servers"].arguments] == [
         ("--stop",), ("--gpu-profile",),
     ]
-    assert commands["procedure_capture_replay_model_servers"].project_dir == Path(
-        "agent-samples/procedure-capture-replay/model-servers"
+    assert commands["procedure_capture_guide_model_servers"].project_dir == Path(
+        "agent-samples/procedure-capture-guide/model-servers"
     )
     assert [argument.flags for argument in commands["tea_making_sample"].arguments] == [
         ("--expose-web-events",),
