@@ -13,6 +13,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
+from rag_service import __main__ as main
 from rag_service.index import _chunk_text
 from xr_ai_tools.rag import RAGTools, RetrieveRequest
 from xr_ai_tools.rpc import RPCServer
@@ -189,8 +190,6 @@ async def test_model_change_during_indexing_never_persists_or_serves_vectors(tmp
 
 
 async def test_profile_identity_is_not_replaced_by_manual_cache_key(tmp_path, monkeypatch) -> None:
-    from rag_service import __main__ as main
-
     profile = tmp_path / "models.json"
     profile.write_text("profile-v1")
     monkeypatch.setattr(main, "load_models_config", lambda _path: object())

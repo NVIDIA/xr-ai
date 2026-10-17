@@ -28,6 +28,25 @@ from _helpers_subprocess import pick_free_port
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 ROOT = Path(__file__).resolve().parents[1]
 
+# A retrieved hit must contain both values for the requested tea, not merely share
+# the document filename with a different tea's instructions.
+_TEA_INSTRUCTIONS = (
+    ("Black tea", "| Black tea | 96–100 °C / 205–212 °F | 3–5 minutes |"),
+    ("Green tea", "| Green tea | 75–82 °C / 167–180 °F | 2–3 minutes |"),
+    ("White tea", "| White tea | 77–82 °C / 170–180 °F | 2–3 minutes |"),
+    ("Oolong tea", "| Oolong tea | 85–96 °C / 185–205 °F | 3–5 minutes |"),
+    ("Pu-erh tea", "| Pu-erh tea | 96–100 °C / 205–212 °F | 4–5 minutes |"),
+    ("Herbal infusion", "| Herbal infusion | 100 °C / 212 °F | 5–7 minutes |"),
+    ("Earl Grey", "Earl Grey and breakfast black teas: 98–100 °C for 4–5 minutes."),
+    ("Breakfast black tea", "Earl Grey and breakfast black teas: 98–100 °C for 4–5 minutes."),
+    ("Jasmine green", "Jasmine green and genmaicha: 80–82 °C for 2–3 minutes."),
+    ("Genmaicha", "Jasmine green and genmaicha: 80–82 °C for 2–3 minutes."),
+    ("White peony", "White peony: about 80 °C for 3 minutes."),
+    ("Moroccan mint", "Moroccan mint or chamomile: 100 °C for 5–7 minutes."),
+    ("Chamomile", "Moroccan mint or chamomile: 100 °C for 5–7 minutes."),
+    ("Rooibos", "Rooibos: 100 °C for 5–6 minutes."),
+)
+
 
 async def test_tea_embedding_startup_and_retrieval(tmp_path):
     if shutil.which("docker") is None:
@@ -75,6 +94,14 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
                 batch_size=rag["batch_size"], min_score=rag["min_score"],
             )
             assert index.vectors.shape[1] == 2048
+            for tea, instructions in _TEA_INSTRUCTIONS:
+                query = f"{tea} water temperature steep time"
+                matches = await index.retrieve(query, top_k=2)
+                assert any(
+                    match["source"] == "tea-brewing.md" and instructions in match["text"]
+                    for match in matches
+                ), f"Missing brewing instructions for {tea!r}: {matches}"
+                print(f"Tea {tea!r}: instructions found in top 2; top_score={matches[0]['score']:.6f}")
             for query, source in (
                 ("How long should green tea steep and how hot should its water be?", "tea-brewing.md"),
                 ("How do I safely handle hot water and avoid steam burns?", "hot-water-safety.md"),

@@ -243,6 +243,31 @@ def test_embedding_default_cache_tracks_service_depth(
     assert captured["model"] == "nvidia/Nemotron-3-Embed-1B-BF16"
 
 
+@pytest.mark.parametrize("backend", ["pip", "docker"])
+@pytest.mark.parametrize("attention_backend", [None, "TRITON_ATTN", "FLASH_ATTN"])
+def test_embedding_only_forwards_configured_attention_backend(
+    monkeypatch: pytest.MonkeyPatch, backend: str, attention_backend: str | None,
+) -> None:
+    captured: dict[str, object] = {}
+    config = {"vllm_backend": backend}
+    if attention_backend is not None:
+        config["attention_backend"] = attention_backend
+    monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_embedding, "load_config", lambda: (config, Path("."), None))
+    monkeypatch.setattr(_embedding, "resolve_model_cache", lambda *_a, **_k: Path("models"))
+    monkeypatch.setattr(_embedding, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_embedding, "serve", lambda **kwargs: captured.update(kwargs))
+
+    _embedding.run()
+
+    assert captured["backend"] == backend
+    args = captured["extra_serve_args"]
+    if attention_backend is None:
+        assert "--attention-backend" not in args
+    else:
+        assert args[args.index("--attention-backend") + 1] == attention_backend
+
+
 @pytest.mark.parametrize("profile", ["spark", "96G_blackwell", "dual_48G_ada", "standalone"])
 def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
     monkeypatch: pytest.MonkeyPatch, profile: str,
@@ -274,6 +299,10 @@ def test_embedding_profiles_launch_nemotron3_with_existing_endpoint(
     assert captured["spark_uma"] is (profile == "spark")
     args = captured["extra_serve_args"]
     assert args[args.index("--served-model-name") + 1] == "embed"
+    if profile == "spark":
+        assert args[args.index("--attention-backend") + 1] == "TRITON_ATTN"
+    else:
+        assert "--attention-backend" not in args
 
 
 def test_embedding_profiles_retain_fractional_memory_budget() -> None:

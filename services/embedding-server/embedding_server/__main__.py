@@ -24,6 +24,8 @@ Config keys
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.20).
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
+    attention_backend:       str    Optional vLLM --attention-backend; omitted
+                                    by default so vLLM selects the backend.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.09-py3).
@@ -75,6 +77,7 @@ def run() -> None:
     enforce_eager = parse_config_bool(
         cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
     )
+    attention_backend = cfg.get("attention_backend")
     backend      = cfg.get("vllm_backend",         "pip")
     image        = cfg.get("vllm_image",           DEFAULT_IMAGE)
     spark_uma    = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
@@ -92,6 +95,8 @@ def run() -> None:
     ]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
+    if attention_backend is not None:
+        extra_serve_args += ["--attention-backend", attention_backend]
 
     serve(
         backend=backend,
