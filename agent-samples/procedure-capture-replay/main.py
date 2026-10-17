@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Capture a demonstrated procedure as images, captions, and spoken narration.
+"""Capture a demonstrated procedure or guide a participant through approved steps.
 
-This sample saves evidence for creating a reusable procedure guide. Guided
-replay is planned but is not implemented in this sample yet.
+Capture saves evidence for creating a reusable procedure guide. Replay loads an
+approved local guide and verifies progress while providing spoken guidance.
 
 This is the user-facing process-stack entry point. The worker's __main__ module
 runs inside its own process and launches procedure_capture_replay_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
-After connecting, say "start capture" to begin and "stop capture" to finish.
-Use --output-root to choose where evidence packets are saved.
+Choose --mode capture or --mode replay. In capture mode, say "start capture"
+to begin and "stop capture" to finish; --output-root selects the packet directory.
+Replay requires a guide name after --mode replay. Say "start replay" to begin
+that guide and "stop replay" to cancel; connecting alone does not start it.
 """
 
 from __future__ import annotations
@@ -38,7 +40,11 @@ PROCESSES = _build_processes()
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Record task demonstrations with spoken start capture and stop capture commands."
+        description="Capture narrated procedures or replay an approved guide with spoken guidance."
+    )
+    parser.add_argument("--mode", choices=("capture", "replay"), default="capture", help="worker capability to run")
+    parser.add_argument(
+        "guide_name", nargs="?", metavar="GUIDE_NAME", help="exact approved guide name or ID (replay only)",
     )
     parser.add_argument(
         "--output-root", type=Path, metavar="PATH",
@@ -48,9 +54,16 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def run(argv: Sequence[str] | None = None) -> None:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.mode == "capture" and args.guide_name is not None:
+        parser.error("GUIDE_NAME requires --mode replay")
+    if args.mode == "replay" and args.output_root is not None:
+        parser.error("--output-root requires --mode capture")
+    if args.mode == "replay" and (args.guide_name is None or not args.guide_name.strip()):
+        parser.error("--mode replay requires a non-empty GUIDE_NAME")
     setup_logging("orchestrator", namespace="procedure-capture-replay")
-    if args.output_root is None:
+    if args.mode == "capture" and args.output_root is None:
         run_stack(PROCESSES, _BASE)
         return
     # Pass the override without rewriting the user's YAML or relocating its
@@ -59,7 +72,9 @@ def run(argv: Sequence[str] | None = None) -> None:
         request = Path(directory) / "worker.json"
         request.write_text(json.dumps({
             "worker_config": str(_BASE / "yaml/worker.yaml"),
-            "output_root": str(args.output_root.expanduser().resolve()),
+            "mode": args.mode,
+            "guide_name": args.guide_name,
+            "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")
         run_stack(_build_processes(worker_config=request), _BASE)
 
