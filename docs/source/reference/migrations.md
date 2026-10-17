@@ -5,6 +5,60 @@
 
 # Release migration
 
+## Nemotron 3 embedding model
+
+The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
+consumer profile selects `nvidia/nemotron-3-embed-1b`. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name `embed`.
+
+1. Stop the agent and its persistent embedding server **before updating**.
+   For the tea sample, run from the repository root:
+
+   ```bash
+   uv run --project agent-samples/tea-making-sample/model-servers tea_making_sample_model_servers --stop
+   ```
+
+   For a standalone deployment, stop the embedding process or container through
+   the supervisor that started it. Check that its listener on port 8109 has
+   stopped. Stopping only RAG or the embedding launcher does not stop persistent
+   weights; the pip launcher reuses a healthy listener without comparing models.
+2. Update the checkout and change `embedding_dim: 768` to `embedding_dim: 2048`
+   in copied tea **and standalone** `rag_service.yaml` files. Restart the
+   embedding server before RAG. Verify the `embed` entry's `root` in
+   `/v1/models` identifies Nemotron 3 Embed, not the previous model.
+3. Restart the agent. RAG rebuilds legacy caches automatically. Its new cache
+   key includes the server-reported backing model, model-profile hash,
+   indexing settings, document content, and optional `cache_key`. The manual
+   key no longer replaces the profile hash. If backing-model metadata is
+   unavailable, RAG rebuilds without reading or writing a persistent cache.
+
+Old 768-dimensional `.npz` caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.
+
+Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. A served ID alone is not a backing-model identity: endpoints
+without a `root` field rebuild on each RAG startup. If weights change under an
+unchanged `root`, bump `cache_key` and restart RAG. Do not change models while
+RAG is running; its in-memory document vectors must match query embeddings.
+If model identity changes or becomes unavailable during indexing, startup fails
+without saving or serving those vectors. Stabilize the endpoint and restart RAG.
+
+(embedding-service-identity-migration)=
+## Embedding SDK identity contract
+
+`EmbeddingService` now requires `async model_identity() -> str | None`.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or `None` when identity cannot be established; do not return a served
+alias that can silently switch weights. The built-in OpenAI-compatible client
+implements this lookup through `/v1/models`.
+
+Returning `None` permits embedding and retrieval, but disables persistent RAG
+cache reads and writes. Setting `cache_key` does not override this safeguard.
+Existing adapters without the method fail `isinstance(..., EmbeddingService)`
+checks and cannot be passed to `DenseIndex.build()` until updated.
+
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for

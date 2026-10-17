@@ -29,7 +29,7 @@ recorded video, and document retrieval.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
-| `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -634,18 +634,28 @@ cleanup.
   `x-audio-sample-rate` and `x-audio-channels` headers describe the signed
   16-bit interleaved samples. Streaming with another response format returns
   HTTP 400.
-- **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
-  `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
-  truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
-  configuration reserves 20% of a GPU and uses Docker.
+- **embedding-server** serves `nvidia/Nemotron-3-Embed-1B-BF16` through
+  `/v1/embeddings` under the served name `embed`. It emits 2048-dimensional
+  vectors. Retrieval inputs use `query: ` for queries and `passage: ` for
+  documents, as specified in the
+  [model card](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16).
+  The standalone configuration reserves 20% of a GPU and uses Docker;
+  the tea sample applies its own memory budget and indexes all 2048 dimensions.
+  Its Spark profile selects Triton attention for GB10 compatibility; other
+  profiles leave attention-backend selection to vLLM.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at
   startup, caches its index, and returns matches above `min_score`. Start the
   embedding service first, RAG second, and the consuming worker last. The cache
-  includes document content, indexing settings, and the model profile; change
-  `cache_key` when a remote endpoint changes its backing model without changing
-  that profile.
+  includes document content, indexing settings, the model-profile hash, the
+  server-reported backing model (`root` from the matching `/v1/models` entry),
+  and optional `cache_key`. A served alias such as `embed` does not identify
+  weights. Without backing-model metadata, RAG disables persistent caching and
+  embeds documents on each startup. Change `cache_key` if weights change under
+  the same reported identity; this key supplements, not replaces, the profile
+  hash. Restart RAG whenever the embedding model changes. Refer to
+  {doc}`/reference/migrations` for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's

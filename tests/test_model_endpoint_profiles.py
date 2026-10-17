@@ -12,6 +12,7 @@ from runpy import run_path
 
 import httpx
 import pytest
+import yaml
 from xr_ai_models import load_models_config, load_models_config_from_dict, make_embedding
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,11 +32,11 @@ def _profile(extras):
 def endpoint(monkeypatch):
     real_client = httpx.AsyncClient
     calls = []
-    state = {"status": 200}
+    state = {"status": 200, "authorization": "Bearer inference-token"}
     monkeypatch.setenv("NIM_TEST_KEY", "inference-token")
 
     def handle(request):
-        assert request.headers["Authorization"] == "Bearer inference-token"
+        assert request.headers.get("Authorization") == state["authorization"]
         if request.url.path == "/v1/health/ready":
             return httpx.Response(state["status"], json={"status": "ready"})
         assert request.url.path == "/v1/embeddings"
@@ -134,12 +135,36 @@ def test_endpoint_profile_and_sample_environments_use_existing_contract():
     assert all(spec.deployment.ownership == "external" for spec in config.entries.values())
     assert config.required_credentials == ("NIM_ENDPOINT_API_KEY",)
     assert config.embedding("embedding").kind == "openai_compat"
+    assert config.embedding("embedding").model_name == "nvidia/nemotron-3-embed-1b"
     assert config.embedding("embedding").default_extras == {"input_type": "passage"}
     assert config.stt("stt").kind == config.tts("tts").kind == "riva_grpc"
     for path in ROOT.glob("agent-samples/*/worker/pyproject.toml"):
         project = tomllib.loads(path.read_text())["project"]
         if any(dep.startswith("xr-ai-models") for dep in project["dependencies"]):
             assert "xr-ai-models[riva]" in project["dependencies"]
+
+
+@pytest.mark.parametrize("native_nim", [False, True])
+async def test_tea_embedding_profiles_use_native_dimensions_and_retrieval_inputs(endpoint, monkeypatch, native_nim):
+    sample = ROOT / "agent-samples/tea-making-sample/yaml"
+    rag = yaml.safe_load((sample / "rag_service.yaml").read_text())
+    assert rag["embedding_dim"] == 2048
+    profile = ROOT / "deployment/nim/models.yaml" if native_nim else sample / rag["models_config"]
+    calls, state = endpoint
+    monkeypatch.setenv("NIM_ENDPOINT_API_KEY", "inference-token")
+    state["authorization"] = "Bearer inference-token" if native_nim else None
+    async with make_embedding(load_models_config(profile), rag["embedding_role"]) as client:
+        await client.embed(["query: How long should tea steep?", "passage: Steep tea for three minutes."])
+    if native_nim:
+        assert calls == [
+            {"model": "nvidia/nemotron-3-embed-1b", "input": ["How long should tea steep?"], "input_type": "query"},
+            {"model": "nvidia/nemotron-3-embed-1b", "input": ["Steep tea for three minutes."], "input_type": "passage"},
+        ]
+    else:
+        assert calls == [{
+            "model": "embed",
+            "input": ["query: How long should tea steep?", "passage: Steep tea for three minutes."],
+        }]
 
 
 @pytest.mark.parametrize("names, message", [
@@ -315,8 +340,6 @@ async def test_native_recognition_releases_rpc_before_returning(action):
 
 
 async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(monkeypatch, tmp_path):
-    import yaml
-
     real_client = httpx.AsyncClient
     calls = []
     source = yaml.safe_load((ROOT / "deployment/nim/models.yaml").read_text())

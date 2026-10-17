@@ -520,6 +520,16 @@ class _StreamingTTSService(TTSService, Protocol):
 class EmbeddingService(Protocol):
     """Structural interface for text-embedding services."""
 
+    async def model_identity(self) -> str | None:
+        """Return the server-reported backing model, or ``None`` if unknown.
+
+        Consumers must not reuse persistent embeddings when identity is
+        unknown. This is not a weight checksum: deployments that replace
+        weights under the same identity need an explicit cache revision.
+        """
+
+        pass
+
     async def embed(
         self,
         texts: Sequence[str],

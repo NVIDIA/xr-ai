@@ -61,7 +61,8 @@ models:
   embedding:
     adapter:
       preset: nemotron_embedding
-      model_name: nvidia/llama-nemotron-embed-1b-v2
+      model_name: nvidia/nemotron-3-embed-1b
+      # Native output is 2048 dimensions; this NIM does not support reduced dimensions.
       # Existing request defaults select the asymmetric embedding dialect.
       # The SDK strips query:/passage: labels and groups by input_type.
       # Unprefixed inputs are passages; local profiles omit these extras.

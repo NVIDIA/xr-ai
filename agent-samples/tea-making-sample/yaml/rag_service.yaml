@@ -8,6 +8,7 @@ embedding_role: embedding
 cache_dir: ../../../models/tea-making-rag-cache
 chunk_size: 700
 overlap: 100
-embedding_dim: 768
+# Native output dimension of both Nemotron 3 Embed 1B BF16 and its NIM.
+embedding_dim: 2048
 batch_size: 16
 min_score: 0.3

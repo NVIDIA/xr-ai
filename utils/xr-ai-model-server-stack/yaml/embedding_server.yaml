@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Shared defaults for sample convenience stacks. Standalone defaults live in services/.
-model: nvidia/llama-nemotron-embed-1b-v2
+model: nvidia/Nemotron-3-Embed-1B-BF16
 host: 0.0.0.0
 port: 8109
 served_model_name: embed

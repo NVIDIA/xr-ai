@@ -5,7 +5,7 @@
 # OpenAI-compatible embeddings API at http://localhost:8109/v1  (served-model-name: "embed")
 # Endpoint: POST /v1/embeddings  (input text → float vector)
 
-model: nvidia/llama-nemotron-embed-1b-v2
+model: nvidia/Nemotron-3-Embed-1B-BF16
 
 host: "0.0.0.0"
 port: 8109
@@ -30,6 +30,9 @@ max_model_len:          8192
 # if this server runs on a dedicated GPU.
 gpu_memory_utilization: 0.20
 enforce_eager:          false
+# Optional vLLM attention backend; omit for automatic selection.
+# The tea sample's Spark profile selects TRITON_ATTN for GB10 compatibility.
+# attention_backend: TRITON_ATTN
 
 # vLLM runtime. If this key is omitted, the wrapper falls back to pip;
 # the checked-in configuration below selects the NGC Docker container.

@@ -115,6 +115,97 @@ async def test_embedding_batches_inputs_and_preserves_response_order() -> None:
     }
 
 
+@pytest.mark.parametrize("payload, expected", [
+    ({"data": [{"id": "other", "root": "wrong"}, {"id": "embed", "root": "weights-v2"}]}, "weights-v2"),
+    ({"data": [{"id": "embed"}]}, None),
+    ({"data": [{"id": "other", "root": "wrong"}]}, None),
+    ({"data": [{"id": "embed", "root": "a"}, {"id": "embed", "root": "b"}]}, None),
+    ({"data": [{"id": "embed", "root": " "}]}, None),
+    ({"data": [{"id": "embed", "root": 42}]}, None),
+    ({"data": [None]}, None),
+    ({"data": {}}, None),
+    ([], None),
+])
+async def test_embedding_identity_uses_matching_server_root(monkeypatch, payload, expected):
+    monkeypatch.setenv("EMBED_TEST_KEY", "test-token")
+
+    def handle(request):
+        assert request.method == "GET"
+        assert str(request.url) == "https://stub/v1/models"
+        assert request.headers["Authorization"] == "Bearer test-token"
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding(
+            "https://stub/", "embed", api_key_env="EMBED_TEST_KEY", client=client,
+        ) as embedding:
+            assert await embedding.model_identity() == expected
+        assert not client.is_closed
+
+
+@pytest.mark.parametrize("failure", ["timeout", "http", "json", "cancelled"])
+async def test_embedding_identity_lookup_failure_and_cancellation(failure):
+    def handle(request):
+        if failure == "timeout":
+            raise httpx.ReadTimeout("metadata unavailable", request=request)
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        if failure == "http":
+            return httpx.Response(404)
+        return httpx.Response(200, text="not JSON")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding("http://stub", "embed", client=client) as embedding:
+            if failure == "cancelled":
+                with pytest.raises(asyncio.CancelledError):
+                    await embedding.model_identity()
+            else:
+                assert await embedding.model_identity() is None
+
+
+async def test_embedding_identity_respects_configured_client_timeout(monkeypatch):
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        assert request.extensions["timeout"] == dict.fromkeys(("connect", "read", "write", "pool"), 0.25)
+        return httpx.Response(200, json={"data": [{"id": "embed", "root": "weights"}]})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    async with OpenAICompatEmbedding("http://stub", "embed", timeout=0.25) as embedding:
+        assert await embedding.model_identity() == "weights"
+
+
+@pytest.mark.parametrize("status, payload, reason", [
+    (401, {}, "HTTP 401"),
+    (200, "secret-response-body", "invalid JSON"),
+    (200, {}, "missing or invalid model list"),
+    (200, {"data": []}, "0 matching model entries"),
+    (200, {"data": [{"id": "embed"}, {"id": "embed"}]}, "2 matching model entries"),
+    (200, {"data": [{"id": "embed"}]}, "matching model has no valid root"),
+])
+async def test_embedding_identity_debug_logs_reason_without_response_body(status, payload, reason):
+    from loguru import logger
+
+    def handle(_request):
+        if isinstance(payload, str):
+            return httpx.Response(status, text=payload)
+        return httpx.Response(status, json=payload)
+
+    messages = []
+    sink = logger.add(messages.append, level="DEBUG")
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            async with OpenAICompatEmbedding("http://stub", "embed", client=client) as embedding:
+                assert await embedding.model_identity() is None
+        logged = "".join(messages)
+        assert reason in logged
+        assert "secret-response-body" not in logged
+    finally:
+        logger.remove(sink)
+
+
 # ── LLM: chat ─────────────────────────────────────────────────────────────
 
 

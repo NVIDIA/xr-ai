@@ -8,8 +8,11 @@ embedding_role: embedding
 cache_dir: .rag-cache
 chunk_size: 900
 overlap: 120
-embedding_dim: 768
+# Native output dimension of Nemotron 3 Embed 1B.
+embedding_dim: 2048
 batch_size: 32
 min_score: 0.3
-# Set this when an endpoint changes its backing model without a profile edit.
+# Bump this if weights change without changing the server-reported model identity.
+# This supplements (never replaces) the model identity and profile hash.
+# It does not enable persistent caching when model identity is unavailable.
 # cache_key: embedding-model-revision
