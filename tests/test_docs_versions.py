@@ -215,6 +215,40 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
         assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme
 
 
+def test_procedure_guide_redirect_preserves_version_query_and_fragment() -> None:
+    source = _ROOT / "docs/source"
+    redirect = source / "_redirects/reference/procedure-capture-replay.html"
+    assert 'html_extra_path = ["_redirects"]' in _CONF.read_text()
+    html = redirect.read_text()
+    assert '<meta http-equiv="refresh" content="0; url=procedure-capture-guide.html">' in html
+    assert '<a href="procedure-capture-guide.html">' in html
+    script = re.search(r"<script>(.*?)</script>", html, re.DOTALL).group(1)
+    subprocess.run(
+        ["node", "-e", """
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+for (const version of ['latest', 'main', 'v0.1.0']) {
+    for (const suffix of ['', '#replay-an-approved-guide', '?source=bookmark#local-model-replay-evaluation']) {
+        const original = new URL(`https://nvidia.github.io/xr-ai/${version}/reference/procedure-capture-replay.html${suffix}`);
+        let destination;
+        vm.runInNewContext(process.argv[1], { window: { location: {
+            search: original.search, hash: original.hash,
+            replace: value => { destination = new URL(value, original).href; },
+        } } });
+        assert.equal(destination, `https://nvidia.github.io/xr-ai/${version}/reference/procedure-capture-guide.html${suffix}`);
+    }
+}
+""", script],
+        check=True,
+    )
+    guide = (source / "reference/procedure-capture-guide.md").read_text()
+    for anchor in (
+        "procedure-capture-and-replay", "replay-an-approved-guide",
+        "local-model-replay-evaluation", "replay-regression-tests",
+    ):
+        assert f"({anchor})=" in guide
+
+
 def test_latest_docs_link_checker_validates_pages_and_fragments(tmp_path) -> None:
     check_links = runpy.run_path(str(_LATEST_LINK_CHECKER))["check_latest_docs_links"]
     repository = tmp_path.resolve() / "repository"
