@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Session recording covers the whole participant connection, independently of
-# spoken start capture and stop capture commands. Other settings use shared defaults.
+# spoken capture or replay commands in either mode. Other settings use shared defaults.
 out_dir: ~/.local/share/xr-ai/captures/procedure-capture-replay
 profile: demo
 session_mode: participant
