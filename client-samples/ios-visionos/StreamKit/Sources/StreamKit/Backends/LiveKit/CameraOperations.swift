@@ -24,8 +24,7 @@ final class CameraOperations {
     }
 
     func stop(_ cleanup: @escaping @MainActor @Sendable () async throws -> Void) async throws {
-        // This applies on EVERY admission, even when another stop is pending:
-        // an intervening queued start must not outlive the later stop.
+        // Cancel every earlier start, including starts queued behind a pending stop.
         for task in starts.values { task.cancel() }
         stops += 1
         let task = enqueue(cleanup)
@@ -36,6 +35,7 @@ final class CameraOperations {
     private func enqueue(_ operation: @escaping @MainActor @Sendable () async throws -> Void) -> Task<Void, any Error> {
         let previous = tail
         let task = Task {
+            // ignored: the preceding caller owns its failure; later transitions must still drain it.
             _ = await previous?.result
             try Task.checkCancellation()
             try await operation()

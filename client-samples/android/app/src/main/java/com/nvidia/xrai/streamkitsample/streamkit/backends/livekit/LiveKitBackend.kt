@@ -145,7 +145,9 @@ internal class LiveKitBackend(
         @Volatile var connectEntered = false
     }
     @Volatile private var roomLifetime: RoomLifetime? = null
-    private var failedRoomClose: Pair<RoomLifetime, Throwable>? = null
+    private data class RoomCloseFailure(val lifetime: RoomLifetime, val error: Throwable)
+    private enum class TeardownPurpose { DISCONNECT, RECONNECT }
+    private var failedRoomClose: RoomCloseFailure? = null
 
     // ── Injected video state (external frame source) ───────────────────────────
 
@@ -171,7 +173,7 @@ internal class LiveKitBackend(
     // ── StreamingBackend: connect / disconnect ─────────────────────────────────
 
     override suspend fun connect(sessionConfig: SessionConfig) {
-        tearDown(reconnecting = true)
+        tearDown(TeardownPurpose.RECONNECT)
         val generation = connectionGeneration.get()
 
         if (config.host.isBlank()) throw StreamError.InvalidHost(config.host)
@@ -275,7 +277,7 @@ internal class LiveKitBackend(
     }
 
     override suspend fun disconnect() {
-        tearDown()
+        tearDown(TeardownPurpose.DISCONNECT)
     }
 
     // ── StreamingBackend: audio ────────────────────────────────────────────────
@@ -359,10 +361,9 @@ internal class LiveKitBackend(
         // Full reconnect temporarily moves publications into an SDK-private
         // republish pool. Registry absence cannot authorize disposing its tracks.
         if (room != null && (!isConnected || room?.state != Room.State.CONNECTED)) throw StreamError.NotConnected
-        val track = ownedCameraTrack
-        if (track != null) {
-            val allocation = ownedCamera!!
-            releaseFailedCamera(allocation.participant, track)
+        val allocation = ownedCamera
+        if (allocation != null) {
+            releaseOwnedCamera(allocation.track)
             injectedVideoTrack = null
             injectedCapturer = null
             return
@@ -370,7 +371,7 @@ internal class LiveKitBackend(
         room?.localParticipant?.setCameraEnabled(false)
     }
 
-    private fun releaseFailedCamera(participant: LocalParticipant, track: LocalVideoTrack) {
+    private fun releaseOwnedCamera(track: LocalVideoTrack) {
         val allocation = ownedCamera?.takeIf { it.track === track } ?: return
         val lp = allocation.participant
         allocation.disposalFailure?.let { throw it }
@@ -461,10 +462,10 @@ internal class LiveKitBackend(
             // transaction, before any suspension. First injection preempts the
             // device camera; failed publication leaves no camera published.
             ownedCameraTrack?.let { track ->
-                if (lp.getTrackPublication(Track.Source.CAMERA)?.track !== track) releaseFailedCamera(lp, track)
+                if (lp.getTrackPublication(Track.Source.CAMERA)?.track !== track) releaseOwnedCamera(track)
             }
             lp.getTrackPublication(Track.Source.CAMERA)?.track?.let {
-                if (it === ownedCameraTrack) releaseFailedCamera(lp, it as LocalVideoTrack)
+                if (it === ownedCameraTrack) releaseOwnedCamera(it as LocalVideoTrack)
                 else lp.unpublishTrack(it)
             }
             val newCapturer = InjectedVideoCapturer()
@@ -496,7 +497,7 @@ internal class LiveKitBackend(
                 injectedCapturer = null
                 // Publish can fail/cancel before the SDK owns the track. Its
                 // unpublish operation is a no-op for an unpublished track.
-                releaseFailedCamera(lp, track)
+                releaseOwnedCamera(track)
                 throw error
             }
         }
@@ -682,9 +683,10 @@ internal class LiveKitBackend(
             if (room !== eventRoom) {
                 withContext(NonCancellable) {
                     cameraMutex.withLock {
-                        if (failedRoomClose?.first?.room === eventRoom) failedRoomClose = null
+                        if (failedRoomClose?.lifetime?.room === eventRoom) failedRoomClose = null
                         ownedCamera?.takeIf { it.room === eventRoom }?.let {
-                            try { releaseFailedCamera(it.participant, it.track) }
+                            // isolation boundary: retain the failed owner; this observer has no caller to report to.
+                            try { releaseOwnedCamera(it.track) }
                             catch (error: Throwable) { LKLog.e(error) { "Retained camera cleanup failed" } }
                         }
                     }
@@ -714,7 +716,8 @@ internal class LiveKitBackend(
                     cameraMutex.withLock {
                         val allocation = ownedCamera
                         if (allocation?.participant === eventRoom.localParticipant) {
-                            try { releaseFailedCamera(allocation.participant, allocation.track) }
+                            // isolation boundary: terminal notification must survive retained camera cleanup failure.
+                            try { releaseOwnedCamera(allocation.track) }
                             catch (error: Throwable) { LKLog.e(error) { "Camera cleanup after terminal disconnect failed" } }
                             if (injectedVideoTrack === allocation.track) {
                                 injectedVideoTrack = null
@@ -834,9 +837,9 @@ internal class LiveKitBackend(
 
     // ── Teardown ──────────────────────────────────────────────────────────────
 
-    private suspend fun tearDown(reconnecting: Boolean = false) {
+    private suspend fun tearDown(purpose: TeardownPurpose) {
         val generation = connectionGeneration.incrementAndGet()
-        val closingLifetime = roomLifetime ?: failedRoomClose?.first
+        val closingLifetime = roomLifetime ?: failedRoomClose?.lifetime
         val closingRoom = closingLifetime?.room ?: room
         val oldScope = connectionScope
         isConnected = false
@@ -856,12 +859,12 @@ internal class LiveKitBackend(
                 // Close first: SDK cleanup releases current publications and
                 // its reconnect pool. Historical publication is not ownership.
                 try {
-                    val previousFailure = failedRoomClose?.takeIf { it.first.room === closingRoom }
-                    if (previousFailure != null && closingRoom?.state == Room.State.DISCONNECTED) throw previousFailure.second
+                    val previousFailure = failedRoomClose?.takeIf { it.lifetime.room === closingRoom }
+                    if (previousFailure != null && closingRoom?.state == Room.State.DISCONNECTED) throw previousFailure.error
                     closingRoom?.disconnect()
-                    if (failedRoomClose?.first === closingLifetime) failedRoomClose = null
+                    if (failedRoomClose?.lifetime === closingLifetime) failedRoomClose = null
                 } catch (error: Throwable) {
-                    if (closingLifetime != null) failedRoomClose = closingLifetime to error
+                    if (closingLifetime != null) failedRoomClose = RoomCloseFailure(closingLifetime, error)
                     if (failure == null) failure = error else failure!!.addSuppressed(error)
                 } finally {
                     if (room === closingRoom || room == null) cameraPublishBaseline = null
@@ -873,7 +876,7 @@ internal class LiveKitBackend(
             val retained = allocation
             cameraMutex.withLock {
                 if (retained != null) {
-                    try { releaseFailedCamera(retained.participant, retained.track) }
+                    try { releaseOwnedCamera(retained.track) }
                     catch (error: Throwable) { cameraFailure = error }
                     if (injectedVideoTrack === retained.track) {
                         injectedVideoTrack = null
@@ -891,7 +894,8 @@ internal class LiveKitBackend(
         }
         failure?.let { throw it }
         cameraFailure?.let {
-            if (reconnecting) LKLog.e(it) { "Camera remains unavailable; reconnecting transport independently" }
+            // isolation boundary: reconnect admits transport, not replacement camera ownership.
+            if (purpose == TeardownPurpose.RECONNECT) LKLog.e(it) { "Camera remains unavailable; reconnecting transport independently" }
             else throw it
         }
     }

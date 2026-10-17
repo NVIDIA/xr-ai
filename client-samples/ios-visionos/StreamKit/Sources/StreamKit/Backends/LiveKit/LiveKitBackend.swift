@@ -150,7 +150,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     public func connect(config sessionConfig: SessionConfig) async throws {
         self.sessionConfig = sessionConfig
 
-        try await tearDown(reconnecting: true)
+        try await tearDown(.reconnect)
         let generation = connectionGeneration
 
         guard !config.host.isEmpty else {
@@ -216,7 +216,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     @MainActor
     public func disconnect() async throws {
-        try await tearDown()
+        try await tearDown(.disconnect)
     }
 
     // MARK: - StreamingBackend: audio
@@ -452,6 +452,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             // Drain owned capture/publication before releasing its track. If
             // the task completed just before stop, take its exact publication
             // into the usual retryable cleanup fields before the caller resumes.
+            // ignored: the start caller observes failure; cleanup still drains its exact owned resources.
             if let publication = try? await pending.task.value {
                 if pending.track === bufferTrack { bufferPublication = publication }
                 else { cameraPublication = publication }
@@ -876,8 +877,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         return value
     }
 
+    private enum TeardownPurpose { case disconnect, reconnect }
+
     @MainActor
-    private func tearDown(reconnecting: Bool = false) async throws {
+    private func tearDown(_ purpose: TeardownPurpose) async throws {
         connectionGeneration &+= 1
         cameraGeneration &+= 1
         let room = room
@@ -887,10 +890,12 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         } close: { [self] in
             do { try await closeRoom(room) }
             catch {
-                // Only the camera close result is quarantined; microphone and
-                // transport failures retain their existing throwing contract.
-                guard reconnecting else { throw error }
-                mediaLog.error("Camera remains unavailable after transport close: \(error.localizedDescription, privacy: .public)")
+                switch purpose {
+                case .disconnect: throw error
+                case .reconnect:
+                    // isolation boundary: camera quarantine must not prevent transport admission.
+                    mediaLog.error("Camera remains unavailable after transport close: \(error.localizedDescription, privacy: .public)")
+                }
             }
         }
     }
@@ -924,6 +929,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             closingRoom.delegates.remove(delegate: self)
             await sdk.disconnect(closingRoom)
         }
+        // ignored: the start caller owns its result; retained capture cleanup below owns release failure.
         _ = try? await cameraTask?.task.value
         cameraPublishTask = nil
         if let track = cameraPublication?.track as? LocalVideoTrack { retainCameraCapture(track) }
@@ -937,8 +943,6 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // The connection is closed even if native capture release fails. Its
         // exact owner survives for retry and the caller receives the failure.
         try await stopCameraCaptureCleanup()
-        // A failed native stop remains owned across reconnect. The next
-        // publication retries it before allocating replacement capture.
     }
 
     private func startNetworkMetricsReporting(for room: Room) {
@@ -1277,7 +1281,7 @@ extension LiveKitBackend: RoomDelegate {
                 self.connectionGeneration &+= 1
             }
             if connectionState == .disconnected {
-                do { try await self.tearDown() }
+                do { try await self.tearDown(.disconnect) }
                 catch { mediaLog.error("Camera cleanup after disconnect failed: \(error.localizedDescription, privacy: .public)") }
                 guard self.room == nil else { return }
             }
