@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from http import HTTPStatus
+from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -252,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(
                     redact(response.read(1048576).decode()).encode(), content_type=response.headers["Content-Type"]
                 )
-        except Exception as exc:
+        except (OSError, ValueError, RuntimeError, HTTPException, subprocess.SubprocessError) as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def do_POST(self):
@@ -302,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except subprocess.TimeoutExpired:
             self.send_json({"error": "launcher command timed out"}, HTTPStatus.GATEWAY_TIMEOUT)
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def log_message(self, fmt, *args):

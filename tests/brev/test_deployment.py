@@ -45,6 +45,21 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse((Path(directory) / "ui.pid").exists())
 
     @unittest.skipUnless(
+        Path("/proc/self/cmdline").exists() and shutil.which("setsid"), "requires Linux procfs and setsid",
+    )
+    def test_start_ui_restarts_owned_chooser(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+trap stop_ui EXIT
+start_ui
+old="$(first_line "$UI_PID_FILE")"
+start_ui
+[[ "$(first_line "$UI_PID_FILE")" != "$old" ]]
+''', directory, XR_AI_UI_PORT="0", XR_AI_UI_AUTH="password", XR_AI_UI_BIND="127.0.0.1")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((Path(directory) / "ui.pid").exists())
+
+    @unittest.skipUnless(
         Path("/proc/self/cmdline").exists() and shutil.which("flock"), "requires Linux procfs and flock",
     )
     def test_stop_all_closes_chooser_and_preserves_saved_state(self):
@@ -85,17 +100,25 @@ class DeploymentTests(unittest.TestCase):
                     chooser.wait(timeout=5)
 
     @unittest.skipUnless(Path("/proc/self/cmdline").exists(), "requires Linux procfs")
-    def test_stop_ui_refuses_unrelated_live_pid(self):
-        with tempfile.TemporaryDirectory() as directory, subprocess.Popen(["sleep", "30"]) as unrelated:
-            try:
-                (Path(directory) / "ui.pid").write_text(str(unrelated.pid))
-                result = self.shell("stop_ui", directory)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("does not match this launcher", result.stderr)
-                self.assertIsNone(unrelated.poll())
-            finally:
-                unrelated.terminate()
-                unrelated.wait(timeout=5)
+    def test_chooser_stop_and_restart_refuse_unrelated_live_pid(self):
+        for action in ("stop_ui", "start_ui"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as directory, \
+                    subprocess.Popen(["sleep", "30"]) as unrelated:
+                try:
+                    pid_file = Path(directory) / "ui.pid"
+                    pid_file.write_text(str(unrelated.pid))
+                    result = self.shell(
+                        'nohup() { echo unexpected-ui-start; }; ' + action, directory,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("does not match this launcher", result.stderr)
+                    self.assertNotIn("unexpected-ui-start", result.stdout)
+                    self.assertIsNone(unrelated.poll())
+                    self.assertEqual(pid_file.read_text(), str(unrelated.pid))
+                finally:
+                    if unrelated.poll() is None:
+                        unrelated.terminate()
+                    unrelated.wait(timeout=5)
 
     @unittest.skipUnless(shutil.which("flock"), "requires Linux util-linux flock")
     def test_action_lock_released_after_kill(self):

@@ -212,8 +212,9 @@ audio, video, and session data on the host. The launcher uses `--session-recordi
 on current runtimes or `--capture` on older releases such as `v0.3.0-beta`.
 From the terminal, use `./deployments/brev/launch.sh start simple-vlm --session-recording`;
 the launcher selects the supported sample flag. Restart deployment to change this option.
-Procedure capture and replay is a separate sample: its
-default flow records narrated procedures; guided replay is not yet implemented.
+Procedure capture and replay is a separate sample: the chooser runs its default
+capture mode. To replay an approved guide, use the sample's documented CLI
+with `--mode replay GUIDE_NAME`; the chooser does not select replay guides.
 
 ## Download session recordings
 

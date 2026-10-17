@@ -322,8 +322,7 @@ serve_ui() {
 
 start_ui() {
   local attempt
-  if pid_alive "$UI_PID_FILE"; then kill "$(first_line "$UI_PID_FILE")"; sleep 0.5; fi
-  rm -f "$UI_PID_FILE"
+  stop_ui
   nohup setsid "$SELF" serve > "$UI_LOG" 2>&1 </dev/null &
   for ((attempt=0; attempt<30; attempt++)); do [[ -s "$UI_PID_FILE" ]] && pid_alive "$UI_PID_FILE" && return; sleep 1; done
   tail -n 40 "$UI_LOG" >&2; die "UI failed to start"
