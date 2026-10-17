@@ -1,0 +1,510 @@
+<!doctype html>
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>XR AI Experiences</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --g: #76b900;
+        --bg: #0d0d0d;
+        --card: #181818;
+        --line: #3d3d3d;
+        --muted: #aaa;
+        --red: #ff7373;
+        --amber: #f5bd4f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        border-top: 4px solid var(--g);
+        background: var(--bg);
+        color: #f5f5f5;
+        font:
+          15px/1.5 Arial,
+          sans-serif;
+      }
+      a {
+        color: #91c733;
+      }
+      header {
+        height: 66px;
+        padding: 0 5vw;
+        display: flex;
+        align-items: center;
+        background: #000;
+        font-weight: bold;
+        letter-spacing: 0.1em;
+      }
+      header img {
+        width: 120px;
+      }
+      header i {
+        height: 24px;
+        border-left: 1px solid #555;
+        margin: 0 18px;
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 50px 24px 70px;
+      }
+      .eyebrow,
+      .label {
+        color: var(--g);
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1 {
+        font-size: clamp(37px, 5vw, 56px);
+        line-height: 1.05;
+        margin: 9px 0;
+      }
+      h2 {
+        margin: 40px 0 6px;
+      }
+      h3 {
+        margin: 0 0 8px;
+      }
+      .muted,
+      .sub {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 14px;
+        margin: 20px 0;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        padding: 19px;
+      }
+      .value {
+        font-size: 17px;
+        font-weight: bold;
+        margin-top: 8px;
+      }
+      .sub {
+        font-size: 13px;
+      }
+      .badge {
+        display: inline-block;
+        border: 1px solid #555;
+        border-radius: 20px;
+        padding: 3px 9px;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      .ready,
+      .ok {
+        color: #a8df55;
+      }
+      .starting {
+        color: var(--amber);
+      }
+      .failed,
+      .bad {
+        color: var(--red);
+      }
+      .sample {
+        min-height: 190px;
+        display: flex;
+        flex-direction: column;
+        cursor: pointer;
+      }
+      .sample.selected {
+        border-color: var(--g);
+        box-shadow: inset 4px 0 var(--g);
+      }
+      .sample input {
+        position: absolute;
+        opacity: 0;
+      }
+      .fit {
+        margin-top: auto;
+        font-size: 13px;
+        font-weight: bold;
+      }
+      .actions,
+      .connect,
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 9px;
+      }
+      button,
+      .button {
+        border: 0;
+        padding: 11px 17px;
+        background: var(--g);
+        color: #071000;
+        font: inherit;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      button.alt,
+      .button.alt {
+        background: #333;
+        color: white;
+        border: 1px solid #555;
+      }
+      button:disabled {
+        opacity: 0.4;
+      }
+      #message {
+        color: var(--muted);
+      }
+      .revision {
+        font: 12px monospace;
+        overflow-wrap: anywhere;
+      }
+      .logs {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        background: #080808;
+      }
+      .toolbar {
+        padding: 11px;
+        background: #141414;
+      }
+      select,
+      input[type="search"],
+      input[type="password"] {
+        height: 35px;
+        padding: 0 9px;
+        background: #080808;
+        color: white;
+        border: 1px solid #555;
+      }
+      input[type="search"] {
+        flex: 1;
+      }
+      .log {
+        height: 400px;
+        margin: 0;
+        padding: 15px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #ddd;
+        font: 12px/1.55 monospace;
+      }
+      .error {
+        color: #ff8585;
+      }
+      .warning-line {
+        color: #ffd071;
+      }
+      .info {
+        color: #8fc8ff;
+      }
+      dialog {
+        color: white;
+        background: var(--card);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img
+        src="https://brev.nvidia.com/logos/svg/nvidia-white-text.svg"
+        alt="NVIDIA"
+      /><i></i>XR AI EXPERIENCES
+    </header>
+    <dialog id="tip">
+      <h3>Models</h3>
+      <p>
+        Some revisions require a Hugging Face token. Add one to restart
+        deployment and avoid anonymous request limits.
+      </p>
+      <form method="dialog" class="actions">
+        <input
+          id="ft"
+          type="password"
+          size="30"
+          placeholder="Hugging Face token"
+        /><button id="use">Restart with token</button
+        ><button class="alt">Not now</button>
+      </form>
+    </dialog>
+    <main>
+      <div class="eyebrow">Brev or local GPU host</div>
+      <h1>Deploy an XR AI experience.</h1>
+      <div id="summary" class="grid"></div>
+      <div class="actions">
+        <select id="version" aria-label="XR-AI release">
+          <option value="latest">Latest release</option>
+          <option value="current">Current checkout (development)</option>
+        </select>
+        <input
+          id="c"
+          type="search"
+          aria-label="Custom XR-AI revision"
+          placeholder="Or enter a release tag or full commit SHA"
+        /><button id="load">Load revision</button>
+      </div>
+      <p id="releaseNote" class="sub"></p>
+      <p class="muted">
+        Changing revision runs code from that revision on this host. Use only
+        trusted releases or reviewed commits.
+      </p>
+      <h2>Experiences</h2>
+      <div id="demos" class="grid"></div>
+      <p>
+        <label><input id="recording" type="checkbox" /> Record session</label>
+        <span id="recordingNote" class="sub"></span>
+      </p>
+      <div class="actions">
+        <button id="start">Deploy selected</button
+        ><button id="auth" class="alt">Use HF token</button
+        ><button id="stop" class="alt">Stop active</button
+        ><span id="message"></span>
+      </div>
+      <h2>Connect</h2>
+      <div id="connect" class="card connect"></div>
+      <h2 id="serverLogs">Server logs</h2>
+      <div class="logs">
+        <div class="toolbar">
+          <select id="logSource"></select
+          ><input
+            id="filter"
+            type="search"
+            placeholder="Filter visible lines"
+          />
+        </div>
+        <pre id="log" class="log">Waiting for server output…</pre>
+      </div>
+      <h2>Recordings</h2>
+      <p class="muted">Disconnect the recording client or stop the experience to finalize its session before downloading.</p>
+      <button id="recordingsRefresh" class="alt">Refresh recordings</button>
+      <div id="recordings" class="grid">No recordings loaded.</div>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id),
+        E = (x) =>
+          String(x ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      let view,
+        selected = "",
+        recording = false,
+        source = "combined",
+        offset = 0,
+        text = "",
+        signature = "";
+      async function api(path, options) {
+        let r = await fetch(path, options),
+          x = await r.json();
+        if (!r.ok) throw Error(x.error || r.statusText);
+        return x;
+      }
+      function card(d) {
+        let on = selected === d.id,
+          reason = (d.blockers || []).join(" · ");
+        return `<label class="card sample ${on ? "selected" : ""}"><input type="radio" name="sample" value="${E(d.id)}" ${on ? "checked" : ""}><h3>${E(d.name)}</h3><div class="sub">${E(d.description)}</div><div class="fit ${d.runnable ? "ok" : "bad"}">${d.runnable ? "Ready to deploy" : E(reason || "Does not fit this VM")}</div></label>`;
+      }
+      function render(x) {
+        let i = x.inventory,
+          p = x.process,
+          g = i.gpus || [],
+          active = i.demos.find((d) => d.id === p.sample),
+          busy = ["ready", "starting"].includes(p.state);
+        view = x;
+        if (!i.demos.some((d) => d.id === selected)) {
+          selected = i.recommended || i.demos[0]?.id || "";
+          recording = selected === p.sample && !!p.recording;
+        }
+        let pick = i.demos.find((d) => d.id === selected);
+        if (!pick?.recording_flag) recording = false;
+        $("recording").disabled = !pick?.recording_flag;
+        $("recording").checked = recording;
+        $("recordingNote").textContent = pick?.recording_flag
+          ? "Saves audio, video, and session data on this host. Off by default."
+          : "Optional session recording is unavailable for this sample and revision.";
+        $("summary").innerHTML =
+          `<div class="card"><div class="label">Hardware</div><div class="value">${g.length ? g.map((v) => `${E(v.name)} · ${(v.memory_mib / 1024).toFixed(1)} GiB · NVENC: ${v.nvenc ? "Yes" : "No"}`).join("<br>") : "No GPU detected"}</div><div class="sub">driver ${E(i.driver_version || "unknown")}</div></div><div class="card"><div class="label">Active experience</div><div class="value">${E(active?.name || p.sample || "None")}</div><div class="sub"><a href="#serverLogs" class="badge ${E(p.state)}">${E(p.state)}</a></div></div><div class="card"><div class="label">XR-AI revision</div><div class="value">${E(i.revision === "current" ? "Current checkout" : i.revision?.startsWith("v") ? i.revision : "Commit")}</div><div class="sub revision">${E((i.commit || "unknown").slice(0, 12))}</div></div><div class="card"><div class="label">Development Root CA</div><div class="value revision">${E(i.root_ca_sha256 || "Available after startup")}</div><div class="sub">SHA-256 · trust once per VM</div></div>`;
+        $("demos").innerHTML = i.demos.map(card).join("");
+        document.querySelectorAll("[name=sample]").forEach(
+          (n) =>
+            (n.onchange = () => {
+              selected = n.value;
+              recording = selected === p.sample && !!p.recording;
+              render(view);
+            }),
+        );
+        let same = busy && selected === p.sample && recording === !!p.recording;
+        $("start").disabled = !pick?.runnable || same;
+        $("auth").textContent = p.anonymous ? "Use HF token" : "Forget token";
+        $("stop").disabled = !p.sample || p.state === "stopped";
+        $("start").textContent = pick
+          ? "Deploy " + pick.name
+          : "Deploy selected";
+        try {
+          if (p.anonymous && p.state === "starting" && !localStorage.xraiHF) {
+            localStorage.xraiHF = 1;
+            $("tip").showModal();
+          }
+        } catch (e) {}
+        let port = active?.web_port,
+          base = `https://${E(i.public_host)}:${port}`,
+          commit = encodeURIComponent(i.commit || "main"),
+          project = (active?.project || "agent-samples")
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/"),
+          src = `https://github.com/NVIDIA/xr-ai/tree/${commit}/${project}`,
+          client = `https://github.com/NVIDIA/xr-ai/tree/${commit}/${active?.project === "agent-samples/xr-render-demo" ? "client-samples/web-xr" : "client-samples"}`;
+        $("connect").innerHTML =
+          p.state === "ready" && port
+            ? `<a class="button" target="_blank" href="${base}">Open web client</a><a class="button alt" target="_blank" href="${base}/cert">Install XR AI root CA</a>${p.events ? "<a class=button target=_blank href=/events>Live events</a>" : ""}<a class="button alt" target="_blank" href="${E(client)}">Build a native client</a><a target="_blank" href="${E(src)}">Sample source</a>`
+            : `<span class="muted">Client links appear when ready.</span>${active ? `<a target="_blank" href="${E(src)}">Sample source</a>` : ""}`;
+      }
+      function drawLog() {
+        let q = $("filter").value.toLowerCase(),
+          lines = text
+            .split("\n")
+            .filter((v) => !q || v.toLowerCase().includes(q));
+        $("log").innerHTML = lines
+          .map(
+            (v) =>
+              `<span class="${/(^|\s)(error|fatal|critical)(\s|:)|traceback|\w+error:|exception:/i.test(v) ? "error" : /warn/i.test(v) ? "warning-line" : /info|ready|started/i.test(v) ? "info" : ""}">${E(v)}</span>`,
+          )
+          .join("\n");
+      }
+      async function logs() {
+        let x = await api("/api/logs"),
+          sig = JSON.stringify(x.sources);
+        if (!x.sources.some((v) => v.id === source)) {
+          source = "combined";
+          offset = 0;
+          text = "";
+        }
+        if (sig !== signature) {
+          signature = sig;
+          $("logSource").innerHTML = x.sources
+            .map(
+              (v) =>
+                `<option value="${E(v.id)}" ${v.id === source ? "selected" : ""}>${E(v.name)}</option>`,
+            )
+            .join("");
+        }
+        x = await api(
+          `/api/log?id=${encodeURIComponent(source)}&offset=${offset}`,
+        );
+        if (x.offset < offset) text = "";
+        text += x.text || "";
+        if (text.length > 300000) text = text.slice(-250000);
+        offset = x.offset;
+        drawLog();
+      }
+      async function refresh() {
+        try {
+          let x = await api("/api/status");
+          x.process.events = (await fetch("/e")).ok;
+          render(x);
+          await logs();
+        } catch (e) {
+          $("message").textContent = e.message;
+        }
+      }
+      async function act(path, body = "") {
+        $("message").textContent = "Working…";
+        try {
+          let x = await api(path, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-XR-AI-Request": "1",
+            },
+            body,
+          });
+          $("message").textContent = x.message;
+          text = "";
+          offset = 0;
+        } catch (e) {
+          $("message").textContent = e.message;
+        }
+        refresh();
+      }
+      $("load").onclick = () => {
+        selected = "";
+        act("/api/commit", `c=${encodeURIComponent($("c").value.trim() || $("version").value)}`);
+      };
+      $("version").onchange = () => { $("c").value = ""; };
+      async function loadReleases() {
+        try {
+          const x = await api("/api/releases");
+          const previous = $("version").value;
+          $("version").innerHTML = `<option value="latest">Latest release (${E(x.latest)})</option>`
+            + x.tags.map((tag) => `<option value="${E(tag)}">${E(tag)}</option>`).join("")
+            + '<option value="current">Current checkout (development)</option>';
+          $("version").value = previous || "latest";
+        } catch (e) { $("releaseNote").textContent = "Release discovery unavailable: " + e.message; }
+      }
+      async function loadRecordings() {
+        try {
+          const x = await api("/api/recordings");
+          $("recordings").innerHTML = x.recordings.map((r) =>
+            `<div class="card"><h3 class="revision">${E(r.id)}</h3><p class="sub">${E(r.participant)} · ${r.complete ? "Finalized" : "Finalized, incomplete"}</p><a href="/api/recording?id=${encodeURIComponent(r.id)}">Download session ZIP</a></div>`
+          ).join("") || "No finalized session recordings yet.";
+        } catch (e) { $("recordings").textContent = e.message; }
+      }
+      function deploymentBody(token = "") {
+        return `sample=${encodeURIComponent(selected)}${recording ? "&recording=1" : ""}${token ? "&h=" + encodeURIComponent(token) : ""}`;
+      }
+      $("recording").onchange = () => {
+        recording = $("recording").checked;
+        render(view);
+      };
+      $("start").onclick = () =>
+        act("/api/start", deploymentBody());
+      $("auth").onclick = () =>
+        view.process.anonymous
+          ? $("tip").showModal()
+          : act("/api/stop", "forget=1");
+      $("use").onclick = () => {
+        let h = $("ft"),
+          v = h.value;
+        h.value = "";
+        if (v && selected)
+          act("/api/start", deploymentBody(v));
+      };
+      $("stop").onclick = async () => { await act("/api/stop"); loadRecordings(); };
+      $("recordingsRefresh").onclick = loadRecordings;
+      $("logSource").onchange = (e) => {
+        source = e.target.value;
+        text = "";
+        offset = 0;
+        logs();
+      };
+      $("filter").oninput = drawLog;
+      refresh();
+      loadReleases();
+      loadRecordings();
+      setInterval(refresh, 3000);
+      setInterval(loadRecordings, 15000);
+    </script>
+  </body>
+</html>

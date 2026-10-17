@@ -667,7 +667,7 @@ async def test_native_nim_factory_remains_explicit_ordinary_speech(tmp_path, mon
     from xr_ai_runtime import Topic
     from xr_ai_voice import UserQuery, VoiceAgent, _session
 
-    profile = load_models_config(Path(__file__).resolve().parents[1] / "deployment/nim/models.yaml")
+    profile = load_models_config(Path(__file__).resolve().parents[1] / "deployments/nim/models.yaml")
     client = make_stt(profile, "stt")
     probe = AsyncMock(side_effect=AssertionError("local speaker backend queried"))
     monkeypatch.setattr(_SpeakerClient, "_available", probe)

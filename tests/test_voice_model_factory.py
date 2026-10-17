@@ -46,7 +46,7 @@ def options(voice_gate):
 
 @pytest.mark.parametrize("with_batch_role", [False, True])
 async def test_required_factory_skips_batch_dependency(tmp_path, monkeypatch, with_batch_role):
-    models = load_models_config(ROOT / "deployment/nim/models.yaml") if with_batch_role else ModelsConfig({})
+    models = load_models_config(ROOT / "deployments/nim/models.yaml") if with_batch_role else ModelsConfig({})
     monkeypatch.setattr(_runtime, "make_stt", lambda *_a: pytest.fail("batch dependency constructed"))
     monkeypatch.setattr(_session, "HubVoiceTransport", lambda: pytest.fail("media allocated"))
     voice = VoiceAgent.from_models(models=models, **options(gate(tmp_path, True, "required")))
@@ -73,7 +73,7 @@ def test_factory_missing_batch_role_fails_before_media(tmp_path, monkeypatch, en
 
 
 def test_factory_wrong_role_and_invalid_capacity_fail_before_client(tmp_path, monkeypatch):
-    models = load_models_config(ROOT / "deployment/nim/models.yaml")
+    models = load_models_config(ROOT / "deployments/nim/models.yaml")
     models.entries["stt"] = models.entries["tts"]
     with pytest.raises(TypeError, match="STTSpec"):
         VoiceAgent.from_models(models=models, **options(gate(tmp_path, False, "auto")))
@@ -109,7 +109,7 @@ async def test_documented_nim_switch_preserves_first_backup_and_restores_active_
     model_original = (target / model_file).read_bytes()
     gate_original = (target / preset).read_bytes()
     source = tmp_path / "models.nim.yaml"
-    shutil.copy(ROOT / "deployment/nim/models.yaml", source)
+    shutil.copy(ROOT / "deployments/nim/models.yaml", source)
     backup_dir = tmp_path / "local-backup"
     docs = (ROOT / "docs/source/guides/deploying-with-nim.md").read_text()
     code = re.search(r"python - <<'PYTHON'\n(.*?)\nPYTHON", docs, re.S).group(1)

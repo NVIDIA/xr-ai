@@ -22,7 +22,7 @@ client-samples/  Platform clients
 agent-sdk/       Agent runtime, hub IPC, model, tool, and voice libraries
 agent-samples/   Runnable agent stacks
 model-server-samples/  Standalone model-server samples (CLEF)
-deployment/      External model endpoint profiles and validation
+deployments/     External model endpoint profiles and validation
 apps/            Application workspaces outside repository sample tooling
 services/        Hub, model servers, and typed capability services
 utils/           Launcher, logging, VAD, vLLM, and voice-gate utilities

@@ -179,7 +179,7 @@ endpoints; refer to {ref}`rag-embedding-health`.
 ## Deployment profiles
 
 Use the same factories and typed interfaces for local development and native
-NIM deployment. The example in `deployment/nim/models.yaml` selects native HTTP
+NIM deployment. The example in `deployments/nim/models.yaml` selects native HTTP
 chat and embedding endpoints and Riva gRPC speech, without compatibility servers.
 The embedding factory honors existing request defaults, including asymmetric
 `input_type` batches. Refer to {doc}`/guides/deploying-with-nim` for deployment

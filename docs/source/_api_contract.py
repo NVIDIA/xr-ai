@@ -25,6 +25,7 @@ API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "utils" / "xr-ai-voicegate" / "xr_ai_voicegate",
 )
 PUBLIC_API_MODULES = (
+    "xr_ai_launcher.deployment",
     "xr_ai_models.presets",
     "xr_ai_tools.async_tools",
     "xr_ai_tools.capture",
