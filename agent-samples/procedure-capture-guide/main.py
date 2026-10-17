@@ -13,7 +13,8 @@ Choose --mode capture or --mode guide. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
 Guide mode requires a guide name after --mode guide. Say "start guide" to begin
 that guide and "stop guide" to cancel; connecting alone does not start it.
-Add --session-recording to record media for the whole participant connection.
+In either mode, --session-recording independently records the whole participant
+connection; it does not start or stop procedure capture or guided execution.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "record participant video, bidirectional audio, and data-channel traffic "
-            "for the whole connection, independently of procedure capture commands"
+            "for the whole connection in either mode, independently of procedure capture or guide commands"
         ),
     )
     parser.add_argument("--hub-config", type=Path, metavar="PATH",

@@ -56,14 +56,15 @@ again to begin a fresh run of the same command-line-selected guide.
 Refer to the [guide reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#follow-an-approved-guide)
 for verification and step-advance controls. Capture mode and guide mode run separately.
 
-To also record the whole participant session, independently of **start capture**
-and **stop capture**, use:
+To also record the whole participant session in either mode, independently of
+spoken capture or guide commands, use:
 
 ```bash
-uv run procedure_capture_guide --session-recording
+uv run main.py --mode capture --session-recording
+uv run main.py --mode guide "Tea Making" --session-recording
 ```
 
-This flag can be combined with `--output-root PATH`. Refer to the
+In capture mode, this flag can also be combined with `--output-root PATH`. Refer to the
 [session recording guide](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#session-recording)
 for output locations and encoding requirements.
 

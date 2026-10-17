@@ -78,18 +78,22 @@ feature described below.
 
 ## Session recording
 
-To record the whole participant connection, run:
+To record the whole participant connection in either mode, run:
 
 ```bash
-uv run procedure_capture_guide --session-recording
+uv run main.py --mode capture --session-recording
+uv run main.py --mode guide "Tea Making" --session-recording
 ```
 
 The shared recorder starts immediately after DeviceIOHub and records participant
 video, device and agent audio, and data-channel traffic from join to leave.
-Recording continues before, during, and after procedure capture, including when
-no procedure is captured. **start capture** and **stop capture** control only
-procedure packets; they do not start or stop session recording. Disconnecting or
-stopping the stack finalizes the session recording.
+Recording continues while the selected agent is idle, capturing a demonstration,
+or following a guide. **start capture** and **stop capture** control only procedure
+packets; **start guide** and **stop guide** control only guided execution.
+Neither pair starts or stops session recording, and enabling session recording
+does not start either procedure mode's work. Guide mode still waits for **start guide**
+and retains its verification and timer rules. Disconnecting or stopping the stack
+finalizes the session recording.
 
 `yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
 profile. It saves recordings under
@@ -99,7 +103,7 @@ and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the sha
 recorder's output and encoding contract.
 
 The flag does not enable the client camera or microphone. Enable live video for
-continuous camera recording. `--output-root` can be combined with this flag and
+continuous camera recording. In capture mode, `--output-root` can be combined with this flag and
 changes only the procedure-packet destination; configure session recording output
 through `out_dir` in `yaml/media_capture.yaml`.
 

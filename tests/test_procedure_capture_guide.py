@@ -35,7 +35,8 @@ from procedure_capture_guide_worker.config import load_config  # noqa: E402
 
 
 @pytest.mark.parametrize("session_recording", [False, True])
-def test_config_and_cli(monkeypatch, tmp_path, session_recording):
+@pytest.mark.parametrize("explicit_mode", [False, True])
+def test_config_and_cli(monkeypatch, tmp_path, session_recording, explicit_mode):
     worker = load_config(_SAMPLE / "yaml/worker.yaml")
     assert not hasattr(worker, "media_capture_dir")
     assert (worker.capture.capture_fps, worker.capture.caption_interval_s) == (2, 5)
@@ -52,6 +53,8 @@ def test_config_and_cli(monkeypatch, tmp_path, session_recording):
     stack = Mock()
     monkeypatch.setattr(module, "run_stack", stack)
     args = ["--session-recording"] if session_recording else []
+    if explicit_mode:
+        args.extend(["--mode", "capture"])
     expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
     module.run(args)
     assert [p.name for p in stack.call_args.args[0]] == expected

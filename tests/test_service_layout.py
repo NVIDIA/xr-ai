@@ -555,6 +555,9 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
     ("procedure-capture-guide", []),
     ("procedure-capture-guide", ["--output-root", "evidence"]),
     ("procedure-capture-guide", ["--mode", "guide", "Tea Making"]),
+    ("procedure-capture-guide", ["--session-recording"]),
+    ("procedure-capture-guide", ["--output-root", "evidence", "--session-recording"]),
+    ("procedure-capture-guide", ["--mode", "guide", "Tea Making", "--session-recording"]),
 ])
 @pytest.mark.parametrize("relative", [False, True])
 def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_path, monkeypatch):
