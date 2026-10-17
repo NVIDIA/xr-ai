@@ -124,15 +124,21 @@ Package Contents
 
    Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
-   Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
+   Schema: a top-level mapping with ``mode`` (``always_on``, ``wake_only``,
+   ``conversation`` or ``hybrid``), ``magic_phrases`` (list[str] or
    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
    ``stop_commands_enabled`` (bool, default true).
    Optional ``conversation`` and ``speaker`` mappings configure session
    controls and speech-backend selection for the unified voice pipeline.
    Their settings remain private to that path.
-   Missing file or empty file → returns the dataclass defaults (gate
-   disabled / always-on). ``magic_phrases: null`` and trailing whitespace
-   in phrases are normalized the same way the inline-block parser did.
+   The package's annotated ``voice_gate.yaml`` supplies defaults; the selected
+   file overrides individual top-level and section fields. Missing or empty
+   files use the packaged ``always_on`` baseline. Mode chooses activation;
+   the optional mappings tune controls and choose ASR independently. Addressed
+   modes require non-empty phrases. Current mode-less configurations normalize
+   once using their conversation and phrase settings; explicit mode must not be
+   mixed with ``conversation.enabled``. ``magic_phrases: null`` and trailing
+   whitespace are normalized before validation.
 
 
 .. py:class:: VoiceGate(cfg: xr_ai_voicegate.VoiceGateConfig, *, audio_sink: xr_ai_voicegate.AudioSink, tts: xr_ai_voicegate.TTSLike)

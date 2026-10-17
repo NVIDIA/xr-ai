@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -664,9 +665,11 @@ worker YAML. Tea making’s worker and RAG YAML each select <code class="docutil
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.</p>
-<p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code>. Tea making can
-select <code class="docutils literal notranslate"><span class="pre">voice_gate.always-on.yaml</span></code> instead of <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>; disable speaker
-ASR in the selected preset, and back up and restore that same file. Use a
+<p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code> (Tea making
+defaults to <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>). Disable speaker ASR in that file, and back up
+and restore the same file. Interaction
+mode does not select the ASR backend: keep the selected conversation mode, or
+choose another mode independently. Use a
 different backup directory when adapting another sample. If the directory
 already exists, this procedure fails without overwriting its original local
 configuration or changing the active files. Do not rerun the switch to replace

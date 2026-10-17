@@ -306,6 +306,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -428,13 +429,15 @@
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e74a609dd47711fe8520ee4da2133336c6d8b995/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/825022ed2549a9b09bf627ced54dbcc7360bca96/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e74a609dd47711fe8520ee4da2133336c6d8b995/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/825022ed2549a9b09bf627ced54dbcc7360bca96/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e74a609dd47711fe8520ee4da2133336c6d8b995/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference internal" href="python-code-style.html"><span class="doc">Python code style</span></a> for the public API, exception handling,
+and module layout conventions for Python code. Refer to
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/825022ed2549a9b09bf627ced54dbcc7360bca96/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -449,9 +452,19 @@ strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e74a609dd47711fe8520ee4da2133336c6d8b995/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/825022ed2549a9b09bf627ced54dbcc7360bca96/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
+<p>Ruff enforces exception-handling rules (<code class="docutils literal notranslate"><span class="pre">BLE001</span></code>, <code class="docutils literal notranslate"><span class="pre">S110</span></code>, <code class="docutils literal notranslate"><span class="pre">S112</span></code>, <code class="docutils literal notranslate"><span class="pre">B904</span></code>) on
+all new code. Violations that predate the rules are grandfathered in the
+generated <code class="docutils literal notranslate"><span class="pre">ruff-baseline.toml</span></code>, which records the exact count per file and rule
+and can only shrink. When a change fixes violations, run
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/ruff_baseline.py</span> <span class="pre">--write</span></code> and commit the
+lowered entries. Running the script without <code class="docutils literal notranslate"><span class="pre">--write</span></code> checks that the baseline
+matches the code and prints how much of the repository each rule covers; the
+pre-commit hook runs that check when Python files change. To keep
+a deliberate broad catch in new code, add an inline <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">noqa:</span> <span class="pre">BLE001</span></code> comment with
+the reason.</p>
 <p>The user-facing command catalog is generated from top-level sample
 <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
 descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>

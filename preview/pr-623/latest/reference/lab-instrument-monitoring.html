@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -821,14 +822,17 @@ proxy in front of it.</p>
 <h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
 <p>Each non-empty final STT result delivered on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> is written to
 <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> during an active conversation, before optional wake gating.
-Conversation controls and closed-conversation speech are withheld. Transcript
+With <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code>, accepted closed-state one-off queries are also delivered;
+ignored closed-state speech and conversation controls are withheld. Transcript
 delivery is bounded and best effort; overflow drops the oldest pending
 transcript, and shutdown discards pending items. Speech rejected by a wake
 phrase during an active conversation is still persisted.</p>
 <p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
 wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Set
-<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">agent</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>,
-with the optional chime and five-second follow-up window. Accepted speech reaches
+<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">agent</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code> inside
+the open conversation, with the optional chime and five-second bare-wake
+follow-up window. Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to additionally accept wake-addressed
+one-off questions while the conversation is closed. Accepted speech reaches
 the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed text reaches the foreground but is not an
 STT transcript. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>Each connection writes to a new participant-scoped directory:</p>

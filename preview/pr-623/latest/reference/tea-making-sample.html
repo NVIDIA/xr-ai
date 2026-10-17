@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -499,11 +500,13 @@ Agent, start recording the transcript.
 </div>
 <p>Speech uses the reused TTS endpoint in <code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code>. Voice-gate
 behavior comes from <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/tea_making_worker.yaml</span></code>.
-Both presets now require <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
+The default requires <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code> after connecting,
 then accept speech without a wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>.
-Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the normal preset to require its
-configured wake phrases. Disable conversation controls in the always-on preset
-to restore immediate speech dispatch. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
+Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to also accept wake-addressed one-off questions before a
+conversation starts, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> for immediate, ungated speech dispatch.
+The advanced <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> policy applies only inside an open
+conversation. Backend selection is independent of these modes. Refer to
+<a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>The live event viewer is available at <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8092</span></code> on the XR-AI
 host. With <code class="docutils literal notranslate"><span class="pre">--expose-web-events</span></code>, use <code class="docutils literal notranslate"><span class="pre">http://&lt;xr-host&gt;:8092</span></code> from a trusted
 development network and restrict TCP port 8092 accordingly. Durable JSONL
@@ -739,8 +742,8 @@ temporary worker configuration with absolute paths. Edit the files under
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/workflow.yaml</span></code></p></td>
 <td><p>Typed state, steps, triggers, evidence, tool access, transitions, and user messages</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.always-on.yaml</span></code></p></td>
-<td><p>Conversation controls and optional wake phrases</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Interaction mode, conversation controls and optional wake phrases</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/rag_service.yaml</span></code></p></td>
 <td><p>Document path, model configuration, cache, chunking, embedding dimensions, and score threshold</p></td>
@@ -754,8 +757,8 @@ temporary worker configuration with absolute paths. Edit the files under
 </tbody>
 </table>
 </div>
-<p>Choose a voice preset through <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in
-<code class="docutils literal notranslate"><span class="pre">tea_making_worker.yaml</span></code>. Change observation and summary frequency in that
+<p>Set the interaction mode directly in <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>; <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> in
+<code class="docutils literal notranslate"><span class="pre">tea_making_worker.yaml</span></code> selects that file. Change observation and summary frequency in that
 worker file, retrieval behavior in <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code>, and the procedure itself
 in <code class="docutils literal notranslate"><span class="pre">workflow.yaml</span></code>. Relative paths declared in each configuration file resolve
 from that file’s directory. Workflow state and step references are validated at

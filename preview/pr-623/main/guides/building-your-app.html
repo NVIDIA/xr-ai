@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -490,9 +491,11 @@ ask before switching the documentation, skill, and checkout to <code class="docu
 <p>Read <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, then review the
 <a class="reference internal" href="../getting_started/requirements.html"><span class="doc">system requirements</span></a> and
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">credential sources</span></a> before resolving the
-application. The copied reference application uses local model services by
-default. When configuring hosted LLM or VLM endpoints, refer to the “Hosting
-models on NVIDIA NIM” section of <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a>.</p>
+application. Choose local model services or hosted endpoints. If setup already
+selected one, keep that choice. The copied reference application uses local
+model services by default. For hosted inference, refer to
+<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>; the hub still needs NVENC and NVDEC on its
+host as described in the system requirements.</p>
 </section>
 <section id="choose-the-layers-your-application-needs">
 <h2>Choose the layers your application needs<a class="headerlink" href="#choose-the-layers-your-application-needs" title="Link to this heading">#</a></h2>
@@ -639,7 +642,7 @@ repository source mapping.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>Keep the typed DeviceIOHub configuration shape.</p></td>
-<td><p>Set the room, ports, web client, and network behavior.</p></td>
+<td><p>Set the room, ports, web client, and network behavior. Refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/services/device-io-hub/device_io_hub.yaml">DeviceIOHub reference YAML</a> for coupled port and URL changes.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">worker/pyproject.toml</span></code>, <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code>, and <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code></p></td>
 <td><p>Keep the named-package layout, console entry point, argument parsing, and delegation to <code class="docutils literal notranslate"><span class="pre">run_app()</span></code>.</p></td>
@@ -662,8 +665,8 @@ repository source mapping.</p>
 <td><p>Declare only the logical model roles, client adapters, and shared endpoints the application needs. Do not add model-server deployment or readiness settings.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
-<td><p>Keep it when speech input needs wake phrases and follow-up turns.</p></td>
-<td><p>Tune the behavior or remove it with the voice runtime.</p></td>
+<td><p>Keep it when the application uses voice.</p></td>
+<td><p>Choose conversation controls or direct speech using <a class="reference internal" href="../reference/agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>, and test the application’s first spoken request.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">README.md</span></code></p></td>
 <td><p>Keep a short configure and run path.</p></td>
@@ -693,6 +696,8 @@ live-frame selection from <code class="docutils literal notranslate"><span class
 uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>worker
 </pre></div>
 </div>
+<section id="local-model-services">
+<h3>Local model services<a class="headerlink" href="#local-model-services" title="Link to this heading">#</a></h3>
 <p>The model launcher requires <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code>. Configure it through one of the
 sources in <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a> before starting the application.
 The copied application reuses speaker ASR, VLM, and TTS services. Start those shared
@@ -702,23 +707,56 @@ ready:</p>
 <span class="w">  </span>--project<span class="w"> </span>../../agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
-<p>Then start the application from the same directory:</p>
+</section>
+<section id="hosted-endpoints">
+<h3>Hosted endpoints<a class="headerlink" href="#hosted-endpoints" title="Link to this heading">#</a></h3>
+<p>Follow <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> to configure and validate the STT, VLM,
+and TTS roles in the application’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>. Keep a copy of the local
+profile before replacing its entries. Apply the guide’s voice-gate settings
+for hosted speech to disable the copied local speaker backend. Start the
+application after endpoint validation.</p>
+</section>
+<section id="start-the-application">
+<h3>Start the application<a class="headerlink" href="#start-the-application" title="Link to this heading">#</a></h3>
+<p>After the selected model environment is ready, start the application from
+<code class="docutils literal notranslate"><span class="pre">apps/my-app/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>../../uv.toml<span class="w"> </span>run<span class="w"> </span>my_app
 </pre></div>
 </div>
-<p>Open the authenticated web-client URL printed by DeviceIOHub, grant the media
-permissions the application needs, and connect.</p>
+<p>Open the full web-client URL printed by DeviceIOHub, including its scheme and
+port. For a client on another device, replace <code class="docutils literal notranslate"><span class="pre">localhost</span></code> with the XR AI host’s
+IP address or hostname reachable by that device. HTTPS is enabled by default.
+Refer to <a class="reference internal" href="../getting_started/networking.html#tls-for-the-web-client"><span class="std std-ref">TLS for clients</span></a> for certificate trust on the client
+device and <a class="reference internal" href="troubleshooting.html#web-client-empty-response"><span class="std std-ref">Browser reports an empty response on the hub port</span></a> if the browser reports an empty
+response.</p>
+<p>For the copied voice-and-vision application, select <strong>Connect</strong>, grant camera
+and microphone access, choose <strong>On-demand images</strong> or <strong>Live video</strong> under
+<strong>Camera Mode</strong>, then select <strong>Start Microphone</strong>. Use the conversation controls
+configured in <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code> before speaking the application’s request.
+The web client’s <strong>Send</strong> control delivers a typed query to the agent and
+bypasses speech gating. It checks the query path without exercising STT or
+conversation controls.</p>
+<p>Write the application’s README with its intended client, exact connection
+steps, voice mode, and an example request. Check the adapted commands and link
+targets before handing the application to its user.</p>
 <p>The application launcher owns only DeviceIOHub, the worker, and any other
 application processes. The separate model-server launcher owns shared model
-startup and readiness. The copied worker does not poll the STT, VLM, or TTS
-health endpoints; it explicitly exercises VLM inference as an application
+startup and readiness. The voice runtime checks required speaker ASR
+readiness, and the copied worker exercises VLM inference as an application
 warmup before announcing readiness. Keep or replace that probe according to the
 capabilities the application must warm or verify. When a model role changes,
 update <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> and the worker’s service construction. Do not add
-shared model services to the application’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list.</p>
+shared model services to the application’s <code class="docutils literal notranslate"><span class="pre">PROCESSES</span></code> list. If a process
+fails, use its launch context and run-log directory to investigate through
+<a class="reference internal" href="troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
+</section>
 </section>
 <section id="verify-without-hardware">
 <h2>Verify without hardware<a class="headerlink" href="#verify-without-hardware" title="Link to this heading">#</a></h2>
+<p>Turn each requirement in the application brief into an observable acceptance
+case. Include configuration defaults when a key is omitted, the intended first
+request, and the recovery behavior for unavailable inputs. Keep these checks in
+<code class="docutils literal notranslate"><span class="pre">apps/my-app/tests/</span></code> using the layout and command below.</p>
 <p>From the repository root, load the worker configuration before starting
 services. This check imports the renamed package, reads the application YAML,
 and resolves packaged files such as the system prompt:</p>
@@ -762,6 +800,13 @@ test directory explicitly with the repository test environment:</p>
 </pre></div>
 </div>
 <p>Refer to <a class="reference internal" href="testing.html"><span class="doc">Testing</span></a> for the complete test commands and marker rules.</p>
+<p>Before reporting that the application is complete, match each requirement to
+its test or client-interaction result. Exercise the intended first request
+through a real client after the hardware-free checks pass. Record the selected
+model environment, configuration, observed response, and any simulated media
+or unverified requirement. Distinguish typed input from spoken input and record
+whether STT and the configured conversation controls were exercised. Passing
+tests and service readiness do not replace that client check.</p>
 </section>
 <section id="understand-the-application-boundary">
 <h2>Understand the application boundary<a class="headerlink" href="#understand-the-application-boundary" title="Link to this heading">#</a></h2>
@@ -830,7 +875,12 @@ follow <code class="docutils literal notranslate"><span class="pre">AGENTS.md</s
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-from-a-source-checkout">Start from a source checkout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-the-layers-your-application-needs">Choose the layers your application needs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#copy-the-reference-application">Copy the reference application</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolve-and-run-the-application">Resolve and run the application</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolve-and-run-the-application">Resolve and run the application</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-services">Local model services</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#start-the-application">Start the application</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-without-hardware">Verify without hardware</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#understand-the-application-boundary">Understand the application boundary</a></li>
 </ul>

@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -464,6 +465,63 @@
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--capture</span></code> becomes
 <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">simple_vlm_example</span> <span class="pre">--session-recording</span></code>.</p>
 </section>
+<section id="clef-image-decision-inputs">
+<span id="clef-image-input-migration"></span><h2>Clef image decision inputs<a class="headerlink" href="#clef-image-decision-inputs" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">DecisionService.decide</span></code> now accepts optional ordered <code class="docutils literal notranslate"><span class="pre">images</span></code> containing JPEG
+or PNG bytes, local <code class="docutils literal notranslate"><span class="pre">pathlib.Path</span></code> objects, or inline data URL strings. Custom
+decision adapters that implement this capability must accept the optional
+<code class="docutils literal notranslate"><span class="pre">images</span></code> keyword. Text-only calls omit images from the wire request and remain
+unchanged. Refer to <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash local decision server</span></a> for input and resource-limit details.</p>
+<p>Before updating a running Clef service, stop it from the old checkout in
+<code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
+uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Update the checkout, then start the sample again. Model and configuration
+identity do not identify the running application code version: an already
+running text-only listener cannot accept images. Image requests require the
+updated service; there is no silent text-only fallback.</p>
+</section>
+<section id="explicit-voice-interaction-modes">
+<h2>Explicit voice interaction modes<a class="headerlink" href="#explicit-voice-interaction-modes" title="Link to this heading">#</a></h2>
+<p>Choose <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">conversation</span></code>, <code class="docutils literal notranslate"><span class="pre">hybrid</span></code>, <code class="docutils literal notranslate"><span class="pre">wake_only</span></code>, or <code class="docutils literal notranslate"><span class="pre">always_on</span></code> at the top of
+the selected voice-gate YAML. Remove <code class="docutils literal notranslate"><span class="pre">conversation.enabled</span></code> when setting mode.
+The four conversation samples select <code class="docutils literal notranslate"><span class="pre">conversation</span></code> to preserve their closed-until-start
+workflow. Tea’s redundant alternate preset is removed; change <code class="docutils literal notranslate"><span class="pre">mode</span></code> in its
+normal <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code> to choose another interaction policy.
+<code class="docutils literal notranslate"><span class="pre">hybrid</span></code> adds one-off addressed questions without persistent enrollment before
+starting a natural conversation. <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> require non-empty
+<code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code>. <code class="docutils literal notranslate"><span class="pre">always_on</span></code> explicitly preserves the ungated baseline.</p>
+<p>Existing mode-less inputs normalize their present conversation and phrase
+settings at the loader boundary, but new configurations must use the explicit
+mode rather than combining old activation flags. Speaker-only controls must
+move to the <code class="docutils literal notranslate"><span class="pre">conversation</span></code> mapping when adding an
+explicit mode; otherwise the loader reports an error rather than replacing
+custom phrases. The advanced setting
+<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase</span></code> applies only after a conversation opens.
+Speaker backend selection is now independent: disabling conversation controls
+does not disable a configured speaker backend. To use batch STT, explicitly set
+<code class="docutils literal notranslate"><span class="pre">speaker.enabled:</span> <span class="pre">false</span></code> and supply the batch STT model client/service.</p>
+<p>Speaker streaming protocol 4 carries explicit interaction policy and attributed
+one-turn events. Restart/update the service and client together; old peers fail
+the identity check rather than silently changing speech authorization. There
+is no cross-version service reuse, anonymous transcript fallback, or upgrade
+reconciliation machinery.</p>
+</section>
+<section id="procedure-replay-development-guides">
+<h2>Procedure replay development guides<a class="headerlink" href="#procedure-replay-development-guides" title="Link to this heading">#</a></h2>
+<p>For guides authored against earlier versions of the procedure replay sample,
+remove the unused <code class="docutils literal notranslate"><span class="pre">task.source_session</span></code> field. Steps with <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code>
+can omit <code class="docutils literal notranslate"><span class="pre">agent</span></code>; the deterministic patch must satisfy all <code class="docutils literal notranslate"><span class="pre">complete_when</span></code>
+requirements. Each step needs at least one initially unmet completion field
+that preceding steps cannot write. Give successive steps separate completion
+flags when adapting a guide that reused the same flag.</p>
+<p>The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> result now includes <code class="docutils literal notranslate"><span class="pre">available</span></code> and
+<code class="docutils literal notranslate"><span class="pre">unavailable_reason</span></code>. Elapsed time, remaining time, and expiration are <code class="docutils literal notranslate"><span class="pre">null</span></code>
+when unavailable, rather than raising a tool error. Refer to
+<a class="reference internal" href="procedure-capture-replay.html"><span class="doc">Procedure capture and replay</span></a> for the current guide and evaluation contracts.</p>
+</section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
 <p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
@@ -587,7 +645,7 @@ unconditional worker <code class="docutils literal notranslate"><span class="pre
 the loaded models and voice-gate settings. To serve batch STT, explicitly select
 <code class="docutils literal notranslate"><span class="pre">stt</span></code> in the sample’s launcher and hardware overrides and configure the consuming
 worker’s batch adapter. For batch-only speech omit <code class="docutils literal notranslate"><span class="pre">speaker-stt</span></code> from that
-selection and disable speaker enrollment.
+selection and set <code class="docutils literal notranslate"><span class="pre">speaker.enabled:</span> <span class="pre">false</span></code> in the worker’s voice-gate YAML.
 Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for serving both paths.</p>
 </section>
 <section id="voice-sample-conversation-defaults">
@@ -598,14 +656,15 @@ connecting, then accept speech without a wake phrase until
 within the configured window. The existing STT adapters and NIM model stack
 remain unchanged.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> in the sample’s voice-gate YAML to
-keep wake phrases during an active conversation. Set
-<code class="docutils literal notranslate"><span class="pre">conversation.enabled:</span> <span class="pre">false</span></code> to restore the original wake-only behavior, or
-always-on dispatch when <code class="docutils literal notranslate"><span class="pre">magic_phrases</span></code> is empty. Restart workers after editing
+keep wake phrases during an active conversation. Select <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">wake_only</span></code> for
+addressed turns without a persistent session, <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to combine addressed
+one-off questions with natural conversations, or <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> for ungated
+dispatch. Restart workers after editing
 these settings. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
-<p>Only final transcripts during an active conversation reach
-<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; start and stop controls are withheld. Applications
-that need all final transcripts retain that behavior by disabling conversation
-controls.</p>
+<p>In conversation mode only final transcripts during an active conversation reach
+<code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code>; start and stop controls are withheld. Hybrid mode also
+delivers its accepted closed-state one-off questions. Applications that need
+ungated final transcripts can select <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">always_on</span></code> explicitly.</p>
 </section>
 <section id="local-model-server-cli">
 <h2>Local model-server CLI<a class="headerlink" href="#local-model-server-cli" title="Link to this heading">#</a></h2>
@@ -876,6 +935,9 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#procedure-replay-development-guides">Procedure replay development guides</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>

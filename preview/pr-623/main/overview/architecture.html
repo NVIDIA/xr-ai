@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -609,6 +610,14 @@ video -- on-demand frame access --+                 |                         |
 text instead of speech, omit models, execute deterministic tools locally, call
 typed capability services, or publish events for another in-process agent
 registered with the same <code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> to consume.</p>
+<p>Voice interaction policy is separate from ASR selection. <code class="docutils literal notranslate"><span class="pre">always_on</span></code> accepts
+all recognized speech, <code class="docutils literal notranslate"><span class="pre">wake_only</span></code> accepts addressed turns, <code class="docutils literal notranslate"><span class="pre">conversation</span></code>
+requires a start phrase before natural dialogue, and <code class="docutils literal notranslate"><span class="pre">hybrid</span></code> also accepts
+closed-state addressed one-off questions without enrolling an owner. With
+speaker ASR, the service attributes each candidate before authorizing a turn;
+only an unambiguous start phrase establishes the persistent conversation owner.
+Batch ASR applies the same interaction policy without individual speaker
+identity. Refer to <a class="reference internal" href="../reference/agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>Workers obtain LLM, VLM, STT, TTS, and embedding clients from
 <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Model profiles keep three concerns separate:</p>
 <ul class="simple">
