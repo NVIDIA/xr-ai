@@ -1150,7 +1150,9 @@ vectors. Retrieval inputs use <code class="docutils literal notranslate"><span c
 documents, as specified in the
 <a class="reference external" href="https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16">model card</a>.
 The standalone configuration reserves 20% of a GPU and uses Docker;
-the tea sample applies its own memory budget and indexes all 2048 dimensions.</p></li>
+the tea sample applies its own memory budget and indexes all 2048 dimensions.
+Its Spark profile selects Triton attention for GB10 compatibility; other
+profiles leave attention-backend selection to vLLM.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at

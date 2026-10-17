@@ -641,6 +641,8 @@ cleanup.
   [model card](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16).
   The standalone configuration reserves 20% of a GPU and uses Docker;
   the tea sample applies its own memory budget and indexes all 2048 dimensions.
+  Its Spark profile selects Triton attention for GB10 compatibility; other
+  profiles leave attention-backend selection to vLLM.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at

@@ -434,22 +434,22 @@
 <span id="task-capture"></span><h1>Procedure capture and replay<a class="headerlink" href="#procedure-capture-and-replay" title="Link to this heading">#</a></h1>
 <p>The procedure-capture-replay sample records narrated demonstrations between
 spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
-processing. This sample currently implements capture only; guided replay is not
-yet available.</p>
+processing. Replay mode guides participants through a locally approved procedure
+and verifies progress with visual observations and elapsed-time checks.</p>
 <section id="run-a-demonstration">
 <h2>Run a demonstration<a class="headerlink" href="#run-a-demonstration" title="Link to this heading">#</a></h2>
 <p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-replay/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>procedure_capture_replay_model_servers
-uv<span class="w"> </span>run<span class="w"> </span>main.py
+uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture
 </pre></div>
 </div>
 <p>The sample’s <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. Omni is included for future voice guidance and
-conversational assistance during replay; that integration is not implemented in
-this capture-only sample. The launcher combines shared server defaults with
+or generate guides automatically. Replay uses Omni for guide questions and
+model-driven observations, alongside the same STT, TTS, and Cosmos services.
+The launcher combines shared server defaults with
 <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>; use <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> to select a
 profile explicitly. The worker’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> configures its client
 adapters and endpoints, not server deployment. Keep those endpoints aligned
@@ -478,7 +478,7 @@ updating the checkout. If you changed ports in a GPU profile, pass the same
 <section id="output-destination">
 <h2>Output destination<a class="headerlink" href="#output-destination" title="Link to this heading">#</a></h2>
 <p>Choose an output root at launch without editing configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--output-root<span class="w"> </span>/path/to/task-evidence
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture<span class="w"> </span>--output-root<span class="w"> </span>/path/to/task-evidence
 </pre></div>
 </div>
 <p>Packets are saved under <code class="docutils literal notranslate"><span class="pre">PATH/sessions/&lt;session-id&gt;/</span></code>. Relative command-line
@@ -631,6 +631,257 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.</p>
 </section>
+<section id="replay-an-approved-guide">
+<h2>Replay an approved guide<a class="headerlink" href="#replay-an-approved-guide" title="Link to this heading">#</a></h2>
+<p>Place a reviewed <code class="docutils literal notranslate"><span class="pre">*.guide.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">*.guide.yml</span></code> file under <code class="docutils literal notranslate"><span class="pre">guides/</span></code> in the
+sample directory. User-created guides remain local and ignored by Git; the
+maintained tea-making example is the only checked-in exception. Set <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
+<code class="docutils literal notranslate"><span class="pre">approved</span></code> only after reviewing the instructions, completion checks, timers,
+and safety constraints. The CLI matches an exact, case-insensitive <code class="docutils literal notranslate"><span class="pre">task.name</span></code>
+or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>; it rejects missing, draft, invalid, and ambiguous selections.
+Quote names containing spaces:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>replay<span class="w"> </span><span class="s2">"Guide Name"</span>
+</pre></div>
+</div>
+<p>Start the shared models first, as for capture. Replay uses the LLM, VLM, STT,
+and TTS endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>. Connect using the hub’s web
+client URL and enable microphone and camera access. The command line selects
+the guide, but connecting does not start it. Say <strong>start replay</strong> to begin step
+one with independent progress for that participant. No wake phrase is required.
+Until then, no verification or timer is running. Say <strong>stop replay</strong> at any time
+to cancel guidance, then <strong>start replay</strong> to begin a fresh run of the same guide.
+Turning off live video does not reset the guide. The shared current
+frame tool may request a still image from clients that support on-demand capture;
+if no fresh image is available, visual verification waits. Timer checks continue
+without a camera. Disconnect releases
+that participant’s progress and pending work; reconnect waits for start replay.</p>
+<p>Like <a class="reference internal" href="tea-making-sample.html"><span class="doc">Tea-making guidance — building deterministic visual workflows</span></a>, replay separates foreground conversation from
+background verification. The foreground answers guide questions using the
+current step and its allowed tools. It cannot directly commit completion.
+Periodic observations use a fresh camera view or a deterministic elapsed-time
+check. The observer can commit only declared writable fields, with any required
+consecutive evidence. Late observations from a previous step or run cannot
+change current progress. The agent announces step completion once, without
+requiring a user question, but does not automatically advance to the next step.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Request</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>“Start replay”</p></td>
+<td><p>Begin a fresh run of the command-line-selected guide from step one</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Stop replay”</p></td>
+<td><p>Cancel guidance and verification, clear progress, and keep the selected guide loaded but inactive</p></td>
+</tr>
+<tr class="row-even"><td><p>“What should I do?”</p></td>
+<td><p>Explain the current step</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Does this look right?”</p></td>
+<td><p>Use the current step’s visual tool if available</p></td>
+</tr>
+<tr class="row-even"><td><p>“How much time remains?”</p></td>
+<td><p>Use the current step’s timer tool if available</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Next” or “continue”</p></td>
+<td><p>Advance only if the current step is verified complete</p></td>
+</tr>
+<tr class="row-even"><td><p>“Skip”</p></td>
+<td><p>Explicitly bypass the current step; this is not evidence of success</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Status”</p></td>
+<td><p>Report current progress</p></td>
+</tr>
+<tr class="row-even"><td><p>“Stop guide” or “reset guide”</p></td>
+<td><p>Same as stop replay</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Restart”</p></td>
+<td><p>Same as start replay</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>After “next” on the completed final step, the agent announces workflow
+completion and leaves the guide inactive, ready for another start replay.
+No relaunch or reconnect is needed. Explicitly skipping to the end also leaves
+the guide inactive, with an explicit skipped-steps message rather than a
+verified-completion claim. While inactive, status and start replay remain
+available, but there is no active step or timer. Recording commands and
+selecting another guide are not supported inside replay mode.</p>
+<p>The worker pins the validated guide and SHA-256 from the same captured bytes at
+startup. File edits do not change a running replay; restart the sample to use a
+new version or revoke approval. Approval is a local review convention, not a
+cryptographic signature. Model-based visual checks can be wrong; reviewers must
+describe observable evidence, including orientation and count where relevant.
+This demo is not a safety interlock. A still image cannot prove a hidden action.</p>
+<section id="included-tea-making-guide">
+<h3>Included tea-making guide<a class="headerlink" href="#included-tea-making-guide" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">guides/tea-making.guide.yaml</span></code> is a hand-authored, approved example with task
+name <strong>Tea Making</strong> and ID <code class="docutils literal notranslate"><span class="pre">tea_making</span></code>. Its four stages are specific to Numi
+Chamomile Lemon: read the packet, verify the water temperature, put the tea in
+water, and start the steeping timer. It is not generated from a user recording.</p>
+<p>Start the sample’s shared models, then run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>replay<span class="w"> </span><span class="s2">"Tea Making"</span>
+</pre></div>
+</div>
+<p>Connect and say <strong>start replay</strong>. Say <strong>next</strong> after each verified visual step
+and <strong>stop replay</strong> to cancel. The guide finishes automatically when the
+five-minute timer expires. Say <strong>start replay</strong> to repeat.</p>
+<p>Use Numi Chamomile Lemon tea, a stable heat-safe vessel,
+and a kettle or thermometer with a readable <strong>current</strong> water-temperature
+display. <a class="reference external" href="https://numitea.com/products/chamomile-lemon">Numi’s product instructions</a>
+specify a 5–6 minute steep; this example chooses five minutes. Numi’s
+<a class="reference external" href="https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits">general herbal-tea guidance</a>
+calls for boiling water. The example verifies a displayed 100°C (212°F) current
+reading. If the packet requires a different recipe or local boiling temperature
+cannot reach that target, stop and adapt a local copy before using it. Do not
+tilt or lift hot vessels to satisfy a camera check.</p>
+<p>The example is adapted to replay’s existing tools, not a drop-in copy of the
+tea sample’s workflow YAML:</p>
+<ul class="simple">
+<li><p>It verifies both the Numi brand and Chamomile Lemon blend name. The recipe is
+fixed in the guide, not inferred from packaging colors or retrieved by the LLM.</p></li>
+<li><p>Its three visual steps require two distinct fresh frames. The first reads
+<code class="docutils literal notranslate"><span class="pre">BRAND</span> <span class="pre">|</span> <span class="pre">BLEND</span></code> and matches <code class="docutils literal notranslate"><span class="pre">NUMI</span> <span class="pre">|</span> <span class="pre">CHAMOMILE</span> <span class="pre">LEMON</span></code>; the second reads a current
+<code class="docutils literal notranslate"><span class="pre">LABEL</span> <span class="pre">|</span> <span class="pre">NUMBER</span> <span class="pre">UNIT</span></code> reading and accepts <code class="docutils literal notranslate"><span class="pre">CURRENT</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTUAL</span></code>, or <code class="docutils literal notranslate"><span class="pre">THERMOMETER</span></code>
+with <code class="docutils literal notranslate"><span class="pre">100</span> <span class="pre">C</span></code> or <code class="docutils literal notranslate"><span class="pre">212</span> <span class="pre">F</span></code>. It preserves <code class="docutils literal notranslate"><span class="pre">TARGET</span></code> and <code class="docutils literal notranslate"><span class="pre">SET</span></code> labels in the visual
+result so those readings cannot satisfy completion. Unlabeled displays are
+unavailable rather than assumed to show current temperature. Matching tolerates
+equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
+not different temperatures. Immersion requires <code class="docutils literal notranslate"><span class="pre">YES</span></code> for
+visible bag contact with visible water, including a floating bag.
+Other readings, <code class="docutils literal notranslate"><span class="pre">NO</span></code>, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, missing frames, and malformed responses
+cannot complete a step. These bounded evidence commits do not use an
+observation LLM; the foreground LLM still handles questions and controls.</p></li>
+<li><p>The heating check verifies a displayed current temperature at the brewing
+target, not a target setting or a “heating underway” threshold. Replay
+does not expose the tea sample’s typed temperature tools: this is a VLM
+judgment, not a deterministic temperature measurement or safety guarantee.</p></li>
+<li><p>Immersion detection does not start the timer. Say <strong>next</strong> promptly after
+immersion is confirmed to enter the timer step. The runtime then measures a
+full 300 seconds; time spent waiting at the immersion step is not subtracted.
+Timer verification does not inspect images or prove continued immersion.</p></li>
+<li><p>The final step sets <code class="docutils literal notranslate"><span class="pre">finish_on_complete:</span> <span class="pre">true</span></code>, so expiry ends the active run,
+clears progress, and announces completion without another <strong>next</strong> command.</p></li>
+<li><p>Skipping a visual prerequisite ends the run as skipped instead of assuming
+the prerequisite was satisfied. Skipping the timer also cannot produce a
+verified-completion announcement.</p></li>
+</ul>
+<p>Regression tests load this exact example and exercise its state transitions,
+distinct-frame evidence, skip behavior, and timer with simulated observations.
+Those tests do not establish accuracy on real tea-making images or appliances.</p>
+<section id="local-model-replay-evaluation">
+<h4>Local-model replay evaluation<a class="headerlink" href="#local-model-replay-evaluation" title="Link to this heading">#</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">eval/replay.py</span></code> exercises a manifest’s selected guide through
+the actual replay agent, runtime, voice aggregation, frame selection, and model
+tools. It uses the sample’s configured LLM and VLM. Fixture images replace the
+hub camera endpoint, and typed requests enter the same runtime topic as
+transcribed speech. Microphones, STT, network camera delivery, and audible TTS
+are not covered. The script never manages external model-server processes.</p>
+<p>The checked-in <code class="docutils literal notranslate"><span class="pre">eval/replay_cases.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">eval/fixtures/indicator.guide.yaml</span></code>
+provide a synthetic visual-and-timer scenario. <code class="docutils literal notranslate"><span class="pre">eval/replay_routing.yaml</span></code>
+exercises the composed foreground prompt with controls, polite requests,
+quoted commands, negation, unsupported capture requests, and visual questions.
+Both run with the full permitted tool set; the evaluator does not preselect
+tools based on the utterance.</p>
+<p>A YAML or JSON manifest selects <code class="docutils literal notranslate"><span class="pre">guides_dir</span></code> (relative to the manifest) and
+<code class="docutils literal notranslate"><span class="pre">guide</span></code> (name or ID), and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">image</span></code>: show an image <code class="docutils literal notranslate"><span class="pre">path</span></code>, or a named synthetic <code class="docutils literal notranslate"><span class="pre">scene</span></code>. Optional
+<code class="docutils literal notranslate"><span class="pre">scenes</span></code> map names to a rectangle color or display text.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">observe</span></code>: wait for <code class="docutils literal notranslate"><span class="pre">count</span></code> visual results (default two) from the displayed
+image and compare them to the allowed <code class="docutils literal notranslate"><span class="pre">answers</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">say</span></code>: send <code class="docutils literal notranslate"><span class="pre">text</span></code> as a user turn. Optional <code class="docutils literal notranslate"><span class="pre">expect</span></code> checks the delivered
+answer against a regex; <code class="docutils literal notranslate"><span class="pre">tools</span></code> and <code class="docutils literal notranslate"><span class="pre">arguments</span></code> check model tool calls.
+Status assertions use <strong>What is my status?</strong> and <code class="docutils literal notranslate"><span class="pre">workflow__status</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wait_speech</span></code>: wait for an <code class="docutils literal notranslate"><span class="pre">expect</span></code> regex in speech delivered since the last
+user turn, with optional <code class="docutils literal notranslate"><span class="pre">timeout_s</span></code>. This checks completion notices, including
+automatic timer completion, without reading private backend state.</p></li>
+</ul>
+<p>The runner makes no assumptions about step names, step count, or a final timer.
+Timers use real elapsed time. Include negative observations before positive
+ones and explicitly test early advance, completion, stop, and restart as needed.</p>
+<p>From the sample directory, with its model servers already running:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/replay.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--output<span class="w"> </span>artifacts/replay-eval
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/replay.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--manifest<span class="w"> </span>eval/replay_routing.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/replay-routing-eval
+</pre></div>
+</div>
+<p>Use a new output directory for each run. Supply <code class="docutils literal notranslate"><span class="pre">--manifest</span> <span class="pre">/path/to/scenario.yaml</span></code>
+to evaluate another guide and its images.
+Outputs include the exact guide, manifest, image hashes, model tool calls, visual
+answers, speech text, and result JSON. Synthetic controls can isolate label or
+setpoint mistakes but do not establish accuracy on a user’s actual camera views.</p>
+</section>
+</section>
+<section id="guide-structure">
+<h3>Guide structure<a class="headerlink" href="#guide-structure" title="Link to this heading">#</a></h3>
+<p>The declarative shape follows the tea-making workflow: a task, typed sparse
+state, and ordered steps with separate observation and voice policies. This is
+a replay-specific schema inspired by that design, not a compatible loader for
+tea-making or legacy workflow-recorder YAML. Adapt guides to the contract below.</p>
+<p>Text fields must be actual strings. Duplicate mapping keys are rejected at
+every level, including overrides introduced through YAML merges, instead of
+silently replacing earlier requirements. Invalid guides cannot start replay,
+even when their <code class="docutils literal notranslate"><span class="pre">task.status</span></code> is <code class="docutils literal notranslate"><span class="pre">approved</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">schema_version</span></code> must be <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code> declares <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">name</span></code>, positive <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code> (<code class="docutils literal notranslate"><span class="pre">draft</span></code> or
+<code class="docutils literal notranslate"><span class="pre">approved</span></code>), <code class="docutils literal notranslate"><span class="pre">start_step</span></code>, <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">complete_message</span></code>.</p></li>
+<li><p>Each <code class="docutils literal notranslate"><span class="pre">state</span></code> field declares a type (<code class="docutils literal notranslate"><span class="pre">boolean</span></code>, <code class="docutils literal notranslate"><span class="pre">integer</span></code>, <code class="docutils literal notranslate"><span class="pre">number</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">string</span></code>), a description, and optionally an initial value.</p></li>
+<li><p>Each step declares <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">title</span></code>, <code class="docutils literal notranslate"><span class="pre">reads</span></code>, <code class="docutils literal notranslate"><span class="pre">writes</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger</span></code>,
+<code class="docutils literal notranslate"><span class="pre">voice</span></code>, a non-empty <code class="docutils literal notranslate"><span class="pre">complete_when</span></code> mapping, <code class="docutils literal notranslate"><span class="pre">next</span></code>, and <code class="docutils literal notranslate"><span class="pre">messages</span></code> containing
+<code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">complete</span></code>, and <code class="docutils literal notranslate"><span class="pre">skip</span></code>. The <code class="docutils literal notranslate"><span class="pre">next</span></code> chain must visit every step once
+and end with <code class="docutils literal notranslate"><span class="pre">null</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">agent</span></code> and <code class="docutils literal notranslate"><span class="pre">voice</span></code> each contain a prompt and a tool list. <code class="docutils literal notranslate"><span class="pre">agent</span></code> is optional
+when <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code> supplies a deterministic completion patch; that path
+does not run an observation LLM. Otherwise <code class="docutils literal notranslate"><span class="pre">agent</span></code> is required. Allowed step tools
+are <code class="docutils literal notranslate"><span class="pre">current_view</span></code>, <code class="docutils literal notranslate"><span class="pre">clock__now</span></code>, and <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code>. Only the observer receives
+<code class="docutils literal notranslate"><span class="pre">workflow__commit</span></code>. Foreground workflow controls are supplied by the runner,
+not listed in the guide’s step tools.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">evidence</span></code> contains a full-match regex <code class="docutils literal notranslate"><span class="pre">pattern</span></code>, positive
+<code class="docutils literal notranslate"><span class="pre">consecutive</span></code> count, and optional <code class="docutils literal notranslate"><span class="pre">commit</span></code> mapping. With <code class="docutils literal notranslate"><span class="pre">commit</span></code>, matching
+observations directly apply that bounded patch without an observation LLM.
+The patch must satisfy every <code class="docutils literal notranslate"><span class="pre">complete_when</span></code> requirement. Each step must have
+at least one initially unmet completion field that no preceding step can write;
+use a dedicated completion flag rather than reusing a preceding step’s flag.
+Without <code class="docutils literal notranslate"><span class="pre">commit</span></code>, the observation LLM proposes state changes and the evidence
+count gates completion. Use a precise closed-set VLM answer contract if a
+regex is used. Visual evidence counts distinct source frames, identified by
+participant, track, timestamp, and sequence. Repeated or older frames do not
+increment the count or run another observation-model update. Unavailable
+observations reset the consecutive evidence count.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">state_on_skip</span></code> writes only declared step fields;
+<code class="docutils literal notranslate"><span class="pre">complete_on_skip:</span> <span class="pre">true</span></code> ends the run when explicitly skipped.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">finish_on_complete:</span> <span class="pre">true</span></code> is valid only on a terminal step. Once
+verified, it ends the run automatically and announces the task’s completion
+message. If an earlier step was skipped, it reports skipped steps instead.
+The default is <code class="docutils literal notranslate"><span class="pre">false</span></code>, preserving explicit advancement after verification.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">current_view</span></code> triggers require <code class="docutils literal notranslate"><span class="pre">arguments.question</span></code> (1–500 characters), a
+positive <code class="docutils literal notranslate"><span class="pre">interval_s</span></code>, and optionally <code class="docutils literal notranslate"><span class="pre">result_field:</span> <span class="pre">text</span></code>. Timer triggers use
+<code class="docutils literal notranslate"><span class="pre">function:</span> <span class="pre">clock__timer</span></code> with <code class="docutils literal notranslate"><span class="pre">arguments.duration_s</span></code> (positive integer seconds). They may
+select <code class="docutils literal notranslate"><span class="pre">elapsed_s</span></code>, <code class="docutils literal notranslate"><span class="pre">remaining_s</span></code>, or <code class="docutils literal notranslate"><span class="pre">expired</span></code> as <code class="docutils literal notranslate"><span class="pre">result_field</span></code>.
+Arguments can reference declared readable or writable fields using
+<code class="docutils literal notranslate"><span class="pre">$state.field_name</span></code>. On entering a timer step, replay resolves and freezes its
+duration and starts a monotonic runtime clock. Missing or invalid durations
+leave the step blocked. Start timestamps are not writable timer state;
+<code class="docutils literal notranslate"><span class="pre">started_at_us</span></code> in timer trigger arguments is rejected. Model commits and
+wall-clock changes cannot backdate the timer or shorten an active wait.
+The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> tool takes no arguments and reads the active
+runtime timer. Restarting the guide starts a fresh timer on the next timer-step
+entry; <code class="docutils literal notranslate"><span class="pre">clock__now</span></code> is informational and cannot start or modify timers.
+An unavailable or superseded timer returns <code class="docutils literal notranslate"><span class="pre">available:</span> <span class="pre">false</span></code> and a reason,
+not an invented elapsed time or a tool exception.
+Timer-only steps use elapsed-time evidence, not a visual substitute. Completion
+commits for timer triggers are rejected until their configured duration expires.</p>
+</section>
+</section>
 <section id="composition-and-configuration">
 <h2>Composition and configuration<a class="headerlink" href="#composition-and-configuration" title="Link to this heading">#</a></h2>
 <p>The outer <code class="docutils literal notranslate"><span class="pre">main.py</span></code> launches the hub and worker. The worker’s <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>
@@ -645,9 +896,36 @@ persistence, and finalization.
 <code class="docutils literal notranslate"><span class="pre">capture/captioning.py</span></code> defines the request and response contract used by both
 recording and evaluation. Application cleanup explicitly drains capture work
 before closing its frame endpoint and VLM client.</p>
-<p>The worker keeps shared wiring outside the capture subpackage. A future replay
-capability can reuse that infrastructure with its own state; this sample
-currently registers only voice I/O and capture.</p>
+<p>The worker keeps shared model, voice, image, and lifecycle wiring in <code class="docutils literal notranslate"><span class="pre">app.py</span></code>
+and shared settings in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>. The sibling <code class="docutils literal notranslate"><span class="pre">capture/</span></code> and <code class="docutils literal notranslate"><span class="pre">replay/</span></code> packages
+own their capability-specific agents, settings, and helpers. Only the selected
+agent is registered. With no mode flag, capture remains the default.</p>
+<p><code class="docutils literal notranslate"><span class="pre">replay/agent.py</span></code> handles connection events, foreground questions, and conversational
+controls. Its <code class="docutils literal notranslate"><span class="pre">_Replay</span></code> backend in <code class="docutils literal notranslate"><span class="pre">replay/replaying.py</span></code> owns guide progress,
+runtime timers, frame evidence, and background verification. Transitions clear
+both local notices and pending voice-aggregation output under the session lock,
+so obsolete completion notices cannot follow the new step’s instruction.
+The foreground receives detached guidance context and scoped tools. Observation
+updates have a state revision; controls have a separate run-and-step revision.
+Completing the same step during inference does not invalidate a stop or advance
+request, but a concurrent step transition does. The backend rechecks those scopes
+under its own lock when controls execute and answers finish. It owns accepted control tasks
+through completion even if a new utterance cancels the foreground turn. The
+cancelled turn drains accepted controls and delivers their still-current transition
+response; new guidance snapshots also drain controls first. Departure and shutdown
+drain those tasks without speaking to disconnected participants.
+Stop replay cancels the observer and clears timer
+state without unloading the selected guide. Connecting only loads an inactive
+session; start replay activates it and starts its observer and any first-step timer.
+Replay uses <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, native tools, and the
+shared tool loop. The conversation prompt governs intent without an English
+wording filter. Polite action requests can use controls; questions about controls
+do not authorize them. This is model policy, not a deterministic intent guarantee.
+State-changing tools independently check session freshness and completion.
+Guide loading and validation live in <code class="docutils literal notranslate"><span class="pre">replay/guides.py</span></code>
+and <code class="docutils literal notranslate"><span class="pre">replay/_workflow_spec.py</span></code>. Replay never constructs the capture backend or
+writes demonstration packets. Both modes start the same hub and worker processes
+and use the same separately launched model stack and <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>.</p>
 <p>The always-on voice gate passes commands and narration through the same accepted
 input path. Recording acknowledgements follow voice-input handling, so a command
 cannot cancel its own response.</p>
@@ -659,16 +937,22 @@ cannot cancel its own response.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/worker.yaml</span></code></p></td>
-<td><p>Shared frame and speech detection settings; capture configuration path</p></td>
+<td><p>Shared frame and speech detection settings; capability configuration paths</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/capture-agent-config.yaml</span></code></p></td>
 <td><p>Task output directory, sampling rate, and caption interval</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
-<td><p>Managed batch STT, VLM, and acknowledgement TTS services and endpoints</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/replay-agent-config.yaml</span></code></p></td>
+<td><p>Local guide directory and visual verification timeout</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Shared batch STT, LLM, VLM, and TTS services and endpoints</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
 <td><p>Silent, wake-word-free input with sample-owned recording commands</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.replay.yaml</span></code></p></td>
+<td><p>Wake-word-free replay questions and guide controls</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>Room and web server</p></td>
@@ -682,8 +966,28 @@ YAML, even when it is in another directory. Model and voice configuration remain
 beside the worker YAML. Absolute configuration and output paths are also supported.
 The worker loads shared settings into <code class="docutils literal notranslate"><span class="pre">WorkerConfig</span></code> and capture-specific settings
 into <code class="docutils literal notranslate"><span class="pre">CaptureConfig</span></code> under <code class="docutils literal notranslate"><span class="pre">capture/config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">app.py</span></code> supplies each to its
-owning component. Restart after configuration edits.
+owning component. Replay selects its YAML through <code class="docutils literal notranslate"><span class="pre">replay_config</span></code> and loads
+<code class="docutils literal notranslate"><span class="pre">ReplayConfig</span></code> from <code class="docutils literal notranslate"><span class="pre">replay/config.py</span></code>; its guide directory resolves relative to
+that YAML. The required positional <code class="docutils literal notranslate"><span class="pre">GUIDE_NAME</span></code> selects <code class="docutils literal notranslate"><span class="pre">task.name</span></code> or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>,
+not a filesystem path. <code class="docutils literal notranslate"><span class="pre">--output-root</span></code> applies only to capture. Restart after
+configuration edits.
 Refer to <a class="reference internal" href="configuration.html"><span class="doc">Sample configuration reference</span></a> and <a class="reference internal" href="command-line.html"><span class="doc">Command-line reference</span></a> for fields and CLI options.</p>
+</section>
+<section id="replay-regression-tests">
+<h2>Replay regression tests<a class="headerlink" href="#replay-regression-tests" title="Link to this heading">#</a></h2>
+<p>From the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_procedure_capture_replay.py<span class="w"> </span>tests/test_sop_replay.py<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+</pre></div>
+</div>
+<p>These tests cover mode isolation, approval, guide validation, participant-local
+progress, repeated runs, stale observations, timers, and runtime-to-voice delivery.
+They use synthetic fixtures and validate the shipped hand-authored tea guide,
+not private user recordings. Offline CLI tests exercise the evaluation runner
+with controlled model responses, including visual-only and visual-and-timer guides.
+These tests establish runtime behavior, not model accuracy. Run the standalone
+<code class="docutils literal notranslate"><span class="pre">eval/replay.py</span></code> scenarios above against existing model servers to measure live
+tool routing and visual judgments; the runner never manages their lifecycle.</p>
 </section>
 </section>
 
@@ -744,7 +1048,16 @@ Refer to <a class="reference internal" href="configuration.html"><span class="do
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#caption-evaluation">Caption evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#replay-an-approved-guide">Replay an approved guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#included-tea-making-guide">Included tea-making guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-replay-evaluation">Local-model replay evaluation</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#guide-structure">Guide structure</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composition-and-configuration">Composition and configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#replay-regression-tests">Replay regression tests</a></li>
 </ul>
   </nav></div>
 

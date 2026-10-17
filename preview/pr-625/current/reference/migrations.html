@@ -534,6 +534,19 @@ the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.</p>
 </section>
+<section id="procedure-replay-development-guides">
+<h2>Procedure replay development guides<a class="headerlink" href="#procedure-replay-development-guides" title="Link to this heading">#</a></h2>
+<p>For guides authored against earlier versions of the procedure replay sample,
+remove the unused <code class="docutils literal notranslate"><span class="pre">task.source_session</span></code> field. Steps with <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code>
+can omit <code class="docutils literal notranslate"><span class="pre">agent</span></code>; the deterministic patch must satisfy all <code class="docutils literal notranslate"><span class="pre">complete_when</span></code>
+requirements. Each step needs at least one initially unmet completion field
+that preceding steps cannot write. Give successive steps separate completion
+flags when adapting a guide that reused the same flag.</p>
+<p>The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> result now includes <code class="docutils literal notranslate"><span class="pre">available</span></code> and
+<code class="docutils literal notranslate"><span class="pre">unavailable_reason</span></code>. Elapsed time, remaining time, and expiration are <code class="docutils literal notranslate"><span class="pre">null</span></code>
+when unavailable, rather than raising a tool error. Refer to
+<a class="reference internal" href="procedure-capture-replay.html"><span class="doc">Procedure capture and replay</span></a> for the current guide and evaluation contracts.</p>
+</section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
 <p>XR Render and its eval commands now use <code class="docutils literal notranslate"><span class="pre">llm</span></code> instead of <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>.
@@ -951,6 +964,7 @@ reuse the ignored caches rather than downloading them again.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#procedure-replay-development-guides">Procedure replay development guides</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>

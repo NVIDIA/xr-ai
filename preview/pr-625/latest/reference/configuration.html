@@ -807,6 +807,31 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
+<section id="config-procedure-capture-replay-yaml-replay-agent-config-yaml">
+<h3>yaml/replay-agent-config.yaml<a class="headerlink" href="#config-procedure-capture-replay-yaml-replay-agent-config-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Replay-only settings; paths are relative to this file. Models are shared with capture.</span>
+<span class="nt">guides_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../guides</span>
+<span class="nt">vision_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15.0</span>
+</pre></div>
+</div>
+</section>
+<section id="config-procedure-capture-replay-yaml-voice-gate-replay-yaml">
+<h3>yaml/voice_gate.replay.yaml<a class="headerlink" href="#config-procedure-capture-replay-yaml-voice-gate-replay-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># The CLI selects the guide. Every utterance is a guide question or control.</span>
+<span class="nt">magic_phrases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="nt">listening_chime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">followup_grace_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="c1"># Let replay handle "stop replay"; do not consume it as a generic STOP.</span>
+<span class="nt">stop_commands_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</section>
 <section id="config-procedure-capture-replay-yaml-voice-gate-yaml">
 <h3>yaml/voice_gate.yaml<a class="headerlink" href="#config-procedure-capture-replay-yaml-voice-gate-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -829,6 +854,7 @@ workflow.</p></li>
 
 <span class="c1"># Shared frame and voice settings. Configuration paths are relative to this YAML.</span>
 <span class="nt">capture_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">capture-agent-config.yaml</span>
+<span class="nt">replay_config</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">replay-agent-config.yaml</span>
 <span class="nt">frame_max_age_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 <span class="nt">frame_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
 <span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
@@ -1125,6 +1151,9 @@ workflow.</p></li>
 <span class="nt">embedding</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
 <span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="c1"># Avoid FlashAttention kernels incompatible with GB10 SM121 on driver 580</span>
+<span class="w">  </span><span class="c1"># in the qualified vLLM 26.09 image. Other GPU profiles retain auto-selection.</span>
+<span class="w">  </span><span class="nt">attention_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TRITON_ATTN</span>
 </pre></div>
 </div>
 </section>
@@ -2077,6 +2106,8 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-capture-agent-config-yaml">yaml/capture-agent-config.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-models-json">yaml/models.json</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-replay-agent-config-yaml">yaml/replay-agent-config.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-voice-gate-replay-yaml">yaml/voice_gate.replay.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-replay-yaml-worker-yaml">yaml/worker.yaml</a></li>
 </ul>
