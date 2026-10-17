@@ -63,6 +63,20 @@ the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.
 
+## Procedure replay development guides
+
+For guides authored against earlier versions of the procedure replay sample,
+remove the unused `task.source_session` field. Steps with `evidence.commit`
+can omit `agent`; the deterministic patch must satisfy all `complete_when`
+requirements. Each step needs at least one initially unmet completion field
+that preceding steps cannot write. Give successive steps separate completion
+flags when adapting a guide that reused the same flag.
+
+The foreground `clock__timer` result now includes `available` and
+`unavailable_reason`. Elapsed time, remaining time, and expiration are `null`
+when unavailable, rather than raising a tool error. Refer to
+{doc}`procedure-capture-replay` for the current guide and evaluation contracts.
+
 ## Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.
