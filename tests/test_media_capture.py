@@ -1199,6 +1199,43 @@ def test_video_writer_accepts_nominal_rate_with_timestamp_jitter(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["capture", "replay"])
+async def test_procedure_session_recording_outlives_spoken_controls(tmp_path, monkeypatch, mode):
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", types.SimpleNamespace(GetEncoderCaps=_fake_encoder_caps))
+    config = load_capture_config(
+        Path(__file__).resolve().parents[1]
+        / "agent-samples/procedure-capture-replay/yaml/media_capture.yaml"
+    )
+    # Exercise the sample's lifetime policy with the real recorder, without GPU encoding or rendering.
+    service = CaptureService(replace(config, out_dir=str(tmp_path), profile="raw", max_total_bytes=0))
+    service._returns.wait_for_departure = AsyncMock()
+    utterances = ["before", f"start {mode}", "during", f"stop {mode}", "after"]
+    try:
+        await service._on_participant(ParticipantEvent("alice", True, 1_000_000))
+        for index, text in enumerate(utterances):
+            await service._on_agent_data(DataMessage(
+                "alice", CAPTURE_STT_TOPIC, 1_010_000 + index * 10_000, text.encode(),
+            ))
+            assert service._recorder.has_session("alice")
+        # Even reserved agent control messages cannot change a participant-owned recording.
+        await service._on_agent_data(DataMessage("alice", CAPTURE_START_TOPIC, 1_060_000, b"{}"))
+        await service._on_agent_data(DataMessage("alice", CAPTURE_STOP_TOPIC, 1_070_000, b""))
+        await service._drain_callbacks()
+        assert service._recorder.has_session("alice")
+        await service._on_participant(ParticipantEvent("alice", False, 1_080_000))
+        assert not service._recorder.has_session("alice")
+        manifests = list(tmp_path.glob("*/manifest.json"))
+        assert len(manifests) == 1
+        manifest = json.loads(manifests[0].read_text())
+        assert (manifest["start_us"], manifest["end_us"]) == (1_000_000, 1_080_000)
+        assert manifest["counts"]["transcripts"] == len(utterances)
+        transcript = (manifests[0].parent / "transcript.jsonl").read_text()
+        assert all(text in transcript for text in utterances)
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
 async def test_explicit_session_control_records_only_between_reserved_commands(
     tmp_path: Path,
     monkeypatch,

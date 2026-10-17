@@ -50,7 +50,7 @@ def test_sample_command_catalog_matches_top_level_projects() -> None:
         ("--session-recording",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_replay"].arguments] == [
-        ("--mode",), ("guide_name",), ("--output-root",),
+        ("--mode",), ("guide_name",), ("--output-root",), ("--session-recording",),
     ]
     assert [argument.flags for argument in commands["procedure_capture_replay_model_servers"].arguments] == [
         ("--stop",), ("--gpu-profile",),

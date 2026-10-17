@@ -13,6 +13,8 @@ Choose --mode capture or --mode replay. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
 Replay requires a guide name after --mode replay. Say "start replay" to begin
 that guide and "stop replay" to cancel; connecting alone does not start it.
+In either mode, --session-recording independently records the whole participant
+connection; it does not start or stop procedure capture or replay.
 """
 
 from __future__ import annotations
@@ -28,11 +30,24 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
-def _build_processes(*, worker_config: str | Path = "yaml/worker.yaml") -> list[Process]:
-    return [
+_CAPTURE_PROCESS = Process(
+    "capture",
+    "../../services/device-io-hub",
+    "device_io_capture",
+    config="yaml/media_capture.yaml",
+)
+
+
+def _build_processes(
+    *, worker_config: str | Path = "yaml/worker.yaml", capture: bool = False,
+) -> list[Process]:
+    processes = [
         Process("hub", "../../services/device-io-hub", "device_io_hub", config="yaml/device_io_hub.yaml"),
         Process("worker", "worker", "procedure_capture_replay_worker", config=worker_config),
     ]
+    if capture:
+        processes.insert(1, _CAPTURE_PROCESS)
+    return processes
 
 
 PROCESSES = _build_processes()
@@ -50,6 +65,14 @@ def _parser() -> argparse.ArgumentParser:
         "--output-root", type=Path, metavar="PATH",
         help="save task packets under PATH/sessions; overrides YAML artifacts_dir (relative to the launch directory)",
     )
+    parser.add_argument(
+        "--session-recording",
+        action="store_true",
+        help=(
+            "record participant video, bidirectional audio, and data-channel traffic "
+            "for the whole connection in either mode, independently of procedure capture or replay commands"
+        ),
+    )
     return parser
 
 
@@ -64,7 +87,7 @@ def run(argv: Sequence[str] | None = None) -> None:
         parser.error("--mode replay requires a non-empty GUIDE_NAME")
     setup_logging("orchestrator", namespace="procedure-capture-replay")
     if args.mode == "capture" and args.output_root is None:
-        run_stack(PROCESSES, _BASE)
+        run_stack(_build_processes(capture=args.session_recording), _BASE)
         return
     # Pass the override without rewriting the user's YAML or relocating its
     # relative model and voice configuration paths. Keep it until workers exit.
@@ -76,7 +99,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             "guide_name": args.guide_name,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")
-        run_stack(_build_processes(worker_config=request), _BASE)
+        run_stack(_build_processes(worker_config=request, capture=args.session_recording), _BASE)
 
 
 if __name__ == "__main__":

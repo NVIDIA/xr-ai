@@ -1287,27 +1287,40 @@ def test_replay_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, tim
     assert vlm.ask_images.await_count >= 4
 
 
-def test_cli_selects_replay_without_capture_and_quotes_name(monkeypatch):
+@pytest.mark.parametrize("session_recording", [False, True])
+def test_cli_selects_replay_with_independent_session_recording(monkeypatch, session_recording):
     spec = importlib.util.spec_from_file_location("sop_replay_main", _SAMPLE / "main.py")
     main = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(main)
     requests = []
+    extra = ["--session-recording"] if session_recording else []
+    expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
 
     def launch(processes, base):
-        assert [p.name for p in processes] == ["hub", "worker"]
+        assert [p.name for p in processes] == expected
         assert processes[-1].command == "procedure_capture_replay_worker"
         requests.append(json.loads(processes[-1].config.read_text()))
+        config = load_config(processes[-1].config)
+        assert config.mode == "replay" and config.capture is None
+        assert config.replay.guide_name == "Align Parts"
+        assert config.voice_gate_yaml == _SAMPLE / "yaml/voice_gate.replay.yaml"
+        if session_recording:
+            recorder = processes[1]
+            assert recorder.command == "device_io_capture"
+            settings = yaml.safe_load((_SAMPLE / recorder.config).read_text())
+            assert settings["session_mode"] == "participant"
+            assert settings["out_dir"] == "~/.local/share/xr-ai/captures/procedure-capture-replay"
         assert base == _SAMPLE
 
     monkeypatch.setattr(main, "run_stack", launch)
-    main.run(["--mode", "replay", "Align Parts"])
+    main.run(["--mode", "replay", "Align Parts", *extra])
     assert requests == [{"worker_config": str(_SAMPLE / "yaml/worker.yaml"), "mode": "replay",
                          "guide_name": "Align Parts", "output_root": None}]
     for arguments in (["--mode", "replay"], ["--mode", "replay", " "],
                       ["--mode", "capture", "Align Parts"], ["--mode", "unknown"],
                       ["--mode", "replay", "Align Parts", "--output-root", "output"]):
         with pytest.raises(SystemExit):
-            main.run(arguments)
+            main.run([*arguments, *extra])
     assert len(requests) == 1
 
 
