@@ -478,6 +478,10 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
     if (!is_connected_.load()) {
         throw CameraRequiresConnectionError{};
     }
+    if (config.encoding && (!std::isfinite(config.encoding->max_framerate)
+                            || config.encoding->max_framerate < 0.0)) {
+        throw std::invalid_argument("max_framerate must be finite and non-negative");
+    }
     // VideoSource ctor requires explicit width/height, so the track cannot
     // be created here. Arm the backend; the first FrameSink::InjectVideoFrame
     // call creates the source and publishes lazily.
@@ -577,6 +581,19 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
                 }
                 if (encoding.simulcast.has_value()) {
                     options.simulcast = encoding.simulcast;
+                }
+                if (encoding.quality_preference.has_value()) {
+                    switch (*encoding.quality_preference) {
+                    case VideoQualityPreference::kDetail:
+                        options.degradation_preference = livekit::DegradationPreference::MaintainResolution;
+                        break;
+                    case VideoQualityPreference::kMotion:
+                        options.degradation_preference = livekit::DegradationPreference::MaintainFramerate;
+                        break;
+                    case VideoQualityPreference::kBalanced:
+                        options.degradation_preference = livekit::DegradationPreference::Balanced;
+                        break;
+                    }
                 }
             }
             RequireLocalParticipant(room_)->publishTrack(video_track_, options);

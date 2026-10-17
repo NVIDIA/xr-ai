@@ -25,6 +25,8 @@ import { ConnectionState } from '../../ConnectionState.js';
 import { NetworkMetrics, NetworkQuality } from '../../NetworkMetrics.js';
 import { StreamError } from '../../StreamError.js';
 import { MicrophoneMode } from '../../Config/AudioConfig.js';
+import { CameraEncodingConfig } from '../../Config/CameraConfig.js';
+import { cameraPublishOptions } from './CameraOptions.js';
 import {
   ByteStreamConnectionChanged,
   INTERNAL_SEND_BYTE_STREAM,
@@ -455,12 +457,13 @@ export class LiveKitBackend {
       throw StreamError.cameraRequiresConnection();
     }
 
-    // Stop any previous video track first.
-    await this.stopCamera();
-
     const config     = cameraConfig ?? this.#sessionConfig?.camera;
+    const encoding = config?.encoding == null ? null : new CameraEncodingConfig(config.encoding);
     const deviceId   = config?.deviceId ?? null;
     const facingMode = config?.facing   ?? 'user';
+
+    // Validate the new policy before stopping a working camera.
+    await this.stopCamera();
 
     const constraints = deviceId
       ? { deviceId: { exact: deviceId }, resizeMode: 'none' }
@@ -480,6 +483,7 @@ export class LiveKitBackend {
     try {
       const publication = await this.#room.localParticipant.publishTrack(mediaTrack, {
         source: Track.Source.Camera,
+        ...cameraPublishOptions(encoding, mediaTrack.getSettings(), this.#room.options.publishDefaults),
       });
       const track = publication.videoTrack;
       if (!track) throw new Error('LiveKit did not publish the camera track');

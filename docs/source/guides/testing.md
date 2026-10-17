@@ -10,6 +10,21 @@ behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.
 
+The browser camera tests also import presets from the LiveKit version in the
+existing web dependency lock. A fresh checkout must install that artifact
+before running the suite. From the repository root, use the same setup as CI:
+
+```bash
+camera_sdk_dir="$(mktemp -d)"
+camera_sdk_version="$(node -p "require('./dependency-manifest/web-xr-build/package-lock.json').packages['node_modules/livekit-client'].version")"
+npm install --prefix "$camera_sdk_dir" --ignore-scripts --no-package-lock --no-save "livekit-client@${camera_sdk_version}"
+export STREAMKIT_LIVEKIT_SDK_MODULE="file://${camera_sdk_dir}/node_modules/livekit-client/dist/livekit-client.esm.mjs"
+```
+
+An existing `client-samples/web-xr-build/node_modules` installation can also
+supply the SDK when the environment override is unset. No LiveKit server or
+camera device is needed for these tests.
+
 ## Run the suite
 
 From the repository root:

@@ -7,6 +7,10 @@ const WEB_CLIENT_ROOT = new URL('../../client-samples/web/', import.meta.url).hr
 const STREAMKIT_INDEX_URL = new URL(
   '../../client-samples/web/StreamKit/index.js', import.meta.url,
 ).href;
+const SDK_MODULE = process.env.STREAMKIT_LIVEKIT_SDK_MODULE ?? new URL(
+  '../../client-samples/web-xr-build/node_modules/livekit-client/dist/livekit-client.esm.mjs',
+  import.meta.url,
+).href;
 
 function isWebClientJavaScript(url) {
   return url.startsWith(WEB_CLIENT_ROOT) && new URL(url).pathname.endsWith('.js');
@@ -37,6 +41,7 @@ export async function load(url, context, nextLoad) {
             return globalThis.__livekitRoom;
           }
         }
+        export { VideoPresets, VideoPresets43 } from ${JSON.stringify(SDK_MODULE)};
         export const RoomEvent = Object.freeze({
           ConnectionStateChanged: 'connectionStateChanged',
           DataReceived: 'dataReceived',

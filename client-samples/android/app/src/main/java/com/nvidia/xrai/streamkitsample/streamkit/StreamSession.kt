@@ -10,6 +10,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.backends.livekit.LiveKitBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.track.LocalVideoTrack
@@ -185,6 +186,18 @@ class StreamSession(private val backend: StreamingBackend) {
         timestampUs: Long,
     ) {
         backend.injectVideoFrame(i420, width, height, timestampUs)
+    }
+
+    /**
+     * [encoding] applies when the first frame publishes the track. Stop the camera
+     * before changing it; subsequent frames keep the active policy. Custom backends
+     * apply only supported settings.
+     */
+    suspend fun injectVideoFrame(
+        i420: ByteBuffer, width: Int, height: Int, timestampUs: Long,
+        encoding: CameraEncodingConfig?,
+    ) {
+        backend.injectVideoFrame(i420, width, height, timestampUs, encoding)
     }
 
     // ── Local preview ─────────────────────────────────────────────────────────

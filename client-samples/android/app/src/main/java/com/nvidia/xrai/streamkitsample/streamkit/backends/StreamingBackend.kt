@@ -11,6 +11,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.NetworkMetrics
 import com.nvidia.xrai.streamkitsample.streamkit.StreamError
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraEncodingConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import java.io.File
 import java.nio.ByteBuffer
@@ -121,10 +122,23 @@ interface StreamingBackend {
      * camera adapters, screen capture, synthetic frame sources) instead of
      * Camera2/CameraX. Mirror of iOS
      * `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     * The Android LiveKit backend uses one CAMERA source: first injection
+     * replaces its device camera. If that first publication fails, no camera
+     * remains published; callers may explicitly start the device camera again.
+     * Other backends may use different source ownership.
      *
      * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
      */
     suspend fun injectVideoFrame(i420: ByteBuffer, width: Int, height: Int, timestampUs: Long)
+
+    /**
+     * Encoding applies when the first frame publishes the track. Stop the camera
+     * before changing it. Existing custom backends apply only supported settings.
+     */
+    suspend fun injectVideoFrame(
+        i420: ByteBuffer, width: Int, height: Int, timestampUs: Long,
+        encoding: CameraEncodingConfig?,
+    ) = injectVideoFrame(i420, width, height, timestampUs)
 
     // ── Data channel ──────────────────────────────────────────────────────────
 
