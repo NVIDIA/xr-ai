@@ -5,6 +5,11 @@
 
 # Release migration
 
+## Deployment example directory
+
+Replace `deployment/nim/` with `deployments/nim/` in saved commands and paths.
+The NIM model profile and smoke-check behavior are unchanged.
+
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for
