@@ -21,6 +21,67 @@ def _reset_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["device_io_hub"])
 
 
+@pytest.mark.parametrize("with_yaml", [False, True])
+def test_deployment_network_overrides_preserve_sample_yaml(tmp_path, monkeypatch, with_yaml):
+    _reset_argv(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "device_io_hub.yaml"
+    original = "web_server_port: 8080\nweb_client_dir: web\ncert_file: old.crt\nkey_file: old.key\n"
+    if with_yaml:
+        path.write_text(original)
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", yaml.safe_dump({
+        "web_server_port": 9443,
+        "lk_port_ws": 9880,
+        "lk_use_external_ip": True,
+        "web_server_extra_sans": ["203.0.113.1"],
+        "cert_file": "",
+        "key_file": "",
+    }))
+    cfg = load_config()
+    assert cfg.web_server_port == 9443
+    assert cfg.lk_port_ws == 9880
+    assert cfg.lk_internal_url == "ws://127.0.0.1:9880"
+    assert cfg.lk_use_external_ip is True
+    assert cfg.web_server_extra_sans == ["203.0.113.1"]
+    assert cfg.cert_file == cfg.key_file == ""
+    if with_yaml:
+        assert cfg.web_client_dir == str(tmp_path / "web")
+        assert path.read_text() == original
+    else:
+        assert not path.exists()
+
+
+@pytest.mark.parametrize("overrides", [
+    [], None, {"web_server_port": 0}, {"web_server_port": 65536}, {"web_server_port": True},
+    {"lk_use_external_ip": "true"}, {"web_server_extra_sans": "host"},
+    {"cert_file": "/private/key"}, {"api_secret": "secret"}, {"unknown": 1},
+])
+def test_deployment_rejects_invalid_network_overrides(tmp_path, monkeypatch, overrides):
+    _reset_argv(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", yaml.safe_dump(overrides))
+    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK"):
+        load_config()
+
+
+def test_deployment_rejects_malformed_yaml(tmp_path, monkeypatch):
+    _reset_argv(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", "lk_port_ws: [")
+    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK must contain valid YAML"):
+        load_config()
+
+
+def test_network_override_rejection_does_not_partially_mutate_config(monkeypatch):
+    from device_io_hub._deployment import apply_network_overrides
+
+    data = {"web_server_port": 8080}
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", "web_server_port: 9443\napi_secret: no")
+    with pytest.raises(ValueError, match="api_secret"):
+        apply_network_overrides(data)
+    assert data == {"web_server_port": 8080}
+
+
 @pytest.mark.parametrize(
     ("api_key", "api_secret"),
     [

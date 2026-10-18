@@ -76,6 +76,31 @@ NAT also affects the TLS certificate: clients dial the VM's public IP, which
 must be listed in the certificate's SAN via `web_server_extra_sans`. Refer to
 [TLS for the web client](#tls-for-the-web-client) below.
 
+## Host-specific network overrides
+
+To run an unchanged sample YAML on a different host, set
+`DEVICE_IO_HUB_NETWORK` to a YAML mapping before starting its normal command:
+
+```bash
+export DEVICE_IO_HUB_NETWORK='web_server_port: 9443
+lk_port_ws: 9880
+web_server_extra_sans:
+  - 203.0.113.7
+cert_file: ""
+key_file: ""'
+```
+
+Overrides apply after the sample YAML and before configuration validation.
+They accept only `lk_port_ws`, `lk_port_tcp`, `lk_port_udp`, `web_server_port`,
+`token_server_port` (integer ports 1–65535), `lk_use_external_ip`,
+`lk_skip_external_ip_validation` (booleans), and `web_server_extra_sans`
+(a list of strings). Empty `cert_file` and `key_file` values select the
+hub-managed development certificates instead of sample-specified files.
+Changing `lk_port_ws` also updates the hub's internal loopback connection URL.
+Relative asset paths still resolve against the original YAML directory.
+Invalid overrides fail startup; this mechanism does not install software,
+change firewall rules, or alter the sample YAML.
+
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 
 ```bash

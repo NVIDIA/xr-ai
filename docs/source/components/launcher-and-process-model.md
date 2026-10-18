@@ -154,6 +154,21 @@ This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.
 
+### Supervising a foreground stack
+
+A deployment supervisor can set `XR_AI_STACK_READY_FILE` to a private writable
+path before running an existing sample command. The launcher clears stale
+readiness at startup, atomically publishes the run identifier after every
+spawned process signals ready, and removes it on shutdown. This avoids parsing
+or retaining startup logs. The signal reflects process-defined readiness, not
+an additional inference or network health check.
+
+Also check the orchestrator's identity and liveness: a crash or `SIGKILL` can
+leave a stale file. Give each concurrent stack its own path. The path is not
+forwarded to child processes, and model convenience stacks using
+`exit_after_ready=True` do not publish or clear it. Refer to the `run_stack`
+API reference for the file content and lifecycle contract.
+
 ### `launch_mode`: own, persist, reuse
 
 `Process.launch_mode` controls spawn and shutdown behaviour:
