@@ -79,15 +79,23 @@ must be listed in the certificate's SAN via `web_server_extra_sans`. Refer to
 ## Host-specific network overrides
 
 To run an unchanged sample YAML on a different host, set
-`DEVICE_IO_HUB_NETWORK` to a YAML mapping before starting its normal command:
+`DEVICE_IO_HUB_NETWORK_CONFIG` to the path of a UTF-8 YAML file before starting
+its normal command. For example, create `/path/to/network.yaml` containing:
 
-```bash
-export DEVICE_IO_HUB_NETWORK='web_server_port: 9443
+```yaml
+web_server_port: 9443
 lk_port_ws: 9880
 web_server_extra_sans:
   - 203.0.113.7
 cert_file: ""
-key_file: ""'
+key_file: ""
+```
+
+Then run the sample with that overlay, for example from
+`agent-samples/simple-vlm-example/`:
+
+```bash
+DEVICE_IO_HUB_NETWORK_CONFIG=/path/to/network.yaml uv run simple_vlm_example
 ```
 
 Overrides apply after the sample YAML and before configuration validation.
@@ -97,8 +105,12 @@ They accept only `lk_port_ws`, `lk_port_tcp`, `lk_port_udp`, `web_server_port`,
 (a list of strings). Empty `cert_file` and `key_file` values select the
 hub-managed development certificates instead of sample-specified files.
 Changing `lk_port_ws` also updates the hub's internal loopback connection URL.
-Relative asset paths still resolve against the original YAML directory.
-Invalid overrides fail startup; this mechanism does not install software,
+Relative overlay filenames resolve from the hub's working directory; use an
+absolute filename when launching through an orchestrator. Relative sample asset
+paths still resolve against the original sample YAML directory.
+Missing, unreadable, or invalid overlay files fail startup. An unset or empty
+environment variable disables the overlay; inline environment YAML is not supported.
+This mechanism does not install software,
 change firewall rules, or alter the sample YAML.
 
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)

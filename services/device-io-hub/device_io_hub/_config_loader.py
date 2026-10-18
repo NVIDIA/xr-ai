@@ -81,8 +81,10 @@ def load_config() -> LiveKitConnectorConfig:
     document also uses defaults. Unknown top-level and video_recording keys
     are ignored with a warning.
 
-    ``DEVICE_IO_HUB_NETWORK`` supplies a YAML mapping of host network overrides
-    after sample YAML, before validation and relative asset-path resolution.
+    ``DEVICE_IO_HUB_NETWORK_CONFIG`` names a UTF-8 YAML file with host network
+    overrides, applied after sample YAML and before validation and relative
+    asset-path resolution. Relative overlay filenames resolve from CWD;
+    relative sample assets still resolve from the sample YAML directory.
     Accepted fields are the five listener ports, ``lk_use_external_ip``,
     ``lk_skip_external_ip_validation``, and ``web_server_extra_sans``.
     ``cert_file`` and ``key_file`` accept only empty strings to select managed

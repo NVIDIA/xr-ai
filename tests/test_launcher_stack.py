@@ -14,7 +14,6 @@ import xr_ai_launcher._stack as _stack
 
 
 def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
-    monkeypatch.setenv("XR_AI_STACK_READY_FILE", str(tmp_path / "stack.ready"))
     spawned = Mock()
     spawned.stdout = None
     spawned.stderr = None
@@ -37,7 +36,6 @@ def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
     assert failure_contexts["tts"].service == "tts"
     kwargs = popen.call_args.kwargs
     assert kwargs["start_new_session"] is True
-    assert "XR_AI_STACK_READY_FILE" not in kwargs["env"]
     assert (
         kwargs["env"][_stack._PROCESS_GROUP_OWNER_ENV]
         == "pocket_tts_server"
@@ -165,49 +163,6 @@ class TestRunStackShutdownContract:
 
         monkeypatch.setattr(_stack, "_shutdown", _spy_shutdown)
         return calls
-
-    def test_deployment_ready_file_tracks_foreground_stack(self, stub_stack, tmp_path, monkeypatch):
-        ready = tmp_path / "deployment.ready"
-        ready.write_text("stale")
-        monkeypatch.setenv("XR_AI_STACK_READY_FILE", str(ready))
-        monkeypatch.setenv("XR_AI_LOG_TIMESTAMP", "run1")
-
-        def wait_ready(*_args):
-            assert not ready.exists()
-
-        def monitor(_processes):
-            assert ready.read_text() == "run1\n"
-            return None
-
-        monkeypatch.setattr(_stack, "_wait_ready", wait_ready)
-        monkeypatch.setattr(_stack, "_monitor", monitor)
-        _stack.run_stack([_stack.Process("worker", ".", "worker")], tmp_path)
-        assert not ready.exists()
-
-    def test_startup_failure_does_not_publish_deployment_readiness(self, stub_stack, tmp_path, monkeypatch):
-        ready = tmp_path / "deployment.ready"
-        monkeypatch.setenv("XR_AI_STACK_READY_FILE", str(ready))
-
-        def fail(*_args):
-            raise KeyboardInterrupt
-
-        monkeypatch.setattr(_stack, "_wait_ready", fail)
-        with pytest.raises(SystemExit):
-            _stack.run_stack([_stack.Process("worker", ".", "worker")], tmp_path)
-        assert not ready.exists()
-
-    def test_model_convenience_stack_does_not_publish_deployment_readiness(self, stub_stack, tmp_path, monkeypatch):
-        ready = tmp_path / "deployment.ready"
-        ready.write_text("foreground\n")
-        monkeypatch.setenv("XR_AI_STACK_READY_FILE", str(ready))
-        monkeypatch.setattr(_stack, "_wait_ready", lambda *_args: None)
-        monkeypatch.setattr(_stack, "_print_ready_banner", lambda *_args: assert_not_ready())
-
-        def assert_not_ready():
-            assert ready.read_text() == "foreground\n"
-
-        _stack.run_stack([_stack.Process("model", ".", "model")], tmp_path, exit_after_ready=True)
-        assert ready.read_text() == "foreground\n"
 
     def test_abort_during_startup_kills_everything_including_persist(
         self, stub_stack, tmp_path, monkeypatch, capsys,

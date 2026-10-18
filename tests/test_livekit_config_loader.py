@@ -29,7 +29,9 @@ def test_deployment_network_overrides_preserve_sample_yaml(tmp_path, monkeypatch
     original = "web_server_port: 8080\nweb_client_dir: web\ncert_file: old.crt\nkey_file: old.key\n"
     if with_yaml:
         path.write_text(original)
-    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", yaml.safe_dump({
+    overlay = tmp_path / "host" / "network.yaml"
+    overlay.parent.mkdir()
+    overlay.write_text(yaml.safe_dump({
         "web_server_port": 9443,
         "lk_port_ws": 9880,
         "lk_use_external_ip": True,
@@ -37,6 +39,7 @@ def test_deployment_network_overrides_preserve_sample_yaml(tmp_path, monkeypatch
         "cert_file": "",
         "key_file": "",
     }))
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", str(overlay))
     cfg = load_config()
     assert cfg.web_server_port == 9443
     assert cfg.lk_port_ws == 9880
@@ -59,25 +62,57 @@ def test_deployment_network_overrides_preserve_sample_yaml(tmp_path, monkeypatch
 def test_deployment_rejects_invalid_network_overrides(tmp_path, monkeypatch, overrides):
     _reset_argv(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", yaml.safe_dump(overrides))
-    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK"):
+    overlay = tmp_path / "network.yaml"
+    overlay.write_text(yaml.safe_dump(overrides))
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", str(overlay))
+    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK_CONFIG"):
         load_config()
 
 
 def test_deployment_rejects_malformed_yaml(tmp_path, monkeypatch):
     _reset_argv(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", "lk_port_ws: [")
-    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK must contain valid YAML"):
+    overlay = tmp_path / "network.yaml"
+    overlay.write_text("lk_port_ws: [")
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", str(overlay))
+    with pytest.raises(ValueError, match="DEVICE_IO_HUB_NETWORK_CONFIG.*valid UTF-8 YAML"):
         load_config()
 
 
-def test_network_override_rejection_does_not_partially_mutate_config(monkeypatch):
+def test_network_override_rejection_does_not_partially_mutate_config(monkeypatch, tmp_path):
     from device_io_hub._deployment import apply_network_overrides
 
     data = {"web_server_port": 8080}
-    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK", "web_server_port: 9443\napi_secret: no")
+    overlay = tmp_path / "network.yaml"
+    overlay.write_text("web_server_port: 9443\napi_secret: no")
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", str(overlay))
     with pytest.raises(ValueError, match="api_secret"):
+        apply_network_overrides(data)
+    assert data == {"web_server_port": 8080}
+
+
+@pytest.mark.parametrize("filename", [None, ""])
+def test_network_overlay_is_optional(monkeypatch, filename):
+    from device_io_hub._deployment import apply_network_overrides
+
+    monkeypatch.delenv("DEVICE_IO_HUB_NETWORK_CONFIG", raising=False)
+    if filename is not None:
+        monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", filename)
+    data = {"web_server_port": 8080}
+    apply_network_overrides(data)
+    assert data == {"web_server_port": 8080}
+
+
+@pytest.mark.parametrize("content", [None, b"\xff", b"", b"web_server_port: ["])
+def test_network_overlay_file_errors_fail_setup(monkeypatch, tmp_path, content):
+    from device_io_hub._deployment import apply_network_overrides
+
+    overlay = tmp_path / "network.yaml"
+    if content is not None:
+        overlay.write_bytes(content)
+    monkeypatch.setenv("DEVICE_IO_HUB_NETWORK_CONFIG", str(overlay))
+    data = {"web_server_port": 8080}
+    with pytest.raises((FileNotFoundError, ValueError), match="network.yaml"):
         apply_network_overrides(data)
     assert data == {"web_server_port": 8080}
 

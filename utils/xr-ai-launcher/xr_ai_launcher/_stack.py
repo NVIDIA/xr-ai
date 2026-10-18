@@ -49,7 +49,6 @@ from pathlib import Path
 from typing import Sequence, Union
 
 from ._credentials import load_credentials
-from ._deployment import stack_readiness
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
@@ -235,7 +234,7 @@ def _spawn(
         config_path=config_path,
     )
 
-    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "XR_AI_STACK_READY_FILE"}}
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     # The child can record this launcher's dedicated session without creating
     # a nested session that would escape _shutdown's SIGKILL escalation.
     env[_PROCESS_GROUP_OWNER_ENV] = proc.command
@@ -540,15 +539,6 @@ def run_stack(
     is printed every five seconds so model-loading or CloudXR start-up
     remains visible.
 
-    For a supervising deployment, ``XR_AI_STACK_READY_FILE`` publishes aggregate
-    readiness independently of log output: once all spawned processes signal
-    ready, the launcher atomically writes ``XR_AI_LOG_TIMESTAMP`` (or ``ready``)
-    followed by a newline to that private writable path. It clears stale state
-    before startup and removes the file on shutdown. Supervisors must also check
-    process liveness because SIGKILL or a machine crash can leave the file behind.
-    The path is not forwarded to children. Stacks using ``exit_after_ready=True``
-    neither publish nor remove the supervising foreground stack's readiness file.
-
     After all processes are ready the launcher monitors them: if any exits,
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
@@ -602,7 +592,7 @@ def run_stack(
     aborted = False
     failure_status: int | None = None
 
-    with stack_readiness(not exit_after_ready) as mark_ready, tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
+    with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
         tmpdir = Path(_tmpdir)
         try:
             for item in processes:
@@ -650,7 +640,6 @@ def run_stack(
                     )
                     _wait_ready(item.name, ready_file, launched[item.name])
 
-            mark_ready()
             log.info("All processes ready.")
             _print_ready_banner(list(launched.keys()))
             if exit_after_ready:
