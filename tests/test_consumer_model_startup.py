@@ -107,7 +107,7 @@ async def test_shipped_speaker_mode_never_constructs_batch_client(
     profile = load_models_config(root / "agent-samples" / sample / "yaml" / model_file)
     assert "stt" not in profile.entries
     if optional_batch_entry:
-        profile.entries["stt"] = load_models_config(root / "deployment/nim/models.yaml").entries["stt"]
+        profile.entries["stt"] = load_models_config(root / "deployments/nim/models.yaml").entries["stt"]
     monkeypatch.setattr(app, "load_models_config", lambda *_args: profile)
     monkeypatch.setattr(app, "setup_logging", Mock())
     monkeypatch.setattr(_runtime, "make_stt", lambda *_args: pytest.fail("unused batch client constructed"))

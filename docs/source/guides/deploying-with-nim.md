@@ -41,7 +41,7 @@ GPU layout or manage NIM container lifecycle. Refer to NVIDIA's
 [Speech NIM deployment guide](https://docs.nvidia.com/nim/speech/latest/deployment/index.html),
 and the deployment guide for each selected model and container version.
 
-The example in `deployment/nim/models.yaml` selects Nemotron Omni for LLM
+The example in `deployments/nim/models.yaml` selects Nemotron Omni for LLM
 chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
 synthesis, and Llama Nemotron Embed for retrieval. These are endpoint
 configuration examples, not a claim of production or hardware qualification.
@@ -72,7 +72,7 @@ Run the following commands from the repository root. Copy the example to a
 private path and replace the `example.com` addresses before making requests:
 
 ```bash
-cp deployment/nim/models.yaml /tmp/models.nim.yaml
+cp deployments/nim/models.yaml /tmp/models.nim.yaml
 ```
 
 HTTP `base_url` is the service root, excluding `/v1`. Riva gRPC uses `host:port`,
@@ -154,7 +154,7 @@ The speech extra and Python audio compatibility package are its only additions:
 
 ```bash
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models --extra riva \
-  --with 'audioop-lts; python_version >= "3.13"' python deployment/nim/smoke_test.py \
+  --with 'audioop-lts; python_version >= "3.13"' python deployments/nim/smoke_test.py \
   --models /tmp/models.nim.yaml
 ```
 
@@ -207,7 +207,7 @@ target.write_text(json.dumps(active, indent=2) + '\n')
 gate_path.write_text(yaml.safe_dump(gate, sort_keys=False))
 PYTHON
 uv --config-file uv.toml run --project agent-sdk/xr-ai-models --extra riva \
-  --with 'audioop-lts; python_version >= "3.13"' python deployment/nim/smoke_test.py \
+  --with 'audioop-lts; python_version >= "3.13"' python deployments/nim/smoke_test.py \
   --models agent-samples/simple-vlm-example/yaml/models.json
 uv run --project agent-samples/simple-vlm-example simple_vlm_example
 ```

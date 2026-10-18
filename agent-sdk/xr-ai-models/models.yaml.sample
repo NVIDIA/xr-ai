@@ -69,4 +69,4 @@ models:
 
 # For Riva speech, including TLS, language, voice, sample rate, function IDs,
 # endpoint credentials, and independently deployed NIM examples, refer to
-# docs/source/reference/agent-sdk-models.md and deployment/nim/models.yaml.
+# docs/source/reference/agent-sdk-models.md and deployments/nim/models.yaml.

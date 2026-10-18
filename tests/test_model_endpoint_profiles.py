@@ -15,7 +15,7 @@ import pytest
 from xr_ai_models import load_models_config, load_models_config_from_dict, make_embedding
 
 ROOT = Path(__file__).resolve().parents[1]
-SMOKE = run_path(str(ROOT / "deployment/nim/smoke_test.py"))
+SMOKE = run_path(str(ROOT / "deployments/nim/smoke_test.py"))
 
 
 def _profile(extras):
@@ -129,7 +129,7 @@ async def test_embedding_cancellation_does_not_submit_second_group(monkeypatch):
 
 
 def test_endpoint_profile_and_sample_environments_use_existing_contract():
-    config = load_models_config(ROOT / "deployment/nim/models.yaml")
+    config = load_models_config(ROOT / "deployments/nim/models.yaml")
     assert set(config.entries) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert all(spec.deployment.ownership == "external" for spec in config.entries.values())
     assert config.required_credentials == ("NIM_ENDPOINT_API_KEY",)
@@ -162,7 +162,7 @@ async def test_smoke_check_rejects_missing_credentials_before_connecting(monkeyp
     monkeypatch.delenv("NIM_ENDPOINT_API_KEY", raising=False)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: pytest.fail("connected before validation"))
     with pytest.raises(ValueError, match="missing endpoint credential: NIM_ENDPOINT_API_KEY"):
-        await SMOKE["check"](ROOT / "deployment/nim/models.yaml")
+        await SMOKE["check"](ROOT / "deployments/nim/models.yaml")
 
 
 async def test_smoke_check_accepts_native_embedding_dimensions(endpoint, tmp_path, capsys):
@@ -319,7 +319,7 @@ async def test_smoke_uses_native_http_profile_for_chat_vision_and_embeddings(mon
 
     real_client = httpx.AsyncClient
     calls = []
-    source = yaml.safe_load((ROOT / "deployment/nim/models.yaml").read_text())
+    source = yaml.safe_load((ROOT / "deployments/nim/models.yaml").read_text())
     source["models"] = {name: spec for name, spec in source["models"].items() if name not in ("stt", "tts")}
     profile = tmp_path / "models.yaml"
     profile.write_text(yaml.safe_dump(source))
