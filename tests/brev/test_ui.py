@@ -7,6 +7,29 @@ from pathlib import Path
 
 
 class UITests(unittest.TestCase):
+    def test_gpu_memory_unavailable_does_not_render_zero_capacity(self):
+        page = Path(__file__).resolve().parents[2] / "deployments/brev/ui.html"
+        result = subprocess.run(["node", "-e", """
+const fs=require('node:fs'), vm=require('node:vm'), assert=require('node:assert/strict');
+const elements=new Map();
+const context=vm.createContext({document:{getElementById(id){
+  if(!elements.has(id)) elements.set(id,{}); return elements.get(id);
+},querySelectorAll(){return []}},fetch:()=>new Promise(()=>{}),setInterval(){},localStorage:{}});
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8').split('<script>')[1].split('</script>')[0],context);
+for(const memory of [null, undefined, 98304]){
+  context.memory=memory;
+  vm.runInContext(`render({inventory:{demos:[],gpus:[
+    {name:'NVIDIA GB10',memory_mib:memory,nvenc:true}],driver_version:'580.1'},
+    process:{state:'stopped'}})`,context);
+  const summary=elements.get('summary').innerHTML;
+  assert.match(summary,/NVIDIA GB10/);
+  assert.match(summary,/NVENC: Yes/);
+  assert.match(summary,memory==null ? /Memory unavailable/ : /96.0 GiB/);
+  assert.doesNotMatch(summary,/0.0 GiB|NaN|No GPU detected/);
+}
+""", str(page)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_release_selector_and_recording_download_links(self):
         page = Path(__file__).resolve().parents[2] / "deployments/brev/ui.html"
         result = subprocess.run(["node", "-e", """

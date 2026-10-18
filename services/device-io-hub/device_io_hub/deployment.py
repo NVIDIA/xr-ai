@@ -8,6 +8,7 @@ validation. It accepts the five listener ports, LiveKit external-IP booleans,
 and ``web_server_extra_sans``. Empty ``cert_file`` and ``key_file`` overrides
 select XR AI's managed development certificates. Other fields are rejected.
 Relative asset paths continue to resolve against the original YAML directory.
+Overriding ``lk_port_ws`` also sets the hub's loopback ``lk_internal_url``.
 """
 
 import json
@@ -39,3 +40,5 @@ def apply_network_overrides(data: dict) -> None:
         if not valid:
             raise ValueError(f"DEVICE_IO_HUB_NETWORK: unsupported field or value: {key}")
     data.update(overrides)
+    if "lk_port_ws" in overrides:
+        data["lk_internal_url"] = f"ws://127.0.0.1:{overrides['lk_port_ws']}"

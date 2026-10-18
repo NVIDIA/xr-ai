@@ -16,6 +16,33 @@ LAUNCH = ROOT / "deployments/brev/launch.sh"
 
 @unittest.skipUnless(sys.platform == "linux" and shutil.which("flock"), "requires Linux")
 class ShutdownTests(unittest.TestCase):
+    def test_stale_sample_pid_does_not_signal_unrelated_process(self):
+        with tempfile.TemporaryDirectory() as directory, subprocess.Popen(
+            ["sleep", "30"], start_new_session=True,
+        ) as unrelated:
+            state = Path(directory)
+            (state / "sample.pid").write_text(str(unrelated.pid))
+            (state / "sample.current").write_text("old-sample\n")
+            (state / "models.active").write_text("recorded-stack\nmodels\n")
+            try:
+                result = subprocess.run(
+                    ["bash", "-c", '''set -- help; source "$TEST_LAUNCH" >/dev/null
+uv() { echo unexpected-model-stop; }
+stop_locked
+'''], env=os.environ | {"XR_AI_STATE": directory, "TEST_LAUNCH": str(LAUNCH)},
+                    capture_output=True, text=True, timeout=5,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("does not match this launcher and state", result.stderr)
+                self.assertIsNone(unrelated.poll())
+                self.assertNotIn("unexpected-model-stop", result.stdout)
+                self.assertEqual((state / "sample.pid").read_text(), str(unrelated.pid))
+                self.assertTrue((state / "models.active").exists())
+            finally:
+                if unrelated.poll() is None:
+                    unrelated.terminate()
+                unrelated.wait(timeout=5)
+
     def test_stop_during_real_stack_readiness(self):
         runtime = Path(os.environ.get("XR_AI_TEST_ROOT", ROOT)).resolve()
         with tempfile.TemporaryDirectory() as directory:
@@ -95,6 +122,7 @@ prepare_state
 echo 12345 > "$PID_FILE"
 echo sample > "$CURRENT_FILE"
 pid_alive() { return 0; }
+sample_owned() { return 0; }
 kill() { return 0; }
 sleep() { :; }
 uv() { echo unexpected-model-stop; }

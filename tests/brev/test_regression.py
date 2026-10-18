@@ -51,6 +51,7 @@ key_file: "/old/tls.key"
                 command = ("set -- help; source launch.sh >/dev/null; "
                            "configure_runtime agent-samples/simple-vlm-example 203.0.113.7")
                 env = os.environ | {"XR_AI_STATE": str(state), "XR_AI_DEPLOYMENT_PYTHON": sys.executable}
+                env["XR_AI_LIVEKIT_WS_PORT"] = "9880"
                 result = subprocess.run(["bash", "-c", command], cwd=ROOT, env=env, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(worker.read_text(), "voice_gate_yaml: voice_gate.yaml\n")
@@ -60,6 +61,8 @@ key_file: "/old/tls.key"
                 self.assertIn('cert_file: ""', hub)
                 self.assertIn('key_file: ""', hub)
                 self.assertIn("web_server_extra_sans:\n  - 203.0.113.7", hub)
+                self.assertIn('lk_port_ws: 9880', hub)
+                self.assertIn('lk_internal_url: "ws://127.0.0.1:9880"', hub)
                 self.assertNotIn("/old/tls", hub)
                 self.assertNotIn("198.51.100.9", hub)
                 for host, external in (("192.168.1.50", "false"), ("8.8.8.8", "true")):
@@ -87,3 +90,5 @@ key_file: "/old/tls.key"
                 self.assertEqual(overrides["web_server_extra_sans"], ["203.0.113.7"])
                 self.assertEqual(overrides["cert_file"], "")
                 self.assertEqual(overrides["key_file"], "")
+                self.assertEqual(overrides["lk_port_ws"], 9880)
+                self.assertNotIn("lk_internal_url", overrides)

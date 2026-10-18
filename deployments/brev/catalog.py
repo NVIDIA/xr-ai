@@ -50,11 +50,12 @@ def catalog(root: Path) -> dict:
             continue
         index, name, compute, memory, gpu_driver = parts
         try:
+            memory_mib = None if memory in {"N/A", "[N/A]", "Not Supported", "[Not Supported]"} else int(float(memory))
             gpu = {
                 "index": int(index),
                 "name": name,
                 "compute": float(compute),
-                "memory_mib": int(float(memory)),
+                "memory_mib": memory_mib,
                 "nvenc": bool(encoders.get(index)),
             }
         except ValueError:

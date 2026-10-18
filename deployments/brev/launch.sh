@@ -229,7 +229,7 @@ start_sample() {
   printf '%s\n' "$recording_flag" > "$STATE_DIR/sample.recording"
   # Background shells inherit ignored SIGINT; restore it so run_stack can cancel
   # during readiness waits. The detached sample must not retain the action lock.
-  nohup env --default-signal=INT setsid "$SELF" _run "$project" "$command" "$recording_flag" >> "$APP_LOG" 2>&1 </dev/null 9>&- &
+  nohup env --default-signal=INT XR_AI_STATE="$STATE_DIR" setsid "$SELF" _run "$project" "$command" "$recording_flag" >> "$APP_LOG" 2>&1 </dev/null 9>&- &
   pid=$!; printf '%s\n' "$pid" > "$PID_FILE"; sleep 1
   pid_alive "$PID_FILE" || { tail -n 80 "$APP_LOG" >&2; stop_locked; die "$sample failed to start"; }
   note "starting $sample in the background (PID $pid)"
@@ -265,11 +265,25 @@ run_sample() {
   exit "$rc"
 }
 
+sample_owned() {
+  local pid="$1" argument
+  local -a arguments=()
+  while IFS= read -r -d '' argument; do arguments+=("$argument"); done < "/proc/$pid/cmdline"
+  [[ "${arguments[1]:-}" == "$SELF" && "${arguments[2]:-}" == _run ]] || return 1
+  # The same launcher can supervise different state directories on one host.
+  while IFS= read -r -d '' argument; do
+    [[ "$argument" != "XR_AI_STATE=$STATE_DIR" ]] || return 0
+  done < "/proc/$pid/environ"
+  return 1
+}
+
 stop_locked() {
   local pid attempt sample root models model_command
   sample="$(first_line "$CURRENT_FILE" 2>/dev/null || true)"
   if pid_alive "$PID_FILE"; then
-    pid="$(first_line "$PID_FILE")"; note "stopping $sample (PID $pid)"
+    pid="$(first_line "$PID_FILE")"
+    sample_owned "$pid" || die "sample PID $pid does not match this launcher and state; refusing to stop it"
+    note "stopping $sample (PID $pid)"
     # SIGTERM is not handled during startup in older run_stack releases. SIGINT
     # enters their KeyboardInterrupt cleanup, including separately grouped children.
     kill -INT -- "-$pid" 2>/dev/null || kill -INT "$pid" 2>/dev/null || true

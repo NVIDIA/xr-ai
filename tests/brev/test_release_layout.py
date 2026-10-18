@@ -15,6 +15,44 @@ ROOT = Path(__file__).resolve().parents[2] / "deployments" / "brev"
 
 @unittest.skipUnless(os.environ.get("XR_AI_TEST_ROOT"), "release checkout supplied by compatibility CI")
 class ReleaseLayoutTests(unittest.TestCase):
+    def test_spark_catalog_preserves_gpu_when_memory_is_unavailable(self):
+        repo = ROOT.parents[1]
+        for memory in ("N/A", "[N/A]", "Not Supported", "[Not Supported]", "98304"):
+            with self.subTest(memory=memory), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory)
+                binary = state / "bin"
+                binary.mkdir()
+                smi = binary / "nvidia-smi"
+                smi.write_text(f'''#!/bin/bash
+case "$*" in
+  *query-compute-apps*) exit 0 ;;
+  *pci.bus_id*) echo '0, GPU-test, 0000:01:00.0, NVIDIA GB10, 12.1, {memory}, {memory}, {memory}' ;;
+  *encoder.stats*) echo '0, 0' ;;
+  *) echo '0, NVIDIA GB10, 12.1, {memory}, 580.1' ;;
+esac
+''')
+                smi.chmod(0o755)
+                fixture = state / "probe.json"
+                fixture.write_text(json.dumps({
+                    "docker_version": "27", "docker_runtime": True, "codec_libraries": True,
+                }))
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "catalog.py"), str(repo)],
+                    env=os.environ | {"PATH": str(binary) + ":" + os.environ["PATH"],
+                                      "XR_AI_PROBE_FIXTURE": str(fixture)},
+                    text=True, capture_output=True, timeout=20,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                inventory = json.loads(result.stdout)
+                self.assertEqual(inventory["driver_version"], "580.1")
+                self.assertEqual(inventory["gpus"], [{
+                    "index": 0, "name": "NVIDIA GB10", "compute": 12.1,
+                    "memory_mib": 98304 if memory == "98304" else None, "nvenc": True,
+                }])
+                simple = next(demo for demo in inventory["demos"] if demo["id"] == "simple-vlm")
+                self.assertEqual(simple["blockers"], [] if sys.platform == "linux" else ["Linux is required"])
+                self.assertEqual(simple["runnable"], sys.platform == "linux")
+
     def test_real_release_catalog_and_model_commands(self):
         repo = Path(os.environ["XR_AI_TEST_ROOT"]).resolve()
         with tempfile.TemporaryDirectory() as directory:

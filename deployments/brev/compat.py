@@ -68,6 +68,7 @@ def configure(root: Path, project: str, host: str, ports: list[str]) -> dict:
     overrides = network_overrides(host, ports)
     if (root / "services/device-io-hub/device_io_hub/deployment.py").is_file():
         return overrides
+    overrides["lk_internal_url"] = f"ws://127.0.0.1:{overrides['lk_port_ws']}"
     # Old releases have no override hook. Limit rewriting to their flat hub YAML;
     # fail explicitly if a layout changes rather than appending ineffective keys.
     yaml = root / project / "yaml"

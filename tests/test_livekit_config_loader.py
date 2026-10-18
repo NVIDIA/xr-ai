@@ -41,6 +41,7 @@ def test_deployment_network_overrides_preserve_sample_yaml(tmp_path, monkeypatch
     cfg = load_config()
     assert cfg.web_server_port == 9443
     assert cfg.lk_port_ws == 9880
+    assert cfg.lk_internal_url == "ws://127.0.0.1:9880"
     assert cfg.lk_use_external_ip is True
     assert cfg.web_server_extra_sans == ["203.0.113.1"]
     assert cfg.cert_file == cfg.key_file == ""
