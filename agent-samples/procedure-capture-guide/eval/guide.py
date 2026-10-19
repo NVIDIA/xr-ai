@@ -28,6 +28,7 @@ from pathlib import Path
 import nemo_relay
 import yaml
 from _recorded_camera import capture_frames, feed_recording
+from _tea_scenes import load_scenes, render_scene
 from loguru import logger
 from PIL import Image, ImageDraw
 from procedure_capture_guide_worker.config import load_config
@@ -156,13 +157,16 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     if hashlib.sha256(raw).hexdigest() != guide.sha256:
         raise ValueError("guide changed while loading; retry with a fixed guide")
     fixtures = {}
-    for name, scene in ({} if packet else manifest.get("scenes", {})).items():
-        image = Image.new("RGB", (640, 480), "white")
-        draw = ImageDraw.Draw(image)
-        if "rectangle" in scene:
-            draw.rectangle((120, 100, 520, 380), fill=scene["rectangle"])
-        if "text" in scene:
-            draw.multiline_text((40, 40), scene["text"], fill="black", font_size=42, spacing=20)
+    for name, scene in ({} if packet else load_scenes(manifest_path, manifest)).items():
+        if "kind" in scene:
+            image = render_scene(scene)
+        else:
+            image = Image.new("RGB", (640, 480), "white")
+            draw = ImageDraw.Draw(image)
+            if "rectangle" in scene:
+                draw.rectangle((120, 100, 520, 380), fill=scene["rectangle"])
+            if "text" in scene:
+                draw.multiline_text((40, 40), scene["text"], fill="black", font_size=42, spacing=20)
         path = output / f"{name}.png"
         image.save(path)
         fixtures[name] = path.resolve()
@@ -305,6 +309,18 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                     await wait_until(lambda: any(re.search(action["expect"], item.text)
                                                  for item in speech.outputs[speech_offset:]),
                                      action.get("timeout_s", 90))
+                    if "after_speech" in action:
+                        origins = [event for event in events if event["kind"] == "speech"
+                                   and re.search(action["after_speech"], event["text"])]
+                        endings = [event for event in events if event["kind"] == "speech"
+                                   and re.search(action["expect"], event["text"])]
+                        action_passed = bool(origins and endings) and (
+                            endings[-1]["elapsed_s"] - origins[-1]["elapsed_s"] >= action["minimum_elapsed_s"]
+                        )
+                elif kind == "quiet":
+                    before = len(speech.outputs)
+                    await asyncio.sleep(action["duration_s"])
+                    action_passed = len(speech.outputs) == before
                 else:
                     raise ValueError(f"unknown action: {kind}")
                 if packet:

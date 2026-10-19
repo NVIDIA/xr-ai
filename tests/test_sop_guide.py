@@ -1429,6 +1429,9 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     manifest = yaml.safe_load((_SAMPLE / "eval/guide_cases.yaml").read_text())
     if timer:
         guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
+        completion = next(action for action in manifest["actions"]
+                          if action.get("expect") == "Indicator check finished")
+        completion.update(after_speech="The ten-second wait has started", minimum_elapsed_s=0.5)
     else:
         guide["steps"] = guide["steps"][:1]
         guide["steps"][0]["next"] = None

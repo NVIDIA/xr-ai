@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Schematic scenes drawn entirely in code, not photos or recording derivatives.
+# Packet typography is illustrative, not a reproduction of commercial packaging.
+breakfast: {kind: packet, brand: NUMI, blend: BREAKFAST BLEND, color: '#dea67d'}
+green: {kind: packet, brand: NUMI, blend: GUNPOWDER GREEN, color: '#b2ca90'}
+chamomile: {kind: packet, brand: NUMI, blend: CHAMOMILE LEMON, color: '#e5d191'}
+mint: {kind: packet, brand: NUMI, blend: MOROCCAN MINT, color: '#9db9c5'}
+other_brand: {kind: packet, brand: OTHER TEA, blend: CHAMOMILE LEMON, color: '#e5d191'}
+partial_blend: {kind: packet, brand: NUMI, blend: CHAMOMILE, color: '#e5d191'}
+covered_packet: {kind: packet, covered: true}
+current20: {kind: kettle, readings: [{label: CURRENT, value: '20 C'}]}
+current65: {kind: kettle, readings: [{label: CURRENT, value: '65 C'}]}
+current94: {kind: kettle, readings: [{label: CURRENT, value: '94 C'}]}
+current99: {kind: kettle, readings: [{label: CURRENT, value: '99 C'}]}
+current100: {kind: kettle, readings: [{label: CURRENT, value: '100 C'}]}
+actual212: {kind: kettle, readings: [{label: ACTUAL, value: '212 F'}]}
+current100f: {kind: kettle, readings: [{label: CURRENT, value: '100 F'}]}
+target100: {kind: kettle, readings: [{label: TARGET, value: '100 C'}]}
+set100: {kind: kettle, readings: [{label: SET, value: '100 C'}]}
+unlabeled100: {kind: kettle, readings: [{label: '', value: '100 C'}]}
+mixed94: {kind: kettle, readings: [{label: TARGET, value: '100 C'}, {label: CURRENT, value: '94 C'}]}
+empty: {kind: cup, state: empty}
+dry_bag: {kind: cup, state: dry_bag}
+water: {kind: cup, state: water}
+above: {kind: cup, state: above}
+immersed: {kind: cup, state: immersed}
+floating: {kind: cup, state: floating}
+obscured: {kind: cup, state: obscured}

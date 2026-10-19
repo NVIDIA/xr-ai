@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Independent positive path so a failed negative-case scenario cannot hide
+# timer and lifecycle coverage. No runtime state or observations are injected.
+guides_dir: ../guides
+guide: Tea Making
+scenes_file: tea_scenes.yaml
+actions:
+  - {action: image, scene: chamomile}
+  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
+  - {action: say, text: Start guide, expect: Show the Numi, tools: [workflow__restart]}
+  - {action: wait_speech, expect: The packet identifies Numi Chamomile Lemon}
+  - {action: say, text: 'What is my status?', expect: 'Read the tea packet\. Complete', tools: [workflow__status]}
+  - {action: image, scene: current100}
+  - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: wait_speech, expect: The displayed current water temperature is at the brewing target}
+  - {action: image, scene: immersed}
+  - {action: say, text: Next, expect: Carefully put the Numi, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: wait_speech, expect: The tea bag is visibly in the water}
+  - {action: say, text: Next, expect: five-minute steeping timer is now running, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: say, text: 'How much time remains?', tools: [clock__timer], arguments: [{}]}
+  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
+  # Delivery time is slightly later than timer entry; allow five seconds of
+  # speech scheduling tolerance, without shortening the runtime's 300-second timer.
+  - action: wait_speech
+    expect: Five minutes have elapsed
+    after_speech: five-minute steeping timer is now running
+    minimum_elapsed_s: 295
+    timeout_s: 330
+  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
+  - {action: image, scene: breakfast}
+  - {action: say, text: Start guide, expect: Show the Numi, tools: [workflow__restart]}
+  - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
+  - {action: image, scene: chamomile}
+  - {action: quiet, duration_s: 5}
+  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
