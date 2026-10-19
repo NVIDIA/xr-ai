@@ -6,7 +6,6 @@
 import ctypes.util
 import json
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -103,44 +102,25 @@ def catalog(root: Path) -> dict:
 
     for pyproject in sorted((root / "agent-samples").glob("*/pyproject.toml")):
         relative = pyproject.parent.relative_to(root).as_posix()
-        if pyproject.parent.name == "model-servers":
-            continue
         project = tomllib.loads(pyproject.read_text()).get("project", {})
         scripts = project.get("scripts", {})
         if not scripts or not any(str(value).startswith("xr-ai-launcher") for value in project.get("dependencies", ())):
             continue
         if len(scripts) != 1:
             raise ValueError(f"{pyproject}: expected exactly one sample console command")
-        project_name = project.get("name", pyproject.parent.name)
+        project_name = project["name"]
         command = next(iter(scripts))
         if not re.fullmatch(r"[a-zA-Z0-9_-]+", command):
             raise ValueError(f"{pyproject}: invalid sample console command")
-        simple = relative == "agent-samples/simple-vlm-example"
-        demo_id = "simple-vlm" if simple else re.sub(r"[^a-z0-9-]+", "-", project_name.lower()).strip("-")
-        name = (
-            "Simple VLM"
-            if simple
-            else re.sub(r"-(sample|demo)$", "", project_name).replace("-", " ").title().replace("Xr ", "XR ")
-        )
-        description = (
-            "Vision, speech, and text with shared local models."
-            if simple
-            else project.get("description") or "XR-AI sample using shared local models."
-        )
         models = pyproject.parent / "model-servers"
         fits = bool(profile and (models / "yaml" / f"{profile}.yaml").is_file())
         blockers = [] if fits else ["No matching GPU profile"]
-        if relative == "agent-samples/xr-render-demo" and not all(shutil.which(name) for name in ("node", "npm")):
-            blockers.append("XR Render web client needs Node.js and npm")
-        item = demo(demo_id, name, description, relative, command, fits, blockers)
+        item = demo(project_name, project_name, project["description"], relative, command, fits, blockers)
         demos.append(item)
-    demos.sort(key=lambda item: item["id"] != "simple-vlm")
 
     commit = run(["git", "-C", str(root), "rev-parse", "HEAD"])
     result = {"commit": commit, "driver_version": driver, "gpus": gpus, "demos": demos}
-    recommended = next((item["id"] for item in demos if item["id"] == "simple-vlm" and item["runnable"]), "") or next(
-        (item["id"] for item in demos if item["runnable"]), ""
-    )
+    recommended = next((item["id"] for item in demos if item["runnable"]), "")
     result["recommended"] = recommended
 
     return result

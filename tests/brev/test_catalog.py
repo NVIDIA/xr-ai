@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import io
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -24,14 +25,12 @@ class CatalogTests(unittest.TestCase):
         self.driver = "580.1"
         self.docker = "27.0.1"
         self.runtimes = '{"nvidia":{}}'
-        self.tools = True
         self.codec = True
         self.commands = []
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(catalog.subprocess, "check_output", side_effect=self.output))
         self.stack.enter_context(patch.object(catalog.ctypes.util, "find_library", side_effect=lambda _: self.codec))
-        self.stack.enter_context(patch.object(catalog.shutil, "which", side_effect=lambda _: self.tools))
         self.stack.enter_context(patch.object(catalog.sys, "platform", "linux"))
 
     def output(self, argv, **_kwargs):
@@ -56,7 +55,13 @@ class CatalogTests(unittest.TestCase):
         expected = {path.parent.relative_to(ROOT).as_posix()
                     for path in (ROOT / "agent-samples").glob("*/model-servers/pyproject.toml")}
         self.assertEqual({str(Path(item["project"]) / "model-servers") for item in inventory["demos"]}, expected)
-        self.assertEqual(inventory["recommended"], "simple-vlm")
+        self.assertEqual(inventory["recommended"], inventory["demos"][0]["id"])
+        for item in inventory["demos"]:
+            project = tomllib.loads((ROOT / item["project"] / "pyproject.toml").read_text())["project"]
+            self.assertEqual(item["id"], project["name"])
+            self.assertEqual(item["name"], project["name"])
+            self.assertEqual(item["description"], project["description"])
+            self.assertTrue(item["description"].strip())
         self.assertTrue(all(item["runnable"] for item in inventory["demos"]))
         self.assertTrue(all(not item["blockers"] for item in inventory["demos"]))
         self.assertTrue(all(argv[0] in {"nvidia-smi", "docker", "git"} for argv in self.commands))
@@ -89,13 +94,6 @@ class CatalogTests(unittest.TestCase):
             self.assertFalse(item["runnable"])
             self.assertEqual(len(item["blockers"]), 4)
 
-    def test_render_requires_build_tools_without_blocking_other_samples(self):
-        self.tools = False
-        inventory = catalog.catalog(ROOT)
-        render = next(item for item in inventory["demos"] if item["id"] == "xr-render-demo")
-        self.assertIn("XR Render web client needs Node.js and npm", render["blockers"])
-        self.assertEqual(inventory["recommended"], "simple-vlm")
-
     def test_missing_tools_report_a_blocked_inventory(self):
         with patch.object(catalog.subprocess, "check_output", side_effect=FileNotFoundError):
             inventory = catalog.catalog(ROOT)
@@ -107,24 +105,30 @@ class CatalogTests(unittest.TestCase):
             root = Path(directory)
             sample = root / "agent-samples/new-sample"
             sample.mkdir(parents=True)
-            metadata = ('[project]\nname="new-sample"\ndependencies=["xr-ai-launcher"]\n'
+            metadata = ('[project]\nname="new-sample"\ndescription="A new sample."\ndependencies=["xr-ai-launcher"]\n'
                         '[project.scripts]\nnew_sample="main:run"\n')
             (sample / "pyproject.toml").write_text(metadata)
             inventory = catalog.catalog(root)
             self.assertEqual(inventory["demos"][0]["command"], "new_sample")
+            self.assertEqual(inventory["demos"][0]["name"], "new-sample")
+            self.assertEqual(inventory["demos"][0]["description"], "A new sample.")
             self.assertEqual(inventory["demos"][0]["blockers"], ["No matching GPU profile"])
             profiles = sample / "model-servers/yaml"
             profiles.mkdir(parents=True)
             (profiles / "spark.yaml").touch()
             self.assertEqual(catalog.catalog(root)["recommended"], "new-sample")
+            (sample / "pyproject.toml").write_text(metadata.replace('description="A new sample."\n', ""))
+            with self.assertRaisesRegex(KeyError, "description"):
+                catalog.catalog(root)
             (sample / "pyproject.toml").write_text(metadata + 'another="main:run"\n')
             with self.assertRaisesRegex(ValueError, "exactly one sample console command"):
                 catalog.catalog(root)
 
     def test_resolve_auto_unknown_and_blocked(self):
+        selected = catalog.catalog(ROOT)["demos"][0]
         with contextlib.redirect_stdout(io.StringIO()) as output:
             catalog.main(ROOT, ["--resolve", "auto"])
-        self.assertEqual(output.getvalue(), "simple-vlm\tagent-samples/simple-vlm-example\tsimple_vlm_example\n")
+        self.assertEqual(output.getvalue(), f"{selected['id']}\t{selected['project']}\t{selected['command']}\n")
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
             catalog.main(ROOT, ["--resolve", "missing"])
         self.assertEqual(error.exception.code, 2)
