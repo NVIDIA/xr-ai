@@ -53,6 +53,12 @@ bash tests/run_local_gpu_tests.sh
 
 Pass extra pytest arguments after the script name to select a file or test.
 
+`gpu` tests remove only the model-server containers their own session created
+(labelled `xr-ai-test-session=<id>` by `xr_ai_vllm` via `XR_AI_TEST_SESSION`).
+They never remove containers that were already running, such as persist-mode
+servers in live use; if any `xr-ai-vllm-*` or `xr-ai-nim-*` container is
+running, the `gpu` test is skipped with a message naming it.
+
 ## Apple microphone transaction tests
 
 With Xcode 26.3 or newer selected, run the real StreamKit package tests on an

@@ -38,6 +38,11 @@ log = logging.getLogger(__name__)
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
+# When this env var is set, containers this module creates also carry
+# ``xr-ai-test-session=<value>`` so a test harness can find and remove exactly
+# the containers it launched — never ones a live launcher owns.
+TEST_SESSION_ENV = "XR_AI_TEST_SESSION"
+TEST_SESSION_LABEL = "xr-ai-test-session"
 _LAUNCH_CONTRACT_VERSION = 4
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
@@ -135,6 +140,11 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
+    # Deliberately outside the launch fingerprint: it identifies who created
+    # the container, not how it is configured, so it must not force replacement.
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session:
+        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
     payload: dict[str, Any] = {
         "image": image,
         "port": port,
