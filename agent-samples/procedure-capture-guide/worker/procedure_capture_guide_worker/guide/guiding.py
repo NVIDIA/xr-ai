@@ -351,7 +351,7 @@ class _Guide:
             tool("workflow__status", "Report whether the guide is active and its current progress.",
                  EmptyRequest, status),
             tool("workflow__reset",
-                 "Stop guide and clear progress only for a direct present request "
+                 "Cancel the current run and clear progress only for a direct present request "
                  "to stop guide, stop, reset, or cancel. "
                  "The selected guide stays loaded but inactive; this does not restart it. "
                  "Polite action requests count; explanations, quotations, hypotheticals and negations do not.",

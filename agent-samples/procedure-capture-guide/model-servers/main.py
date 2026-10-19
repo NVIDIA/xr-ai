@@ -5,7 +5,7 @@
 
 This entry point selects batch STT, acknowledgement TTS, an LLM, and the captioning
 VLM. Capture uses STT, TTS, and the VLM; the LLM is available but is not called
-by the capture worker. Guide uses all four services for guidance and verification.
+by the capture worker. Guide mode uses all four services for guidance and verification.
 Batch STT accepts narration without speaker enrollment. The shared model-stack
 launcher combines server defaults with this directory's GPU-profile YAML and
 handles startup, readiness, and explicit shutdown independently of the worker.

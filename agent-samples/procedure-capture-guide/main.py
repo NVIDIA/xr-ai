@@ -3,7 +3,7 @@
 
 """Capture a demonstrated procedure or guide a participant through approved steps.
 
-Capture saves evidence for creating a reusable procedure guide. Guide loads an
+Capture saves evidence for creating a reusable procedure guide. Guide mode loads an
 approved local guide and verifies progress while providing spoken guidance.
 
 This is the user-facing process-stack entry point. The worker's __main__ module
@@ -11,7 +11,7 @@ runs inside its own process and launches procedure_capture_guide_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
 Choose --mode capture or --mode guide. In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
-Guide requires a guide name after --mode guide. Say "start guide" to begin
+Guide mode requires a guide name after --mode guide. Say "start guide" to begin
 that guide and "stop guide" to cancel; connecting alone does not start it.
 """
 
@@ -46,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--mode", choices=("capture", "guide"), default="capture", help="worker capability to run")
     parser.add_argument(
-        "guide_name", nargs="?", metavar="GUIDE_NAME", help="exact approved guide name or ID (guide only)",
+        "guide_name", nargs="?", metavar="GUIDE_NAME", help="exact approved guide name or ID (guide mode only)",
     )
     parser.add_argument(
         "--output-root", type=Path, metavar="PATH",

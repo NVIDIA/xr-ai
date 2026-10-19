@@ -5,22 +5,6 @@
 
 # Release migration
 
-## Procedure capture and guide naming
-
-The sample directory is now `agent-samples/procedure-capture-guide/` instead of
-`agent-samples/procedure-capture-replay/`. Update saved commands to use
-`procedure_capture_guide`, `procedure_capture_guide_worker`, and
-`procedure_capture_guide_model_servers` for the corresponding entry points.
-Run `uv sync` in the renamed sample to install its renamed packages.
-
-Replace `--mode replay "Guide Name"` with `--mode guide "Guide Name"`.
-Say **start guide** and **stop guide** instead of **start replay** and
-**stop replay**. Capture commands and guide YAML structure are unchanged.
-For custom worker settings, rename `replay_config` to `guide_config` and use
-`yaml/guide-agent-config.yaml` and `yaml/voice_gate.guide.yaml`.
-Move local `guides/` and `artifacts/` contents from the old sample directory to
-the new one; ignored user files are not moved by a Git checkout.
-
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for
@@ -78,20 +62,6 @@ one-turn events. Restart/update the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.
-
-## Procedure guide development
-
-For guides authored against earlier versions of the procedure guide sample,
-remove the unused `task.source_session` field. Steps with `evidence.commit`
-can omit `agent`; the deterministic patch must satisfy all `complete_when`
-requirements. Each step needs at least one initially unmet completion field
-that preceding steps cannot write. Give successive steps separate completion
-flags when adapting a guide that reused the same flag.
-
-The foreground `clock__timer` result now includes `available` and
-`unavailable_reason`. Elapsed time, remaining time, and expiration are `null`
-when unavailable, rather than raising a tool error. Refer to
-{doc}`procedure-capture-guide` for the current guide and evaluation contracts.
 
 ## Single LLM entry in model profiles
 

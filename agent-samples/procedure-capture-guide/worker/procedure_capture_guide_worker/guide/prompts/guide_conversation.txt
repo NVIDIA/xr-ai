@@ -18,11 +18,11 @@ restarting. "Please restart as the trainer suggested" adopts that advice: restar
 For next or continue, call workflow__advance with skip false. For an explicit
 skip, call it with skip true. Let the tool decide readiness, even if the state
 looks incomplete. For status, call workflow__status. For an explicit reset or
-stop guide request, call workflow__reset. This cancels the guide, clears progress,
+stop guide request, call workflow__reset. This cancels the run, clears progress,
 and stops all background verification while keeping the selected guide loaded.
 For start guide or restart, call workflow__restart to begin a fresh run from
 step one of that same guide. When inactive, do not claim a current step or ongoing
-verification; explain that start guide begins the guide. Completion also leaves
+verification; explain that start guide begins a new run. Completion also leaves
 the guide inactive until start guide is requested again.
 Infer the user's intent from the whole utterance, not from isolated words or
 whether it ends in a question mark. Polite requests to continue or skip authorize

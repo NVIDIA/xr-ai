@@ -50,11 +50,11 @@ uv run main.py --mode guide "Tea Making"
 Use Numi Chamomile Lemon tea, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
 reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
-The guide must have `task.status: approved`. Guide uses the same model servers;
+The guide must have `task.status: approved`. Guide mode uses the same model servers;
 say **start guide** to begin and **stop guide** to cancel. Say **start guide**
 again to begin a fresh run of the same command-line-selected guide.
 Refer to the [guide reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#follow-an-approved-guide)
-for verification and step-advance controls. Capture and guide run separately.
+for verification and step-advance controls. Capture mode and guide mode run separately.
 
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 

@@ -7,6 +7,7 @@ scenes:
   red: {rectangle: red}
 actions:
   - {"action":"image","scene":"red"}
+  - {"action":"say","text":"Read me the start of the guide","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"Please continue","tools":["workflow__advance"],"arguments":[{"skip":false}]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
@@ -33,6 +34,8 @@ actions:
   - {"action":"say","text":"If I say restart, what happens?","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"What does start guide do?","tools":[]}
+  - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
+  - {"action":"say","text":"Read me the start of the guide","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}
   - {"action":"say","text":"What should I do at this step?","tools":[]}
   - {"action":"say","text":"Start guide","tools":["workflow__restart"]}

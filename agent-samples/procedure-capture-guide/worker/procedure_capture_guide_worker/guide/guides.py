@@ -58,5 +58,7 @@ def select_guide(directory: Path, name: str) -> SelectedGuide:
         raise ValueError(f"Ambiguous guide name {name!r}: {[str(item.path) for item in matches]}")
     guide = matches[0]
     if not guide.workflow.runnable:
-        raise ValueError(f"Guide {name!r} is a draft; review it and set task.status to approved before guide.")
+        raise ValueError(
+            f"Guide {name!r} is a draft; review it and set task.status to approved before using guide mode."
+        )
     return guide

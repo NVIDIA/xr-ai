@@ -24,7 +24,7 @@ The sample's `model-servers` launcher starts batch Parakeet STT on port 8103,
 Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
 Batch STT accepts narration without speaker enrollment. The capture worker uses
 STT, TTS, and Cosmos; the LLM is available but does not participate in capture
-or generate guides automatically. Guide uses Omni for guide questions and
+or generate guides automatically. Guide mode uses Omni for guide questions and
 model-driven observations, alongside the same STT, TTS, and Cosmos services.
 The launcher combines shared server defaults with
 `model-servers/yaml/<gpu-profile>.yaml`; use `--gpu-profile NAME` to select a
@@ -222,7 +222,7 @@ Quote names containing spaces:
 uv run main.py --mode guide "Guide Name"
 ```
 
-Start the shared models first, as for capture. Guide uses the LLM, VLM, STT,
+Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
 and TTS endpoints in `yaml/models.json`. Connect using the hub's web
 client URL and enable microphone and camera access. The command line selects
 the guide, but connecting does not start it. Say **start guide** to begin step
@@ -346,7 +346,8 @@ are not covered. The script never manages external model-server processes.
 The checked-in `eval/guide_cases.yaml` and `eval/fixtures/indicator.guide.yaml`
 provide a synthetic visual-and-timer scenario. `eval/guide_routing.yaml`
 exercises the composed foreground prompt with controls, polite requests,
-quoted commands, negation, unsupported capture requests, and visual questions.
+quoted commands, negation, requests to explain guide content, unsupported capture
+requests, and visual questions.
 Both run with the full permitted tool set; the evaluator does not preselect
 tools based on the utterance.
 
@@ -392,7 +393,7 @@ tea-making or legacy workflow-recorder YAML. Adapt guides to the contract below.
 
 Text fields must be actual strings. Duplicate mapping keys are rejected at
 every level, including overrides introduced through YAML merges, instead of
-silently replacing earlier requirements. Invalid guides cannot start guide,
+silently replacing earlier requirements. Invalid guides cannot be used in guide mode,
 even when their `task.status` is `approved`.
 
 - `schema_version` must be `1`.
@@ -486,13 +487,13 @@ drain those tasks without speaking to disconnected participants.
 Stop guide cancels the observer and clears timer
 state without unloading the selected guide. Connecting only loads an inactive
 session; start guide activates it and starts its observer and any first-step timer.
-Guide uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
+Guide mode uses `VoiceAggregationAgent`, `ImageQueryTool`, native tools, and the
 shared tool loop. The conversation prompt governs intent without an English
 wording filter. Polite action requests can use controls; questions about controls
 do not authorize them. This is model policy, not a deterministic intent guarantee.
 State-changing tools independently check session freshness and completion.
 Guide loading and validation live in `guide/guides.py`
-and `guide/_workflow_spec.py`. Guide never constructs the capture backend or
+and `guide/_workflow_spec.py`. Guide mode never constructs the capture backend or
 writes demonstration packets. Both modes start the same hub and worker processes
 and use the same separately launched model stack and `yaml/models.json`.
 
@@ -516,7 +517,7 @@ YAML, even when it is in another directory. Model and voice configuration remain
 beside the worker YAML. Absolute configuration and output paths are also supported.
 The worker loads shared settings into `WorkerConfig` and capture-specific settings
 into `CaptureConfig` under `capture/config.py`; `app.py` supplies each to its
-owning component. Guide selects its YAML through `guide_config` and loads
+owning component. Guide mode selects its YAML through `guide_config` and loads
 `GuideConfig` from `guide/config.py`; its guide directory resolves relative to
 that YAML. The required positional `GUIDE_NAME` selects `task.name` or `task.id`,
 not a filesystem path. `--output-root` applies only to capture. Restart after
