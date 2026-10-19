@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import signal
+import stat
 import subprocess
 import sys
 import textwrap
@@ -37,6 +38,40 @@ def test_lock_is_free_again_after_the_holder_exits(tmp_path: Path) -> None:
 
     with hold_instance_lock(lock):
         pass
+
+
+@pytest.mark.parametrize("mask", [0o077, 0o777])
+def test_restrictive_umask_keeps_lock_readable_for_the_next_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mask: int,
+) -> None:
+    lock = tmp_path / "hub.lock"
+    previous_mask = os.umask(mask)
+    try:
+        with hold_instance_lock(lock):
+            inode = lock.stat().st_ino
+            assert stat.S_IMODE(lock.stat().st_mode) == 0o644
+
+            real_open = os.open
+
+            def open_as_another_user(path: Path, flags: int, mode: int = 0o777) -> int:
+                # The kernel denies write access to another user's 0644 file.
+                # Keep real descriptors and flock behavior on the same inode.
+                if path == lock and flags == os.O_RDWR:
+                    raise PermissionError("another user's lock")
+                return real_open(path, flags, mode)
+
+            monkeypatch.setattr(os, "open", open_as_another_user)
+            with pytest.raises(StartupError, match="already running"):
+                with hold_instance_lock(lock):
+                    pytest.fail("a read-only contender acquired the held lock")
+    finally:
+        os.umask(previous_mask)
+
+    # A read-only descriptor can acquire the released lock without replacing
+    # the file, even though it cannot update the diagnostic owner record.
+    with hold_instance_lock(lock):
+        assert lock.stat().st_ino == inode
+        assert stat.S_IMODE(lock.stat().st_mode) == 0o644
 
 
 def test_lock_from_a_killed_hub_does_not_block_the_next_one(tmp_path: Path) -> None:

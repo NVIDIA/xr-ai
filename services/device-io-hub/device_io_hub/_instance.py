@@ -55,7 +55,22 @@ def hold_instance_lock(path: Path | None = None) -> Iterator[None]:
 
 def _open(path: Path) -> int:
     try:
-        return os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        return _open_existing(path)
+    try:
+        # umask must not leave a persistent machine-wide lock unreadable to
+        # the next user. Change the created inode, never replace its pathname.
+        os.fchmod(fd, 0o644)
+    except OSError:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _open_existing(path: Path) -> int:
+    try:
+        return os.open(path, os.O_RDWR)
     except PermissionError:
         # Another user created the file. A read-only descriptor can still take
         # the lock; only recording this process as the owner is skipped.
