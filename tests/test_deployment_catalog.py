@@ -18,17 +18,17 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("deployment_catalog", ROOT / "deployment/brev/catalog.py")
 catalog = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(catalog)
+PROBE_SPEC = importlib.util.spec_from_file_location("nvenc_probe", ROOT / "deployment/brev/_nvenc_probe.py")
+probe = importlib.util.module_from_spec(PROBE_SPEC)
+PROBE_SPEC.loader.exec_module(probe)
 
 
 @pytest.fixture
 def host(monkeypatch):
-    nvml = SimpleNamespace(
-        nvmlInit_v2=Mock(return_value=0), nvmlShutdown=Mock(return_value=0),
-        nvmlDeviceGetHandleByUUID=Mock(return_value=0), nvmlDeviceGetEncoderCapacity=Mock(return_value=0),
-    )
     state = SimpleNamespace(memory="[N/A]", name="NVIDIA GB10", compute="12.1", count=1,
                             driver="580.1", docker="27.0.1", runtimes='{"nvidia":{}}',
-                            codec=True, gpu_error=None, calls=[], nvml=nvml)
+                            codec=True, gpu_error=None, calls=[], probe_calls=[], probe_error=None,
+                            nvenc=True, nvenc_error="")
 
     def output(argv, **_kwargs):
         state.calls.append(argv)
@@ -52,9 +52,15 @@ def host(monkeypatch):
     monkeypatch.setattr(catalog.subprocess, "check_output", output)
     monkeypatch.setattr(catalog.ctypes.util, "find_library", lambda _: "cached.so" if state.codec else None)
 
+    def encoder(argv, **kwargs):
+        state.probe_calls.append((argv, kwargs))
+        if state.probe_error:
+            raise state.probe_error
+        return SimpleNamespace(stdout=json.dumps({"nvenc": state.nvenc, "nvenc_error": state.nvenc_error}))
+
+    monkeypatch.setattr(catalog.subprocess, "run", encoder)
+
     def load(name):
-        if name == "libnvidia-ml.so.1":
-            return nvml
         if not state.codec:
             raise OSError("codec library unavailable")
         return object()
@@ -94,36 +100,94 @@ def test_spark_unavailable_memory(host, memory):
     assert all(item["runnable"] for item in inventory["demos"])
 
 
-@pytest.mark.parametrize("result,expected,message", [
-    (0, True, None), (3, False, "at least one NVENC-capable GPU is required"),
-    (999, None, "NVENC support could not be verified"),
+@pytest.mark.parametrize("expected,message", [
+    (True, None), (False, "at least one NVENC-capable GPU is required"),
+    (None, "NVENC support could not be verified"),
 ])
-def test_encoder_capability_not_sessions(host, result, expected, message):
-    host.nvml.nvmlDeviceGetEncoderCapacity.return_value = result
+def test_encoder_capability_not_sessions(host, expected, message):
+    host.nvenc = expected
     inventory = catalog.catalog(ROOT)
     assert inventory["gpus"][0]["nvenc"] is expected
     assert all(item["blockers"] == ([] if message is None else [message]) for item in inventory["demos"])
-    assert host.nvml.nvmlDeviceGetEncoderCapacity.call_args.args[1] == 0
-    host.nvml.nvmlShutdown.assert_called_once()
+    argv, options = host.probe_calls[0]
+    assert argv == [sys.executable, str(ROOT / "deployment/brev/_nvenc_probe.py")]
+    assert options["env"]["CUDA_VISIBLE_DEVICES"] == "GPU-0"
+    assert options["timeout"] == 15
 
 
-def test_nvml_failure_is_unknown_not_unsupported(host):
-    host.nvml.nvmlInit_v2.return_value = 999
+@pytest.mark.parametrize("failure", [
+    FileNotFoundError("python unavailable"), subprocess.TimeoutExpired("probe", 15),
+    subprocess.CalledProcessError(-11, "probe", stderr="native probe crashed"),
+])
+def test_probe_failure_is_unknown_not_unsupported(host, failure):
+    host.probe_error = failure
+    gpu = catalog.catalog(ROOT)["gpus"][0]
+    assert gpu["nvenc"] is None
+    assert gpu["nvenc_error"]
+
+
+@pytest.mark.parametrize("value", ["", "not JSON", '{}', '{"nvenc":1,"nvenc_error":""}'])
+def test_invalid_probe_response_is_unknown(host, monkeypatch, value):
+    monkeypatch.setattr(catalog.subprocess, "run", Mock(return_value=SimpleNamespace(stdout=value)))
     assert catalog.catalog(ROOT)["gpus"][0]["nvenc"] is None
-    host.nvml.nvmlShutdown.assert_not_called()
 
 
-@pytest.mark.parametrize("failure", [OSError("NVML unavailable"), AttributeError("entry point unavailable")])
-def test_nvml_unavailable_is_reported(host, monkeypatch, failure):
-    monkeypatch.setattr(catalog.ctypes, "CDLL", Mock(side_effect=failure))
-    assert catalog.encoder_support(catalog.query_gpu_inventory()) == {0: None}
+@pytest.mark.parametrize("error,expected", [
+    (None, True),
+    ("PyNvEncoderCaps: Error code : 2\nm_nvenc.nvEncOpenEncodeSessionEx(&params, &encoder) returned error 2", False),
+    ("nvEncOpenEncodeSessionEx(&params, &encoder) returned error 1", False),
+    ("nvEncOpenEncodeSessionEx(&params, &encoder) returned error 10", None),
+    ("CUDA initialization failed with error 2", None),
+])
+def test_native_encoder_session_result(monkeypatch, error, expected):
+    class NativeError(Exception):
+        pass
+
+    query = Mock(return_value={"num_encoder_engines": 3})
+    if error:
+        query.side_effect = NativeError(error)
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec",
+                        SimpleNamespace(GetEncoderCaps=query, PyNvVCException=NativeError))
+    result = probe.probe()
+    assert result == {"nvenc": expected, "nvenc_error": error or ""}
+    query.assert_called_once_with(0, "h264")
 
 
-def test_nvml_handle_failure_cleans_up(host):
-    host.nvml.nvmlDeviceGetHandleByUUID.return_value = 999
-    assert catalog.encoder_support(catalog.query_gpu_inventory()) == {0: None}
-    host.nvml.nvmlDeviceGetEncoderCapacity.assert_not_called()
-    host.nvml.nvmlShutdown.assert_called_once()
+def test_missing_codec_package_is_unverified(monkeypatch):
+    monkeypatch.setitem(sys.modules, "PyNvVideoCodec", None)
+    result = probe.probe()
+    assert result["nvenc"] is None
+    assert "PyNvVideoCodec" in result["nvenc_error"]
+
+
+def test_a100_is_blocked_after_encoder_session_rejection(host):
+    host.name, host.compute, host.memory = "NVIDIA A100-SXM4-40GB", "8.0", "40960"
+    host.nvenc = False
+    host.nvenc_error = "nvEncOpenEncodeSessionEx(&params, &encoder) returned error 2"
+    inventory = catalog.catalog(ROOT)
+    assert inventory["gpus"][0]["nvenc"] is False
+    assert inventory["gpus"][0]["nvenc_error"] == host.nvenc_error
+    assert all(not item["runnable"] and "at least one NVENC-capable GPU is required" in item["blockers"]
+               for item in inventory["demos"])
+
+
+@pytest.mark.parametrize("error,expected", [("", True),
+    ("nvEncOpenEncodeSessionEx(&params, &encoder) returned error 2", False),
+    ("CUDA initialization failed", None)])
+def test_real_probe_subprocess_isolates_gpu_and_returns_result(tmp_path, monkeypatch, error, expected):
+    (tmp_path / "PyNvVideoCodec.py").write_text(
+        'import os\nclass PyNvVCException(Exception): pass\n'
+        'def GetEncoderCaps(index, codec):\n'
+        '    assert index == 0 and codec == "h264"\n'
+        '    assert os.environ["CUDA_VISIBLE_DEVICES"] == "GPU-probe"\n'
+        '    print("native diagnostic")\n'
+        f'    if {error!r}: raise PyNvVCException({error!r})\n'
+        '    return {"num_encoder_engines": 3}\n'
+    )
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "previous-device")
+    device = catalog.GPUDevice(7, "GPU-probe", "0000:01:00.0", "test", 12.0, 96.0, 95.0, 1.0)
+    assert catalog.encoder_support((device,)) == {7: {"nvenc": expected, "nvenc_error": error}}
 
 
 def test_codec_loader_fallback(host, monkeypatch):
@@ -155,7 +219,7 @@ def test_failed_inventory_is_one_cause(host, error, message):
     assert inventory["gpus"] == []
     assert all(item["blockers"] == [message] for item in inventory["demos"])
     assert not any("driver_version" in " ".join(argv) for argv in host.calls)
-    host.nvml.nvmlInit_v2.assert_not_called()
+    assert host.probe_calls == []
 
 
 def test_non_linux(host, monkeypatch):

@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import ctypes.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -35,26 +36,25 @@ def library_available(name: str) -> bool:
     return True
 
 
-def encoder_support(devices: tuple[GPUDevice, ...]) -> dict[int, bool | None]:
-    """Query H.264 encoder support, never infer capability from active sessions."""
-    support = dict.fromkeys((gpu.index for gpu in devices), None)
-    try:
-        nvml = ctypes.CDLL("libnvidia-ml.so.1")
-        if nvml.nvmlInit_v2() != 0:
-            return support
+def encoder_support(devices: tuple[GPUDevice, ...]) -> dict[int, dict]:
+    """Bound native-library failures and CUDA context lifetime to each child."""
+    support = {}
+    for gpu in devices:
         try:
-            for gpu in devices:
-                handle, capacity = ctypes.c_void_p(), ctypes.c_uint()
-                if nvml.nvmlDeviceGetHandleByUUID(gpu.uuid.encode(), ctypes.byref(handle)) != 0:
-                    continue
-                # NVML_ENCODER_QUERY_H264 = 0; NOT_SUPPORTED = 3.
-                result = nvml.nvmlDeviceGetEncoderCapacity(handle, 0, ctypes.byref(capacity))
-                support[gpu.index] = True if result == 0 else False if result == 3 else None
-        finally:
-            nvml.nvmlShutdown()
-    except (OSError, AttributeError):
-        # Older drivers can lack NVML entry points; leave capability unverified.
-        return support
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("_nvenc_probe.py"))],
+                env={**os.environ, "CUDA_VISIBLE_DEVICES": gpu.uuid},
+                capture_output=True, text=True, timeout=15, check=True,
+            )
+            value = json.loads(result.stdout.strip().splitlines()[-1])
+            if (not isinstance(value, dict) or "nvenc" not in value
+                    or not any(value["nvenc"] is state for state in (True, False, None))
+                    or not isinstance(value.get("nvenc_error"), str)):
+                raise ValueError("invalid encoder probe response")
+            support[gpu.index] = value
+        except (OSError, subprocess.SubprocessError, ValueError, IndexError) as exc:
+            detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
+            support[gpu.index] = {"nvenc": None, "nvenc_error": detail}
     return support
 
 
@@ -74,10 +74,10 @@ def catalog(root: Path) -> dict:
             gpus = [{
                 "index": gpu.index, "name": gpu.name, "compute": gpu.compute_capability,
                 "memory_mib": None if gpu.total_memory_gib is None else round(gpu.total_memory_gib * 1024),
-                "nvenc": encoders[gpu.index],
+                **encoders[gpu.index],
             } for gpu in devices]
-            if not any(value is True for value in encoders.values()):
-                common.append("NVENC support could not be verified" if None in encoders.values()
+            if not any(gpu["nvenc"] is True for gpu in gpus):
+                common.append("NVENC support could not be verified" if any(gpu["nvenc"] is None for gpu in gpus)
                               else "at least one NVENC-capable GPU is required")
             try:
                 driver = run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]).splitlines()[0]
