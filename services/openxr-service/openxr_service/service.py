@@ -17,6 +17,9 @@ class PoseSource(Protocol):
     def get_pose(self) -> dict[str, Any]:
         pass
 
+    def get_hands(self) -> dict[str, Any]:
+        pass
+
     def health(self) -> dict[str, Any]:
         pass
 
@@ -37,6 +40,9 @@ class OpenXRService:
             if self._sim_pose is not None:
                 return self._sim_pose
             return await asyncio.to_thread(self._source.get_pose)
+        if operation == "get_hand_poses":
+            self._validate(arguments)
+            return await asyncio.to_thread(self._source.get_hands)
         if operation == "set_sim_pose" and self._allow_sim_pose:
             try:
                 pose = HeadPose.model_validate({**arguments, "is_valid": True, "error": None})

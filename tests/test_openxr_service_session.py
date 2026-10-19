@@ -8,6 +8,7 @@ tests pin the OpenXR call sequence and handle cleanup instead.
 """
 from __future__ import annotations
 
+import ctypes
 import enum
 import importlib
 import sys
@@ -26,7 +27,25 @@ class _FormFactorUnavailableError(Exception):
     pass
 
 
-def _fake_xr(calls: list, *, system_error: Exception | None = None, location_flags: int = 3):
+class _Vector3(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_float), ("y", ctypes.c_float), ("z", ctypes.c_float)]
+
+
+class _Pose(ctypes.Structure):
+    _fields_ = [("position", _Vector3)]
+
+
+class _JointLocation(ctypes.Structure):
+    _fields_ = [("location_flags", ctypes.c_uint64), ("pose", _Pose)]
+
+
+def _fake_xr(
+    calls: list,
+    *,
+    system_error: Exception | None = None,
+    location_flags: int = 3,
+    hand_tracking: bool = False,
+):
     xr = types.ModuleType("xr")
     xr.MND_HEADLESS_EXTENSION_NAME = "XR_MND_headless"
     xr.EXTX_OVERLAY_EXTENSION_NAME = "XR_EXTX_overlay"
@@ -41,6 +60,19 @@ def _fake_xr(calls: list, *, system_error: Exception | None = None, location_fla
         setattr(xr, name, lambda name=name, **fields: SimpleNamespace(kind=name, **fields))
     xr.Version = lambda *parts: parts
     xr.Posef = lambda: "identity"
+    xr.EXT_HAND_TRACKING_EXTENSION_NAME = "XR_EXT_hand_tracking"
+    xr.HandEXT = SimpleNamespace(LEFT="left-hand", RIGHT="right-hand")
+    xr.HandJointSetEXT = SimpleNamespace(DEFAULT="default")
+    xr.HandTrackerCreateInfoEXT = lambda **fields: SimpleNamespace(**fields)
+    xr.HandJointsLocateInfoEXT = lambda **fields: SimpleNamespace(**fields)
+    xr.HandJointLocationEXT = _JointLocation
+    xr.HandJointLocationsEXT = lambda **fields: SimpleNamespace(is_active=False, **fields)
+    xr.HAND_JOINT_COUNT_EXT = 26
+    offered = ["XR_MND_headless", "XR_EXT_hand_tracking"] if hand_tracking else ["XR_MND_headless"]
+    xr.enumerate_instance_extension_properties = lambda: [
+        SimpleNamespace(extension_name=name.encode()) for name in offered
+    ]
+    xr.create_hand_tracker_ext = lambda _session, info: f"{info.hand}-tracker"
 
     def create_instance(info):
         calls.append(("create_instance", tuple(info.enabled_extension_names)))
@@ -68,7 +100,7 @@ def _fake_xr(calls: list, *, system_error: Exception | None = None, location_fla
     xr.locate_space = lambda space, base, time: SimpleNamespace(
         location_flags=location_flags, pose=f"{space} in {base} at {time}"
     )
-    for name in ("destroy_instance", "destroy_session", "destroy_space"):
+    for name in ("destroy_instance", "destroy_session", "destroy_space", "destroy_hand_tracker_ext"):
         setattr(xr, name, lambda handle, name=name: calls.append((name, handle)))
     return xr
 
@@ -145,3 +177,54 @@ def test_pose_source_reports_unavailable_until_a_headset_connects(load_session):
         "open_attempts": 2,
         "last_open_error": "_FormFactorUnavailableError: no headset",
     }
+
+
+def test_hand_trackers_are_created_when_offered_and_destroyed_first(load_session):
+    calls: list = []
+    module = load_session(_fake_xr(calls, hand_tracking=True))
+
+    module.HeadlessSession("test").close()
+
+    assert calls[0] == (
+        "create_instance",
+        ("XR_MND_headless", "XR_EXTX_overlay", "XR_KHR_convert_timespec_time", "XR_EXT_hand_tracking"),
+    )
+    assert calls[3:5] == [
+        ("destroy_hand_tracker_ext", "right-hand-tracker"),
+        ("destroy_hand_tracker_ext", "left-hand-tracker"),
+    ]
+
+
+def test_hands_report_joint_positions_and_validity_per_side(load_session, monkeypatch):
+    module = load_session(_fake_xr([], hand_tracking=True))
+
+    def locate(tracker, info, locations):
+        assert (info.base_space, info.time) == ("stage-space", 42)
+        if tracker == "right-hand-tracker":
+            return  # inactive
+        locations.is_active = True
+        joints = locations.joint_locations
+        joints[0].pose.position.x = 0.5
+        joints[0].location_flags = 2  # position valid
+        joints[1].location_flags = 1  # orientation only
+
+    monkeypatch.setattr(module, "_locate_hand_joints", locate)
+
+    hands = module.HeadlessSession("test").hands()
+
+    assert hands["right"] is None
+    left = hands["left"]
+    assert len(left) == 26
+    assert left[0][0].x == pytest.approx(0.5) and left[0][1] is True
+    assert left[1][1] is False
+
+
+def test_runtime_without_hand_tracking_still_tracks_the_head(load_session):
+    calls: list = []
+    module = load_session(_fake_xr(calls))
+
+    session = module.HeadlessSession("test")
+
+    assert "XR_EXT_hand_tracking" not in calls[0][1]
+    assert session.hands() == {}
+    assert session.head().is_valid
