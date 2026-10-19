@@ -76,42 +76,36 @@ NAT also affects the TLS certificate: clients dial the VM's public IP, which
 must be listed in the certificate's SAN via `web_server_extra_sans`. Refer to
 [TLS for the web client](#tls-for-the-web-client) below.
 
-## Host-specific network overrides
+## Deployment-owned hub configuration
 
-To run an unchanged sample YAML on a different host, set
-`DEVICE_IO_HUB_NETWORK_CONFIG` to the path of a UTF-8 YAML file before starting
-its normal command. For example, create `/path/to/network.yaml` containing:
+Keep host listener ports, networking, TLS, and browser assets in one
+customer-owned hub YAML. Application workers retain their own prompts, tools,
+and model-client settings. The sample's checked-in hub YAML remains a standalone
+convenience default.
 
-```yaml
-web_server_port: 9443
-lk_port_ws: 9880
-web_server_extra_sans:
-  - 203.0.113.7
-cert_file: ""
-key_file: ""
-```
-
-Then run the sample with that overlay, for example from
-`agent-samples/simple-vlm-example/`:
+Each shipped agent sample accepts `--hub-config PATH`. For example, from
+`agent-samples/simple-vlm-example/`, after starting its required model services:
 
 ```bash
-DEVICE_IO_HUB_NETWORK_CONFIG=/path/to/network.yaml uv run simple_vlm_example
+uv run simple_vlm_example --hub-config /srv/xr-ai/hub.yaml
 ```
 
-Overrides apply after the sample YAML and before configuration validation.
-They accept only `lk_port_ws`, `lk_port_tcp`, `lk_port_udp`, `web_server_port`,
-`token_server_port` (integer ports 1–65535), `lk_use_external_ip`,
-`lk_skip_external_ip_validation` (booleans), and `web_server_extra_sans`
-(a list of strings). Empty `cert_file` and `key_file` values select the
-hub-managed development certificates instead of sample-specified files.
-Changing `lk_port_ws` also updates the hub's internal loopback connection URL.
-Relative overlay filenames resolve from the hub's working directory; use an
-absolute filename when launching through an orchestrator. Relative sample asset
-paths still resolve against the original sample YAML directory.
-Missing, unreadable, or invalid overlay files fail startup. An unset or empty
-environment variable disables the overlay; inline environment YAML is not supported.
-This mechanism does not install software,
-change firewall rules, or alter the sample YAML.
+The sample passes this file through `Process(config=...)` to DeviceIOHub's
+existing `--config` option. It replaces the sample hub YAML; it is not an
+overlay. Omit the option to use the sample default. A relative CLI filename
+resolves against the launch directory. Relative asset and certificate paths
+inside the selected YAML resolve against that file's directory. No tracked
+sample files are modified, and no separate validation rules or certificate
+restrictions apply to deployment-owned configuration.
+
+When selecting a deployment hub configuration for XR Render, supply its browser
+assets through that configuration. The launcher skips its sample-default web
+vendor preparation and automatic browser-page suppression in this mode.
+
+When URLs are omitted, DeviceIOHub derives `lk_internal_url` from `lk_port_ws`
+and the legacy token server's advertised `token_server_url` from
+`token_server_port`. Explicit URLs retain their scheme, host, port, and path.
+The normal web server's same-origin signaling behavior is unchanged.
 
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 

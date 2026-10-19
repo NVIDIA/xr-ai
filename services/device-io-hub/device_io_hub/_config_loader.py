@@ -25,8 +25,6 @@ from loguru import logger
 from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
 from device_io_hub.video import VideoRecorderConfig
 
-from ._deployment import apply_network_overrides
-
 DEFAULT_CONFIG_NAME = "device_io_hub.yaml"
 LIVEKIT_API_KEY_ENV = "LIVEKIT_API_KEY"
 LIVEKIT_API_SECRET_ENV = "LIVEKIT_API_SECRET"
@@ -80,16 +78,6 @@ def load_config() -> LiveKitConnectorConfig:
     device_io_hub.yaml in CWD uses configuration defaults. An empty YAML
     document also uses defaults. Unknown top-level and video_recording keys
     are ignored with a warning.
-
-    ``DEVICE_IO_HUB_NETWORK_CONFIG`` names a UTF-8 YAML file with host network
-    overrides, applied after sample YAML and before validation and relative
-    asset-path resolution. Relative overlay filenames resolve from CWD;
-    relative sample assets still resolve from the sample YAML directory.
-    Accepted fields are the five listener ports, ``lk_use_external_ip``,
-    ``lk_skip_external_ip_validation``, and ``web_server_extra_sans``.
-    ``cert_file`` and ``key_file`` accept only empty strings to select managed
-    development certificates. Other fields and invalid value types are rejected.
-    Overriding ``lk_port_ws`` also updates the loopback ``lk_internal_url``.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
@@ -102,7 +90,6 @@ def load_config() -> LiveKitConnectorConfig:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         logger.info("No {} found; using defaults. Supply --config <path> to load a configuration", config_path)
         data: dict = {"enable_web_server": False, "web_client_dir": ""}
-        apply_network_overrides(data)
         _apply_env_credentials(data)
         return LiveKitConnectorConfig(**data)
 
@@ -119,7 +106,6 @@ def load_config() -> LiveKitConnectorConfig:
         data = {}
     if not isinstance(data, dict):
         raise ValueError(f"{config_path}: top-level configuration must be a YAML mapping")
-    apply_network_overrides(data)
 
     valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
     _warn_unknown_keys(data, valid, config_path, "top-level")
@@ -135,7 +121,7 @@ def load_config() -> LiveKitConnectorConfig:
         data["web_client_dir"] = ""
 
     # Resolve any relative path fields relative to the YAML file's directory.
-    for key in ("web_client_dir", "cert_file", "key_file"):
+    for key in ("web_client_dir", "browser_dir", "cert_file", "key_file"):
         if data.get(key):
             data[key] = _resolve_path(data[key], base)
 
