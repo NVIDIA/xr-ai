@@ -4,7 +4,6 @@
 -->
 
 (task-capture)=
-(procedure-capture-and-replay)=
 # Procedure capture and guidance
 
 The procedure-capture-guide sample records narrated demonstrations between
@@ -209,7 +208,6 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.
 
-(replay-an-approved-guide)=
 ## Follow an approved guide
 
 Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the
@@ -336,7 +334,6 @@ Regression tests load this exact example and exercise its state transitions,
 distinct-frame evidence, skip behavior, and timer with simulated observations.
 Those tests do not establish accuracy on real tea-making images or appliances.
 
-(local-model-replay-evaluation)=
 #### Local-model guide evaluation
 
 `eval/guide.py` exercises a manifest's selected guide through
@@ -526,7 +523,6 @@ not a filesystem path. `--output-root` applies only to capture. Restart after
 configuration edits.
 Refer to {doc}`configuration` and {doc}`command-line` for fields and CLI options.
 
-(replay-regression-tests)=
 ## Guide regression tests
 
 From the repository root:
