@@ -386,6 +386,7 @@ def test_utility_packages_are_enrolled() -> None:
 
     assert {
         "xr_ai_launcher",
+        "xr_ai_gpu",
         "xr_ai_model_server_stack",
         "xr_ai_logging",
         "xr_ai_vad",

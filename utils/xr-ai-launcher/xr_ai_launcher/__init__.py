@@ -4,8 +4,8 @@
 """
 xr-ai-launcher — process management for the xr-ai stack.
 
-Intentionally stdlib-only so it can be added to any sample without pulling
-in the dependency chain of the processes it manages.
+Uses the standard library and the lightweight xr-ai-gpu utility so samples
+do not pull in the dependency chain of the processes they manage.
 
 Typical usage::
 

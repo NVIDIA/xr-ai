@@ -222,7 +222,8 @@ signatures, types, defaults, fields, and method behavior are generated in the
 **`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
 `Parallel`, and `run_stack` API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
-stdlib-only so it can be added to any sample without pulling in the dependency
+based on the standard library and the dependency-free `xr-ai-gpu` utility so
+it can be added to any sample without pulling in the dependency
 chain of the processes it manages.
 
 **`xr-ai-logging`** — shared loguru setup for the monorepo. Every process calls
@@ -252,3 +253,10 @@ the wrapper's venv, the default) or `docker` (the image selected by
 YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.
+
+GPU hardware facts live in `xr-ai-gpu`, independently of application
+orchestration. Launcher profile matching uses its strict full inventory with no
+driver deadline. CloudXR uses its narrow PCI lookup with a five-second deadline
+and continues without pinning on failure. vLLM retains its existing selected-GPU
+queries and fallback behavior. Profile recommendations and environment
+construction remain with their consuming packages.

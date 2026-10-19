@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-gpu"
+version = "0.1.0"
+requires-python = ">=3.11,<3.15"
+# Hardware inspection has no orchestration or third-party dependencies.
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_gpu"]
