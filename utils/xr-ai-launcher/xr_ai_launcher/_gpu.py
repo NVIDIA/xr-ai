@@ -32,25 +32,17 @@ class _GPUProcess:
 
 
 @dataclass(frozen=True)
-class GPUDevice:
+class _GPUDevice:
     """Physical GPU capacity and current availability."""
 
     index: int
-    """Device index reported by nvidia-smi."""
     uuid: str
-    """Stable GPU UUID."""
     pci_bus_id: str
-    """PCI bus address reported by the driver."""
     name: str
-    """Driver-reported product name."""
     compute_capability: float
-    """CUDA compute capability."""
     total_memory_gib: float | None
-    """Total memory in GiB, or None when unavailable."""
     free_memory_gib: float | None
-    """Free memory in GiB, or None when unavailable."""
     used_memory_gib: float | None
-    """Used memory in GiB, or None when unavailable."""
 
 
 def _parse_mib(value: str) -> float | None:
@@ -87,8 +79,6 @@ def _query_compute_processes() -> dict[str, list[_GPUProcess]]:
         raise GPUInventoryError(
             f"nvidia-smi compute-process inventory failed{suffix}"
         ) from exc
-    except OSError as exc:
-        raise GPUInventoryError(f"nvidia-smi compute-process inventory could not run: {exc}") from exc
 
     result: dict[str, list[_GPUProcess]] = {}
     for line in raw.splitlines():
@@ -112,7 +102,7 @@ def _query_compute_processes() -> dict[str, list[_GPUProcess]]:
     return result
 
 
-def _format_compute_processes(devices: tuple[GPUDevice, ...]) -> str:
+def _format_compute_processes(devices: tuple[_GPUDevice, ...]) -> str:
     """Return best-effort process context for an unsupported topology."""
     try:
         processes = _query_compute_processes()
@@ -133,13 +123,8 @@ def _format_compute_processes(devices: tuple[GPUDevice, ...]) -> str:
     return ", ".join(details) if details else "none"
 
 
-def query_gpu_inventory() -> tuple[GPUDevice, ...]:
-    """Return visible GPUs without selecting a model-server profile.
-
-    Raises:
-        GPUInventoryError: The driver query fails, returns no devices,
-            or contains malformed fields. Unavailable memory is returned as None.
-    """
+def _query_gpu_inventory() -> tuple[_GPUDevice, ...]:
+    """Return exact per-device GPU facts or fail without an assumed fallback."""
     try:
         raw = subprocess.check_output(
             [
@@ -159,16 +144,14 @@ def query_gpu_inventory() -> tuple[GPUDevice, ...]:
         detail = (exc.stderr or "").strip()
         suffix = f": {detail}" if detail else ""
         raise GPUInventoryError(f"nvidia-smi GPU inventory failed{suffix}") from exc
-    except OSError as exc:
-        raise GPUInventoryError(f"nvidia-smi GPU inventory could not run: {exc}") from exc
 
-    devices: list[GPUDevice] = []
+    devices: list[_GPUDevice] = []
     for line in raw.splitlines():
         parts = [part.strip() for part in line.split(",", maxsplit=7)]
         if len(parts) != 8:
             raise GPUInventoryError(f"unparseable nvidia-smi GPU row: {line!r}")
         try:
-            device = GPUDevice(
+            device = _GPUDevice(
                 index=int(parts[0]),
                 uuid=parts[1],
                 pci_bus_id=parts[2],
@@ -187,21 +170,13 @@ def query_gpu_inventory() -> tuple[GPUDevice, ...]:
     return tuple(devices)
 
 
-def detect_gpu_config(devices: tuple[GPUDevice, ...] | None = None) -> str:
+def detect_gpu_config() -> str:
     """Select an existing config only when the complete topology is supported.
 
     This compatibility bridge remains until capability-based service planning
     replaces named config selection. It deliberately has no fallback.
-
-    Args:
-        devices: Inventory from query_gpu_inventory to reuse, or None to query
-            the driver. Passing a snapshot does not repeat the inventory query.
-
-    Raises:
-        GPUInventoryError: Inventory fails or no profile matches the topology.
     """
-    if devices is None:
-        devices = query_gpu_inventory()
+    devices = _query_gpu_inventory()
     if len(devices) == 1:
         gpu = devices[0]
         if gpu.compute_capability >= 10.0:
