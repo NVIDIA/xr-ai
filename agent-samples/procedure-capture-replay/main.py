@@ -28,9 +28,11 @@ from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
-def _build_processes(*, worker_config: str | Path = "yaml/worker.yaml") -> list[Process]:
+def _build_processes(
+    *, worker_config: str | Path = "yaml/worker.yaml", hub_config: Path | None = None,
+) -> list[Process]:
     return [
-        Process("hub", "../../services/device-io-hub", "device_io_hub", config="yaml/device_io_hub.yaml"),
+        Process("hub", "../../services/device-io-hub", "device_io_hub", config=hub_config or "yaml/device_io_hub.yaml"),
         Process("worker", "worker", "procedure_capture_replay_worker", config=worker_config),
     ]
 
@@ -50,12 +52,15 @@ def _parser() -> argparse.ArgumentParser:
         "--output-root", type=Path, metavar="PATH",
         help="save task packets under PATH/sessions; overrides YAML artifacts_dir (relative to the launch directory)",
     )
+    parser.add_argument("--hub-config", type=Path, metavar="PATH",
+                        help="use hub YAML instead of the sample default (relative to launch directory)")
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> None:
     parser = _parser()
     args = parser.parse_args(argv)
+    hub_config = args.hub_config.expanduser().resolve() if args.hub_config is not None else None
     if args.mode == "capture" and args.guide_name is not None:
         parser.error("GUIDE_NAME requires --mode replay")
     if args.mode == "replay" and args.output_root is not None:
@@ -64,7 +69,7 @@ def run(argv: Sequence[str] | None = None) -> None:
         parser.error("--mode replay requires a non-empty GUIDE_NAME")
     setup_logging("orchestrator", namespace="procedure-capture-replay")
     if args.mode == "capture" and args.output_root is None:
-        run_stack(PROCESSES, _BASE)
+        run_stack(_build_processes(hub_config=hub_config), _BASE)
         return
     # Pass the override without rewriting the user's YAML or relocating its
     # relative model and voice configuration paths. Keep it until workers exit.
@@ -76,7 +81,7 @@ def run(argv: Sequence[str] | None = None) -> None:
             "guide_name": args.guide_name,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")
-        run_stack(_build_processes(worker_config=request), _BASE)
+        run_stack(_build_processes(worker_config=request, hub_config=hub_config), _BASE)
 
 
 if __name__ == "__main__":

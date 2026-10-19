@@ -46,6 +46,8 @@ def _parser() -> argparse.ArgumentParser:
             "and data-channel traffic"
         ),
     )
+    parser.add_argument("--hub-config", type=Path, metavar="PATH",
+                        help="use hub YAML instead of the sample default (relative to launch directory)")
     return parser
 
 
@@ -97,14 +99,14 @@ def _materialize_worker_config(
 
 
 def _build_processes(
-    worker_config: Path = _WORKER_CONFIG, *, capture: bool = False
+    worker_config: Path = _WORKER_CONFIG, *, capture: bool = False, hub_config: Path | None = None
 ) -> list[Process]:
     processes = [
         Process(
             "hub",
             "../../services/device-io-hub",
             "device_io_hub",
-            config="yaml/device_io_hub.yaml",
+            config=hub_config or "yaml/device_io_hub.yaml",
         ),
         Process(
             "worker",
@@ -120,13 +122,14 @@ def _build_processes(
 
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
+    hub_config = args.hub_config.expanduser().resolve() if args.hub_config is not None else None
     setup_logging("orchestrator", namespace="lab-instrument-monitoring")
     with tempfile.TemporaryDirectory(prefix="lab-instrument-monitoring-config-") as directory:
         worker_config = _materialize_worker_config(
             Path(directory),
             expose_web_events=args.expose_web_events,
         )
-        run_stack(_build_processes(worker_config, capture=args.session_recording), _BASE)
+        run_stack(_build_processes(worker_config, capture=args.session_recording, hub_config=hub_config), _BASE)
 
 
 if __name__ == "__main__":

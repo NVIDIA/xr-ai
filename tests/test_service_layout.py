@@ -544,6 +544,58 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
     assert "capture" not in [process.name for process in processes]
 
 
+@pytest.mark.parametrize("sample_name, extra", [
+    ("simple-vlm-example", []),
+    ("simple-vlm-example", ["--session-recording"]),
+    ("xr-render-demo", []),
+    ("xr-render-demo", ["--session-recording"]),
+    ("tea-making-sample", ["--session-recording", "--expose-web-events"]),
+    ("lab-instrument-monitoring", ["--session-recording", "--expose-web-events"]),
+    ("procedure-capture-replay", []),
+    ("procedure-capture-replay", ["--output-root", "evidence"]),
+    ("procedure-capture-replay", ["--mode", "replay", "Tea Making"]),
+])
+@pytest.mark.parametrize("relative", [False, True])
+def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_path, monkeypatch):
+    sample = _load_module(f"hub_selection_{sample_name.replace('-', '_')}", f"agent-samples/{sample_name}/main.py")
+    selected = tmp_path / "customer" / "hub.yaml"
+    selected.parent.mkdir()
+    selected.write_text("web_server_port: 9443\n")
+    original = (sample._BASE / "yaml/device_io_hub.yaml").read_bytes()
+    launches = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sample, "run_stack", lambda processes, base: launches.append(processes))
+    if sample_name == "xr-render-demo":
+        monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
+        monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
+        monkeypatch.setattr(sample, "_ensure_lovr_bin", lambda: None)
+
+    sample.run(extra)
+    argument = selected.relative_to(tmp_path) if relative else selected
+    sample.run([*extra, "--hub-config", str(argument)])
+    defaults, configured = launches
+    assert next(p for p in defaults if p.name == "hub").config == "yaml/device_io_hub.yaml"
+    assert next(p for p in configured if p.name == "hub").config == selected
+    assert [(p.name, p.project, p.command) for p in configured] == [
+        (p.name, p.project, p.command) for p in defaults
+    ]
+    assert (sample._BASE / "yaml/device_io_hub.yaml").read_bytes() == original
+    assert selected.read_text() == "web_server_port: 9443\n"
+
+
+def test_render_custom_hub_keeps_browser_assets_deployment_owned(tmp_path, monkeypatch):
+    sample = _load_module("render_deployment_assets", "agent-samples/xr-render-demo/main.py")
+    monkeypatch.delenv(sample._NO_WEB_CLIENT_ENV, raising=False)
+    monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sample, "run_stack", lambda *args: None)
+    monkeypatch.setattr(sample, "_ensure_lovr_bin", lambda: None)
+    monkeypatch.setattr(sample, "read_device_profile", lambda _: pytest.fail("deployment owns browser configuration"))
+    monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: pytest.fail("must not build sample-owned browser assets"))
+    sample.run(["--hub-config", str(tmp_path / "hub.yaml")])
+    assert sample._NO_WEB_CLIENT_ENV not in os.environ
+
+
 def test_render_demo_declares_only_application_processes() -> None:
     sample = _load_module(
         "service_layout_render",

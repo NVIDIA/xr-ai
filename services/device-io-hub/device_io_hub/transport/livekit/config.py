@@ -81,7 +81,8 @@ class LiveKitConnectorConfig:
     lk_skip_external_ip_validation: bool = False
 
     # ── Internal URL for the Python room client (direct WS, no proxy) ─────────
-    lk_internal_url: str = "ws://127.0.0.1:7880"
+    # Omit to derive from lk_port_ws; an explicit URL is preserved unchanged.
+    lk_internal_url: str | None = None
 
     # ── Identity used when the connector joins the room ────────────────────────
     identity: str = "xr-hub-connector"
@@ -90,11 +91,13 @@ class LiveKitConnectorConfig:
     token_server_host: str = "0.0.0.0"
     token_server_port: int = 8000
     # URL returned in token responses so the browser knows where to connect.
-    token_server_url:  str = "ws://localhost:8000"
+    # Omit to derive from token_server_port; an explicit URL is preserved.
+    token_server_url: str | None = None
     # Leave empty for plain HTTP (camera blocked on remote without HTTPS).
     cert_file: str = ""
     key_file:  str = ""
-    # Absolute path to browser static files. Empty = no static serving.
+    # Browser static files; relative paths resolve against the hub YAML.
+    # Empty = no static serving.
     browser_dir: str = ""
 
     # ── Token server (opt-in, only needed for HTTPS browser clients) ──────────
@@ -158,6 +161,10 @@ class LiveKitConnectorConfig:
     video_recording: Any = field(default=None)
 
     def __post_init__(self) -> None:
+        if self.lk_internal_url is None:
+            self.lk_internal_url = f"ws://127.0.0.1:{self.lk_port_ws}"
+        if self.token_server_url is None:
+            self.token_server_url = f"ws://localhost:{self.token_server_port}"
         if (
             not isinstance(self.api_key, str)
             or not self.api_key.strip()
