@@ -14,7 +14,6 @@ import xr_ai_launcher._stack as _stack
 
 
 def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
-    monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", "8093")
     spawned = Mock()
     spawned.stdout = None
     spawned.stderr = None
@@ -37,7 +36,6 @@ def test_spawn_marks_the_launcher_owned_process_group(monkeypatch, tmp_path):
     assert failure_contexts["tts"].service == "tts"
     kwargs = popen.call_args.kwargs
     assert kwargs["start_new_session"] is True
-    assert "XR_AI_STACK_HEALTH_PORT" not in kwargs["env"]
     assert (
         kwargs["env"][_stack._PROCESS_GROUP_OWNER_ENV]
         == "pocket_tts_server"

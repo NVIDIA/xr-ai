@@ -67,7 +67,8 @@ def test_config_and_cli(monkeypatch, tmp_path, session_recording, explicit_mode)
     monkeypatch.chdir(tmp_path)
     requests = []
 
-    def launch(processes, base):
+    def launch(processes, base, *, health_port):
+        assert health_port is None
         assert [p.name for p in processes] == expected
         assert [p for p in processes if p.name == "capture"] == recording_processes
         assert base == _SAMPLE

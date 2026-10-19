@@ -5,7 +5,6 @@
 
 import json
 import logging
-import os
 import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -14,17 +13,6 @@ from subprocess import Popen
 from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
-HEALTH_PORT_ENV = "XR_AI_STACK_HEALTH_PORT"
-
-
-def health_port_from_env() -> int | None:
-    """Read and validate the optional listener port before spawning children."""
-    value = os.environ.get(HEALTH_PORT_ENV, "")
-    if not value:
-        return None
-    if not value.isascii() or not value.isdigit() or not 1 <= int(value) <= 65535:
-        raise ValueError(f"{HEALTH_PORT_ENV} must be an integer port from 1 to 65535")
-    return int(value)
 
 
 @contextmanager
@@ -91,7 +79,7 @@ def stack_health(
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as exc:
-        raise OSError(f"{HEALTH_PORT_ENV}={port}: {exc}") from exc
+        raise OSError(f"health_port={port}: {exc}") from exc
     with server:
         log.info("Stack process-health endpoint: http://127.0.0.1:%s/healthz", server.server_address[1])
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)

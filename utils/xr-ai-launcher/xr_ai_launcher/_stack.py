@@ -50,7 +50,7 @@ from typing import Sequence, Union
 
 from ._credentials import load_credentials
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
-from ._health import HEALTH_PORT_ENV, health_port_from_env, stack_health
+from ._health import stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -237,7 +237,7 @@ def _spawn(
         config_path=config_path,
     )
 
-    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", HEALTH_PORT_ENV}}
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     # The child can record this launcher's dedicated session without creating
     # a nested session that would escape _shutdown's SIGKILL escalation.
     env[_PROCESS_GROUP_OWNER_ENV] = proc.command
@@ -547,6 +547,7 @@ def run_stack(
     base: Path,
     *,
     exit_after_ready: bool = False,
+    health_port: int | None = None,
 ) -> None:
     """
     Start *processes* in declaration order, waiting for each item to signal
@@ -561,12 +562,12 @@ def run_stack(
     is printed every five seconds so model-loading or CloudXR start-up
     remains visible.
 
-    Set ``XR_AI_STACK_HEALTH_PORT`` to an integer TCP port (1–65535) to expose
+    Pass ``health_port`` as an integer TCP port (1–65535) to expose
     ``GET http://127.0.0.1:<port>/healthz`` for this foreground stack. It returns
     503 during startup and cleanup, or when any spawned process has exited;
     200 means startup completed and every spawned process is still running.
-    The endpoint is disabled by default and for ``exit_after_ready=True``.
-    Children do not inherit the port. Invalid ports and bind failures abort
+    The endpoint is disabled with ``health_port=None`` (the default) and for
+    ``exit_after_ready=True``. Invalid ports and bind failures abort
     before any process is launched. This is process health, not an inference
     probe, and does not check services declared with ``launch_mode="reuse"``.
     The JSON body reports ``status``, spawned ``processes`` (running or exited),
@@ -623,7 +624,8 @@ def run_stack(
     # unloading models that are already ready.
     aborted = False
     failure_status: int | None = None
-    health_port = health_port_from_env()
+    if health_port is not None and (type(health_port) is not int or not 1 <= health_port <= 65535):
+        raise ValueError("health_port must be an integer port from 1 to 65535")
     if exit_after_ready:
         health_port = None
 

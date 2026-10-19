@@ -76,6 +76,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--hub-config", type=Path, metavar="PATH",
                         help="use hub YAML instead of the sample default (relative to launch directory)")
+    parser.add_argument("--health-port", type=int, metavar="PORT",
+                        help="serve stack process health on loopback PORT (1–65535; disabled by default)")
     return parser
 
 
@@ -91,7 +93,8 @@ def run(argv: Sequence[str] | None = None) -> None:
         parser.error("--mode guide requires a non-empty GUIDE_NAME")
     setup_logging("orchestrator", namespace="procedure-capture-guide")
     if args.mode == "capture" and args.output_root is None:
-        run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE)
+        run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE,
+                  health_port=args.health_port)
         return
     # Pass the override without rewriting the user's YAML or relocating its
     # relative model and voice configuration paths. Keep it until workers exit.
@@ -103,7 +106,8 @@ def run(argv: Sequence[str] | None = None) -> None:
             "guide_name": args.guide_name,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")
-        run_stack(_build_processes(worker_config=request, capture=args.session_recording, hub_config=hub_config), _BASE)
+        run_stack(_build_processes(worker_config=request, capture=args.session_recording, hub_config=hub_config), _BASE,
+                  health_port=args.health_port)
 
 
 if __name__ == "__main__":

@@ -183,12 +183,14 @@ its IPC receive loop is active.
 
 ### Foreground stack health
 
-Applications using `run_stack` can set `XR_AI_STACK_HEALTH_PORT` to expose
-process health to a local supervisor or monitoring script. The listener binds
-only to loopback. For example, from `agent-samples/simple-vlm-example/`:
+Applications using `run_stack` can pass `health_port=8093` to expose process
+health to a local supervisor or monitoring script. Repository samples expose
+this as `--health-port PORT`. The listener binds only to loopback, separately
+from the worker's optional event viewer. For example, from
+`agent-samples/simple-vlm-example/`:
 
 ```bash
-XR_AI_STACK_HEALTH_PORT=8093 uv run simple_vlm_example
+uv run simple_vlm_example --health-port 8093
 ```
 
 Query `http://127.0.0.1:8093/healthz` locally. It returns 503 while startup or
@@ -204,10 +206,9 @@ Keep the endpoint private; use SSH forwarding for remote inspection.
 
 This is process health, not an inference or dependency probe. Services declared
 with `launch_mode="reuse"` are not checked, and live child processes may still
-be unresponsive. The listener is disabled by default, is not inherited by
-children, and is disabled for `exit_after_ready=True`. Invalid or occupied
-ports fail before launching processes. Refer to `run_stack` for the environment
-contract.
+be unresponsive. The listener is disabled by default and for
+`exit_after_ready=True`. Invalid or occupied ports fail before launching
+processes. Refer to `run_stack` for the API contract.
 
 ### `launch_mode`: own, persist, reuse
 

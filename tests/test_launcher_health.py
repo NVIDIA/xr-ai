@@ -75,7 +75,6 @@ def foreground(monkeypatch):
     monkeypatch.setattr(stack, "_spawn", spawn)
     monkeypatch.setattr(stack, "_print_ready_banner", lambda *_args: None)
     monkeypatch.setattr(stack, "_wait_ready", Mock(side_effect=AssertionError("unexpected startup")))
-    monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", "8093")
     return spawn, process
 
 
@@ -110,18 +109,18 @@ def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, mon
     monkeypatch.setattr(stack, "_monitor", monitor)
     monkeypatch.setattr(stack, "_shutdown", shutdown)
     stack.run_stack([stack.Process("model", ".", "model", launch_mode="reuse"),
-                     stack.Process("worker", ".", "worker")], tmp_path)
+                     stack.Process("worker", ".", "worker")], tmp_path, health_port=8093)
     spawn.assert_called_once()
     with pytest.raises(OSError):
         response(listener[0].server_address[1])
 
 
-@pytest.mark.parametrize("port", ["0", "65536", "-1", "invalid", "+8093", " 8093", "8_093", "８０９３"])
+@pytest.mark.parametrize("port", [0, 65536, -1, "8093", True, 8093.0])
 @pytest.mark.parametrize("exit_after_ready", [False, True])
-def test_invalid_health_port_fails_before_spawn(foreground, monkeypatch, tmp_path, port, exit_after_ready):
-    monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", port)
-    with pytest.raises(ValueError, match="XR_AI_STACK_HEALTH_PORT"):
-        stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path, exit_after_ready=exit_after_ready)
+def test_invalid_health_port_fails_before_spawn(foreground, tmp_path, port, exit_after_ready):
+    with pytest.raises(ValueError, match="health_port"):
+        stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path,
+                        exit_after_ready=exit_after_ready, health_port=port)
     foreground[0].assert_not_called()
 
 
@@ -140,19 +139,19 @@ def test_startup_failure_closes_health_listener(foreground, monkeypatch, tmp_pat
     monkeypatch.setattr(stack, "_wait_ready", fail)
     monkeypatch.setattr(stack, "_shutdown", lambda *_args, **_kwargs: None)
     with pytest.raises(SystemExit) as failure:
-        stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path)
+        stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path, health_port=8093)
     assert failure.value.code == 130
     with pytest.raises(OSError):
         response(listener[0].server_address[1])
 
 
-def test_occupied_health_port_fails_before_spawn(foreground, monkeypatch, tmp_path):
+def test_occupied_health_port_fails_before_spawn(foreground, tmp_path):
     with socket.socket() as occupied:
         occupied.bind(("127.0.0.1", 0))
         occupied.listen()
-        monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", str(occupied.getsockname()[1]))
-        with pytest.raises(OSError, match=f"XR_AI_STACK_HEALTH_PORT={occupied.getsockname()[1]}"):
-            stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path)
+        port = occupied.getsockname()[1]
+        with pytest.raises(OSError, match=f"health_port={port}"):
+            stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path, health_port=port)
     foreground[0].assert_not_called()
 
 
@@ -160,7 +159,7 @@ def test_exit_after_ready_does_not_start_health(foreground, monkeypatch, tmp_pat
     monkeypatch.setattr(stack, "_wait_ready", lambda *_args: None)
     monkeypatch.setattr(stack, "_shutdown", lambda *_args, **_kwargs: None)
     stack.run_stack([stack.Process("model", ".", "model", launch_mode="persist")],
-                    tmp_path, exit_after_ready=True)
+                    tmp_path, exit_after_ready=True, health_port=8093)
     assert listener == []
 
 
@@ -226,10 +225,9 @@ def test_monitor_marks_unready_in_signal_handler(listener, monkeypatch, sig):
             assert stack._monitor({"worker": process}, cancellation) is None
 
 
-@pytest.mark.parametrize("value", [None, ""])
-def test_empty_health_port_disables_listener(monkeypatch, value):
-    if value is None:
-        monkeypatch.delenv(health.HEALTH_PORT_ENV, raising=False)
-    else:
-        monkeypatch.setenv(health.HEALTH_PORT_ENV, value)
-    assert health.health_port_from_env() is None
+def test_stack_health_is_disabled_by_default(foreground, monkeypatch, tmp_path, listener):
+    monkeypatch.setattr(stack, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(stack, "_monitor", lambda *_args: None)
+    monkeypatch.setattr(stack, "_shutdown", lambda *_args, **_kwargs: None)
+    stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path)
+    assert listener == []
