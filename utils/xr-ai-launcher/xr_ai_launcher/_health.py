@@ -3,11 +3,14 @@
 
 """Own the optional loopback health listener; imported only inside xr_ai_launcher."""
 
+import logging
 import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from subprocess import Popen
+
+log = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -19,6 +22,15 @@ def stack_health(processes: Mapping[str, Popen], port: int | None) -> Iterator[t
         return
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = 2.0
+
+        def handle(self) -> None:
+            try:
+                super().handle()
+            except ConnectionError:
+                # ignored: a polling client can close its socket before receiving a response.
+                return
+
         def do_GET(self) -> None:
             if self.path != "/health":
                 self.send_error(404)
@@ -38,7 +50,12 @@ def stack_health(processes: Mapping[str, Popen], port: int | None) -> Iterator[t
             # Health polling is intentionally quiet; no request payload is logged.
             return
 
-    with ThreadingHTTPServer(("127.0.0.1", port), Handler) as server:
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as exc:
+        raise OSError(f"XR_AI_STACK_HEALTH_PORT={port}: {exc}") from exc
+    with server:
+        log.info("Stack process-health endpoint: http://127.0.0.1:%s/health", server.server_address[1])
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
         thread.start()
         try:

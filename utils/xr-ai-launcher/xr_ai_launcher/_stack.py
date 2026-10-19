@@ -560,7 +560,7 @@ def run_stack(
 
     Set ``XR_AI_STACK_HEALTH_PORT`` to an integer TCP port (1–65535) to expose
     ``GET http://127.0.0.1:<port>/health`` for this foreground stack. It returns
-    503 during startup and shutdown, or when any spawned process has exited;
+    503 during startup and cleanup, or when any spawned process has exited;
     200 means startup completed and every spawned process is still running.
     The endpoint is disabled by default and for ``exit_after_ready=True``.
     Children do not inherit the port. Invalid ports and bind failures abort

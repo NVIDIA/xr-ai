@@ -183,27 +183,27 @@ its IPC receive loop is active.
 
 ### Foreground stack health
 
-Set `XR_AI_STACK_HEALTH_PORT` to enable one loopback-only HTTP endpoint on the
-orchestrator, for example from `agent-samples/simple-vlm-example/`:
+Applications using `run_stack` can set `XR_AI_STACK_HEALTH_PORT` to expose
+process health to a local supervisor or monitoring script. The listener binds
+only to loopback. For example, from `agent-samples/simple-vlm-example/`:
 
 ```bash
 XR_AI_STACK_HEALTH_PORT=8093 uv run simple_vlm_example
 ```
 
-Query `http://127.0.0.1:8093/health` locally. It returns 503 while the sample is
-starting or stopping, and 200 only after startup completes and every spawned
-process is still running. Every request checks child-process handles; no
-aggregate readiness file or cached HTTP result is used. Killing the
-orchestrator closes the listener, so a connection failure means unavailable.
-Keep the endpoint private; use the deployment UI or an SSH tunnel for remote
-access. No metrics framework or extra service is required.
+Query `http://127.0.0.1:8093/health` locally. It returns 503 while startup or
+cleanup is in progress, and 200 after startup completes while every spawned
+process is still running. Every request checks the child-process handles.
+An unreachable endpoint means the orchestrator cannot report health; it does
+not establish whether its child processes or external services have stopped.
+Keep the endpoint private; use SSH forwarding for remote inspection.
 
 This is process health, not an inference or dependency probe. Services declared
-with `launch_mode="reuse"` are not checked. The existing internal child
-`--ready-file` startup protocol remains unchanged. The listener is opt-in,
-is not inherited by children, and is disabled for `exit_after_ready=True`.
-Invalid or occupied ports fail before launching processes. Refer to `run_stack`
-for the environment contract.
+with `launch_mode="reuse"` are not checked, and live child processes may still
+be unresponsive. The listener is disabled by default, is not inherited by
+children, and is disabled for `exit_after_ready=True`. Invalid or occupied
+ports fail before launching processes. Refer to `run_stack` for the environment
+contract.
 
 ### `launch_mode`: own, persist, reuse
 

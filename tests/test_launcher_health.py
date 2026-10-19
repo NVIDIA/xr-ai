@@ -1,14 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Live orchestrator health checks, without models, Docker, or readiness files."""
+"""Live process-health reporting for applications using run_stack."""
 
-import os
 import socket
-import subprocess
-import sys
 from http.client import HTTPConnection
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -72,6 +68,7 @@ def foreground(monkeypatch):
     spawn = Mock(return_value=process)
     monkeypatch.setattr(stack, "_spawn", spawn)
     monkeypatch.setattr(stack, "_print_ready_banner", lambda *_args: None)
+    monkeypatch.setattr(stack, "_wait_ready", Mock(side_effect=AssertionError("unexpected startup")))
     monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", "8093")
     return spawn, process
 
@@ -79,7 +76,12 @@ def foreground(monkeypatch):
 def test_stack_exposes_startup_ready_failure_and_shutdown_states(foreground, monkeypatch, tmp_path, listener):
     # Use an OS-assigned port while exercising the actual run_stack integration.
     original = stack.stack_health
-    monkeypatch.setattr(stack, "stack_health", lambda processes, _port: original(processes, 0))
+
+    def bind(processes, port):
+        assert port == 8093
+        return original(processes, 0)
+
+    monkeypatch.setattr(stack, "stack_health", bind)
     spawn, process = foreground
 
     def status():
@@ -116,7 +118,12 @@ def test_invalid_health_port_fails_before_spawn(foreground, monkeypatch, tmp_pat
 
 def test_startup_failure_closes_health_listener(foreground, monkeypatch, tmp_path, listener):
     original = stack.stack_health
-    monkeypatch.setattr(stack, "stack_health", lambda processes, _port: original(processes, 0))
+
+    def bind(processes, port):
+        assert port == 8093
+        return original(processes, 0)
+
+    monkeypatch.setattr(stack, "stack_health", bind)
 
     def fail(*_args):
         raise KeyboardInterrupt
@@ -135,7 +142,7 @@ def test_occupied_health_port_fails_before_spawn(foreground, monkeypatch, tmp_pa
         occupied.bind(("127.0.0.1", 0))
         occupied.listen()
         monkeypatch.setenv("XR_AI_STACK_HEALTH_PORT", str(occupied.getsockname()[1]))
-        with pytest.raises(OSError):
+        with pytest.raises(OSError, match=f"XR_AI_STACK_HEALTH_PORT={occupied.getsockname()[1]}"):
             stack.run_stack([stack.Process("worker", ".", "worker")], tmp_path)
     foreground[0].assert_not_called()
 
@@ -148,33 +155,26 @@ def test_exit_after_ready_does_not_start_health(foreground, monkeypatch, tmp_pat
     assert listener == []
 
 
-def test_forced_orchestrator_death_closes_endpoint():
-    # Print the actual bound port without a shared file or a free-port reservation.
-    code = '''import time
-import xr_ai_launcher._health as health
-original = health.ThreadingHTTPServer
-def server(address, handler):
-    result = original(address, handler)
-    print(result.server_address[1], flush=True)
-    return result
-health.ThreadingHTTPServer = server
-with health.stack_health({}, 0) as initialized:
-    initialized.set()
-    print("ready", flush=True)
-    time.sleep(30)
-'''
-    package = Path(stack.__file__).resolve().parent.parent
-    with subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True,
-                          env=os.environ | {"PYTHONPATH": str(package)}) as child:
-        try:
-            port = int(child.stdout.readline())
-            assert child.stdout.readline().strip() == "ready"
-            assert response(port)[0] == 200
-            child.kill()
-            child.wait(timeout=5)
-            with pytest.raises(OSError):
-                response(port)
-        finally:
-            if child.poll() is None:
-                child.kill()
-                child.wait(timeout=5)
+def test_idle_health_connection_is_bounded(listener):
+    with health.stack_health({}, 0):
+        server = listener[0]
+        assert server.RequestHandlerClass.timeout == 2.0
+        server.RequestHandlerClass.timeout = 0.05
+        with socket.create_connection(server.server_address, timeout=1) as client:
+            client.sendall(b"GET /health HTTP/1.1\r\n")
+            assert client.recv(1) == b""
+
+
+@pytest.mark.parametrize("error", [BrokenPipeError(), ConnectionResetError(), ValueError("unexpected")])
+def test_disconnected_health_client_is_quiet(listener, monkeypatch, error):
+    def disconnected(_self):
+        raise error
+
+    with health.stack_health({}, 0):
+        monkeypatch.setattr(health.BaseHTTPRequestHandler, "handle", disconnected)
+        handler = object.__new__(listener[0].RequestHandlerClass)
+        if isinstance(error, ConnectionError):
+            handler.handle()
+        else:
+            with pytest.raises(ValueError, match="unexpected"):
+                handler.handle()
