@@ -43,25 +43,17 @@ if [[ -f "${SDK_CACHE}" ]]; then
 else
     PARTIAL="${SDK_CACHE}.partial"
     rm -f "${PARTIAL}"
-    # Convenience fallback: if IsaacTeleop has already downloaded the same
-    # version, reuse it instead of hitting the network.
-    ISAAC_COPY="${HOME}/hub/IsaacTeleop/deps/cloudxr/${SDK_FILE}"
-    if [[ -f "${ISAAC_COPY}" ]]; then
-        echo "Copying from IsaacTeleop: ${ISAAC_COPY}"
-        cp "${ISAAC_COPY}" "${PARTIAL}"
+    # Public NGC resource API; no NGC CLI required.
+    NGC_URL="https://api.ngc.nvidia.com/v2/resources/org/nvidia/cloudxr-js/${VERSION}/files?redirect=true&path=${SDK_FILE}"
+    echo "Downloading from public NGC:"
+    echo "  ${NGC_URL}"
+    if command -v wget >/dev/null 2>&1; then
+        wget --content-disposition --output-document "${PARTIAL}" "${NGC_URL}"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fL --output "${PARTIAL}" "${NGC_URL}"
     else
-        # Public NGC resource API; no NGC CLI required.
-        NGC_URL="https://api.ngc.nvidia.com/v2/resources/org/nvidia/cloudxr-js/${VERSION}/files?redirect=true&path=${SDK_FILE}"
-        echo "Downloading from public NGC:"
-        echo "  ${NGC_URL}"
-        if command -v wget >/dev/null 2>&1; then
-            wget --content-disposition --output-document "${PARTIAL}" "${NGC_URL}"
-        elif command -v curl >/dev/null 2>&1; then
-            curl -fL --output "${PARTIAL}" "${NGC_URL}"
-        else
-            echo "error: need wget or curl to download the SDK" >&2
-            exit 1
-        fi
+        echo "error: need wget or curl to download the SDK" >&2
+        exit 1
     fi
     mv "${PARTIAL}" "${SDK_CACHE}"
 fi

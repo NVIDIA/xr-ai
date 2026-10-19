@@ -2,11 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-cloudxr_runtime — launcher for isaacteleop.cloudxr.
+cloudxr_runtime — run the CloudXR OpenXR runtime for XR AI.
 
-Starts the native CloudXR service (libcloudxr.so) in a subprocess, waits for
-it to become ready, then runs isaacteleop's WSS proxy (port 48322) required by
-WebRTC device profiles.  Native device profiles skip the WSS step.
+Fetches the pinned CloudXR Runtime SDK on first use, starts the native
+service (libcloudxr.so) in a subprocess, waits for it to become ready, then
+runs the WSS proxy (port 48322) required by WebRTC device profiles. Native
+device profiles skip the WSS step.
 
 Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 """
@@ -14,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import multiprocessing
 import os
 import shlex
 import shutil
@@ -24,35 +24,35 @@ import sys
 from pathlib import Path
 
 import yaml
-from isaacteleop import __version__ as isaacteleop_version
-from isaacteleop.cloudxr.env_config import EnvConfig
-from isaacteleop.cloudxr.runtime import (
-    check_eula,
-    latest_runtime_log,
-    run as runtime_run,
-    runtime_version,
-    terminate_or_kill_runtime,
-    wait_for_runtime_ready,
-)
-from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
 from xr_ai_gpu import GPUInventoryError, query_gpu_pci_bus_ids
 from xr_ai_launcher import is_native_profile, read_device_profile
 from xr_ai_logging import setup_logging
 
+from . import _wss
+from ._runtime import (
+    Layout,
+    check_eula,
+    latest_runtime_log,
+    prepare_run_dir,
+    publish_env,
+    start_service,
+    stop_service,
+)
+from ._sdk import SDK_VERSION, SDKError, ensure_sdk
+
 
 async def _wait_with_progress(
-    runtime_proc: multiprocessing.Process,
+    runtime_proc: subprocess.Popen[bytes],
     stop: asyncio.Future,
+    lock_file: Path,
     timeout_sec: float = 120.0,
 ) -> bool:
     """Poll for runtime_started lock file; exits early if stop is set or process dies."""
-    from isaacteleop.cloudxr.env_config import get_env_config
-    lock_file = Path(get_env_config().openxr_run_dir()) / "runtime_started"
     deadline = asyncio.get_running_loop().time() + timeout_sec
     elapsed = 0
     while asyncio.get_running_loop().time() < deadline:
-        if stop.done() or not runtime_proc.is_alive():
+        if stop.done() or runtime_proc.poll() is not None:
             return False
         if lock_file.exists():
             return True
@@ -61,19 +61,6 @@ async def _wait_with_progress(
         await asyncio.sleep(1)
         elapsed += 1
     return False
-
-
-def _run_runtime_process() -> None:
-    setup_logging("cloudxr")
-    runtime_run()
-
-
-def _start_runtime_process() -> multiprocessing.Process:
-    runtime_process = multiprocessing.get_context("spawn").Process(
-        target=_run_runtime_process
-    )
-    runtime_process.start()
-    return runtime_process
 
 
 def _load_config(path: Path) -> dict:
@@ -147,14 +134,14 @@ async def _run(
     ready_file: Path | None = None,
     config_path: Path | None = None,
 ) -> None:
-    install_dir = str(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser())
-    env_file    = cfg.get("cloudxr_env_config")
+    layout   = Layout(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser().absolute())
+    env_file = cfg.get("cloudxr_env_config")
 
     # Environment variables such as NV_DEVICE_PROFILE are respected, with config values used as defaults.
     for key, val in cfg.get("cloudxr_env", {}).items():
         os.environ.setdefault(key, str(val))
 
-    # XR-side GPU pinning. Set on os.environ before EnvConfig.from_args so the
+    # XR-side GPU pinning. Set on os.environ before publish_env so the
     # process that hosts the native CloudXR service inherits the three selectors.
     pinning: dict[str, str] | None = None
     gpu_idx = cfg.get("gpu_index")
@@ -169,15 +156,21 @@ async def _run(
                 gpu_idx, pinning["VK_LOADER_DEVICE_SELECT"],
             )
 
-    env_cfg = EnvConfig.from_args(install_dir, env_file)
+    publish_env(layout, Path(env_file) if env_file else None)
 
     # Propagate pinning into cloudxr.env so the scene process inherits the same
     # GPU selectors when it spawns LOVR.
     if pinning is not None:
-        _append_env_to_file(Path(env_cfg.env_filepath()), pinning)
+        _append_env_to_file(layout.env_file, pinning)
 
-    check_eula(accept_eula=cfg.get("accept_eula") or None)
-    logs_dir = env_cfg.ensure_logs_dir()
+    try:
+        sdk = ensure_sdk(layout.install_dir)
+    except SDKError as exc:
+        logger.error("{}", exc)
+        sys.exit(1)
+    check_eula(layout, sdk, accept=bool(cfg.get("accept_eula")))
+    prepare_run_dir(layout, sdk)
+    logs_dir = layout.logs_dir
 
     # Set up stop signal handling before anything async — so SIGTERM during startup
     # cleanly cancels the wait rather than being ignored or causing confusing ordering.
@@ -191,27 +184,24 @@ async def _run(
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _on_signal)
 
-    runtime_proc = _start_runtime_process()
+    runtime_proc = start_service(layout, sdk)
 
-    cxr_ver = runtime_version()
-    logger.info("Isaac Teleop {}  CloudXR {}", isaacteleop_version, cxr_ver)
+    logger.info("CloudXR {}", SDK_VERSION)
     logger.info("Waiting for CloudXR runtime…")
 
     try:
-        ready = await _wait_with_progress(runtime_proc, stop)
+        ready = await _wait_with_progress(runtime_proc, stop, layout.ready_sentinel)
         if not ready:
             if stop.done():
                 return  # cancelled by signal — clean exit
-            native_log = latest_runtime_log() or logs_dir
-            if not runtime_proc.is_alive():
-                # Process exited before signaling ready. exitcode may be None
-                # for a tick after termination — treat that as a failure too.
-                rc = runtime_proc.exitcode
+            native_log = latest_runtime_log(layout) or logs_dir
+            rc = runtime_proc.poll()
+            if rc is not None:
                 logger.error(
                     "CloudXR runtime exited (rc={}) before signaling ready.\n"
                     "  Native log: {}\n"
-                    "  Leftover containers: docker ps --filter name=cloudxr",
-                    rc if rc is not None else "?", native_log,
+                    "  Service stderr: {}",
+                    rc, native_log, logs_dir / "runtime_stderr.log",
                 )
                 sys.exit(rc or 1)
             logger.error(
@@ -222,9 +212,9 @@ async def _run(
             )
             sys.exit(1)
 
-        cxr_log = latest_runtime_log() or logs_dir
+        cxr_log = latest_runtime_log(layout) or logs_dir
         logger.info("CloudXR runtime:   ready  log: {}", cxr_log)
-        logger.info("Activate CloudXR environment: source {}", env_cfg.env_filepath())
+        logger.info("Activate CloudXR environment: source {}", layout.env_file)
         if ready_file:
             ready_file.touch()
 
@@ -235,11 +225,8 @@ async def _run(
             logger.info("native device profile {}, skipping WSS proxy", profile)
             await stop
         else:
-            from datetime import datetime, timezone
-            ts      = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-            wss_log = logs_dir / f"wss.{ts}.log"
             try:
-                await wss_run(log_file_path=wss_log, stop_future=stop)
+                await _wss.run(layout.install_dir / "certs", stop)
             except RuntimeError as exc:
                 logger.error(
                     "CloudXR WSS proxy failed: {}\n"
@@ -248,7 +235,7 @@ async def _run(
                     exc,
                 )
     finally:
-        terminate_or_kill_runtime(runtime_proc)
+        stop_service(runtime_proc)
 
     logger.info("Stopped.")
 

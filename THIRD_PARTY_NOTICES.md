@@ -273,6 +273,23 @@ and [copied EULA with artifact provenance](third_party_licenses/nvidia-cutlass-d
 record the applicable terms. The permissive license elections elsewhere in
 this file do not apply to these proprietary packages.
 
+### NVIDIA CloudXR Runtime SDK
+
+`services/cloudxr-runtime` downloads the NVIDIA CloudXR Runtime SDK 6.2.0 from
+public NGC on first run, verifies its pinned SHA-256, and loads its libraries
+unmodified. The SDK is covered by the NVIDIA CloudXR license agreement, which
+the service asks the operator to accept before starting the runtime. XR AI
+does not redistribute the SDK. The SDK archive ships only this agreement; it
+contains no separate notice files for the libraries it bundles.
+
+| Component | Version | Terms |
+|---|---|---|
+| NVIDIA CloudXR Runtime SDK | 6.2.0 | NVIDIA CloudXR license agreement |
+
+The [copied agreement with artifact provenance](third_party_licenses/nvidia-cloudxr-runtime-6.2.0/)
+records the applicable terms. The permissive license elections elsewhere in
+this file do not apply to this proprietary SDK.
+
 ### `text-unidecode` license election
 
 `text-unidecode` 1.3 is available under the Artistic License or GPLv2+. XR AI
@@ -387,6 +404,7 @@ refer to the component disclosures above for applicable license elections.
 | `matplotlib-3.11.2` | [`LICENSE_YORICK`](third_party_licenses/matplotlib-3.11.2/LICENSE_YORICK) |
 | `matplotlib-3.11.2` | [`copying`](third_party_licenses/matplotlib-3.11.2/copying) |
 | `num2words-0.5.14` | [`COPYING`](third_party_licenses/num2words-0.5.14/COPYING) |
+| `nvidia-cloudxr-runtime-6.2.0` | [`LICENSE.txt`](third_party_licenses/nvidia-cloudxr-runtime-6.2.0/LICENSE.txt) |
 | `nvidia-cutlass-dsl-4.7.1` | [`LICENSE`](third_party_licenses/nvidia-cutlass-dsl-4.7.1/LICENSE) |
 | `nvtx-0.2.15` | [`LICENSE.txt`](third_party_licenses/nvtx-0.2.15/LICENSE.txt) |
 | `opencv-python-headless-5.0.0.93` | [`LICENSE-3RD-PARTY.txt`](third_party_licenses/opencv-python-headless-5.0.0.93/LICENSE-3RD-PARTY.txt) |
