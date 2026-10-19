@@ -23,6 +23,7 @@ from xr_ai_logging import setup_logging
 
 from device_io_hub._config_loader import load_config
 from device_io_hub._errors import StartupError
+from device_io_hub._instance import acquire_instance_lock
 from device_io_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from device_io_hub.transport.livekit import LiveKitConnector, make_client_token
 
@@ -185,6 +186,10 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
     try:
+        # Taken before main() binds or starts anything; see _instance. Never
+        # released here: the kernel drops it at process exit, after atexit
+        # handlers such as the LiveKit container stop have run.
+        acquire_instance_lock()
         asyncio.run(main(ready_file=ns.ready_file))
     except StartupError as e:
         # The message is a pre-formatted banner; print it as-is and exit

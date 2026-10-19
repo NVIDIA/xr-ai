@@ -98,7 +98,9 @@ class LiveKitDocker:
         cfg_path = Path(self._tmpdir.name) / "livekit.yaml"
         _write_livekit_config(cfg_path, self._cfg)
 
-        # Remove any stale container from a previous crashed run.
+        # Remove any stale container from a previous crashed run. This is
+        # safe only because the hub's instance lock (device_io_hub._instance)
+        # proves no live hub is using the container.
         subprocess.run(
             ["docker", "rm", "-f", _CONTAINER_NAME],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
