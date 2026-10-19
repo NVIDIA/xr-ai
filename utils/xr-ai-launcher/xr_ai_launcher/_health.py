@@ -3,18 +3,34 @@
 
 """Own the optional loopback health listener; imported only inside xr_ai_launcher."""
 
+import json
 import logging
+import os
 import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from subprocess import Popen
+from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
+HEALTH_PORT_ENV = "XR_AI_STACK_HEALTH_PORT"
+
+
+def health_port_from_env() -> int | None:
+    """Read and validate the optional listener port before spawning children."""
+    value = os.environ.get(HEALTH_PORT_ENV, "")
+    if not value:
+        return None
+    if not value.isascii() or not value.isdigit() or not 1 <= int(value) <= 65535:
+        raise ValueError(f"{HEALTH_PORT_ENV} must be an integer port from 1 to 65535")
+    return int(value)
 
 
 @contextmanager
-def stack_health(processes: Mapping[str, Popen], port: int | None) -> Iterator[threading.Event]:
+def stack_health(
+    processes: Mapping[str, Popen], port: int | None, unchecked_reuse: tuple[str, ...] = (),
+) -> Iterator[threading.Event]:
     """Serve live process health during one foreground stack's lifetime."""
     initialized = threading.Event()
     if port is None:
@@ -32,19 +48,41 @@ def stack_health(processes: Mapping[str, Popen], port: int | None) -> Iterator[t
                 return
 
         def do_GET(self) -> None:
-            if self.path != "/health":
+            hosts = self.headers.get_all("Host", [])
+            try:
+                host = urlsplit(f"//{hosts[0]}") if len(hosts) == 1 else None
+                valid_host = (
+                    host is not None and host.hostname in {"localhost", "127.0.0.1", "::1"}
+                    and host.username is None and host.password is None
+                    and not (host.path or host.query or host.fragment)
+                )
+                if host is not None:
+                    _ = host.port
+            except ValueError:
+                valid_host = False
+            if not valid_host:
+                self.send_error(400, "unrecognized Host header")
+                return
+            if urlsplit(self.path).path.rstrip("/") != "/healthz":
                 self.send_error(404)
                 return
-            # The process map is complete before initialized is set. Every
-            # request checks the actual child handles, not a stored PID or log.
-            healthy = initialized.is_set() and all(proc.poll() is None for proc in processes.values())
-            body = b"ready\n" if healthy else b"not ready\n"
+            # Startup adds children while requests run on other threads.
+            started = initialized.is_set()
+            states = {name: "running" if proc.poll() is None else "exited"
+                      for name, proc in tuple(processes.items())}
+            healthy = started and initialized.is_set() and all(state == "running" for state in states.values())
+            body = json.dumps({"status": "ready" if healthy else "not_ready", "processes": states,
+                               "unchecked_reuse": unchecked_reuse}).encode()
             self.send_response(200 if healthy else 503)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def do_HEAD(self) -> None:
+            self.do_GET()
 
         def log_message(self, _format: str, *args: object) -> None:
             # Health polling is intentionally quiet; no request payload is logged.
@@ -53,9 +91,9 @@ def stack_health(processes: Mapping[str, Popen], port: int | None) -> Iterator[t
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as exc:
-        raise OSError(f"XR_AI_STACK_HEALTH_PORT={port}: {exc}") from exc
+        raise OSError(f"{HEALTH_PORT_ENV}={port}: {exc}") from exc
     with server:
-        log.info("Stack process-health endpoint: http://127.0.0.1:%s/health", server.server_address[1])
+        log.info("Stack process-health endpoint: http://127.0.0.1:%s/healthz", server.server_address[1])
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
         thread.start()
         try:

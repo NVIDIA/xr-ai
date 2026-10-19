@@ -191,9 +191,13 @@ only to loopback. For example, from `agent-samples/simple-vlm-example/`:
 XR_AI_STACK_HEALTH_PORT=8093 uv run simple_vlm_example
 ```
 
-Query `http://127.0.0.1:8093/health` locally. It returns 503 while startup or
+Query `http://127.0.0.1:8093/healthz` locally. It returns 503 while startup or
 cleanup is in progress, and 200 after startup completes while every spawned
 process is still running. Every request checks the child-process handles.
+The JSON response contains `status` (`ready` or `not_ready`), `processes`
+(spawned names mapped to `running` or `exited`), and `unchecked_reuse` (names
+of external services that are not checked). HEAD returns the same status
+without a body. Shutdown signals immediately clear readiness.
 An unreachable endpoint means the orchestrator cannot report health; it does
 not establish whether its child processes or external services have stopped.
 Keep the endpoint private; use SSH forwarding for remote inspection.

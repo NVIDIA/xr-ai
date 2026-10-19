@@ -50,7 +50,7 @@ from typing import Sequence, Union
 
 from ._credentials import load_credentials
 from ._failure import FailureContext, emit_failure_summary, failure_exit_status
-from ._health import stack_health
+from ._health import HEALTH_PORT_ENV, health_port_from_env, stack_health
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
@@ -237,7 +237,7 @@ def _spawn(
         config_path=config_path,
     )
 
-    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "XR_AI_STACK_HEALTH_PORT"}}
+    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", HEALTH_PORT_ENV}}
     # The child can record this launcher's dedicated session without creating
     # a nested session that would escape _shutdown's SIGKILL escalation.
     env[_PROCESS_GROUP_OWNER_ENV] = proc.command
@@ -320,10 +320,13 @@ def _drain_output_readers(
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
 class _Cancellation:
-    def __init__(self) -> None:
+    def __init__(self, initialized: threading.Event | None = None) -> None:
+        self.initialized = initialized
         self.signum: int | None = None
 
     def _request(self, signum, _frame) -> None:
+        if self.initialized is not None:
+            self.initialized.clear()
         # Do not interrupt Popen before its handle is registered for cleanup.
         if self.signum is None:
             self.signum = signum
@@ -559,13 +562,15 @@ def run_stack(
     remains visible.
 
     Set ``XR_AI_STACK_HEALTH_PORT`` to an integer TCP port (1–65535) to expose
-    ``GET http://127.0.0.1:<port>/health`` for this foreground stack. It returns
+    ``GET http://127.0.0.1:<port>/healthz`` for this foreground stack. It returns
     503 during startup and cleanup, or when any spawned process has exited;
     200 means startup completed and every spawned process is still running.
     The endpoint is disabled by default and for ``exit_after_ready=True``.
     Children do not inherit the port. Invalid ports and bind failures abort
     before any process is launched. This is process health, not an inference
     probe, and does not check services declared with ``launch_mode="reuse"``.
+    The JSON body reports ``status``, spawned ``processes`` (running or exited),
+    and ``unchecked_reuse`` process names. HEAD is also supported.
 
     After all processes are ready the launcher monitors them: if any exits,
     the remaining foreground processes are terminated. The launcher preserves
@@ -606,12 +611,9 @@ def run_stack(
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.
-    _no_kill: set[str] = {
-        p.name
-        for item in processes
-        for p in (item.processes if isinstance(item, Parallel) else [item])
-        if p.launch_mode in ("persist", "reuse")
-    }
+    declared = [p for item in processes for p in (item.processes if isinstance(item, Parallel) else [item])]
+    _no_kill = {p.name for p in declared if p.launch_mode in ("persist", "reuse")}
+    unchecked_reuse = tuple(p.name for p in declared if p.launch_mode == "reuse")
 
     launched: dict[str, subprocess.Popen] = {}
     failure_contexts: dict[str, FailureContext] = {}
@@ -621,16 +623,15 @@ def run_stack(
     # unloading models that are already ready.
     aborted = False
     failure_status: int | None = None
-    health_port = None
-    if not exit_after_ready and os.environ.get("XR_AI_STACK_HEALTH_PORT"):
-        try:
-            health_port = int(os.environ["XR_AI_STACK_HEALTH_PORT"])
-        except ValueError as exc:
-            raise ValueError("XR_AI_STACK_HEALTH_PORT must be an integer port from 1 to 65535") from exc
-        if not 1 <= health_port <= 65535:
-            raise ValueError("XR_AI_STACK_HEALTH_PORT must be an integer port from 1 to 65535")
+    health_port = health_port_from_env()
+    if exit_after_ready:
+        health_port = None
 
-    with stack_health(launched, health_port) as initialized, tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir, _Cancellation() as cancellation:
+    with (
+        stack_health(launched, health_port, unchecked_reuse) as initialized,
+        _Cancellation(initialized) as cancellation,
+        tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir,
+    ):
         tmpdir = Path(_tmpdir)
         try:
             for item in processes:
