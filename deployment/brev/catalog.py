@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Own sample inventory and read-only host checks for deployment tools."""
+"""Discover sample metadata and report read-only host preflight checks.
+
+Samples declare one console command, an xr-ai-launcher dependency, project.name,
+and project.description. A matching sample-owned model-servers GPU profile and
+the common Linux, driver, Docker, and codec checks determine qualification, not
+runtime readiness. Unknown GPU memory remains null; NVENC is a capability flag.
+"""
 
 import ctypes.util
 import json
