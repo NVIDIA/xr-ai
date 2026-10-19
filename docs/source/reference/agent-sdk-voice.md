@@ -49,7 +49,7 @@ session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
 
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
-For deployment order and migration of existing applications, refer to
+For deployment order and model availability requirements, refer to
 {ref}`consumer-model-readiness`.
 
 Each non-empty final STT result during an active conversation is queued for

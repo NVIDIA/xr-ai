@@ -30,7 +30,8 @@ Public Python references are generated from each enrolled module's literal
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
-and add a migration entry for a breaking change.
+and add a migration entry for a breaking change. Refer to
+{ref}`migration-release-rollover` for the migration guide's release scope.
 
 The repository-wide README and documentation ownership rules live in the
 [`Comments and documentation`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation)
@@ -92,3 +93,43 @@ global cutoff. Resolve each affected project with the root config explicitly
 supplied, validate the affected behavior, and regenerate the dependency
 manifest with `uv run --script .github/scripts/generate_dependency_manifest.py`.
 Commit the generated manifest changes alongside the dependency declarations.
+
+(migration-release-rollover)=
+## Migration entries and release rollover
+
+{doc}`/reference/migrations` covers changes from the latest published release
+to the checked-out version. Use a `Changes since <baseline tag>` heading and
+state that `main` is unreleased. Add entries as third-level headings under
+that heading, before `Earlier releases`. Link to the baseline release's tagged
+guide; users skipping releases apply earlier guides in release order.
+
+For each breaking change, name who is affected, state the required action, and
+include a before-and-after example when useful. Update the entry when another
+change in the same development cycle supersedes it, so the instructions lead
+directly from the baseline release to the final behavior.
+
+Use this checklist for every release:
+
+1. Prepare the guide on the branch being released. Compare its code with the
+   previous release, consolidate superseded instructions, and include only
+   changes shipped by this release. State the release version in the opening
+   paragraph. Release branches can contain a different set of changes from
+   `main`.
+2. Publish the release tag and its versioned documentation. Verify that
+   `https://nvidia.github.io/xr-ai/<tag>/reference/migrations.html` contains the
+   completed guide and that its link to the previous release resolves. Use a
+   concrete tag in history links; `latest` and `main` change over time.
+3. After verifying publication, reconcile the entries on `main` with the tag.
+   Use `git merge-base <tag> main` to establish shared history and
+   `git diff <tag> main -- docs/source/reference/migrations.md` to compare
+   guides, then verify the corresponding code changes, including equivalent
+   cherry-picks. Retire an entry only when the published tag covers its change
+   and retains its upgrade instructions. Keep main-only entries. Carry a
+   release-branch entry into `main` only when its code is also present there.
+   Update the baseline and pinned history link to the new tag, state that
+   `main` is unreleased, and mark the guide empty only if no entries remain.
+   Tagged documentation retains completed entries.
+4. Preserve published URL fragments with compact forwarding links to the
+   appropriate tagged guide or canonical topic. Keep ongoing explanations in
+   canonical documentation and update their incoming references before retiring
+   the entry.
