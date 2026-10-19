@@ -894,6 +894,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
+  - `coverage>=7.10`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`
