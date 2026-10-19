@@ -8,7 +8,10 @@ import runpy
 import subprocess
 import sys
 import tomllib
+from html.parser import HTMLParser
 from pathlib import Path
+
+import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SELECTOR = _ROOT / ".github" / "scripts" / "select_latest_docs_release.py"
@@ -215,14 +218,42 @@ def test_latest_docs_alias_contains_complete_rendered_version() -> None:
         assert f"https://nvidia.github.io/xr-ai/latest/{page}" in readme
 
 
-def test_procedure_guide_redirect_preserves_version_query_and_fragment() -> None:
+@pytest.mark.parametrize("script_tags", [
+    ("<script>", "</script>"),
+    ("<SCRIPT>", "</SCRIPT>"),
+    ('<ScRiPt type="text/javascript">', "</sCrIpT >"),
+])
+def test_procedure_guide_redirect_preserves_version_query_and_fragment(script_tags) -> None:
+    class RedirectParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.scripts = []
+            self.in_script = False
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "script":
+                self.scripts.append("")
+                self.in_script = True
+
+        def handle_endtag(self, tag):
+            if tag == "script":
+                self.in_script = False
+
+        def handle_data(self, data):
+            if self.in_script:
+                self.scripts[-1] += data
+
     source = _ROOT / "docs/source"
     redirect = source / "_redirects/reference/procedure-capture-replay.html"
     assert 'html_extra_path = ["_redirects"]' in _CONF.read_text()
     html = redirect.read_text()
     assert '<meta http-equiv="refresh" content="0; url=procedure-capture-guide.html">' in html
     assert '<a href="procedure-capture-guide.html">' in html
-    script = re.search(r"<script>(.*?)</script>", html, re.DOTALL).group(1)
+    parser = RedirectParser()
+    parser.feed(html.replace("<script>", script_tags[0]).replace("</script>", script_tags[1]))
+    parser.close()
+    assert len(parser.scripts) == 1
+    script = parser.scripts[0]
     subprocess.run(
         ["node", "-e", """
 const assert = require('node:assert/strict');
