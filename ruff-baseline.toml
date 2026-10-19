@@ -63,7 +63,6 @@
 "services/device-io-hub/device_io_hub/transport/livekit/_web_server.py" = ["BLE001"]  # BLE001=1
 "services/device-io-hub/device_io_hub/transport/livekit/connector.py" = ["BLE001"]  # BLE001=1
 "services/device-io-hub/device_io_hub/video/_recorder.py" = ["BLE001"]  # BLE001=6
-"services/openxr-service/openxr_service/session.py" = ["BLE001"]  # BLE001=3
 "services/pocket-tts/pocket_tts_server/__main__.py" = ["BLE001"]  # BLE001=6
 "services/rag-service/rag_service/index.py" = ["BLE001"]  # BLE001=1
 "services/speaker-stt/speaker_stt/__main__.py" = ["BLE001"]  # BLE001=2
