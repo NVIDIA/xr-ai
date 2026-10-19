@@ -1,0 +1,1183 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Procedure capture and guidance &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/procedure-capture-guide';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Simple VLM example" href="simple-vlm-example.html" />
+    <link rel="prev" title="NIM model endpoints" href="model-servers-nim.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" >v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" selected>main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../v0.3.0-beta/index.html", "../../v0.2.0-beta.2/index.html", "../../v0.1.0-beta/index.html", "procedure-capture-guide.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-your-app.html">Build your application</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clef-flash.html">Clef-Flash local decision server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Procedure capture and guidance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="python/xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Procedure capture and guidance</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<section id="procedure-capture-and-guidance">
+<span id="task-capture"></span><h1>Procedure capture and guidance<a class="headerlink" href="#procedure-capture-and-guidance" title="Link to this heading">#</a></h1>
+<p>The procedure-capture-guide sample records narrated demonstrations between
+spoken commands. It saves snapshots, visual captions, and transcribed narration for review and downstream
+processing. Guide mode guides participants through a locally approved procedure
+and verifies progress with visual observations and elapsed-time checks.</p>
+<section id="run-a-demonstration">
+<h2>Run a demonstration<a class="headerlink" href="#run-a-demonstration" title="Link to this heading">#</a></h2>
+<p>Run commands from <code class="docutils literal notranslate"><span class="pre">agent-samples/procedure-capture-guide/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>procedure_capture_guide_model_servers
+uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture
+</pre></div>
+</div>
+<p>The sample’s <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> launcher starts batch Parakeet STT on port 8103,
+Pocket TTS on 8105, Nemotron Omni LLM on 8108, and Cosmos VLM on 8100.
+Batch STT accepts narration without speaker enrollment. The capture worker uses
+STT, TTS, and Cosmos; the LLM is available but does not participate in capture
+or generate guides automatically. Guide mode uses Omni for guide questions and
+model-driven observations, alongside the same STT, TTS, and Cosmos services.
+The launcher combines shared server defaults with
+<code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>; use <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> to select a
+profile explicitly. The worker’s <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> configures its client
+adapters and endpoints, not server deployment. Keep those endpoints aligned
+with server ports when changing configuration. Refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the shared launch workflow.</p>
+<p>Wait for the shared models to be ready before starting the sample. Open the
+authenticated web-client URL printed by DeviceIOHub, enable the microphone,
+and connect. Say <strong>start capture</strong>, demonstrate and narrate, then say
+<strong>stop capture</strong>. Say <strong>start capture</strong> again for another task packet without
+reconnecting. The worker logs each finalized packet’s path and status.</p>
+<p>Use live video or on-demand image capture. Speak commands directly, without a
+wake phrase. After <strong>start capture</strong>, the worker says “Capture started.”
+and stays silent during narration. After <strong>stop capture</strong>, it says
+“Capture stopped.” The evidence packet, transcript, and summary then finish
+saving silently; processing errors are logged. Disconnecting finalizes the packet
+without announcements.</p>
+<p>To stop the sample, press Ctrl+C. The shared model servers remain running.
+To stop the services selected by this sample’s deployment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-servers<span class="w"> </span>procedure_capture_guide_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Stop the model stack before changing server settings, switching samples, or
+updating the checkout. If you changed ports in a GPU profile, pass the same
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> on stop.</p>
+</section>
+<section id="output-destination">
+<h2>Output destination<a class="headerlink" href="#output-destination" title="Link to this heading">#</a></h2>
+<p>Choose an output root at launch without editing configuration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture<span class="w"> </span>--output-root<span class="w"> </span>/path/to/task-evidence
+</pre></div>
+</div>
+<p>Packets are saved under <code class="docutils literal notranslate"><span class="pre">PATH/sessions/&lt;session-id&gt;/</span></code>. Relative command-line
+paths resolve against the launch directory; <code class="docutils literal notranslate"><span class="pre">~</span></code> is expanded. Without this option,
+<code class="docutils literal notranslate"><span class="pre">artifacts_dir</span></code> from <code class="docutils literal notranslate"><span class="pre">yaml/capture-agent-config.yaml</span></code> is used, relative to that YAML. The override
+does not relocate model or voice configuration and does not edit the YAML.</p>
+<p>The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
+captions use the configured VLM, and recording acknowledgements use TTS. Refer to
+<a class="reference internal" href="../getting_started/requirements.html"><span class="doc">Requirements</span></a> for model and hub deployment. The sample
+does not launch a raw audio/video recorder or require NVENC for its snapshots.</p>
+</section>
+<section id="recording-boundaries">
+<h2>Recording boundaries<a class="headerlink" href="#recording-boundaries" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>After connecting, the worker waits for <strong>start capture</strong> to open a packet.
+<strong>stop capture</strong> finalizes it. Repeat the pair to record another demonstration
+on the same connection; duplicate starts during recording are ignored.</p></li>
+<li><p>Say each command as a standalone utterance. Matching ignores case, surrounding
+whitespace, and trailing sentence punctuation. Other speech is saved as
+narration while recording, including phrases such as “stop” or “stop recording.”
+The two control commands are excluded from narration.</p></li>
+<li><p>Recording and narration continue while the camera is off or images are
+unavailable. When a fresh live frame is unavailable, the worker requests a
+still from clients supporting on-demand capture; this can briefly activate
+the camera. Captioning resumes when a distinct image is saved.</p></li>
+<li><p>Disconnect or graceful shutdown finalizes the active packet. Reconnecting
+returns the worker to waiting for <strong>start capture</strong>.</p></li>
+</ul>
+<p>Commands take effect after speech recognition finishes. Keep the microphone
+enabled and pause after the final narration before saying <strong>stop capture</strong> or
+disconnecting. A late transcript can miss the recording boundary; source audio
+is not retained by this sample.</p>
+<p>A new recording waits for the preceding packet to finish saving. Narration after
+its start command is queued in order, but snapshots during this brief restart
+gap are not buffered.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading">#</a></h2>
+<p>Generated data remains local and Git-ignored. Defaults are relative to the sample:</p>
+<p>Frame, caption, and transcript logs append during recording. Packet counts and
+the summary are sealed at stop after pending writes drain; they are not live
+progress indicators.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Location</p></th>
+<th class="head"><p>Contents</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/packet.json</span></code></p></td>
+<td><p>Recording status, participant, timestamps, counts, and activity hierarchy</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/frames/</span></code></p></td>
+<td><p>JPEG samples targeting 2 fps and timestamped <code class="docutils literal notranslate"><span class="pre">index.jsonl</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/captions.jsonl</span></code></p></td>
+<td><p>Timestamped captions, activities, phases, and visible changes</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/transcript.jsonl</span></code></p></td>
+<td><p>Final user transcripts inside the task recording boundary</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/summary.md</span></code></p></td>
+<td><p>Human-readable activity and phase summary</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifacts/sessions/&lt;session-id&gt;/errors.jsonl</span></code></p></td>
+<td><p>Frame, caption, or persistence errors, when present</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="evidence-packet-contract">
+<h3>Evidence-packet contract<a class="headerlink" href="#evidence-packet-contract" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">packet.json</span></code> uses <code class="docutils literal notranslate"><span class="pre">schema_version:</span> <span class="pre">1</span></code>. A finalized <code class="docutils literal notranslate"><span class="pre">complete</span></code> packet contains
+<code class="docutils literal notranslate"><span class="pre">packet.json</span></code>, <code class="docutils literal notranslate"><span class="pre">summary.md</span></code>, and <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> (which can be empty). The
+<code class="docutils literal notranslate"><span class="pre">frames/</span></code> directory exists, but <code class="docutils literal notranslate"><span class="pre">frames/index.jsonl</span></code> and <code class="docutils literal notranslate"><span class="pre">captions.jsonl</span></code> are
+created only when records are appended. An absent log with a zero corresponding
+count means no observations of that kind were saved. A missing log with a
+nonzero count is inconsistent and must not be silently interpreted as empty.
+<code class="docutils literal notranslate"><span class="pre">errors.jsonl</span></code> is optional; its absence is not proof of sufficient evidence.
+Cancelled startup or failed storage can leave an <code class="docutils literal notranslate"><span class="pre">incomplete</span></code> packet with fewer
+files; consumers must check status and file availability before conversion.</p>
+<p>JSONL files contain one object per nonempty line. <code class="docutils literal notranslate"><span class="pre">files</span></code> paths in the packet,
+image <code class="docutils literal notranslate"><span class="pre">path</span></code> values in the frame index, and caption <code class="docutils literal notranslate"><span class="pre">frame_path</span></code> values are
+relative to the packet directory. Preserve these paths when copying a packet.
+Frame IDs and caption reference IDs are local to that packet. Timestamps ending
+in <code class="docutils literal notranslate"><span class="pre">_us</span></code> are Unix microseconds; human-readable timestamps are UTC ISO 8601.</p>
+<p><code class="docutils literal notranslate"><span class="pre">started_at</span></code> is the accepted start command’s transcript timestamp. During a
+recording, <code class="docutils literal notranslate"><span class="pre">ended_at</span></code> is <code class="docutils literal notranslate"><span class="pre">null</span></code>. At finalization it records the effective end,
+after recording producers stop and further evidence admission closes, before
+pending writes and derived summaries finish draining. <code class="docutils literal notranslate"><span class="pre">stop_command.timestamp_us</span></code>
+preserves the accepted stop utterance’s transcript timestamp, which can precede
+the last captured frames because speech recognition takes time. <code class="docutils literal notranslate"><span class="pre">stop_command</span></code>
+is <code class="docutils literal notranslate"><span class="pre">null</span></code> when no spoken stop was accepted. Neither
+timestamp is a claim that the demonstrated task itself finished successfully.</p>
+<p>Activity/phase grouping, captions, and <code class="docutils literal notranslate"><span class="pre">summary.md</span></code> are fallible model-derived
+interpretations. Use the frame index and saved images to inspect their evidence.
+Downstream coding-agent conversion consumes the packet as immutable input and
+writes generated guide material separately. A guide capability consumes that
+generated package rather than importing capture internals.</p>
+<p>The captioner starts when the first sampled frame is available, then waits
+5 seconds after each caption attempt before checking for a new frame. Each
+request compares two saved images in chronological order: the previous
+successfully captioned frame, then the current frame. The first caption of each
+recording uses only the initial image. Requests describe visible actions, object
+details, and changes, and run when a distinct saved image is available. Model
+latency adds to the caption interval; on-demand sampling also depends on client
+response time. Review captions against the images: they are model observations,
+not verified procedural steps.</p>
+<p><code class="docutils literal notranslate"><span class="pre">caption</span></code> describes the current image; <code class="docutils literal notranslate"><span class="pre">delta</span></code> compares earlier and current
+states. Previous activity and phase names are supplied only to stabilize summary
+grouping, not as visual evidence. Grouping is a navigation aid, not a step list.
+Malformed responses are recorded as <code class="docutils literal notranslate"><span class="pre">caption_error</span></code> in <code class="docutils literal notranslate"><span class="pre">errors.jsonl</span></code>, including
+the raw response, and are excluded from captions and summaries. The next request
+still compares against the last successfully captioned image.</p>
+<p>Each saved caption includes pipeline-generated <code class="docutils literal notranslate"><span class="pre">delta_reference_frame_id</span></code> and
+<code class="docutils literal notranslate"><span class="pre">delta_reference_timestamp_us</span></code> for the earlier image actually supplied to the
+model. Both are <code class="docutils literal notranslate"><span class="pre">null</span></code> on the first observation. Resolve the reference ID through
+<code class="docutils literal notranslate"><span class="pre">frames/index.jsonl</span></code>; it need not be the preceding sampled frame, especially
+after slow or failed inference. Current-image provenance remains in <code class="docutils literal notranslate"><span class="pre">frame_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">frame_timestamp_us</span></code>, and <code class="docutils literal notranslate"><span class="pre">frame_path</span></code>. These references identify the evidence
+pair; they do not verify the model’s interpretation or establish intervening
+actions. Older packets without the reference fields do not explicitly record
+that comparison provenance.</p>
+<p>The transcript contains admitted narration between the spoken commands. The
+commands themselves are recorded as boundaries rather than narration.</p>
+<p><code class="docutils literal notranslate"><span class="pre">packet.json.stop_command</span></code> records an accepted spoken stop. Packet status
+<code class="docutils literal notranslate"><span class="pre">complete</span></code> means local writes finished; evidence can still be missing or
+incorrect. Review the counts, errors, and source images before using the packet.
+Persistence failures mark a packet <code class="docutils literal notranslate"><span class="pre">incomplete</span></code> when storage permits saving that
+status; otherwise the process log reports the failure. Failed packets are closed
+so subsequent recording commands create separate packets.
+Recordings are retained until manually removed, so monitor disk usage.</p>
+</section>
+</section>
+<section id="caption-evaluation">
+<h2>Caption evaluation<a class="headerlink" href="#caption-evaluation" title="Link to this heading">#</a></h2>
+<p>With the configured VLM running, run the synthetic visual controls from the
+sample directory. Choose a new output directory for each evaluation:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">PYTHONPATH</span><span class="o">=</span>worker<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/caption.py<span class="w"> </span>--output<span class="w"> </span>artifacts/caption-eval
+</pre></div>
+</div>
+<p>The cases exercise initial observations, chronological direction, unchanged
+images, object appearance and disappearance, and grouping labels that disagree
+with visual evidence. The runner uses the production query, system prompt,
+multi-image tool, and parser. It saves source images, raw responses, and expected
+observations for inspection. The command exits nonzero if any case fails the
+response contract or cannot obtain a model response; all cases are still saved
+for inspection. Its automatic result measures response structure,
+not visual accuracy: compare every output with its images and expected
+observations. Synthetic controls supplement, rather than replace, evaluations on
+recorded demonstrations.</p>
+</section>
+<section id="follow-an-approved-guide">
+<h2>Follow an approved guide<a class="headerlink" href="#follow-an-approved-guide" title="Link to this heading">#</a></h2>
+<p>Place a reviewed <code class="docutils literal notranslate"><span class="pre">*.guide.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">*.guide.yml</span></code> file under <code class="docutils literal notranslate"><span class="pre">guides/</span></code> in the
+sample directory. User-created guides remain local and ignored by Git; the
+maintained tea-making example is the only checked-in exception. Set <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
+<code class="docutils literal notranslate"><span class="pre">approved</span></code> only after reviewing the instructions, completion checks, timers,
+and safety constraints. The CLI matches an exact, case-insensitive <code class="docutils literal notranslate"><span class="pre">task.name</span></code>
+or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>; it rejects missing, draft, invalid, and ambiguous selections.
+Quote names containing spaces:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Guide Name"</span>
+</pre></div>
+</div>
+<p>Start the shared models first, as for capture. Guide mode uses the LLM, VLM, STT,
+and TTS endpoints in <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>. Connect using the hub’s web
+client URL and enable microphone and camera access. The command line selects
+the guide, but connecting does not start it. Say <strong>start guide</strong> to begin step
+one with independent progress for that participant. No wake phrase is required.
+Until then, no verification or timer is running. Say <strong>stop guide</strong> at any time
+to cancel guidance, then <strong>start guide</strong> to begin a fresh run of the same guide.
+Turning off live video does not reset the guide. The shared current
+frame tool may request a still image from clients that support on-demand capture;
+if no fresh image is available, visual verification waits. Timer checks continue
+without a camera. Disconnect releases
+that participant’s progress and pending work; reconnect waits for start guide.</p>
+<p>Like <a class="reference internal" href="tea-making-sample.html"><span class="doc">Tea-making guidance — building deterministic visual workflows</span></a>, guide separates foreground conversation from
+background verification. The foreground answers guide questions using the
+current step and its allowed tools. It cannot directly commit completion.
+Periodic observations use a fresh camera view or a deterministic elapsed-time
+check. The observer can commit only declared writable fields, with any required
+consecutive evidence. Late observations from a previous step or run cannot
+change current progress. The agent announces step completion once, without
+requiring a user question, but does not automatically advance to the next step.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Request</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>“Start guide”</p></td>
+<td><p>Begin a fresh run of the command-line-selected guide from step one</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Stop guide”</p></td>
+<td><p>Cancel guidance and verification, clear progress, and keep the selected guide loaded but inactive</p></td>
+</tr>
+<tr class="row-even"><td><p>“What should I do?”</p></td>
+<td><p>Explain the current step</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Does this look right?”</p></td>
+<td><p>Use the current step’s visual tool if available</p></td>
+</tr>
+<tr class="row-even"><td><p>“How much time remains?”</p></td>
+<td><p>Use the current step’s timer tool if available</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Next” or “continue”</p></td>
+<td><p>Advance only if the current step is verified complete</p></td>
+</tr>
+<tr class="row-even"><td><p>“Skip”</p></td>
+<td><p>Explicitly bypass the current step; this is not evidence of success</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Status”</p></td>
+<td><p>Report current progress</p></td>
+</tr>
+<tr class="row-even"><td><p>“Reset guide”</p></td>
+<td><p>Same as stop guide</p></td>
+</tr>
+<tr class="row-odd"><td><p>“Restart”</p></td>
+<td><p>Same as start guide</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>After “next” on the completed final step, the agent announces workflow
+completion and leaves the guide inactive, ready for another start guide.
+No relaunch or reconnect is needed. Explicitly skipping to the end also leaves
+the guide inactive, with an explicit skipped-steps message rather than a
+verified-completion claim. While inactive, status and start guide remain
+available, but there is no active step or timer. Recording commands and
+selecting another guide are not supported inside guide mode.</p>
+<p>The worker pins the validated guide and SHA-256 from the same captured bytes at
+startup. File edits do not change a running guide; restart the sample to use a
+new version or revoke approval. Approval is a local review convention, not a
+cryptographic signature. Model-based visual checks can be wrong; reviewers must
+describe observable evidence, including orientation and count where relevant.
+This demo is not a safety interlock. A still image cannot prove a hidden action.</p>
+<section id="included-tea-making-guide">
+<h3>Included tea-making guide<a class="headerlink" href="#included-tea-making-guide" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">guides/tea-making.guide.yaml</span></code> is a hand-authored, approved example with task
+name <strong>Tea Making</strong> and ID <code class="docutils literal notranslate"><span class="pre">tea_making</span></code>. Its four stages are specific to Numi
+Chamomile Lemon: read the packet, verify the water temperature, put the tea in
+water, and start the steeping timer. It is not generated from a user recording.</p>
+<p>Start the sample’s shared models, then run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Tea Making"</span>
+</pre></div>
+</div>
+<p>Connect and say <strong>start guide</strong>. Say <strong>next</strong> after each verified visual step
+and <strong>stop guide</strong> to cancel. The guide finishes automatically when the
+five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
+<p>Use Numi Chamomile Lemon tea, a stable heat-safe vessel,
+and a kettle or thermometer with a readable <strong>current</strong> water-temperature
+display. <a class="reference external" href="https://numitea.com/products/chamomile-lemon">Numi’s product instructions</a>
+specify a 5–6 minute steep; this example chooses five minutes. Numi’s
+<a class="reference external" href="https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits">general herbal-tea guidance</a>
+calls for boiling water. The example verifies a displayed 100°C (212°F) current
+reading. If the packet requires a different recipe or local boiling temperature
+cannot reach that target, stop and adapt a local copy before using it. Do not
+tilt or lift hot vessels to satisfy a camera check.</p>
+<p>The example is adapted to guide’s existing tools, not a drop-in copy of the
+tea sample’s workflow YAML:</p>
+<ul class="simple">
+<li><p>It verifies both the Numi brand and Chamomile Lemon blend name. The recipe is
+fixed in the guide, not inferred from packaging colors or retrieved by the LLM.</p></li>
+<li><p>Its three visual steps require two distinct fresh frames. The first reads
+<code class="docutils literal notranslate"><span class="pre">BRAND</span> <span class="pre">|</span> <span class="pre">BLEND</span></code> and matches <code class="docutils literal notranslate"><span class="pre">NUMI</span> <span class="pre">|</span> <span class="pre">CHAMOMILE</span> <span class="pre">LEMON</span></code>; the second reads a current
+<code class="docutils literal notranslate"><span class="pre">LABEL</span> <span class="pre">|</span> <span class="pre">NUMBER</span> <span class="pre">UNIT</span></code> reading and accepts <code class="docutils literal notranslate"><span class="pre">CURRENT</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTUAL</span></code>, or <code class="docutils literal notranslate"><span class="pre">THERMOMETER</span></code>
+with <code class="docutils literal notranslate"><span class="pre">100</span> <span class="pre">C</span></code> or <code class="docutils literal notranslate"><span class="pre">212</span> <span class="pre">F</span></code>. It preserves <code class="docutils literal notranslate"><span class="pre">TARGET</span></code> and <code class="docutils literal notranslate"><span class="pre">SET</span></code> labels in the visual
+result so those readings cannot satisfy completion. Unlabeled displays are
+unavailable rather than assumed to show current temperature. Matching tolerates
+equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
+not different temperatures. Immersion requires <code class="docutils literal notranslate"><span class="pre">YES</span></code> for
+visible bag contact with visible water, including a floating bag.
+Other readings, <code class="docutils literal notranslate"><span class="pre">NO</span></code>, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, missing frames, and malformed responses
+cannot complete a step. These bounded evidence commits do not use an
+observation LLM; the foreground LLM still handles questions and controls.</p></li>
+<li><p>The heating check verifies a displayed current temperature at the brewing
+target, not a target setting or a “heating underway” threshold. Guide
+does not expose the tea sample’s typed temperature tools: this is a VLM
+judgment, not a deterministic temperature measurement or safety guarantee.</p></li>
+<li><p>Immersion detection does not start the timer. Say <strong>next</strong> promptly after
+immersion is confirmed to enter the timer step. The runtime then measures a
+full 300 seconds; time spent waiting at the immersion step is not subtracted.
+Timer verification does not inspect images or prove continued immersion.</p></li>
+<li><p>The final step sets <code class="docutils literal notranslate"><span class="pre">finish_on_complete:</span> <span class="pre">true</span></code>, so expiry ends the active run,
+clears progress, and announces completion without another <strong>next</strong> command.</p></li>
+<li><p>Skipping a visual prerequisite ends the run as skipped instead of assuming
+the prerequisite was satisfied. Skipping the timer also cannot produce a
+verified-completion announcement.</p></li>
+</ul>
+<p>Regression tests load this exact example and exercise its state transitions,
+distinct-frame evidence, skip behavior, and timer with simulated observations.
+Those tests do not establish accuracy on real tea-making images or appliances.</p>
+<section id="local-model-guide-evaluation">
+<h4>Local-model guide evaluation<a class="headerlink" href="#local-model-guide-evaluation" title="Link to this heading">#</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">eval/guide.py</span></code> exercises a manifest’s selected guide through
+the actual guide agent, runtime, voice aggregation, frame selection, and model
+tools. It uses the sample’s configured LLM and VLM. Fixture images replace the
+hub camera endpoint, and typed requests enter the same runtime topic as
+transcribed speech. Microphones, STT, network camera delivery, and audible TTS
+are not covered. The script never manages external model-server processes.</p>
+<p>The checked-in <code class="docutils literal notranslate"><span class="pre">eval/guide_cases.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">eval/fixtures/indicator.guide.yaml</span></code>
+provide a synthetic visual-and-timer scenario. <code class="docutils literal notranslate"><span class="pre">eval/guide_routing.yaml</span></code>
+exercises the composed foreground prompt with controls, polite requests,
+quoted commands, negation, requests to explain guide content, unsupported capture
+requests, and visual questions.
+Both run with the full permitted tool set; the evaluator does not preselect
+tools based on the utterance.</p>
+<p>A YAML or JSON manifest selects <code class="docutils literal notranslate"><span class="pre">guides_dir</span></code> (relative to the manifest) and
+<code class="docutils literal notranslate"><span class="pre">guide</span></code> (name or ID), and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">image</span></code>: show an image <code class="docutils literal notranslate"><span class="pre">path</span></code>, or a named synthetic <code class="docutils literal notranslate"><span class="pre">scene</span></code>. Optional
+<code class="docutils literal notranslate"><span class="pre">scenes</span></code> map names to a rectangle color or display text.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">observe</span></code>: wait for <code class="docutils literal notranslate"><span class="pre">count</span></code> visual results (default two) from the displayed
+image and compare them to the allowed <code class="docutils literal notranslate"><span class="pre">answers</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">say</span></code>: send <code class="docutils literal notranslate"><span class="pre">text</span></code> as a user turn. Optional <code class="docutils literal notranslate"><span class="pre">expect</span></code> checks the delivered
+answer against a regex; <code class="docutils literal notranslate"><span class="pre">tools</span></code> and <code class="docutils literal notranslate"><span class="pre">arguments</span></code> check model tool calls.
+Status assertions use <strong>What is my status?</strong> and <code class="docutils literal notranslate"><span class="pre">workflow__status</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wait_speech</span></code>: wait for an <code class="docutils literal notranslate"><span class="pre">expect</span></code> regex in speech delivered since the last
+user turn, with optional <code class="docutils literal notranslate"><span class="pre">timeout_s</span></code>. This checks completion notices, including
+automatic timer completion, without reading private backend state.</p></li>
+</ul>
+<p>The runner makes no assumptions about step names, step count, or a final timer.
+Timers use real elapsed time. Include negative observations before positive
+ones and explicitly test early advance, completion, stop, and restart as needed.</p>
+<p>From the sample directory, with its model servers already running:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--output<span class="w"> </span>artifacts/guide-eval
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--manifest<span class="w"> </span>eval/guide_routing.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/guide-routing-eval
+</pre></div>
+</div>
+<p>Use a new output directory for each run. Supply <code class="docutils literal notranslate"><span class="pre">--manifest</span> <span class="pre">/path/to/scenario.yaml</span></code>
+to evaluate another guide and its images.
+Outputs include the exact guide, manifest, image hashes, model tool calls, visual
+answers, speech text, and result JSON. Synthetic controls can isolate label or
+setpoint mistakes but do not establish accuracy on a user’s actual camera views.</p>
+</section>
+</section>
+<section id="guide-structure">
+<h3>Guide structure<a class="headerlink" href="#guide-structure" title="Link to this heading">#</a></h3>
+<p>The declarative shape follows the tea-making workflow: a task, typed sparse
+state, and ordered steps with separate observation and voice policies. This is
+a guide-specific schema inspired by that design, not a compatible loader for
+tea-making or legacy workflow-recorder YAML. Adapt guides to the contract below.</p>
+<p>Text fields must be actual strings. Duplicate mapping keys are rejected at
+every level, including overrides introduced through YAML merges, instead of
+silently replacing earlier requirements. Invalid guides cannot be used in guide mode,
+even when their <code class="docutils literal notranslate"><span class="pre">task.status</span></code> is <code class="docutils literal notranslate"><span class="pre">approved</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">schema_version</span></code> must be <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code> declares <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">name</span></code>, positive <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code> (<code class="docutils literal notranslate"><span class="pre">draft</span></code> or
+<code class="docutils literal notranslate"><span class="pre">approved</span></code>), <code class="docutils literal notranslate"><span class="pre">start_step</span></code>, <code class="docutils literal notranslate"><span class="pre">foreground_prompt</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">complete_message</span></code>.</p></li>
+<li><p>Each <code class="docutils literal notranslate"><span class="pre">state</span></code> field declares a type (<code class="docutils literal notranslate"><span class="pre">boolean</span></code>, <code class="docutils literal notranslate"><span class="pre">integer</span></code>, <code class="docutils literal notranslate"><span class="pre">number</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">string</span></code>), a description, and optionally an initial value.</p></li>
+<li><p>Each step declares <code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">title</span></code>, <code class="docutils literal notranslate"><span class="pre">reads</span></code>, <code class="docutils literal notranslate"><span class="pre">writes</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger</span></code>,
+<code class="docutils literal notranslate"><span class="pre">voice</span></code>, a non-empty <code class="docutils literal notranslate"><span class="pre">complete_when</span></code> mapping, <code class="docutils literal notranslate"><span class="pre">next</span></code>, and <code class="docutils literal notranslate"><span class="pre">messages</span></code> containing
+<code class="docutils literal notranslate"><span class="pre">enter</span></code>, <code class="docutils literal notranslate"><span class="pre">complete</span></code>, and <code class="docutils literal notranslate"><span class="pre">skip</span></code>. The <code class="docutils literal notranslate"><span class="pre">next</span></code> chain must visit every step once
+and end with <code class="docutils literal notranslate"><span class="pre">null</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">agent</span></code> and <code class="docutils literal notranslate"><span class="pre">voice</span></code> each contain a prompt and a tool list. <code class="docutils literal notranslate"><span class="pre">agent</span></code> is optional
+when <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code> supplies a deterministic completion patch; that path
+does not run an observation LLM. Otherwise <code class="docutils literal notranslate"><span class="pre">agent</span></code> is required. Allowed step tools
+are <code class="docutils literal notranslate"><span class="pre">current_view</span></code>, <code class="docutils literal notranslate"><span class="pre">clock__now</span></code>, and <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code>. Only the observer receives
+<code class="docutils literal notranslate"><span class="pre">workflow__commit</span></code>. Foreground workflow controls are supplied by the runner,
+not listed in the guide’s step tools.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">evidence</span></code> contains a full-match regex <code class="docutils literal notranslate"><span class="pre">pattern</span></code>, positive
+<code class="docutils literal notranslate"><span class="pre">consecutive</span></code> count, and optional <code class="docutils literal notranslate"><span class="pre">commit</span></code> mapping. With <code class="docutils literal notranslate"><span class="pre">commit</span></code>, matching
+observations directly apply that bounded patch without an observation LLM.
+The patch must satisfy every <code class="docutils literal notranslate"><span class="pre">complete_when</span></code> requirement. Each step must have
+at least one initially unmet completion field that no preceding step can write;
+use a dedicated completion flag rather than reusing a preceding step’s flag.
+Without <code class="docutils literal notranslate"><span class="pre">commit</span></code>, the observation LLM proposes state changes and the evidence
+count gates completion. Use a precise closed-set VLM answer contract if a
+regex is used. Visual evidence counts distinct source frames, identified by
+participant, track, timestamp, and sequence. Repeated or older frames do not
+increment the count or run another observation-model update. Unavailable
+observations reset the consecutive evidence count.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">state_on_skip</span></code> writes only declared step fields;
+<code class="docutils literal notranslate"><span class="pre">complete_on_skip:</span> <span class="pre">true</span></code> ends the run when explicitly skipped.</p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">finish_on_complete:</span> <span class="pre">true</span></code> is valid only on a terminal step. Once
+verified, it ends the run automatically and announces the task’s completion
+message. If an earlier step was skipped, it reports skipped steps instead.
+The default is <code class="docutils literal notranslate"><span class="pre">false</span></code>, preserving explicit advancement after verification.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">current_view</span></code> triggers require <code class="docutils literal notranslate"><span class="pre">arguments.question</span></code> (1–500 characters), a
+positive <code class="docutils literal notranslate"><span class="pre">interval_s</span></code>, and optionally <code class="docutils literal notranslate"><span class="pre">result_field:</span> <span class="pre">text</span></code>. Timer triggers use
+<code class="docutils literal notranslate"><span class="pre">function:</span> <span class="pre">clock__timer</span></code> with <code class="docutils literal notranslate"><span class="pre">arguments.duration_s</span></code> (positive integer seconds). They may
+select <code class="docutils literal notranslate"><span class="pre">elapsed_s</span></code>, <code class="docutils literal notranslate"><span class="pre">remaining_s</span></code>, or <code class="docutils literal notranslate"><span class="pre">expired</span></code> as <code class="docutils literal notranslate"><span class="pre">result_field</span></code>.
+Arguments can reference declared readable or writable fields using
+<code class="docutils literal notranslate"><span class="pre">$state.field_name</span></code>. On entering a timer step, guide resolves and freezes its
+duration and starts a monotonic runtime clock. Missing or invalid durations
+leave the step blocked. Start timestamps are not writable timer state;
+<code class="docutils literal notranslate"><span class="pre">started_at_us</span></code> in timer trigger arguments is rejected. Model commits and
+wall-clock changes cannot backdate the timer or shorten an active wait.
+The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> tool takes no arguments and reads the active
+runtime timer. Restarting the guide starts a fresh timer on the next timer-step
+entry; <code class="docutils literal notranslate"><span class="pre">clock__now</span></code> is informational and cannot start or modify timers.
+An unavailable or superseded timer returns <code class="docutils literal notranslate"><span class="pre">available:</span> <span class="pre">false</span></code> and a reason,
+not an invented elapsed time or a tool exception.
+Timer-only steps use elapsed-time evidence, not a visual substitute. Completion
+commits for timer triggers are rejected until their configured duration expires.</p>
+</section>
+</section>
+<section id="composition-and-configuration">
+<h2>Composition and configuration<a class="headerlink" href="#composition-and-configuration" title="Link to this heading">#</a></h2>
+<p>The outer <code class="docutils literal notranslate"><span class="pre">main.py</span></code> launches the hub and worker. The worker’s <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>
+accepts configuration and readiness arguments; <code class="docutils literal notranslate"><span class="pre">procedure_capture_guide_worker/app.py</span></code> constructs
+the hub endpoint, model clients, voice runtime, and frame/image tools.
+The worker uses <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> for transcripts, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> for snapshots,
+and <code class="docutils literal notranslate"><span class="pre">MultiImageQueryTool</span></code> for captions.</p>
+<p>The registered <code class="docutils literal notranslate"><span class="pre">CaptureAgent</span></code> in <code class="docutils literal notranslate"><span class="pre">procedure_capture_guide_worker/capture/agent.py</span></code> owns commands,
+narration admission, participant generations, and acknowledgements. Its private
+<code class="docutils literal notranslate"><span class="pre">_Capture</span></code> helper in <code class="docutils literal notranslate"><span class="pre">capture/capturing.py</span></code> owns sampling, caption tasks,
+persistence, and finalization.
+<code class="docutils literal notranslate"><span class="pre">capture/captioning.py</span></code> defines the request and response contract used by both
+recording and evaluation. Application cleanup explicitly drains capture work
+before closing its frame endpoint and VLM client.</p>
+<p>The worker keeps shared model, voice, image, and lifecycle wiring in <code class="docutils literal notranslate"><span class="pre">app.py</span></code>
+and shared settings in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>. The sibling <code class="docutils literal notranslate"><span class="pre">capture/</span></code> and <code class="docutils literal notranslate"><span class="pre">guide/</span></code> packages
+own their capability-specific agents, settings, and helpers. Only the selected
+agent is registered. With no mode flag, capture remains the default.</p>
+<p><code class="docutils literal notranslate"><span class="pre">guide/agent.py</span></code> handles connection events, foreground questions, and conversational
+controls. Its <code class="docutils literal notranslate"><span class="pre">_Guide</span></code> backend in <code class="docutils literal notranslate"><span class="pre">guide/guiding.py</span></code> owns guide progress,
+runtime timers, frame evidence, and background verification. Transitions clear
+both local notices and pending voice-aggregation output under the session lock,
+so obsolete completion notices cannot follow the new step’s instruction.
+The foreground receives detached guidance context and scoped tools. Observation
+updates have a state revision; controls have a separate run-and-step revision.
+Completing the same step during inference does not invalidate a stop or advance
+request, but a concurrent step transition does. The backend rechecks those scopes
+under its own lock when controls execute and answers finish. It owns accepted control tasks
+through completion even if a new utterance cancels the foreground turn. The
+cancelled turn drains accepted controls and delivers their still-current transition
+response; new guidance snapshots also drain controls first. Departure and shutdown
+drain those tasks without speaking to disconnected participants.
+Stop guide cancels the observer and clears timer
+state without unloading the selected guide. Connecting only loads an inactive
+session; start guide activates it and starts its observer and any first-step timer.
+Guide mode uses <code class="docutils literal notranslate"><span class="pre">VoiceAggregationAgent</span></code>, <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code>, native tools, and the
+shared tool loop. The conversation prompt governs intent without an English
+wording filter. Polite action requests can use controls; questions about controls
+do not authorize them. This is model policy, not a deterministic intent guarantee.
+State-changing tools independently check session freshness and completion.
+Guide loading and validation live in <code class="docutils literal notranslate"><span class="pre">guide/guides.py</span></code>
+and <code class="docutils literal notranslate"><span class="pre">guide/_workflow_spec.py</span></code>. Guide mode never constructs the capture backend or
+writes demonstration packets. Both modes start the same hub and worker processes
+and use the same separately launched model stack and <code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code>.</p>
+<p>The always-on voice gate passes commands and narration through the same accepted
+input path. Recording acknowledgements follow voice-input handling, so a command
+cannot cancel its own response.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Configuration</p></th>
+<th class="head"><p>Settings</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/worker.yaml</span></code></p></td>
+<td><p>Shared frame and speech detection settings; capability configuration paths</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/capture-agent-config.yaml</span></code></p></td>
+<td><p>Task output directory, sampling rate, and caption interval</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/guide-agent-config.yaml</span></code></p></td>
+<td><p>Local guide directory and visual verification timeout</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
+<td><p>Shared batch STT, LLM, VLM, and TTS services and endpoints</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<td><p>Silent, wake-word-free input with sample-owned recording commands</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.guide.yaml</span></code></p></td>
+<td><p>Wake-word-free guide questions and guide controls</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<td><p>Room and web server</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">worker.yaml</span></code> selects the capture YAML through <code class="docutils literal notranslate"><span class="pre">capture_config</span></code>, resolved relative
+to the worker YAML. <code class="docutils literal notranslate"><span class="pre">artifacts_dir</span></code> resolves relative to the selected capture
+YAML, even when it is in another directory. Model and voice configuration remain
+beside the worker YAML. Absolute configuration and output paths are also supported.
+The worker loads shared settings into <code class="docutils literal notranslate"><span class="pre">WorkerConfig</span></code> and capture-specific settings
+into <code class="docutils literal notranslate"><span class="pre">CaptureConfig</span></code> under <code class="docutils literal notranslate"><span class="pre">capture/config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">app.py</span></code> supplies each to its
+owning component. Guide mode selects its YAML through <code class="docutils literal notranslate"><span class="pre">guide_config</span></code> and loads
+<code class="docutils literal notranslate"><span class="pre">GuideConfig</span></code> from <code class="docutils literal notranslate"><span class="pre">guide/config.py</span></code>; its guide directory resolves relative to
+that YAML. The required positional <code class="docutils literal notranslate"><span class="pre">GUIDE_NAME</span></code> selects <code class="docutils literal notranslate"><span class="pre">task.name</span></code> or <code class="docutils literal notranslate"><span class="pre">task.id</span></code>,
+not a filesystem path. <code class="docutils literal notranslate"><span class="pre">--output-root</span></code> applies only to capture. Restart after
+configuration edits.
+Refer to <a class="reference internal" href="configuration.html"><span class="doc">Sample configuration reference</span></a> and <a class="reference internal" href="command-line.html"><span class="doc">Command-line reference</span></a> for fields and CLI options.</p>
+</section>
+<section id="guide-regression-tests">
+<h2>Guide regression tests<a class="headerlink" href="#guide-regression-tests" title="Link to this heading">#</a></h2>
+<p>From the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tests/test_procedure_capture_guide.py<span class="w"> </span>tests/test_sop_guide.py<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+</pre></div>
+</div>
+<p>These tests cover mode isolation, approval, guide validation, participant-local
+progress, repeated runs, stale observations, timers, and runtime-to-voice delivery.
+They use synthetic fixtures and validate the shipped hand-authored tea guide,
+not private user recordings. Offline CLI tests exercise the evaluation runner
+with controlled model responses, including visual-only and visual-and-timer guides.
+These tests establish runtime behavior, not model accuracy. Run the standalone
+<code class="docutils literal notranslate"><span class="pre">eval/guide.py</span></code> scenarios above against existing model servers to measure live
+tool routing and visual judgments; the runner never manages their lifecycle.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="model-servers-nim.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">NIM model endpoints</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="simple-vlm-example.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Simple VLM example</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-a-demonstration">Run a demonstration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-destination">Output destination</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recording-boundaries">Recording boundaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#outputs">Outputs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#evidence-packet-contract">Evidence-packet contract</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#caption-evaluation">Caption evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#follow-an-approved-guide">Follow an approved guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#included-tea-making-guide">Included tea-making guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-guide-evaluation">Local-model guide evaluation</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#guide-structure">Guide structure</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composition-and-configuration">Composition and configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#guide-regression-tests">Guide regression tests</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
