@@ -1335,7 +1335,8 @@ def test_cli_selects_guide_with_independent_session_recording(monkeypatch, sessi
     extra = ["--session-recording"] if session_recording else []
     expected = ["hub", "capture", "worker"] if session_recording else ["hub", "worker"]
 
-    def launch(processes, base):
+    def launch(processes, base, *, health_port):
+        assert health_port is None
         assert [p.name for p in processes] == expected
         assert processes[-1].command == "procedure_capture_guide_worker"
         requests.append(json.loads(processes[-1].config.read_text()))
