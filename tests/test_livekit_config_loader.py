@@ -21,6 +21,86 @@ def _reset_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["device_io_hub"])
 
 
+def test_deployment_config_owns_paths_without_merging_sample_yaml(tmp_path, monkeypatch):
+    from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
+
+    deployment = tmp_path / "deployment"
+    deployment.mkdir()
+    selected = deployment / "hub.yaml"
+    selected.write_text("web_client_dir: assets\nbrowser_dir: legacy-assets\n"
+                        "cert_file: tls/server.crt\nkey_file: tls/server.key\n"
+                        "lk_port_ws: 9880\ntoken_server_port: 9000\n")
+    sample = tmp_path / "sample"
+    sample.mkdir()
+    default = sample / "device_io_hub.yaml"
+    default.write_text("room_name: sample-room\nweb_server_port: 9999\n")
+    monkeypatch.chdir(sample)
+    monkeypatch.setattr(sys, "argv", ["device_io_hub", "--config", str(selected)])
+    cfg = load_config()
+    assert cfg.room_name == "xr-room"
+    assert cfg.web_server_port == 8080
+    assert cfg.web_client_dir == str(deployment / "assets")
+    assert cfg.browser_dir == str(deployment / "legacy-assets")
+    assert cfg.cert_file == str(deployment / "tls/server.crt")
+    assert cfg.key_file == str(deployment / "tls/server.key")
+    assert cfg.lk_internal_url == "ws://127.0.0.1:9880"
+    assert cfg.token_server_url == "ws://localhost:9000"
+    assert default.read_text() == "room_name: sample-room\nweb_server_port: 9999\n"
+    direct = LiveKitConnectorConfig(api_key="key", api_secret="secret", lk_port_ws=9880)
+    assert direct.lk_internal_url == cfg.lk_internal_url
+
+
+@pytest.mark.parametrize("ports", [(7880, 8000), (9880, 9000)])
+@pytest.mark.parametrize("explicit", [None, ("ws://127.0.0.1:7880", "ws://localhost:8000"),
+                                     ("wss://internal.example:9443/rtc", "wss://public.example/rtc")])
+def test_listener_url_derivation_is_identical_for_yaml_and_direct_config(tmp_path, monkeypatch, explicit, ports):
+    from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
+
+    values = {"lk_port_ws": ports[0], "token_server_port": ports[1]}
+    if explicit is not None:
+        values.update(lk_internal_url=explicit[0], token_server_url=explicit[1])
+    selected = tmp_path / "hub.yaml"
+    selected.write_text(yaml.safe_dump(values))
+    monkeypatch.setattr(sys, "argv", ["device_io_hub", "--config", str(selected)])
+    loaded = load_config()
+    direct = LiveKitConnectorConfig(api_key="key", api_secret="secret", **values)
+    for cfg in (loaded, direct):
+        assert cfg.lk_internal_url == (explicit[0] if explicit else f"ws://127.0.0.1:{ports[0]}")
+        assert cfg.token_server_url == (explicit[1] if explicit else f"ws://localhost:{ports[1]}")
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_selected_and_default_config_share_validation(tmp_path, monkeypatch, selected):
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / ("customer.yaml" if selected else "device_io_hub.yaml")
+    path.write_text("return_audio_max_buffer_s: 0\n")
+    monkeypatch.setattr(sys, "argv", ["device_io_hub", "--config", str(path)] if selected else ["device_io_hub"])
+    with pytest.raises(ValueError, match="return_audio_max_buffer_s"):
+        load_config()
+
+
+@pytest.mark.parametrize("advertised", [None, "wss://external.example/rtc"])
+@pytest.mark.asyncio
+async def test_token_response_tracks_listener_unless_url_is_explicit(advertised):
+    import httpx
+    from device_io_hub.transport.livekit._token_server import build_app
+    from device_io_hub.transport.livekit._web_server import _build_app
+    from device_io_hub.transport.livekit.config import LiveKitConnectorConfig
+
+    cfg = LiveKitConnectorConfig(api_key="key", api_secret="test-secret-" * 4,
+                                lk_port_ws=9880, token_server_port=9000, token_server_url=advertised,
+                                web_server_port=9443)
+    for app, expected in ((build_app(cfg), advertised or "ws://localhost:9000"),
+                          (_build_app(cfg, None), "wss://web.example:9443")):
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="https://web.example",
+            ) as client:
+                result = await client.get("/token")
+                assert result.status_code == 200
+                assert result.json()["url"] == expected
+
+
 @pytest.mark.parametrize(
     ("api_key", "api_secret"),
     [

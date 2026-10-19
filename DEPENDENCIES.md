@@ -675,6 +675,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `loguru>=0.7`
   - `pyyaml>=6.0`
+  - `pydantic>=2.0,<3.0`
 - Optional dependency groups: none
 - Commands:
   - `procedure_capture_replay_worker` → `procedure_capture_replay_worker.__main__:run`
@@ -893,6 +894,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
+  - `coverage>=7.10`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`
