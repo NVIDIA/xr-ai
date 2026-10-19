@@ -13,8 +13,8 @@ change drivers or firewall rules, or download models.
 From the repository root, using Python 3.11 or newer:
 
 ```bash
-python3 deployments/brev/catalog.py "$PWD"
-python3 deployments/brev/catalog.py "$PWD" --resolve auto
+python3 deployment/brev/catalog.py "$PWD"
+python3 deployment/brev/catalog.py "$PWD" --resolve auto
 ```
 
 The first command prints a JSON inventory with GPU facts, per-sample blockers,
