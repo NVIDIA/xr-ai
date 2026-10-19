@@ -72,7 +72,7 @@ _ALLOWED_LEGACY_REFERENCES = {
 }
 _HUB_PROJECT = _ROOT / "services" / "device-io-hub"
 _SAMPLE_WEB_CLIENTS = {
-    "procedure-capture-replay": _ROOT / "client-samples" / "web",
+    "procedure-capture-guide": _ROOT / "client-samples" / "web",
     "lab-instrument-monitoring": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "tea-making-sample": _ROOT / "client-samples" / "web",
@@ -551,9 +551,9 @@ def test_sample_run_passes_capture_and_preserves_web_event_option(
     ("xr-render-demo", ["--session-recording"]),
     ("tea-making-sample", ["--session-recording", "--expose-web-events"]),
     ("lab-instrument-monitoring", ["--session-recording", "--expose-web-events"]),
-    ("procedure-capture-replay", []),
-    ("procedure-capture-replay", ["--output-root", "evidence"]),
-    ("procedure-capture-replay", ["--mode", "replay", "Tea Making"]),
+    ("procedure-capture-guide", []),
+    ("procedure-capture-guide", ["--output-root", "evidence"]),
+    ("procedure-capture-guide", ["--mode", "guide", "Tea Making"]),
 ])
 @pytest.mark.parametrize("relative", [False, True])
 def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_path, monkeypatch):

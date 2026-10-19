@@ -284,7 +284,7 @@ def test_embedding_profiles_retain_fractional_memory_budget() -> None:
 
 
 _SAMPLES = {
-    "procedure-capture-replay": ("stt", "tts", "omni", "vlm"),
+    "procedure-capture-guide": ("stt", "tts", "omni", "vlm"),
     "simple-vlm-example": ("speaker-stt", "tts", "vlm"),
     "lab-instrument-monitoring": ("speaker-stt", "tts", "omni", "vlm"),
     "tea-making-sample": ("speaker-stt", "tts", "omni", "embedding"),
