@@ -36,8 +36,9 @@ _BANNER = "━" * 56
 def hold_instance_lock(path: Path | None = None) -> Iterator[None]:
     """Hold the machine-wide hub lock for the duration of the block.
 
-    *path* defaults to :data:`LOCK_PATH`. Raises :class:`StartupError` naming
-    the running hub when another process holds the lock.
+    *path* defaults to :data:`LOCK_PATH`. Raises :class:`StartupError` when
+    another process holds the lock, with the last recorded PID as an
+    unverified diagnostic. Read-only holders cannot update that record.
     """
     path = path or LOCK_PATH
     fd = _open(path)
@@ -45,7 +46,7 @@ def hold_instance_lock(path: Path | None = None) -> Iterator[None]:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise _already_running(_owner(path)) from None
+            raise _already_running(_last_recorded_pid(path)) from None
         _record_owner(fd)
         yield
     finally:
@@ -86,27 +87,22 @@ def _record_owner(fd: int) -> None:
         pass
 
 
-def _owner(path: Path) -> str:
-    """Describe the process recorded in *path*, for the refusal banner."""
+def _last_recorded_pid(path: Path) -> str:
+    """Read diagnostic history, which does not identify the current holder."""
     try:
         pid = int(path.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
-        return "unknown process"
-    try:
-        args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
-    except OSError:
-        return f"pid {pid}"
-    command = " ".join(arg.decode(errors="replace") for arg in args if arg)
-    return f"pid {pid}: {command}" if command else f"pid {pid}"
+        return "unknown"
+    return str(pid)
 
 
-def _already_running(owner: str) -> StartupError:
+def _already_running(last_recorded_pid: str) -> StartupError:
     lines = [
         "",
         _BANNER,
         "  Another DeviceIOHub is already running — refusing to start",
         _BANNER,
-        f"  Running hub : {owner}",
+        f"  Last recorded PID (unverified): {last_recorded_pid}",
         "",
         "  Only one hub can run on a machine: hubs share fixed IPC socket",
         "  paths, LiveKit ports, and the LiveKit container. Starting a",

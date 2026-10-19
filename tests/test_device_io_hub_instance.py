@@ -19,7 +19,7 @@ from device_io_hub._errors import StartupError
 from device_io_hub._instance import hold_instance_lock
 
 
-def test_second_holder_is_refused_and_told_who_runs(tmp_path: Path) -> None:
+def test_second_holder_is_refused_with_an_unverified_pid_record(tmp_path: Path) -> None:
     lock = tmp_path / "hub.lock"
 
     with hold_instance_lock(lock):
@@ -27,7 +27,31 @@ def test_second_holder_is_refused_and_told_who_runs(tmp_path: Path) -> None:
             with hold_instance_lock(lock):
                 pytest.fail("a second hub acquired the lock")
 
-    assert f"pid {os.getpid()}" in str(refused.value)
+    assert f"Last recorded PID (unverified): {os.getpid()}" in str(refused.value)
+
+
+def test_read_only_holder_does_not_attribute_a_stale_pid_to_the_running_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock = tmp_path / "hub.lock"
+    recorded_pid = os.getppid()
+    lock.write_text(f"{recorded_pid}\n", encoding="utf-8")
+
+    def must_not_look_up_process(_path: Path) -> bytes:
+        pytest.fail("an unverified PID must not be attributed to a process")
+
+    monkeypatch.setattr(Path, "read_bytes", must_not_look_up_process)
+    with monkeypatch.context() as holder_patch:
+        holder_patch.setattr(_instance, "_open", lambda path: os.open(path, os.O_RDONLY))
+        with hold_instance_lock(lock):
+            holder_patch.undo()
+            with pytest.raises(StartupError, match="already running") as refused:
+                with hold_instance_lock(lock):
+                    pytest.fail("a second hub acquired the lock")
+
+    assert f"Last recorded PID (unverified): {recorded_pid}" in str(refused.value)
+    assert "Running hub" not in str(refused.value)
+    assert lock.read_text(encoding="utf-8") == f"{recorded_pid}\n"
 
 
 def test_lock_is_free_again_after_the_holder_exits(tmp_path: Path) -> None:
@@ -99,7 +123,7 @@ def test_lock_from_a_killed_hub_does_not_block_the_next_one(tmp_path: Path) -> N
     try:
         assert holder.stdout is not None
         assert holder.stdout.readline().strip() == "locked"
-        with pytest.raises(StartupError, match=f"pid {holder.pid}"):
+        with pytest.raises(StartupError, match=rf"Last recorded PID \(unverified\): {holder.pid}"):
             with hold_instance_lock(lock):
                 pass
     finally:
