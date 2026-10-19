@@ -3,6 +3,8 @@
 
 """Own the headless OpenXR session that tracks the user's head."""
 
+from __future__ import annotations
+
 import threading
 import time
 from types import SimpleNamespace
