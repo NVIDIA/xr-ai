@@ -24,12 +24,127 @@ _LOCAL_VLM_CONFIGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def no_real_gpu_probe(monkeypatch):
+    monkeypatch.setattr("xr_ai_vllm.gpu_compute_major", lambda: 0)
+
+
 def _load_server_module():
     spec = importlib.util.spec_from_file_location("_test_vlm_server_main", _SERVER_MAIN)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    ("major", "overrides", "decoder", "encoder"),
+    [
+        (0, {}, None, None),
+        (8, {}, None, None),
+        (9, {}, None, None),
+        (10, {}, None, None),
+        (11, {}, None, None),
+        (12, {}, "TRITON_ATTN", "TRITON_ATTN"),
+        (12, {"attention_backend": "FLASHINFER"}, "FLASHINFER", "TRITON_ATTN"),
+        (12, {"mm_encoder_attn_backend": "TORCH_SDPA"}, "TRITON_ATTN", "TORCH_SDPA"),
+        (12, {"attention_backend": " auto "}, None, "TRITON_ATTN"),
+        (12, {"attention_backend": "auto", "mm_encoder_attn_backend": "auto"}, None, None),
+        (12, {"model": "other/model"}, None, None),
+        (12, {"vllm_backend": "pip"}, None, None),
+        (12, {"vllm_image": "custom/image:tag"}, None, None),
+        (12, {"vllm_backend": "pip", "attention_backend": "TRITON_ATTN"}, "TRITON_ATTN", None),
+        (8, {"attention_backend": "triton_attn"}, "TRITON_ATTN", None),
+    ],
+)
+def test_attention_defaults_and_explicit_overrides(monkeypatch, tmp_path, major, overrides, decoder, encoder):
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text()) | overrides
+    captured = {}
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(server, "load_config", lambda: (cfg, _SERVER_YAML.parent, None))
+    monkeypatch.setattr(server, "resolve_model_cache", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(server, "setup_hf_env", lambda *_a: None)
+    monkeypatch.setattr(server, "gpu_compute_major", lambda: major)
+    monkeypatch.setattr(server, "serve", lambda **kwargs: captured.update(kwargs))
+    server.run()
+    args = captured["extra_serve_args"]
+    for flag, expected in (("--attention-backend", decoder), ("--mm-encoder-attn-backend", encoder)):
+        if expected is None:
+            assert flag not in args
+        else:
+            assert args[args.index(flag) + 1] == expected
+
+
+@pytest.mark.parametrize(
+    ("inherited", "configured", "selected", "major"),
+    [
+        (None, None, None, 12),
+        ("1", None, "1", 8),
+        ("1,0", None, "1,0", 8),
+        ("GPU-selected", None, "GPU-selected", 12),
+        ("1", "0", "0", 12),
+        ("0", "1", "1", 8),
+    ],
+)
+def test_attention_probe_and_launch_share_gpu_selection(
+    monkeypatch, tmp_path, inherited, configured, selected, major,
+):
+    from xr_ai_vllm._config import gpu_compute_major
+
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text())
+    if inherited is None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    else:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", inherited)
+    if configured is not None:
+        cfg["cuda_visible_devices"] = configured
+    else:
+        cfg.pop("cuda_visible_devices", None)
+    captured = {}
+    queries = []
+
+    def query(argv, **_kwargs):
+        queries.append(argv)
+        return f"{major}.0\n"
+
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(server, "load_config", lambda: (cfg, _SERVER_YAML.parent, None))
+    monkeypatch.setattr(server, "resolve_model_cache", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(server, "gpu_compute_major", gpu_compute_major)
+    monkeypatch.setattr("xr_ai_vllm._config.subprocess.check_output", query)
+    monkeypatch.setattr(server, "serve", lambda **kwargs: captured.update(kwargs))
+    for name in ("HF_HOME", "TRANSFORMERS_CACHE"):
+        monkeypatch.setenv(name, str(tmp_path))
+    monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "1")
+    server.run()
+
+    expected_query = ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"]
+    if selected:
+        expected_query += ["--id", selected.split(",")[0]]
+    assert queries == [expected_query]
+    assert captured["cuda_visible_devices"] == selected
+    args = captured["extra_serve_args"]
+    for flag in ("--attention-backend", "--mm-encoder-attn-backend"):
+        if major == 12:
+            assert args[args.index(flag) + 1] == "TRITON_ATTN"
+        else:
+            assert flag not in args
+
+
+@pytest.mark.parametrize("key", ["attention_backend", "mm_encoder_attn_backend"])
+@pytest.mark.parametrize("value", [None, "", " ", True, 1, []])
+def test_invalid_attention_override_fails_before_launch(monkeypatch, tmp_path, key, value):
+    server = _load_server_module()
+    cfg = yaml.safe_load(_SERVER_YAML.read_text()) | {key: value}
+    monkeypatch.setattr(server, "setup_logging", lambda _name: None)
+    monkeypatch.setattr(server, "load_config", lambda: (cfg, _SERVER_YAML.parent, None))
+    monkeypatch.setattr(server, "resolve_model_cache", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(server, "setup_hf_env", lambda *_a: None)
+    monkeypatch.setattr(server, "serve", lambda **_kw: pytest.fail("invalid config launched vLLM"))
+    with pytest.raises(ValueError, match=key):
+        server.run()
 
 
 def test_default_cosmos3_service_uses_reasoner_only_path(monkeypatch, tmp_path) -> None:

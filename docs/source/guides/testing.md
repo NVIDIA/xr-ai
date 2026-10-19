@@ -92,6 +92,27 @@ it covers multi-client and multi-agent fan-out, interleaving, join and leave
 events, filter isolation, attribution, ordering, and participant-targeted return
 traffic.
 
+## Measure coverage
+
+CI measures coverage on Python 3.12 and publishes a per-project table to the job
+summary, with the raw reports attached as the `coverage` artifact. The report is
+informational and does not gate the build. The measured packages are listed in
+`source_pkgs` in `tests/pyproject.toml`: the SDK, utilities, and services that
+the test project installs or puts on its `pythonpath`. A package missing from
+that list does not appear in the table. To reproduce the report, run from
+`tests/` with the project environment at the repository root:
+
+```bash
+UV_PROJECT_ENVIRONMENT=../.venv uv --config-file ../uv.toml run coverage run -m pytest -m "not gpu"
+UV_PROJECT_ENVIRONMENT=../.venv uv --config-file ../uv.toml run coverage json
+python3 ../.github/scripts/coverage_summary.py coverage.json
+```
+
+Beyond line and branch coverage, the table counts the `except` clauses in each
+project and how many of them ran at least once. An `except` body runs only when
+a test provokes the failure, so this number shows where failure handling is
+untested. Add a test that exercises a handler before changing it.
+
 ## Adding tests
 
 Keep shared endpoint and polling helpers in `conftest.py`, `_helpers.py`, or

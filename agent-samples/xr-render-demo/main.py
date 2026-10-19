@@ -96,6 +96,8 @@ def _parser() -> argparse.ArgumentParser:
             "and data-channel traffic"
         ),
     )
+    parser.add_argument("--hub-config", type=Path, metavar="PATH",
+                        help="use hub YAML instead of the sample default (relative to launch directory)")
     return parser
 
 
@@ -103,10 +105,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return _parser().parse_args(sys.argv[1:] if argv is None else argv)
 
 
-def _build_processes(*, capture: bool = False) -> list[Process]:
+def _build_processes(*, capture: bool = False, hub_config: Path | None = None) -> list[Process]:
     processes = [
         Process("hub",        "../../services/device-io-hub",                "device_io_hub",
-                config="yaml/device_io_hub.yaml"),
+                config=hub_config or "yaml/device_io_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",               "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",
@@ -318,14 +320,16 @@ def _ensure_web_vendor() -> None:
 
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
+    hub_config = args.hub_config.expanduser().resolve() if args.hub_config is not None else None
     setup_logging("orchestrator", namespace="xr-render-demo")
-    if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
-        os.environ[_NO_WEB_CLIENT_ENV] = "1"
-        logger.info("native device profile: web client page disabled, skipping vendor build")
-    else:
-        _ensure_web_vendor()
+    if hub_config is None:
+        if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
+            os.environ[_NO_WEB_CLIENT_ENV] = "1"
+            logger.info("native device profile: web client page disabled, skipping vendor build")
+        else:
+            _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(capture=args.session_recording), _BASE)
+    run_stack(_build_processes(capture=args.session_recording, hub_config=hub_config), _BASE)
 
 
 if __name__ == "__main__":

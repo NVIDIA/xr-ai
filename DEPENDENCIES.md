@@ -636,7 +636,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Commands:
   - `lab_instrument_monitoring_worker` → `lab_instrument_monitoring_worker.__main__:run`
 
-#### `procedure-capture-replay` — [`agent-samples/procedure-capture-replay/`](agent-samples/procedure-capture-replay/)
+#### `procedure-capture-guide` — [`agent-samples/procedure-capture-guide/`](agent-samples/procedure-capture-guide/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
@@ -646,9 +646,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
-  - `procedure_capture_replay` → `main:run`
+  - `procedure_capture_guide` → `main:run`
 
-#### `procedure-capture-replay-model-servers` — [`agent-samples/procedure-capture-replay/model-servers/`](agent-samples/procedure-capture-replay/model-servers/)
+#### `procedure-capture-guide-model-servers` — [`agent-samples/procedure-capture-guide/model-servers/`](agent-samples/procedure-capture-guide/model-servers/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
@@ -657,9 +657,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
 - Optional dependency groups: none
 - Commands:
-  - `procedure_capture_replay_model_servers` → `main:run`
+  - `procedure_capture_guide_model_servers` → `main:run`
 
-#### `procedure-capture-replay-worker` — [`agent-samples/procedure-capture-replay/worker/`](agent-samples/procedure-capture-replay/worker/)
+#### `procedure-capture-guide-worker` — [`agent-samples/procedure-capture-guide/worker/`](agent-samples/procedure-capture-guide/worker/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
@@ -678,7 +678,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pydantic>=2.0,<3.0`
 - Optional dependency groups: none
 - Commands:
-  - `procedure_capture_replay_worker` → `procedure_capture_replay_worker.__main__:run`
+  - `procedure_capture_guide_worker` → `procedure_capture_guide_worker.__main__:run`
 
 #### `simple-vlm-example` — [`agent-samples/simple-vlm-example/`](agent-samples/simple-vlm-example/)
 
@@ -894,6 +894,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-rag-service` → [`xr-rag-service`](services/rag-service/) (local, editable)
   - `pytest>=8.0`
   - `pytest-asyncio>=0.23`
+  - `coverage>=7.10`
   - `numpy>=1.24`
   - `audioop-lts; python_version >= '3.13'`
   - `huggingface-hub>=0.32.0`

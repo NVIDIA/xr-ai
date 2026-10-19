@@ -18,6 +18,7 @@ import httpx
 import pytest
 
 from _stub_openai import StubOpenAI
+from _helpers_vlm_stream import require_complete_vlm_stream
 
 from xr_ai_models import (
     Capabilities,
@@ -634,6 +635,39 @@ def test_cleartext_key_transport_detection() -> None:
 
 
 # ── VLM ───────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("ending", "error"),
+    [
+        ('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', None),
+        ("", r"without the OpenAI \[DONE\]"),
+        ('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n', r"without the OpenAI \[DONE\]"),
+        ('data: {"error":{"message":"inference failed"}}\n\n', "VLM stream error"),
+        ('data: {"error":{"message":"inference failed"}}\n\ndata: [DONE]\n\n', "VLM stream error"),
+    ],
+    ids=["complete", "partial-eof", "finish-without-done", "error-after-content", "error-before-done"],
+)
+async def test_vlm_stream_completion_guard(monkeypatch, ending, error) -> None:
+    wire = ('data: {"choices":[{"delta":{"content":"gray"}}]}\n\n' + ending).encode()
+
+    def handle(_request):
+        return httpx.Response(200, content=wire, headers={"content-type": "text/event-stream"})
+
+    chunks = []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatVLM("http://stub", "vlm", client=client) as vlm:
+            async def consume():
+                with require_complete_vlm_stream(monkeypatch):
+                    async for chunk in vlm.stream_images([b"image"], "What color?"):
+                        chunks.append(chunk)
+
+            if error:
+                with pytest.raises(AssertionError, match=error):
+                    await consume()
+            else:
+                await consume()
+    assert chunks == ["gray"]
 
 
 _PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24

@@ -23,9 +23,9 @@ lk_port_ws:  7880   # WebSocket signaling
 lk_port_tcp: 7881   # WebRTC TCP fallback
 lk_port_udp: 7882   # WebRTC UDP media
 
-# The Python room client uses this URL independently of lk_port_ws. Update
-# its port together with lk_port_ws when changing the signaling listener.
-lk_internal_url: "ws://127.0.0.1:7880"
+# Omit to derive the Python room client's loopback URL from lk_port_ws.
+# Set an explicit URL only when the room client needs a different endpoint.
+# lk_internal_url: "ws://127.0.0.1:7880"
 
 # Cloud VMs commonly have a private interface behind a public NAT. Enable
 # STUN-based public-IP discovery so LiveKit advertises a reachable ICE address.
@@ -87,8 +87,8 @@ enable_token_server: true
 # already in use"; either set a free port here, or add `ignoredPorts=8000`
 # under `[experimental]` in %UserProfile%\.wslconfig and run `wsl --shutdown`.
 # token_server_port: 8000
-# URL advertised by this server's /token response. Update its port together
-# with token_server_port.
+# URL advertised by this server's /token response. When omitted, its port
+# follows token_server_port. An explicit URL is used unchanged.
 # token_server_url: "ws://localhost:8000"
 
 # ── Video recording (NVENC, optional) ─────────────────────────────────────────

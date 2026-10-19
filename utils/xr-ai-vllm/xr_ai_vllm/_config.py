@@ -90,8 +90,8 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     ``HF_HOME`` for Transformers <4.36 and libraries that have not adopted
     ``HF_HOME``.
 
-    Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
-    callers that run GPU detection can confirm the device filter is applied.
+    Returns the YAML device selection when configured, otherwise inherited
+    ``CUDA_VISIBLE_DEVICES`` (or ``None``), for GPU probes and Docker placement.
     """
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
@@ -99,6 +99,8 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
         # Pip mode reads it from the env; docker mode forwards it through the
         # NVIDIA runtime.
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
+    else:
+        cuda_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
 
     hf_token = os.environ.get("HF_TOKEN") or cfg.get("hf_token")
     if hf_token:
@@ -111,14 +113,18 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
 
 
 def gpu_compute_major() -> int:
-    """Return the GPU's compute-capability major version, or 0 if unknown.
+    """Return the first selected GPU's compute-capability major, or 0 if unknown.
 
     Reads ``CUDA_VISIBLE_DEVICES`` from the env, so set the device filter
     before calling. Logs a warning on failure and falls back to 0.
     """
     try:
+        argv = ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"]
+        selected = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",", 1)[0].strip()
+        if selected:
+            argv += ["--id", selected]
         out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"],
+            argv,
             text=True, stderr=subprocess.DEVNULL,
         ).strip().splitlines()
         if out:
