@@ -76,20 +76,19 @@ def _query_compute_processes() -> dict[str, list[_GPUProcess]]:
             ],
             text=True,
             stderr=subprocess.PIPE,
-            timeout=8,
         ).strip()
     except FileNotFoundError as exc:
         raise GPUInventoryError(
             "nvidia-smi is unavailable while inspecting GPU compute processes"
         ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise GPUInventoryError("nvidia-smi compute-process inventory timed out") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()
         suffix = f": {detail}" if detail else ""
         raise GPUInventoryError(
             f"nvidia-smi compute-process inventory failed{suffix}"
         ) from exc
+    except OSError as exc:
+        raise GPUInventoryError(f"nvidia-smi compute-process inventory could not run: {exc}") from exc
 
     result: dict[str, list[_GPUProcess]] = {}
     for line in raw.splitlines():
@@ -138,7 +137,7 @@ def query_gpu_inventory() -> tuple[GPUDevice, ...]:
     """Return visible GPUs without selecting a model-server profile.
 
     Raises:
-        GPUInventoryError: The driver query fails, times out, returns no devices,
+        GPUInventoryError: The driver query fails, returns no devices,
             or contains malformed fields. Unavailable memory is returned as None.
     """
     try:
@@ -151,18 +150,17 @@ def query_gpu_inventory() -> tuple[GPUDevice, ...]:
             ],
             text=True,
             stderr=subprocess.PIPE,
-            timeout=8,
         ).strip()
     except FileNotFoundError as exc:
         raise GPUInventoryError(
             "nvidia-smi is unavailable; XR-AI cannot inspect GPU capacity"
         ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise GPUInventoryError("nvidia-smi GPU inventory timed out") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()
         suffix = f": {detail}" if detail else ""
         raise GPUInventoryError(f"nvidia-smi GPU inventory failed{suffix}") from exc
+    except OSError as exc:
+        raise GPUInventoryError(f"nvidia-smi GPU inventory could not run: {exc}") from exc
 
     devices: list[GPUDevice] = []
     for line in raw.splitlines():

@@ -84,11 +84,30 @@ def test_profile_reuses_public_inventory_without_requery() -> None:
         query.assert_not_called()
 
 
-def test_inventory_timeout_is_reported() -> None:
-    with patch("xr_ai_launcher._gpu.subprocess.check_output",
-               side_effect=subprocess.TimeoutExpired("nvidia-smi", 8)):
-        with pytest.raises(GPUInventoryError, match="timed out"):
+def test_inventory_os_error_is_reported() -> None:
+    with patch("xr_ai_launcher._gpu.subprocess.check_output", side_effect=PermissionError("not executable")):
+        with pytest.raises(GPUInventoryError, match="could not run.*not executable"):
             query_gpu_inventory()
+
+
+def test_existing_detection_has_no_new_deadline() -> None:
+    with _mock_smi([_row(0, "RTX PRO 6000 Blackwell", 12.0, 98304)]) as query:
+        assert detect_gpu_config() == "96G_blackwell"
+        assert "timeout" not in query.call_args.kwargs
+
+
+def test_process_os_error_is_diagnostic_context() -> None:
+    with _mock_smi([_row(0, "NVIDIA L40S", 8.9, 46068)], process_error=PermissionError("not executable")), \
+            pytest.raises(GPUInventoryError, match="no existing.*could not run.*not executable"):
+        detect_gpu_config()
+
+
+def test_process_inventory_has_no_new_deadline() -> None:
+    with _mock_smi([_row(0, "NVIDIA L40S", 8.9, 46068)]) as query, \
+            pytest.raises(GPUInventoryError, match="no existing"):
+        detect_gpu_config()
+    assert len(query.call_args_list) == 2
+    assert all("timeout" not in call.kwargs for call in query.call_args_list)
 
 
 def test_unparseable_inventory_is_rejected() -> None:
