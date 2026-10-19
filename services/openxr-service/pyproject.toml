@@ -15,7 +15,9 @@ dependencies = [
     "xr-ai-logging",
     "xr-ai-tools[services]",
     "pyyaml>=6.0",
-    "isaacteleop>=1.3.131",
+    # OpenXR bindings with a bundled loader. 1.1.5301 ships the Linux x86_64
+    # loader only; aarch64 needs a later release than the uv.toml cutoff.
+    "pyopenxr>=1.1.5301",
 ]
 
 [tool.uv.sources]
