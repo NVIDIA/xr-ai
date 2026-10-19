@@ -42,6 +42,15 @@ The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
 traffic back to the originating client only.
 
+Only one hub runs on a machine. Its IPC socket paths, LiveKit ports, and
+LiveKit container name are fixed, and claiming them replaces whatever holds
+them, so before claiming anything the hub takes an exclusive lock on
+`/tmp/xr_hub.lock`. A second hub, for example from starting another sample by
+mistake, finds the lock held and exits with a message that names the running
+hub, leaving the running sample untouched. The operating system releases the
+lock when the hub exits for any reason, so a crashed hub never blocks the next
+start.
+
 On startup, `__main__.py` loads the configuration, constructs a `HubEndpoint`
 (the IPC server), registers hub-local callbacks (`on_frame`, `on_audio`,
 `on_data`, `on_participant`), and starts the hub receive loop before bringing
