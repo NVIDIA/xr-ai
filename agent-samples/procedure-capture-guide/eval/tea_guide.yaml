@@ -1,23 +1,23 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Full shipped guide: no substituted observation answers or shortened timer.
+# Brand-neutral test guide: no substituted observation answers or shortened timer.
 # User turns are authored test inputs, not transcripts from a recording.
-guides_dir: ../guides
-guide: Tea Making
+guides_dir: fixtures
+guide: Chamomile Lemon Evaluation
 scenes_file: tea_scenes.yaml
 actions:
   - {action: image, scene: breakfast}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
-  - {action: say, text: Start guide, expect: Show the Numi, tools: [workflow__restart]}
-  - {action: observe, answers: ['NUMI | BREAKFAST BLEND']}
+  - {action: say, text: Start guide, expect: Show the Chamomile Lemon, tools: [workflow__restart]}
+  - {action: observe, answers: ['BREAKFAST BLEND']}
   - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: image, scene: green}
-  - {action: observe, answers: ['NUMI | GUNPOWDER GREEN']}
+  - {action: observe, answers: ['GUNPOWDER GREEN']}
   - {action: image, scene: mint}
-  - {action: observe, answers: ['NUMI | MOROCCAN MINT']}
+  - {action: observe, answers: ['MOROCCAN MINT']}
   - {action: image, scene: chamomile}
-  - {action: wait_speech, expect: The packet identifies Numi Chamomile Lemon}
+  - {action: wait_speech, expect: The packet identifies Chamomile Lemon}
   - {action: image, scene: current65}
   - {action: say, text: Next, expect: Heat fresh water, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: observe, answers: ['CURRENT | 65 C', 'CURRENT | 65°C', 'CURRENT | 65 °C']}
@@ -30,7 +30,7 @@ actions:
   - {action: image, scene: current100}
   - {action: wait_speech, expect: The displayed current water temperature is at the brewing target}
   - {action: image, scene: dry_bag}
-  - {action: say, text: Next, expect: Carefully put the Numi, tools: [workflow__advance], arguments: [{skip: false}]}
+  - {action: say, text: Next, expect: Carefully put the Chamomile Lemon, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: observe, answers: ['NO']}
   - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
   - {action: image, scene: above}
@@ -43,7 +43,7 @@ actions:
   - {action: wait_speech, expect: Five minutes have elapsed, timeout_s: 330}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
   - {action: image, scene: breakfast}
-  - {action: say, text: Start guide, expect: Show the Numi, tools: [workflow__restart]}
+  - {action: say, text: Start guide, expect: Show the Chamomile Lemon, tools: [workflow__restart]}
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
   - {action: image, scene: chamomile}
   - {action: quiet, duration_s: 5}

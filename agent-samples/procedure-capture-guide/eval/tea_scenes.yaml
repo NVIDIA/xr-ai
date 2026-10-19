@@ -3,12 +3,12 @@
 
 # Schematic scenes drawn entirely in code, not photos or recording derivatives.
 # Packet typography is illustrative, not a reproduction of commercial packaging.
-breakfast: {kind: packet, brand: NUMI, blend: BREAKFAST BLEND, color: '#dea67d'}
-green: {kind: packet, brand: NUMI, blend: GUNPOWDER GREEN, color: '#b2ca90'}
-chamomile: {kind: packet, brand: NUMI, blend: CHAMOMILE LEMON, color: '#e5d191'}
-mint: {kind: packet, brand: NUMI, blend: MOROCCAN MINT, color: '#9db9c5'}
-other_brand: {kind: packet, brand: OTHER TEA, blend: CHAMOMILE LEMON, color: '#e5d191'}
-partial_blend: {kind: packet, brand: NUMI, blend: CHAMOMILE, color: '#e5d191'}
+breakfast: {kind: packet, blend: BREAKFAST BLEND, color: '#dea67d'}
+green: {kind: packet, blend: GUNPOWDER GREEN, color: '#b2ca90'}
+chamomile: {kind: packet, blend: CHAMOMILE LEMON, color: '#e5d191'}
+mint: {kind: packet, blend: MOROCCAN MINT, color: '#9db9c5'}
+other_blend: {kind: packet, blend: LEMON GINGER, color: '#e5d191'}
+partial_blend: {kind: packet, blend: CHAMOMILE, color: '#e5d191'}
 covered_packet: {kind: packet, covered: true}
 current20: {kind: kettle, readings: [{label: CURRENT, value: '20 C'}]}
 current65: {kind: kettle, readings: [{label: CURRENT, value: '65 C'}]}

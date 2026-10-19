@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Measure the shipped tea guide's visual checks on generated scenes.
+"""Measure the brand-neutral test guide's visual checks on generated scenes.
 
 Run each step independently so an early recognition failure cannot hide later
 cases. Save image and prompt provenance, raw responses, and separate recognition
@@ -142,7 +142,7 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
         "guide_sha256": guide.sha256,
         "models_config_sha256": hashlib.sha256(models_path.read_bytes()).hexdigest(),
         "elapsed_s": time.monotonic() - started,
-        "coverage": "Real configured VLM and production visual prompt; isolated single-frame evidence gates.",
+        "coverage": "Real configured VLM, production system prompt, test guide; isolated single-frame evidence gates.",
         "not_scored": ["consecutive-frame enforcement", "conversation", "transitions", "timer", "STT", "TTS"],
     }
     (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")

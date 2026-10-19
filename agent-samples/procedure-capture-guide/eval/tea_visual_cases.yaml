@@ -2,17 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Oracles describe the drawing, not a model's prior responses. Only pixels and
-# the shipped guide's question reach Cosmos; these expectations never do.
-guides_dir: ../guides
-guide: Tea Making
+# the test guide's question reach Cosmos; these expectations never do.
+guides_dir: fixtures
+guide: Chamomile Lemon Evaluation
 scenes_file: tea_scenes.yaml
 cases:
-  - {scene: breakfast, step: identify, answer: 'NUMI\s*\|\s*BREAKFAST BLEND', accept: false}
-  - {scene: green, step: identify, answer: 'NUMI\s*\|\s*GUNPOWDER GREEN', accept: false}
-  - {scene: chamomile, step: identify, answer: 'NUMI\s*\|\s*CHAMOMILE LEMON', accept: true}
-  - {scene: mint, step: identify, answer: 'NUMI\s*\|\s*MOROCCAN MINT', accept: false}
-  - {scene: other_brand, step: identify, answer: 'OTHER TEA\s*\|\s*CHAMOMILE LEMON', accept: false}
-  - {scene: partial_blend, step: identify, answer: 'NUMI\s*\|\s*CHAMOMILE', accept: false}
+  - {scene: breakfast, step: identify, answer: 'BREAKFAST BLEND', accept: false}
+  - {scene: green, step: identify, answer: 'GUNPOWDER GREEN', accept: false}
+  - {scene: chamomile, step: identify, answer: 'CHAMOMILE LEMON', accept: true}
+  - {scene: mint, step: identify, answer: 'MOROCCAN MINT', accept: false}
+  - {scene: other_blend, step: identify, answer: 'LEMON GINGER', accept: false}
+  - {scene: partial_blend, step: identify, answer: 'CHAMOMILE', accept: false}
   - {scene: covered_packet, step: identify, answer: UNKNOWN, accept: false}
   - {scene: current20, step: heat_water, answer: 'CURRENT\s*\|\s*20\s*(?:°\s*)?C', accept: false}
   - {scene: current65, step: heat_water, answer: 'CURRENT\s*\|\s*65\s*(?:°\s*)?C', accept: false}

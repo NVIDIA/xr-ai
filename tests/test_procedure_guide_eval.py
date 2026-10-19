@@ -32,6 +32,11 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     assert len(cases) == 25
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
     scenes = yaml.safe_load((_SAMPLE / "eval/tea_scenes.yaml").read_text())
+    for scene in scenes.values():
+        if scene["kind"] == "packet":
+            assert set(scene) <= {"kind", "blend", "color", "covered"}
+    identification = guide.workflow.steps["identify"]
+    assert identification.evidence.pattern == r"(?i)^CHAMOMILE LEMON$"
     pixels = set()
     for case in cases:
         rendered = evaluator.render_scene(scenes[case["scene"]])
@@ -77,7 +82,7 @@ def test_schema_and_renderer_fail_loudly(evaluator):
 
 
 @pytest.mark.asyncio
-async def test_visual_evaluator_uses_production_question_not_answer(evaluator, tmp_path, monkeypatch):
+async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_path, monkeypatch):
     requests = []
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
@@ -103,7 +108,7 @@ async def test_visual_evaluator_uses_production_question_not_answer(evaluator, t
     assert summary["gate_correct"] == 40
     assert not summary["passed"]
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-    guide = evaluator.select_guide(_SAMPLE / "guides", "Tea Making")
+    guide = evaluator.select_guide(_SAMPLE / "eval/fixtures", "Chamomile Lemon Evaluation")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
@@ -131,11 +136,11 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("filename", ["tea_guide.yaml", "tea_guide_complete.yaml"])
-def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
+def test_flow_uses_brand_neutral_guide_and_control_contract(evaluator, filename):
     path = _SAMPLE / "eval" / filename
     manifest = yaml.safe_load(path.read_text())
     guide = evaluator.select_guide(path.parent / manifest["guides_dir"], manifest["guide"])
-    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    assert guide.path == _SAMPLE / "eval/fixtures/chamomile-lemon.guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]

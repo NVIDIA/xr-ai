@@ -43,7 +43,7 @@ def render_scene(scene: dict) -> Image.Image:
         draw.rectangle((170, 65, 620, 515), fill=scene.get("color", "#e5d191"), outline="#4d493f", width=5)
         draw.rectangle((190, 85, 600, 495), outline="#7e795c", width=2)
         if not scene.get("covered", False):
-            text(220, 135, scene["brand"], 52)
+            text(220, 135, "TEA", 52)
             text(220, 265, scene["blend"].replace(" ", "\n", 1), 38)
         else:
             draw.rectangle((210, 125, 590, 425), fill="#bbb9b2")
