@@ -140,7 +140,7 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
         assert "{{" not in step.enter_message  # Guide messages are not Jinja templates.
         if step.trigger.function == "current_view":
             assert not step.finish_on_complete
-            expected = {"identify": r"(?i)^NUMI\s*\|\s*CHAMOMILE LEMON$",
+            expected = {"identify": r"(?i)^.*\bCHAMOMILE\b.*$",
                         "start_steeping": "(?i)^YES$"}
             assert step.evidence.consecutive == 2
             if step.id in expected:
@@ -155,7 +155,8 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
             assert step.voice.tools == ("clock__timer",)
 
 
-async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch):
+@pytest.mark.parametrize("tea_label", ["CHAMOMILE", "chamomile lemon", "ORGANIC CHAMOMILE HERBAL TEA"])
+async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch, tea_label):
     from procedure_capture_guide_worker.guide import guiding
 
     now = 1000.0
@@ -180,9 +181,9 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
 
     for step_id in ("identify", "heat_water", "start_steeping"):
         assert session.step_id == step_id and session.timer is None
-        positive = {"identify": "NUMI | CHAMOMILE LEMON", "heat_water": "CURRENT | 100 C",
+        positive = {"identify": tea_label, "heat_water": "CURRENT | 100 C",
                     "start_steeping": "YES"}[step_id]
-        negative = {"identify": "NUMI | MOROCCAN MINT", "heat_water": "CURRENT | 80 C", "start_steeping": "NO"}[step_id]
+        negative = {"identify": "MOROCCAN MINT", "heat_water": "CURRENT | 80 C", "start_steeping": "NO"}[step_id]
         for answer in (negative, "UNKNOWN", positive):
             await observe(answer)
             assert not backend._is_complete(session)

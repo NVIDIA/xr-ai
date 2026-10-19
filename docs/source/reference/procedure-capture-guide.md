@@ -275,8 +275,8 @@ This demo is not a safety interlock. A still image cannot prove a hidden action.
 ### Included tea-making guide
 
 `guides/tea-making.guide.yaml` is a hand-authored, approved example with task
-name **Tea Making** and ID `tea_making`. Its four stages are specific to Numi
-Chamomile Lemon: read the packet, verify the water temperature, put the tea in
+name **Tea Making** and ID `tea_making`. Its four stages guide brewing
+chamomile tea: read the packet, verify the water temperature, put the tea in
 water, and start the steeping timer. It is not generated from a user recording.
 
 Start the sample's shared models, then run:
@@ -289,23 +289,25 @@ Connect and say **start guide**. Say **next** after each verified visual step
 and **stop guide** to cancel. The guide finishes automatically when the
 five-minute timer expires. Say **start guide** to repeat.
 
-Use Numi Chamomile Lemon tea, a stable heat-safe vessel,
+Use a tea packet or box labeled **chamomile**, a stable heat-safe vessel,
 and a kettle or thermometer with a readable **current** water-temperature
-display. [Numi's product instructions](https://numitea.com/products/chamomile-lemon)
-specify a 5–6 minute steep; this example chooses five minutes. Numi's
-[general herbal-tea guidance](https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits)
-calls for boiling water. The example verifies a displayed 100°C (212°F) current
-reading. If the packet requires a different recipe or local boiling temperature
-cannot reach that target, stop and adapt a local copy before using it. Do not
-tilt or lift hot vessels to satisfy a camera check.
+display. The example uses the chamomile settings in the tea sample's
+[brewing reference](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/tea-making-sample/rag-documents/tea-brewing.md):
+100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
+a displayed 100°C (212°F) current reading. If the packet requires a different
+recipe or local boiling temperature cannot reach that target, stop and adapt a
+local copy before using it. Do not tilt or lift hot vessels to satisfy a camera
+check.
 
 The example is adapted to guide's existing tools, not a drop-in copy of the
 tea sample's workflow YAML:
 
-- It verifies both the Numi brand and Chamomile Lemon blend name. The recipe is
-  fixed in the guide, not inferred from packaging colors or retrieved by the LLM.
+- It accepts the printed word **chamomile** on a tea packet or box, including
+  blend names such as **Chamomile Lemon**, regardless of brand. The brand does
+  not need to be visible. The brewing settings are fixed in the guide; the
+  brewing reference is not retrieved at runtime.
 - Its three visual steps require two distinct fresh frames. The first reads
-  `BRAND | BLEND` and matches `NUMI | CHAMOMILE LEMON`; the second reads a current
+  the tea name and matches the word `CHAMOMILE`; the second reads a current
   `LABEL | NUMBER UNIT` reading and accepts `CURRENT`, `ACTUAL`, or `THERMOMETER`
   with `100 C` or `212 F`. It preserves `TARGET` and `SET` labels in the visual
   result so those readings cannot satisfy completion. Unlabeled displays are

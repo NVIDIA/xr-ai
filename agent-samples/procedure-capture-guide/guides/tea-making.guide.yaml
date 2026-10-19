@@ -1,24 +1,24 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Numi specifies 5–6 minutes for Chamomile Lemon; use the five-minute minimum.
-# https://numitea.com/products/chamomile-lemon
-# Its general herbal-tea instructions specify boiling water:
-# https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits
+# Brewing reference: ../../tea-making-sample/rag-documents/tea-brewing.md
+# Chamomile uses 100 C / 212 F water and a 5–7 minute steep; choose five minutes.
 schema_version: 1
 task:
   id: tea_making
   name: Tea Making
-  version: 3
+  version: 4
   status: approved
   start_step: identify
   foreground_prompt: >-
-    Guide brewing Numi Chamomile Lemon herbal tea, not green tea or another
-    chamomile blend. This recipe uses boiling water, verified here by a current
-    water reading of 100 C or 212 F, and a five-minute steep selected from the
-    manufacturer's 5–6 minute instructions. Do not silently change the recipe.
-    If the user's packet differs, or local boiling temperature cannot reach
-    this display target, stop and adapt the guide rather than bypass verification.
+    Guide brewing chamomile tea. Accept any tea packet or box with the word
+    chamomile visibly printed on it, regardless of brand or blend. This recipe
+    follows the tea sample's brewing reference: boiling water, verified here by
+    a current water reading of 100 C or 212 F, and a five-minute steep selected
+    from its 5–7 minute range. Do not silently change the recipe. If the package
+    instructions require different brewing settings, or local boiling temperature
+    cannot reach this display target, stop and adapt the guide rather than
+    bypass verification.
     Use a stable heat-safe vessel and follow appliance instructions. Keep hands
     clear of hot water and steam; never ask the user to tilt a hot vessel for
     the camera. Visual judgments do not guarantee safety. No retrieval or
@@ -26,12 +26,12 @@ task:
     visual step. The timer starts only on entering the fourth step, not when
     immersion is first detected. When the timer expires the run ends automatically;
     no next command is needed to finish. Start guide begins a fresh run.
-  complete_message: Five minutes have elapsed. Your Numi Chamomile Lemon guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
+  complete_message: Five minutes have elapsed. Your chamomile tea guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
 
 state:
   tea_identified:
     type: boolean
-    description: The visible packet identifies both Numi and Chamomile Lemon.
+    description: The word chamomile is visible on the tea packet or box.
     initial: false
   water_at_target:
     type: boolean
@@ -56,31 +56,32 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Read the brand and full blend name printed on the same tea packet or
-          box. Return the actual printed words in uppercase as BRAND | BLEND.
-          Do not substitute the desired product for the visible label. If either
-          cannot be fully read, return UNKNOWN. Use printed words, not colors,
-          flowers, nearby cups, or knowledge of likely products. Output only
-          the two labels separated by |, or UNKNOWN.
+          Read the tea name printed on the visible tea packet or box. Return
+          only the legible printed words in uppercase on one line. The brand
+          does not need to be visible. Do not substitute the desired tea for
+          the visible label. Use printed words, not colors, flowers, nearby
+          cups, or knowledge of likely products. If the tea name cannot be
+          read, return UNKNOWN.
       result_field: text
     evidence:
-      pattern: '(?i)^NUMI\s*\|\s*CHAMOMILE LEMON$'
+      pattern: '(?i)^.*\bCHAMOMILE\b.*$'
       consecutive: 2
       commit: {tea_identified: true}
     voice:
       prompt: >-
-        Ask to see the packet front so both Numi and Chamomile Lemon are legible.
-        Use current_view for label questions. A different brand, a different Numi
-        blend, or chamomile alone is not the selected product. Do not say the
-        package is verified based on a user assertion. The fixed recipe is
-        boiling water and five minutes, not green-tea settings.
+        Ask to see the tea packet or box so the word chamomile is legible.
+        Accept chamomile alone or as part of a blend name from any brand.
+        Use current_view for label questions. Do not say the package is verified
+        based on a user assertion. The fixed recipe is boiling water and five
+        minutes; stop and adapt the guide if the package specifies different
+        brewing settings.
       tools: [current_view]
     complete_when: {tea_identified: true}
     next: heat_water
     complete_on_skip: true
     messages:
-      enter: Show the Numi Chamomile Lemon packet so I can read the brand and tea name.
-      complete: The packet identifies Numi Chamomile Lemon. Say next to check the water temperature.
+      enter: Show the tea packet or box so I can read the word chamomile.
+      complete: The packet identifies chamomile tea. Say next to check the water temperature.
       skip: Packet verification skipped; ending this run rather than choosing an unverified tea.
 
   - id: heat_water
@@ -155,7 +156,7 @@ steps:
     next: steep_timer
     complete_on_skip: true
     messages:
-      enter: Carefully put the Numi Chamomile Lemon tea bag in the prepared water, keeping the vessel stable.
+      enter: Carefully put the chamomile tea bag in the prepared water, keeping the vessel stable.
       complete: The tea bag is visibly in the water. Say next now to start the five-minute steeping timer.
       skip: Immersion verification and the timer were skipped; this run is not a verified completion.
 
