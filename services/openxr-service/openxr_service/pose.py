@@ -75,3 +75,55 @@ def from_native_pose(data: Any) -> dict[str, Any]:
         "pitch_deg": round(pitch, 1),
         "ts": int(time.time() * 1000),
     }
+
+
+# XR_EXT_hand_tracking joints of the default joint set, in index order.
+HAND_JOINTS = (
+    "palm", "wrist",
+    "thumb_metacarpal", "thumb_proximal", "thumb_distal", "thumb_tip",
+    "index_metacarpal", "index_proximal", "index_intermediate", "index_distal", "index_tip",
+    "middle_metacarpal", "middle_proximal", "middle_intermediate", "middle_distal", "middle_tip",
+    "ring_metacarpal", "ring_proximal", "ring_intermediate", "ring_distal", "ring_tip",
+    "little_metacarpal", "little_proximal", "little_intermediate", "little_distal", "little_tip",
+)
+
+
+def unavailable_hands(error: str) -> dict[str, Any]:
+    return {
+        "left": {"is_tracked": False, "joints": {}},
+        "right": {"is_tracked": False, "joints": {}},
+        "ts": int(time.time() * 1000),
+        "error": f"session_not_ready: {error}",
+    }
+
+
+def from_native_hands(hands: dict[str, Any]) -> dict[str, Any]:
+    """Convert located joints into per-hand world-space joint positions.
+
+    *hands* maps ``left`` and ``right`` to ``(position, is_valid)`` pairs in
+    :data:`HAND_JOINTS` order, or to ``None`` for an untracked hand. Only
+    joints with a valid position are reported.
+    """
+
+    def hand(joints: Any) -> dict[str, Any]:
+        if joints is None:
+            return {"is_tracked": False, "joints": {}}
+        return {
+            "is_tracked": True,
+            "joints": {
+                name: {
+                    "x": round(float(position.x), 3),
+                    "y": round(float(position.y), 3),
+                    "z": round(float(position.z), 3),
+                }
+                for name, (position, is_valid) in zip(HAND_JOINTS, joints, strict=True)
+                if is_valid
+            },
+        }
+
+    return {
+        "left": hand(hands.get("left")),
+        "right": hand(hands.get("right")),
+        "ts": int(time.time() * 1000),
+        "error": None if hands else "hand tracking is not supported by the OpenXR runtime",
+    }

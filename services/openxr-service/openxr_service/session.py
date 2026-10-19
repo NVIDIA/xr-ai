@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Own the headless OpenXR session that tracks the user's head."""
+"""Own the headless OpenXR session that tracks the user's head and hands."""
 
 from __future__ import annotations
 
+import ctypes
 import threading
 import time
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ from typing import Any
 import xr
 from loguru import logger
 
-from .pose import from_native_pose, unavailable_pose
+from .pose import from_native_hands, from_native_pose, unavailable_hands, unavailable_pose
 
 # Headless: no graphics binding. Overlay: run beside the application that
 # renders to the headset. Timespec: convert the monotonic clock to XrTime.
@@ -23,14 +24,18 @@ _EXTENSIONS = (
     xr.KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME,
 )
 _POSE_VALID = xr.SpaceLocationFlags.POSITION_VALID_BIT | xr.SpaceLocationFlags.ORIENTATION_VALID_BIT
+_HANDS = {"left": xr.HandEXT.LEFT, "right": xr.HandEXT.RIGHT}
 
 
 class HeadlessSession:
-    """A running headless OpenXR overlay session with a head tracker.
+    """A running headless OpenXR overlay session with head and hand trackers.
 
-    Ported from IsaacTeleop 1.3.131 (``oxr_session.cpp`` and
-    ``live_head_tracker_impl.cpp``, Apache-2.0): poses are reported in the
-    STAGE reference space, and the head is the VIEW space located in it.
+    Ported from IsaacTeleop 1.3.131 (``oxr_session.cpp``,
+    ``live_head_tracker_impl.cpp``, and ``live_hand_tracker_impl.cpp``,
+    Apache-2.0): poses are reported in the STAGE reference space, and the head
+    is the VIEW space located in it. Hands use the session's own
+    ``XR_EXT_hand_tracking`` trackers; IsaacTeleop also prefers trackers bound
+    to Monado xdevs, which only matter for plugin-pushed hand devices.
     Construction raises :class:`xr.XrException` while no headset is streaming.
     """
 
@@ -44,6 +49,12 @@ class HeadlessSession:
             raise
 
     def _open(self, app_name: str) -> None:
+        offered = {
+            properties.extension_name.decode()
+            for properties in xr.enumerate_instance_extension_properties()
+        }
+        # Heads work without hand tracking, so enable it only when offered.
+        hand_tracking = xr.EXT_HAND_TRACKING_EXTENSION_NAME in offered
         self.instance = self._own(
             xr.destroy_instance,
             xr.create_instance(
@@ -53,7 +64,10 @@ class HeadlessSession:
                         engine_name="xr-ai",
                         api_version=xr.Version(1, 0, 0),
                     ),
-                    enabled_extension_names=list(_EXTENSIONS),
+                    enabled_extension_names=[
+                        *_EXTENSIONS,
+                        *([xr.EXT_HAND_TRACKING_EXTENSION_NAME] if hand_tracking else []),
+                    ],
                 )
             ),
         )
@@ -75,6 +89,21 @@ class HeadlessSession:
             else view_configurations[0]
         )
         xr.begin_session(self.session, xr.SessionBeginInfo(primary_view_configuration_type=primary))
+        self._hand_trackers = self._create_hand_trackers() if hand_tracking else {}
+        if not hand_tracking:
+            logger.warning("openxr-service: runtime has no XR_EXT_hand_tracking; hands unavailable")
+
+    def _create_hand_trackers(self) -> dict[str, Any]:
+        return {
+            side: self._own(
+                xr.destroy_hand_tracker_ext,
+                xr.create_hand_tracker_ext(
+                    self.session,
+                    xr.HandTrackerCreateInfoEXT(hand=hand, hand_joint_set=xr.HandJointSetEXT.DEFAULT),
+                ),
+            )
+            for side, hand in _HANDS.items()
+        }
 
     def _own(self, destroy: Any, handle: Any) -> Any:
         self._handles.append((handle, destroy))
@@ -98,11 +127,48 @@ class HeadlessSession:
         is_valid = location.location_flags & _POSE_VALID == _POSE_VALID
         return SimpleNamespace(is_valid=is_valid, pose=location.pose if is_valid else xr.Posef())
 
+    def hands(self) -> dict[str, list[tuple[Any, bool]] | None]:
+        """Locate both hands now.
+
+        Each side maps to its 26 joints in ``xr.HandJointEXT`` order as
+        ``(position, is_valid)`` pairs, or to ``None`` while that hand is not
+        tracked.
+        """
+        info = xr.HandJointsLocateInfoEXT(base_space=self.stage, time=self.now())
+        return {side: self._locate_joints(tracker, info) for side, tracker in self._hand_trackers.items()}
+
+    @staticmethod
+    def _locate_joints(tracker: Any, info: Any) -> list[tuple[Any, bool]] | None:
+        joints = (xr.HandJointLocationEXT * xr.HAND_JOINT_COUNT_EXT)()
+        locations = xr.HandJointLocationsEXT(joint_count=xr.HAND_JOINT_COUNT_EXT, joint_locations=joints)
+        _locate_hand_joints(tracker, info, locations)
+        if not locations.is_active:
+            return None
+        return [
+            (joint.pose.position, bool(joint.location_flags & xr.SpaceLocationFlags.POSITION_VALID_BIT))
+            for joint in joints
+        ]
+
     def close(self) -> None:
         """Destroy every handle, newest first."""
         while self._handles:
             handle, destroy = self._handles.pop()
             destroy(handle)
+
+
+def _locate_hand_joints(tracker: Any, info: Any, locations: Any) -> None:
+    """Call ``xrLocateHandJointsEXT``, filling the caller's joint buffer.
+
+    pyopenxr's ``locate_hand_joints_ext`` passes no joint buffer, which the
+    runtime rejects, so the extension function is called directly.
+    """
+    locate = ctypes.cast(
+        xr.get_instance_proc_addr(tracker.instance, "xrLocateHandJointsEXT"),
+        xr.PFN_xrLocateHandJointsEXT,
+    )
+    result = xr.check_result(locate(tracker, ctypes.byref(info), ctypes.byref(locations)))
+    if result.is_exception():
+        raise result
 
 
 class HardwarePoseSource:
@@ -158,6 +224,15 @@ class HardwarePoseSource:
                     return unavailable_pose(error)
             data = self._session.head()
         return from_native_pose(data)
+
+    def get_hands(self) -> dict[str, Any]:
+        with self._lock:
+            if self._session is None:
+                error = self._try_open()
+                if error is not None:
+                    return unavailable_hands(error)
+            hands = self._session.hands()
+        return from_native_hands(hands)
 
     def health(self) -> dict[str, Any]:
         with self._lock:
