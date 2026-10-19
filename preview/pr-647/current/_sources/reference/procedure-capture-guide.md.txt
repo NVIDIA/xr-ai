@@ -315,9 +315,13 @@ tea sample's workflow YAML:
   equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
   not different temperatures. Immersion requires `YES` for
   visible bag contact with visible water, including a floating bag.
-  Other readings, `NO`, `UNKNOWN`, missing frames, and malformed responses
-  cannot complete a step. These bounded evidence commits do not use an
-  observation LLM; the foreground LLM still handles questions and controls.
+  For identification, exact `UNKNOWN` responses and missing frames do not
+  satisfy the evidence requirement. Any single-line response containing the
+  whole word `CHAMOMILE` can match, regardless of letter case, so recognizing
+  only printed words depends on the VLM following its prompt. For temperature
+  and immersion, responses outside the accepted formats above do not match.
+  These bounded evidence commits do not use an observation LLM; the foreground
+  LLM still handles questions and controls.
 - The heating check verifies a displayed current temperature at the brewing
   target, not a target setting or a “heating underway” threshold. Guide
   does not expose the tea sample's typed temperature tools: this is a VLM

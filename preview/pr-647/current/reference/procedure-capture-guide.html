@@ -732,7 +732,7 @@ five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
 <p>Use a tea packet or box labeled <strong>chamomile</strong>, a stable heat-safe vessel,
 and a kettle or thermometer with a readable <strong>current</strong> water-temperature
 display. The example uses the chamomile settings in the tea sample’s
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/5a02c86a8f59942cd971d438f9da6f1dd0696644/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/4926a0e191546211fd03099a2e694430c9f0a7a6/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
 100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
 a displayed 100°C (212°F) current reading. If the packet requires a different
 recipe or local boiling temperature cannot reach that target, stop and adapt a
@@ -754,9 +754,13 @@ unavailable rather than assumed to show current temperature. Matching tolerates
 equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
 not different temperatures. Immersion requires <code class="docutils literal notranslate"><span class="pre">YES</span></code> for
 visible bag contact with visible water, including a floating bag.
-Other readings, <code class="docutils literal notranslate"><span class="pre">NO</span></code>, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, missing frames, and malformed responses
-cannot complete a step. These bounded evidence commits do not use an
-observation LLM; the foreground LLM still handles questions and controls.</p></li>
+For identification, exact <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> responses and missing frames do not
+satisfy the evidence requirement. Any single-line response containing the
+whole word <code class="docutils literal notranslate"><span class="pre">CHAMOMILE</span></code> can match, regardless of letter case, so recognizing
+only printed words depends on the VLM following its prompt. For temperature
+and immersion, responses outside the accepted formats above do not match.
+These bounded evidence commits do not use an observation LLM; the foreground
+LLM still handles questions and controls.</p></li>
 <li><p>The heating check verifies a displayed current temperature at the brewing
 target, not a target setting or a “heating underway” threshold. Guide
 does not expose the tea sample’s typed temperature tools: this is a VLM
