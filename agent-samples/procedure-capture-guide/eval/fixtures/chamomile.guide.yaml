@@ -5,13 +5,13 @@
 # Keep this fixture separate from the sample's user-facing example guide.
 schema_version: 1
 task:
-  id: chamomile_lemon_eval
-  name: Chamomile Lemon Evaluation
+  id: chamomile_eval
+  name: Chamomile Evaluation
   version: 1
   status: approved
   start_step: identify
   foreground_prompt: >-
-    Guide brewing Chamomile Lemon herbal tea, not green tea or another
+    Guide brewing Chamomile herbal tea, not green tea or another
     chamomile blend. This recipe uses boiling water, verified here by a current
     water reading of 100 C or 212 F, and a five-minute steep for this
     evaluation's fixed recipe. Do not silently change the recipe.
@@ -24,12 +24,12 @@ task:
     visual step. The timer starts only on entering the fourth step, not when
     immersion is first detected. When the timer expires the run ends automatically;
     no next command is needed to finish. Start guide begins a fresh run.
-  complete_message: Five minutes have elapsed. Your Chamomile Lemon guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
+  complete_message: Five minutes have elapsed. Your Chamomile guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
 
 state:
   tea_identified:
     type: boolean
-    description: The visible packet identifies the complete Chamomile Lemon blend name.
+    description: The visible packet identifies the complete Chamomile blend name.
     initial: false
   water_at_target:
     type: boolean
@@ -62,14 +62,14 @@ steps:
           Output only the tea name, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '(?i)^CHAMOMILE LEMON$'
+      pattern: '(?i)^CHAMOMILE$'
       consecutive: 2
       commit: {tea_identified: true}
     voice:
       prompt: >-
-        Ask to see the packet front so the complete Chamomile Lemon name is legible.
-        Use current_view for label questions. A different blend or chamomile
-        alone is not the selected tea. Do not say the package is verified
+        Ask to see the packet front so the complete Chamomile name is legible.
+        Use current_view for label questions. A different tea or an incomplete
+        name is not the selected tea. Do not say the package is verified
         based on a user assertion. The fixed recipe is
         boiling water and five minutes, not green-tea settings.
       tools: [current_view]
@@ -77,8 +77,8 @@ steps:
     next: heat_water
     complete_on_skip: true
     messages:
-      enter: Show the Chamomile Lemon packet so I can read the complete tea name.
-      complete: The packet identifies Chamomile Lemon. Say next to check the water temperature.
+      enter: Show the Chamomile packet so I can read the complete tea name.
+      complete: The packet identifies Chamomile. Say next to check the water temperature.
       skip: Packet verification skipped; ending this run rather than choosing an unverified tea.
 
   - id: heat_water
@@ -153,7 +153,7 @@ steps:
     next: steep_timer
     complete_on_skip: true
     messages:
-      enter: Carefully put the Chamomile Lemon tea bag in the prepared water, keeping the vessel stable.
+      enter: Carefully put the Chamomile tea bag in the prepared water, keeping the vessel stable.
       complete: The tea bag is visibly in the water. Say next now to start the five-minute steeping timer.
       skip: Immersion verification and the timer were skipped; this run is not a verified completion.
 

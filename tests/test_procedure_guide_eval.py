@@ -36,7 +36,7 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
     identification = guide.workflow.steps["identify"]
-    assert identification.evidence.pattern == r"(?i)^CHAMOMILE LEMON$"
+    assert identification.evidence.pattern == r"(?i)^CHAMOMILE$"
     pixels = set()
     for case in cases:
         rendered = evaluator.render_scene(scenes[case["scene"]])
@@ -108,7 +108,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     assert summary["gate_correct"] == 40
     assert not summary["passed"]
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-    guide = evaluator.select_guide(_SAMPLE / "eval/fixtures", "Chamomile Lemon Evaluation")
+    guide = evaluator.select_guide(_SAMPLE / "eval/fixtures", "Chamomile Evaluation")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
@@ -140,7 +140,7 @@ def test_flow_uses_brand_neutral_guide_and_control_contract(evaluator, filename)
     path = _SAMPLE / "eval" / filename
     manifest = yaml.safe_load(path.read_text())
     guide = evaluator.select_guide(path.parent / manifest["guides_dir"], manifest["guide"])
-    assert guide.path == _SAMPLE / "eval/fixtures/chamomile-lemon.guide.yaml"
+    assert guide.path == _SAMPLE / "eval/fixtures/chamomile.guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]
