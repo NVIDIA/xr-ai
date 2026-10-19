@@ -1035,7 +1035,9 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
     pull = f"ipc://{tmp_path}/{suffix}-a"
     pub = f"ipc://{tmp_path}/{suffix}-b"
     file_pull = f"ipc://{tmp_path}/{suffix}-c"
-    file_pub = f"ipc://{tmp_path}/{suffix}-d"
+    # In-process fan-out makes the slow pipe's capacity depend on ZMQ's HWMs,
+    # not additional OS socket buffering. The connector still uses real IPC.
+    file_pub = f"inproc://slow-file-subscriber-{suffix}"
     hub = HubEndpoint(
         pull,
         pub,
@@ -1055,7 +1057,9 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
         pub,
         pull,
         file_sub_addr=file_pub,
-        file_hwm=1,
+        # Leave room for every test message and subscription probes. Receiving
+        # a callback does not mean ZMQ has replenished the publisher's credit.
+        file_hwm=16,
         filter=Subscribe.FILE,
     )
     slow = ProcessorEndpoint(
@@ -1084,7 +1088,6 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
             while "alice" not in healthy.connected_participants:
                 await asyncio.sleep(0.001)
         assert await healthy.wait_for_subscriptions(timeout=1)
-        await asyncio.sleep(0.05)
         assert slow._file_sub is not None
 
         for index in range(3):
@@ -1109,6 +1112,14 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
                     await asyncio.sleep(0.001)
 
         assert received == ["stream-0", "stream-1", "stream-2"]
+        # The stopped receiver fills its send+receive capacity (1 + 1), so
+        # stream-2 must be dropped there while reaching the healthy receiver.
+        queued = []
+        while await slow._file_sub.poll(timeout=0) & zmq.POLLIN:
+            _, payload = await slow._file_sub.recv_multipart()
+            _, message = decode(payload)
+            queued.append(message.transfer_id)
+        assert queued == ["stream-0", "stream-1"]
     finally:
         healthy.stop()
         healthy.close()
