@@ -53,7 +53,7 @@ jobs:
           xcodebuild -scheme StreamKit \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -derivedDataPath "$RUNNER_TEMP/streamkit-tests" \
-            -only-testing:StreamKitTests/CameraLifecycleTests/stopAfterPublicationCompletionReclaimsUnadoptedInjectedPublication \
+            '-only-testing:StreamKitTests/CameraLifecycleTests/stopAfterPublicationCompletionReclaimsUnadoptedInjectedPublication()' \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee "$RUNNER_TEMP/publication-handoff-negative.log"
           result=${PIPESTATUS[0]}
           set -e
