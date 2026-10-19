@@ -37,6 +37,17 @@ The repository-wide README and documentation ownership rules live in the
 section of `AGENTS.md`. Follow that contract instead of introducing another
 placement rule in a package or sample.
 
+Ruff enforces exception-handling rules (`BLE001`, `S110`, `S112`, `B904`) on
+all new code. Violations that predate the rules are grandfathered in the
+generated `ruff-baseline.toml`, which records the exact count per file and rule
+and can only shrink. When a change fixes violations, run
+`uv run --script .github/scripts/ruff_baseline.py --write` and commit the
+lowered entries. Running the script without `--write` checks that the baseline
+matches the code and prints how much of the repository each rule covers; the
+pre-commit hook runs that check when Python files change. To keep
+a deliberate broad catch in new code, add an inline `# noqa: BLE001` comment with
+the reason.
+
 The user-facing command catalog is generated from top-level sample
 `[project.scripts]` entries and literal `argparse` declarations. Keep option
 descriptions in `help=` and do not repeat flag tables in narrative pages.
