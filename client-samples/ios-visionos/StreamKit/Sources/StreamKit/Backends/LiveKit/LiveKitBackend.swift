@@ -36,6 +36,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         }
         var stop: @MainActor @Sendable (LocalVideoTrack) async throws -> Void = { try await $0.stop() }
         var start: @MainActor @Sendable (LocalVideoTrack) async throws -> Void = { try await $0.start() }
+        var publicationHandoff: @MainActor @Sendable () async -> Void = {}
     }
 
     // MARK: StreamingBackend hooks
@@ -302,6 +303,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         let publication = try await withTaskCancellationHandler {
             try await task.value
         } onCancel: { task.cancel() }
+        await sdk.publicationHandoff()
         guard cameraGeneration == generation else { throw CancellationError() }
         return publication
     }
@@ -348,6 +350,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 if cameraPublication === publication { cameraPublication = nil }
                 throw CancellationError()
             }
+            // The producer commits cleanup ownership before exposing its result
+            // to a caller that may already have been invalidated by stop.
+            if track === bufferTrack { bufferPublication = publication }
+            else { cameraPublication = publication }
             cameraCaptureCleanup.removeAll { $0 === track }
             return publication
         } catch {

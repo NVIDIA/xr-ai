@@ -28,6 +28,49 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Verify publication handoff regression rejects missing producer ownership
+        working-directory: client-samples/ios-visionos/StreamKit
+        run: |
+          source_file=Sources/StreamKit/Backends/LiveKit/LiveKitBackend.swift
+          saved_source=$(mktemp)
+          cp "$source_file" "$saved_source"
+          trap 'cp "$saved_source" "$source_file"; rm -f "$saved_source"' EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("Sources/StreamKit/Backends/LiveKit/LiveKitBackend.swift")
+          source = path.read_text()
+          commit = """            // The producer commits cleanup ownership before exposing its result
+                      // to a caller that may already have been invalidated by stop.
+                      if track === bufferTrack { bufferPublication = publication }
+                      else { cameraPublication = publication }
+          """
+          if source.count(commit) != 1:
+              raise SystemExit("Expected exactly one producer ownership commit")
+          path.write_text(source.replace(commit, "", 1))
+          PY
+          set +e
+          set -o pipefail
+          xcodebuild -scheme StreamKit \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -derivedDataPath "$RUNNER_TEMP/streamkit-tests" \
+            -only-testing:StreamKitTests/CameraLifecycleTests/stopAfterPublicationCompletionReclaimsUnadoptedInjectedPublication \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee "$RUNNER_TEMP/publication-handoff-negative.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -ne 0
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          log = (Path(os.environ["RUNNER_TEMP"]) / "publication-handoff-negative.log").read_text()
+          name = "stopAfterPublicationCompletionReclaimsUnadoptedInjectedPublication"
+          if not re.search(r"Test " + name + r"\(\).*failed", log):
+              raise SystemExit("Negative control did not execute and fail the intended test")
+          for expression in ("trackPublications", "startStopCounter", "unpublishCount"):
+              if not any("Expectation failed" in line and expression in line for line in log.splitlines()):
+                  raise SystemExit("Missing intended failed assertion: " + expression)
+          print("Negative control confirmed: registry, capture counter and unpublish assertions rejected missing ownership")
+          PY
       - name: Test the real StreamKit package on iOS Simulator
         working-directory: client-samples/ios-visionos/StreamKit
         run: >-

@@ -49,6 +49,7 @@ private final class CameraLifecycleFixture {
     var connectGate: CameraBoundaryGate?
     var unpublishGate: CameraBoundaryGate?
     var publishGate: CameraBoundaryGate?
+    var publicationHandoffGate: CameraBoundaryGate?
     var stopFailures = 0
     var failPartialStart = false
     var startGate: CameraBoundaryGate?
@@ -100,6 +101,7 @@ private final class CameraLifecycleFixture {
             if self.failUnpublish { throw CameraBoundaryFailure.unpublish }
             if let track = publication.track as? LocalVideoTrack { try await track.stop() }
         }
+        operations.publicationHandoff = { [weak self] in await self?.publicationHandoffGate?.hold() }
         operations.disconnect = { [weak self] room in
             guard let self else { return }
             self.disconnectCount += 1
@@ -421,6 +423,62 @@ struct CameraLifecycleTests {
         #expect(f.tracks[0].capturer._state.startStopCounter == 0)
         #expect(f.unpublishCount == 1)
         f.publishGate = nil
+        try await f.backend.disconnect()
+    }
+
+    @Test func stopAfterPublicationCompletionReclaimsUnadoptedInjectedPublication() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        let gate = CameraBoundaryGate()
+        f.publicationHandoffGate = gate
+        defer { gate.release() }
+        let publication = Task { try await f.backend.injectVideoFrame(f.frame()) }
+        await gate.waitUntilEntered() // Child succeeded; its caller has not adopted the result.
+        #expect(f.rooms[0].localParticipant.trackPublications.count == 1)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 1)
+        var stop: Task<Void, any Error>!
+        await withCheckedContinuation { entered in
+            stop = Task { @MainActor in
+                entered.resume()
+                try await f.backend.stopCamera()
+            }
+        }
+        gate.release()
+        await #expect(throws: CancellationError.self) { try await publication.value }
+        try await stop.value
+        #expect(f.rooms[0].localParticipant.trackPublications.isEmpty)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 0)
+        #expect(f.unpublishCount == 1)
+        try await f.backend.disconnect()
+    }
+
+    @Test func stopAfterPublicationCompletionRetainsFailedDeviceCleanupForRetry() async throws {
+        let f = CameraLifecycleFixture()
+        try await f.backend.connect(config: .default)
+        let gate = CameraBoundaryGate()
+        f.publicationHandoffGate = gate
+        defer { gate.release() }
+        let publication = Task { try await f.backend.startCamera(config: .default) }
+        await gate.waitUntilEntered()
+        f.failUnpublish = true
+        f.stopFailures = 1
+        var stop: Task<Void, any Error>!
+        await withCheckedContinuation { entered in
+            stop = Task { @MainActor in
+                entered.resume()
+                try await f.backend.stopCamera()
+            }
+        }
+        gate.release()
+        await #expect(throws: CancellationError.self) { try await publication.value }
+        await #expect(throws: CameraBoundaryFailure.self) { try await stop.value }
+        #expect(f.unpublishCount == 1)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 1)
+        f.failUnpublish = false
+        try await f.backend.stopCamera()
+        #expect(f.unpublishCount == 2) // The exact failed publication remained owned.
+        #expect(f.rooms[0].localParticipant.trackPublications.isEmpty)
+        #expect(f.tracks[0].capturer._state.startStopCounter == 0)
         try await f.backend.disconnect()
     }
 }
