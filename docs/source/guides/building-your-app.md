@@ -64,7 +64,8 @@ host as described in the system requirements.
     Import: `xr_ai_launcher`\
     Source: `utils/xr-ai-launcher`
   - Process management for starting DeviceIOHub, workers, and application
-    services in dependency order, with only `xr-ai-gpu` as a runtime dependency.
+    services in dependency order, with only the lightweight `xr-ai-gpu` and
+    `xr-ai-cloudxr` runtime dependencies.
 * - {doc}`xr-ai-hub-client </reference/python/xr_ai_hub/index>`\
     Import: `xr_ai_hub`\
     Source: `agent-sdk/xr-ai-hub`

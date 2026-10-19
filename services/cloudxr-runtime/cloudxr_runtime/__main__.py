@@ -36,8 +36,8 @@ from isaacteleop.cloudxr.runtime import (
 )
 from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
+from xr_ai_cloudxr import is_native_profile, read_device_profile
 from xr_ai_gpu import GPUInventoryError, query_gpu_pci_bus_ids
-from xr_ai_launcher import is_native_profile, read_device_profile
 from xr_ai_logging import setup_logging
 
 

@@ -57,10 +57,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from loguru import logger
+from xr_ai_cloudxr import is_native_profile, read_device_profile
 from xr_ai_launcher import (
     Process,
-    is_native_profile,
-    read_device_profile,
     run_stack,
 )
 from xr_ai_logging import setup_logging

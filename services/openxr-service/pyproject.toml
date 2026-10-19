@@ -11,7 +11,7 @@ version = "0.1.0"
 description = "Long-running OpenXR tracking service for XR AI."
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "xr-ai-launcher",
+    "xr-ai-cloudxr",
     "xr-ai-logging",
     "xr-ai-tools[services]",
     "pyyaml>=6.0",
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-cloudxr = { path = "../../utils/xr-ai-cloudxr", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 xr-ai-tools = { path = "../../agent-sdk/xr-ai-tools", editable = true }
 

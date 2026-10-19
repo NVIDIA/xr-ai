@@ -11,12 +11,14 @@ version = "0.1.0"
 description = "Conversational control of a live CloudXR scene through specialized agents and tools."
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    "xr-ai-cloudxr",
     "xr-ai-launcher",
     "xr-ai-logging",
     "loguru>=0.7",
 ]
 
 [tool.uv.sources]
+xr-ai-cloudxr = { path = "../../utils/xr-ai-cloudxr", editable = true }
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 

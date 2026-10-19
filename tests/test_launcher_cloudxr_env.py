@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for xr_ai_launcher._cloudxr_env.load_cloudxr_env."""
+"""Regression tests for the shared CloudXR environment and profile helpers."""
 from __future__ import annotations
 
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from xr_ai_launcher._cloudxr_env import (
+from xr_ai_cloudxr import (
     NATIVE_DEVICE_PROFILES,
     XR_RUNTIME_VAR,
     is_native_profile,
@@ -178,3 +178,13 @@ class TestReadDeviceProfile:
 
     def test_falsy_path_returns_empty(self):
         assert read_device_profile(None) == ""
+
+
+def test_launcher_compatibility_exports_are_the_shared_implementation():
+    import xr_ai_cloudxr
+    import xr_ai_launcher
+    import xr_ai_launcher._cloudxr_env as legacy
+
+    for name in xr_ai_cloudxr.__all__:
+        assert getattr(xr_ai_launcher, name) is getattr(xr_ai_cloudxr, name)
+        assert getattr(legacy, name) is getattr(xr_ai_cloudxr, name)

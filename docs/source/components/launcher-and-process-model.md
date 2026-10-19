@@ -222,8 +222,8 @@ signatures, types, defaults, fields, and method behavior are generated in the
 **`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
 `Parallel`, and `run_stack` API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
-based on the standard library and the dependency-free `xr-ai-gpu` utility so
-it can be added to any sample without pulling in the dependency
+based on the standard library and the lightweight `xr-ai-gpu` and `xr-ai-cloudxr`
+helpers, so it can be added to any sample without pulling in the dependency
 chain of the processes it manages.
 
 **`xr-ai-logging`** — shared loguru setup for the monorepo. Every process calls
@@ -231,8 +231,9 @@ chain of the processes it manages.
 (level controlled by `XR_AI_VERBOSE`), a DEBUG file sink under
 `/tmp/log_<namespace>_<timestamp>/`, and a stdlib bridge that routes records
 emitted via `logging.getLogger(...)` into loguru. The launcher depends only on
-`xr-ai-gpu` and uses standard-library logging; its records and the agent SDK's
-records end up in the same sinks without either package importing loguru. The orchestrator
+`xr-ai-gpu` and `xr-ai-cloudxr` and uses standard-library logging; its records
+and the agent SDK's records end up in the same sinks without either package
+importing loguru. The orchestrator
 stamps namespace, timestamp, and root env vars so all spawned subprocesses write into
 the same per-run folder.
 
@@ -261,3 +262,9 @@ driver deadline. CloudXR uses its narrow PCI lookup with a five-second deadline
 and continues without pinning on failure. vLLM retains its existing selected-GPU
 queries and fallback behavior. Profile recommendations and environment
 construction remain with their consuming packages.
+
+CloudXR environment loading and native-device profile selection live in the
+stdlib-only `xr-ai-cloudxr` package. The CloudXR and OpenXR services, xr-render
+scene capability, and sample composition import these helpers directly. The
+launcher retains its existing public helper names as one-way re-exports; the
+integration package does not depend on orchestration or service implementations.

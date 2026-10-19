@@ -37,7 +37,8 @@ import yaml
 import zmq
 import zmq.asyncio
 from loguru import logger
-from xr_ai_launcher import ManagedProcess, load_cloudxr_env
+from xr_ai_cloudxr import load_cloudxr_env
+from xr_ai_launcher import ManagedProcess
 
 # Max seconds the post-spawn scene resync waits for LOVR to connect its PULL
 # socket. LOVR normally attaches within a second or two of spawn; the bound

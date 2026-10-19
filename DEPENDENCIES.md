@@ -218,6 +218,15 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Utilities
 
+#### `xr-ai-cloudxr` — [`utils/xr-ai-cloudxr/`](utils/xr-ai-cloudxr/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies: none
+- Optional dependency groups: none
+- Commands: none
+
 #### `xr-ai-gpu` — [`utils/xr-ai-gpu/`](utils/xr-ai-gpu/)
 
 - Python: `>=3.11,<3.15`
@@ -234,6 +243,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `hatchling`
 - Runtime dependencies:
   - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
@@ -325,8 +335,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `isaacteleop[cloudxr]>=1.3.131`
   - `pyyaml`
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
@@ -471,7 +481,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
-  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `pyyaml>=6.0`
@@ -785,6 +795,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `loguru>=0.7`
@@ -832,6 +843,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-tools[services]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
@@ -885,6 +897,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies:
+  - `xr-ai-cloudxr` → [`xr-ai-cloudxr`](utils/xr-ai-cloudxr/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
@@ -1033,7 +1046,10 @@ Keep non-obvious fan-out in the same change:
 ## Dependency rules (enforced)
 
 - `utils/xr-ai-gpu/` has zero runtime dependencies and uses only the standard library.
-- `utils/xr-ai-launcher/` depends only on `xr-ai-gpu`; neither pulls in service dependencies.
+- `utils/xr-ai-cloudxr/` has zero runtime dependencies; it owns CloudXR environment
+  and device-profile helpers and never imports the launcher or runnable services.
+- `utils/xr-ai-launcher/` depends only on `xr-ai-gpu` and `xr-ai-cloudxr`;
+  neither helper pulls in service dependencies. Services use the helpers directly.
 - `utils/xr-ai-logging/` depends only on `loguru`.
 - `utils/xr-ai-vllm/` has zero runtime dependencies. Adding dependencies would
   defeat docker mode by pulling vLLM-side packages into the wrapper environment.

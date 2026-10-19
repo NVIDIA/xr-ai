@@ -19,7 +19,8 @@ result is a single, unified logging stack:
   auto-prunes.
 * **stdlib bridge** — a :class:`logging.Handler` (``_InterceptHandler``)
   routes any record emitted via ``logging.getLogger(...)`` into loguru.
-  The launcher depends only on ``xr-ai-gpu`` and uses standard-library logging.
+  The launcher depends only on ``xr-ai-gpu`` and ``xr-ai-cloudxr`` and uses
+  standard-library logging.
   The bridge brings its records and those from ``agent-sdk/xr-ai-hub/``
   (pyzmq+msgpack-only by contract) into the same file and stderr sinks without
   either package importing loguru.

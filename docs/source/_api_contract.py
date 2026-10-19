@@ -12,6 +12,7 @@ from pathlib import Path
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 API_PACKAGE_DIRS = (
     _REPOSITORY_ROOT / "utils" / "xr-ai-gpu" / "xr_ai_gpu",
+    _REPOSITORY_ROOT / "utils" / "xr-ai-cloudxr" / "xr_ai_cloudxr",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-hub" / "xr_ai_hub",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-models" / "xr_ai_models",
     _REPOSITORY_ROOT / "agent-sdk" / "xr-ai-runtime" / "xr_ai_runtime",

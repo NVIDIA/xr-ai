@@ -53,9 +53,9 @@ def _install_cloudxr_runtime_fakes(monkeypatch):
     xr_ai_logging = types.ModuleType("xr_ai_logging")
     xr_ai_logging.setup_logging = lambda *_args, **_kwargs: None
 
-    xr_ai_launcher = types.ModuleType("xr_ai_launcher")
-    xr_ai_launcher.is_native_profile = lambda _profile: False
-    xr_ai_launcher.read_device_profile = lambda _path: "web"
+    xr_ai_cloudxr = types.ModuleType("xr_ai_cloudxr")
+    xr_ai_cloudxr.is_native_profile = lambda _profile: False
+    xr_ai_cloudxr.read_device_profile = lambda _path: "web"
 
     monkeypatch.setitem(sys.modules, "isaacteleop", isaacteleop)
     monkeypatch.setitem(sys.modules, "isaacteleop.cloudxr", cloudxr_package)
@@ -63,7 +63,7 @@ def _install_cloudxr_runtime_fakes(monkeypatch):
     monkeypatch.setitem(sys.modules, "isaacteleop.cloudxr.runtime", runtime)
     monkeypatch.setitem(sys.modules, "isaacteleop.cloudxr.wss", wss)
     monkeypatch.setitem(sys.modules, "loguru", loguru)
-    monkeypatch.setitem(sys.modules, "xr_ai_launcher", xr_ai_launcher)
+    monkeypatch.setitem(sys.modules, "xr_ai_cloudxr", xr_ai_cloudxr)
     monkeypatch.setitem(sys.modules, "xr_ai_logging", xr_ai_logging)
 
 
