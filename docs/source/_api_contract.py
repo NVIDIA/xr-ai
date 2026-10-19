@@ -162,14 +162,14 @@ def _resolve_name(
     module: _Module,
     name: str,
     modules: dict[tuple[str, ...], _Module],
-    resolving: frozenset[tuple[tuple[str, ...], str]] = frozenset(),
+    resolving: frozenset[tuple[Path, tuple[str, ...], str]] = frozenset(),
 ) -> _Definition | None:
-    key = (module.parts, name)
+    key = (package_dir, module.parts, name)
     if key in resolving:
         return None
     resolving |= {key}
 
-    binding: ast.AST | tuple[tuple[str, ...], str] | None = None
+    binding: ast.AST | tuple[Path, tuple[str, ...], str] | None = None
     for node in module.tree.body:
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name == name:
@@ -180,7 +180,12 @@ def _resolve_name(
             for alias in node.names:
                 if alias.name == "*" or (alias.asname or alias.name) != name:
                     continue
-                binding = (imported_parts, alias.name) if imported_parts is not None else None
+                binding = (package_dir, imported_parts, alias.name) if imported_parts is not None else None
+                if imported_parts is None and node.level == 0 and node.module:
+                    imported = tuple(node.module.split("."))
+                    target = next((path for path in API_PACKAGE_DIRS if path.name == imported[0]), None)
+                    if target is not None:
+                        binding = (target, imported[1:], alias.name)
             continue
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
@@ -189,10 +194,12 @@ def _resolve_name(
             binding = node
 
     if isinstance(binding, tuple):
-        imported_module = _load_module(package_dir, binding[0], modules)
+        target_dir, parts, target_name = binding
+        target_modules = modules if target_dir == package_dir else {}
+        imported_module = _load_module(target_dir, parts, target_modules)
         if imported_module is None:
             return None
-        return _resolve_name(package_dir, imported_module, binding[1], modules, resolving)
+        return _resolve_name(target_dir, imported_module, target_name, target_modules, resolving)
     if isinstance(binding, (ast.Assign, ast.AnnAssign)):
         value = binding.value
         if isinstance(value, ast.Name) and value.id != name:

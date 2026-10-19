@@ -393,3 +393,22 @@ def test_utility_packages_are_enrolled() -> None:
         "xr_ai_vllm",
         "xr_ai_voicegate",
     } <= enrolled
+
+
+def test_documented_exports_resolve_across_enrolled_packages(tmp_path, monkeypatch):
+    contract = _load_contract()
+    consumer = _package(tmp_path, "from utility_api import Failure\n__all__ = ['Failure']\n")
+    utility = tmp_path / "utility_api"
+    utility.mkdir()
+    (utility / "__init__.py").write_text(
+        "from ._errors import Failure\n__all__ = ['Failure']\n"
+    )
+    (utility / "_errors.py").write_text(
+        'class Failure(RuntimeError):\n    """A documented shared failure."""\n'
+    )
+    _enroll(monkeypatch, contract, consumer)
+    monkeypatch.setattr(contract, "API_PACKAGE_DIRS", (consumer, utility))
+    assert contract.validate_public_api() == []
+
+    (utility / "_errors.py").write_text("from example_api import Failure\n")
+    assert len(contract.validate_public_api()) == 2
