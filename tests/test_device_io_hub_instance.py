@@ -16,88 +16,55 @@ import device_io_hub.__main__ as hub_main
 import pytest
 from device_io_hub import _instance
 from device_io_hub._errors import StartupError
-from device_io_hub._instance import hold_instance_lock
+from device_io_hub._instance import acquire_instance_lock
 
 
-def test_second_holder_is_refused_with_an_unverified_pid_record(tmp_path: Path) -> None:
+def test_second_holder_is_refused_and_told_how_to_find_the_first(tmp_path: Path) -> None:
     lock = tmp_path / "hub.lock"
 
-    with hold_instance_lock(lock):
+    fd = acquire_instance_lock(lock)
+    try:
         with pytest.raises(StartupError, match="already running") as refused:
-            with hold_instance_lock(lock):
-                pytest.fail("a second hub acquired the lock")
+            acquire_instance_lock(lock)
+    finally:
+        os.close(fd)
 
-    assert f"Last recorded PID (unverified): {os.getpid()}" in str(refused.value)
-
-
-def test_read_only_holder_does_not_attribute_a_stale_pid_to_the_running_hub(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    lock = tmp_path / "hub.lock"
-    recorded_pid = os.getppid()
-    lock.write_text(f"{recorded_pid}\n", encoding="utf-8")
-
-    def must_not_look_up_process(_path: Path) -> bytes:
-        pytest.fail("an unverified PID must not be attributed to a process")
-
-    monkeypatch.setattr(Path, "read_bytes", must_not_look_up_process)
-    with monkeypatch.context() as holder_patch:
-        holder_patch.setattr(_instance, "_open", lambda path: os.open(path, os.O_RDONLY))
-        with hold_instance_lock(lock):
-            holder_patch.undo()
-            with pytest.raises(StartupError, match="already running") as refused:
-                with hold_instance_lock(lock):
-                    pytest.fail("a second hub acquired the lock")
-
-    assert f"Last recorded PID (unverified): {recorded_pid}" in str(refused.value)
-    assert "Running hub" not in str(refused.value)
-    assert lock.read_text(encoding="utf-8") == f"{recorded_pid}\n"
+    assert f"fuser -v {lock}" in str(refused.value)
 
 
-def test_lock_is_free_again_after_the_holder_exits(tmp_path: Path) -> None:
+def test_lock_is_free_again_after_the_holder_closes_it(tmp_path: Path) -> None:
     lock = tmp_path / "hub.lock"
 
-    with hold_instance_lock(lock):
-        pass
-
-    with hold_instance_lock(lock):
-        pass
+    os.close(acquire_instance_lock(lock))
+    os.close(acquire_instance_lock(lock))
 
 
 @pytest.mark.parametrize("mask", [0o077, 0o777])
-def test_restrictive_umask_keeps_lock_readable_for_the_next_user(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mask: int,
+def test_restrictive_umask_still_creates_a_lock_every_user_can_read(
+    tmp_path: Path, mask: int,
 ) -> None:
     lock = tmp_path / "hub.lock"
     previous_mask = os.umask(mask)
     try:
-        with hold_instance_lock(lock):
-            inode = lock.stat().st_ino
-            assert stat.S_IMODE(lock.stat().st_mode) == 0o644
-
-            real_open = os.open
-
-            def open_as_another_user(path: Path, flags: int, mode: int = 0o777) -> int:
-                # The kernel denies write access to another user's 0644 file.
-                # Keep real descriptors and flock behavior on the same inode.
-                if path == lock and flags == os.O_RDWR:
-                    raise PermissionError("another user's lock")
-                return real_open(path, flags, mode)
-
-            monkeypatch.setattr(os, "open", open_as_another_user)
-            with pytest.raises(StartupError, match="already running"):
-                with hold_instance_lock(lock):
-                    pytest.fail("a read-only contender acquired the held lock")
+        os.close(acquire_instance_lock(lock))
     finally:
         os.umask(previous_mask)
 
-    # A read-only descriptor can acquire the released lock without replacing
-    # the file, even though it cannot update the diagnostic owner record.
-    with hold_instance_lock(lock):
-        assert lock.stat().st_ino == inode
-        assert stat.S_IMODE(lock.stat().st_mode) == 0o644
+    assert stat.S_IMODE(lock.stat().st_mode) == 0o644
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root opens any file")
+def test_unreadable_lock_file_is_refused_with_a_banner(tmp_path: Path) -> None:
+    lock = tmp_path / "hub.lock"
+    lock.touch(mode=0o000)
+
+    with pytest.raises(StartupError, match="Cannot open the DeviceIOHub lock file") as refused:
+        acquire_instance_lock(lock)
+
+    assert f"sudo rm {lock}" in str(refused.value)
+
+
+@pytest.mark.integration
 def test_lock_from_a_killed_hub_does_not_block_the_next_one(tmp_path: Path) -> None:
     lock = tmp_path / "hub.lock"
     holder = subprocess.Popen(
@@ -106,12 +73,12 @@ def test_lock_from_a_killed_hub_does_not_block_the_next_one(tmp_path: Path) -> N
             "-c",
             textwrap.dedent(
                 f"""
-                import sys, time
+                import time
                 from pathlib import Path
-                from device_io_hub._instance import hold_instance_lock
-                with hold_instance_lock(Path({str(lock)!r})):
-                    print("locked", flush=True)
-                    time.sleep(60)
+                from device_io_hub._instance import acquire_instance_lock
+                acquire_instance_lock(Path({str(lock)!r}))
+                print("locked", flush=True)
+                time.sleep(60)
                 """
             ),
         ],
@@ -123,16 +90,14 @@ def test_lock_from_a_killed_hub_does_not_block_the_next_one(tmp_path: Path) -> N
     try:
         assert holder.stdout is not None
         assert holder.stdout.readline().strip() == "locked"
-        with pytest.raises(StartupError, match=rf"Last recorded PID \(unverified\): {holder.pid}"):
-            with hold_instance_lock(lock):
-                pass
+        with pytest.raises(StartupError, match="already running"):
+            acquire_instance_lock(lock)
     finally:
         holder.send_signal(signal.SIGKILL)
         holder.wait(timeout=10)
 
     # SIGKILL skips every cleanup handler; the kernel still releases the lock.
-    with hold_instance_lock(lock):
-        pass
+    os.close(acquire_instance_lock(lock))
 
 
 def test_entry_point_refuses_before_starting_anything(
@@ -147,9 +112,41 @@ def test_entry_point_refuses_before_starting_anything(
 
     monkeypatch.setattr(hub_main, "main", must_not_run)
 
-    with hold_instance_lock(lock):
+    fd = acquire_instance_lock(lock)
+    try:
         with pytest.raises(SystemExit) as exited:
             hub_main.run()
+    finally:
+        os.close(fd)
 
     assert exited.value.code == 1
     assert "Another DeviceIOHub is already running" in capsys.readouterr().err
+
+
+def test_entry_point_holds_the_lock_while_running_and_after_main_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock = tmp_path / "hub.lock"
+    monkeypatch.setattr(_instance, "LOCK_PATH", lock)
+    monkeypatch.setattr(sys, "argv", ["device_io_hub"])
+    held: list[int] = []
+
+    def acquire_and_remember() -> int:
+        held.append(acquire_instance_lock())
+        return held[-1]
+
+    async def lock_is_held(**_kwargs: object) -> None:
+        with pytest.raises(StartupError, match="already running"):
+            acquire_instance_lock(lock)
+
+    monkeypatch.setattr(hub_main, "acquire_instance_lock", acquire_and_remember)
+    monkeypatch.setattr(hub_main, "main", lock_is_held)
+
+    try:
+        hub_main.run()
+        # Still held for atexit handlers, until the process exits.
+        with pytest.raises(StartupError, match="already running"):
+            acquire_instance_lock(lock)
+    finally:
+        for fd in held:
+            os.close(fd)
