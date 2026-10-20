@@ -362,6 +362,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -543,7 +544,7 @@ separately and owns small GPU-profile overrides; shared defaults live under
 <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code>. For startup probes, refer to
 <a class="reference internal" href="../reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a> and <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.
 Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
-read through the generic stdlib-only launcher deployment loaders requires the
+read through the generic launcher deployment loaders requires the
 wrapped nested JSON shape including deployment metadata. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services with <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, or <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Schema, preset
@@ -607,6 +608,7 @@ build-backend = "hatchling.build"
 [project]
 name = "&lt;kebab-name&gt;"
 version = "0.1.0"
+description = "&lt;One-line description of the sample experience&gt;"
 requires-python = "&gt;=3.11,&lt;3.15"
 dependencies = [
     "xr-ai-launcher",

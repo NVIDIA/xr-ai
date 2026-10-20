@@ -362,6 +362,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -744,8 +745,8 @@ This demo is not a safety interlock. A still image cannot prove a hidden action.
 <section id="included-tea-making-guide">
 <h3>Included tea-making guide<a class="headerlink" href="#included-tea-making-guide" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">guides/tea-making.guide.yaml</span></code> is a hand-authored, approved example with task
-name <strong>Tea Making</strong> and ID <code class="docutils literal notranslate"><span class="pre">tea_making</span></code>. Its four stages are specific to Numi
-Chamomile Lemon: read the packet, verify the water temperature, put the tea in
+name <strong>Tea Making</strong> and ID <code class="docutils literal notranslate"><span class="pre">tea_making</span></code>. Its four stages guide brewing
+chamomile tea: read the packet, verify the water temperature, put the tea in
 water, and start the steeping timer. It is not generated from a user recording.</p>
 <p>Start the sample’s shared models, then run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Tea Making"</span>
@@ -754,22 +755,25 @@ water, and start the steeping timer. It is not generated from a user recording.<
 <p>Connect and say <strong>start guide</strong>. Say <strong>next</strong> after each verified visual step
 and <strong>stop guide</strong> to cancel. The guide finishes automatically when the
 five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
-<p>Use Numi Chamomile Lemon tea, a stable heat-safe vessel,
+<p>Use a tea packet or box labeled <strong>chamomile</strong>, a stable heat-safe vessel,
 and a kettle or thermometer with a readable <strong>current</strong> water-temperature
-display. <a class="reference external" href="https://numitea.com/products/chamomile-lemon">Numi’s product instructions</a>
-specify a 5–6 minute steep; this example chooses five minutes. Numi’s
-<a class="reference external" href="https://numitea.com/blogs/news/the-ultimate-guide-to-types-of-tea-and-their-benefits">general herbal-tea guidance</a>
-calls for boiling water. The example verifies a displayed 100°C (212°F) current
-reading. If the packet requires a different recipe or local boiling temperature
-cannot reach that target, stop and adapt a local copy before using it. Do not
-tilt or lift hot vessels to satisfy a camera check.</p>
+display. The example uses the chamomile settings in the tea sample’s
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
+100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
+a displayed 100°C (212°F) current reading. If the packet requires a different
+recipe or local boiling temperature cannot reach that target, stop and adapt a
+local copy before using it. Do not tilt or lift hot vessels to satisfy a camera
+check.</p>
 <p>The example is adapted to guide’s existing tools, not a drop-in copy of the
 tea sample’s workflow YAML:</p>
 <ul class="simple">
-<li><p>It verifies both the Numi brand and Chamomile Lemon blend name. The recipe is
-fixed in the guide, not inferred from packaging colors or retrieved by the LLM.</p></li>
-<li><p>Its three visual steps require two distinct fresh frames. The first reads
-<code class="docutils literal notranslate"><span class="pre">BRAND</span> <span class="pre">|</span> <span class="pre">BLEND</span></code> and matches <code class="docutils literal notranslate"><span class="pre">NUMI</span> <span class="pre">|</span> <span class="pre">CHAMOMILE</span> <span class="pre">LEMON</span></code>; the second reads a current
+<li><p>It accepts the printed word <strong>chamomile</strong> on a tea packet or box, including
+blend names such as <strong>Chamomile Lemon</strong>, regardless of brand. The brand does
+not need to be visible. The brewing settings are fixed in the guide; the
+brewing reference is not retrieved at runtime.</p></li>
+<li><p>Its three visual steps require two distinct fresh frames. Identification
+accepts only <code class="docutils literal notranslate"><span class="pre">YES</span></code> (case-insensitive) to visible <code class="docutils literal notranslate"><span class="pre">CHAMOMILE</span></code> text, not <code class="docutils literal notranslate"><span class="pre">NO</span></code>,
+<code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, or explanatory prose; the second step reads a current
 <code class="docutils literal notranslate"><span class="pre">LABEL</span> <span class="pre">|</span> <span class="pre">NUMBER</span> <span class="pre">UNIT</span></code> reading and accepts <code class="docutils literal notranslate"><span class="pre">CURRENT</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTUAL</span></code>, or <code class="docutils literal notranslate"><span class="pre">THERMOMETER</span></code>
 with <code class="docutils literal notranslate"><span class="pre">100</span> <span class="pre">C</span></code> or <code class="docutils literal notranslate"><span class="pre">212</span> <span class="pre">F</span></code>. It preserves <code class="docutils literal notranslate"><span class="pre">TARGET</span></code> and <code class="docutils literal notranslate"><span class="pre">SET</span></code> labels in the visual
 result so those readings cannot satisfy completion. Unlabeled displays are
@@ -777,9 +781,11 @@ unavailable rather than assumed to show current temperature. Matching tolerates
 equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
 not different temperatures. Immersion requires <code class="docutils literal notranslate"><span class="pre">YES</span></code> for
 visible bag contact with visible water, including a floating bag.
-Other readings, <code class="docutils literal notranslate"><span class="pre">NO</span></code>, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, missing frames, and malformed responses
-cannot complete a step. These bounded evidence commits do not use an
-observation LLM; the foreground LLM still handles questions and controls.</p></li>
+Missing frames and responses outside each step’s accepted format cannot
+satisfy its evidence requirement. A well-formed answer can still be a
+visual misclassification; the response contract does not prove visual accuracy.
+These bounded evidence commits do not use an observation LLM; the foreground
+LLM still handles questions and controls.</p></li>
 <li><p>The heating check verifies a displayed current temperature at the brewing
 target, not a target setting or a “heating underway” threshold. Guide
 does not expose the tea sample’s typed temperature tools: this is a VLM
@@ -812,6 +818,11 @@ quoted commands, negation, requests to explain guide content, unsupported captur
 requests, and visual questions.
 Both run with the full permitted tool set; the evaluator does not preselect
 tools based on the utterance.</p>
+<p><code class="docutils literal notranslate"><span class="pre">eval/tea_identification.yaml</span></code> tests the included tea guide with generated label
+cards: chamomile alone, longer chamomile names, other teas, and an unreadable
+label. It checks real VLM responses, rejection of premature advancement, and
+identification announcements. These cards test the response contract, not
+photographic accuracy.</p>
 <p>A YAML or JSON manifest selects <code class="docutils literal notranslate"><span class="pre">guides_dir</span></code> (relative to the manifest) and
 <code class="docutils literal notranslate"><span class="pre">guide</span></code> (name or ID), and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
 <ul class="simple">
@@ -834,6 +845,8 @@ ones and explicitly test early advance, completion, stop, and restart as needed.
 <span class="w">  </span>--output<span class="w"> </span>artifacts/guide-eval
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--manifest<span class="w"> </span>eval/guide_routing.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/guide-routing-eval
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--manifest<span class="w"> </span>eval/tea_identification.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/tea-identification-eval
 </pre></div>
 </div>
 <p>Use a new output directory for each run. Supply <code class="docutils literal notranslate"><span class="pre">--manifest</span> <span class="pre">/path/to/scenario.yaml</span></code>

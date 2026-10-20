@@ -7,8 +7,8 @@ xr_ai_launcher
 
    xr-ai-launcher — process management for the xr-ai stack.
 
-   Intentionally stdlib-only so it can be added to any sample without pulling
-   in the dependency chain of the processes it manages.
+   Uses the standard library and the lightweight xr-ai-gpu utility so samples
+   do not pull in the dependency chain of the processes they manage.
 
    Typical usage::
 
@@ -37,14 +37,6 @@ Attributes
 
    xr_ai_launcher.NATIVE_DEVICE_PROFILES
    xr_ai_launcher.XR_RUNTIME_VAR
-
-
-Exceptions
-----------
-
-.. autoapisummary::
-
-   xr_ai_launcher.GPUInventoryError
 
 
 Classes
@@ -151,19 +143,15 @@ Package Contents
    token is visible early without blocking startup on an interactive prompt.
 
 
-.. py:exception:: GPUInventoryError
-
-
-
-   Raised when visible GPUs cannot be inventoried or safely classified.
-
-
 .. py:function:: detect_gpu_config() -> str
 
    Select an existing config only when the complete topology is supported.
 
    This compatibility bridge remains until capability-based service planning
    replaces named config selection. It deliberately has no fallback.
+
+   Raises:
+       GPUInventoryError: Inventory fails or no profile matches the topology.
 
 
 .. py:class:: ModelDeployment

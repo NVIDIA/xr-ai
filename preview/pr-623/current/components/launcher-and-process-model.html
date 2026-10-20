@@ -337,6 +337,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -655,14 +656,16 @@ signatures, types, defaults, fields, and method behavior are generated in the
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code></strong> — process management for the xr-ai stack: the <code class="docutils literal notranslate"><span class="pre">Process</span></code>,
 <code class="docutils literal notranslate"><span class="pre">Parallel</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
-stdlib-only so it can be added to any sample without pulling in the dependency
+based on the standard library and the dependency-free <code class="docutils literal notranslate"><span class="pre">xr-ai-gpu</span></code> utility so
+it can be added to any sample without pulling in the dependency
 chain of the processes it manages.</p>
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-logging</span></code></strong> — shared loguru setup for the monorepo. Every process calls
 <code class="docutils literal notranslate"><span class="pre">setup_logging()</span></code> once at startup to get a unified logging stack: a stderr sink
 (level controlled by <code class="docutils literal notranslate"><span class="pre">XR_AI_VERBOSE</span></code>), a DEBUG file sink under
 <code class="docutils literal notranslate"><span class="pre">/tmp/log_&lt;namespace&gt;_&lt;timestamp&gt;/</span></code>, and a stdlib bridge that routes records
-emitted via <code class="docutils literal notranslate"><span class="pre">logging.getLogger(...)</span></code> into loguru — so stdlib-only packages
-(<code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) and the agent SDK end up in the same sinks. The orchestrator
+emitted via <code class="docutils literal notranslate"><span class="pre">logging.getLogger(...)</span></code> into loguru. The launcher depends only on
+<code class="docutils literal notranslate"><span class="pre">xr-ai-gpu</span></code> and uses standard-library logging; its records and the agent SDK’s
+records end up in the same sinks without either package importing loguru. The orchestrator
 stamps namespace, timestamp, and root env vars so all spawned subprocesses write into
 the same per-run folder.</p>
 <p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-vad</span></code></strong> — shared Silero-VAD utterance detector for agent workers. It
@@ -681,6 +684,12 @@ the wrapper’s venv, the default) or <code class="docutils literal notranslate"
 YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.</p>
+<p>GPU hardware facts live in <code class="docutils literal notranslate"><span class="pre">xr-ai-gpu</span></code>, independently of application
+orchestration. Launcher profile matching uses its strict full inventory with no
+driver deadline. CloudXR uses its narrow PCI lookup with a five-second deadline
+and continues without pinning on failure. vLLM retains its existing selected-GPU
+queries and fallback behavior. Profile recommendations and environment
+construction remain with their consuming packages.</p>
 </section>
 </section>
 

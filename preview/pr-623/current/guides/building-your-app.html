@@ -337,6 +337,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -488,8 +489,8 @@ host as described in the system requirements.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html"><span class="doc">xr-ai-launcher</span></a><br />
 Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code><br />
 Source: <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher</span></code></p></td>
-<td><p>Stdlib-only process management for starting DeviceIOHub, workers, and
-application services in dependency order.</p></td>
+<td><p>Process management for starting DeviceIOHub, workers, and application
+services in dependency order, with only <code class="docutils literal notranslate"><span class="pre">xr-ai-gpu</span></code> as a runtime dependency.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../reference/python/xr_ai_hub/index.html"><span class="doc">xr-ai-hub-client</span></a><br />
 Import: <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code><br />
@@ -613,11 +614,11 @@ repository source mapping.</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">main.py</span></code> and the root <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p></td>
 <td><p>Keep the <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> entry point, DeviceIOHub process, worker process, and launcher source entries.</p></td>
-<td><p>Rename the project, command, logging namespace, worker command, and worker YAML path. Add only application-owned service processes.</p></td>
+<td><p>Rename the project, command, logging namespace, worker command, and worker YAML path. Update <code class="docutils literal notranslate"><span class="pre">project.description</span></code> to describe the application. Add only application-owned service processes.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>Keep the typed DeviceIOHub configuration shape.</p></td>
-<td><p>Set the room, ports, web client, and network behavior. Refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0c1a06d312e4614a1efc89c82a5bd0461510bd77/services/device-io-hub/device_io_hub.yaml">DeviceIOHub reference YAML</a> for coupled port and URL changes.</p></td>
+<td><p>Set the room, ports, web client, and network behavior. Refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/dd77c6089a650e2b64034c29b7fbcfd6b29d846f/services/device-io-hub/device_io_hub.yaml">DeviceIOHub reference YAML</a> for coupled port and URL changes.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">worker/pyproject.toml</span></code>, <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code>, and <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code></p></td>
 <td><p>Keep the named-package layout, console entry point, argument parsing, and delegation to <code class="docutils literal notranslate"><span class="pre">run_app()</span></code>.</p></td>

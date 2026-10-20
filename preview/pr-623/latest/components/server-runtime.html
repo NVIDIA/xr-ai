@@ -337,6 +337,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -462,6 +463,15 @@ YAML file’s own directory, not the working directory.</p>
 <p>The hub is one hub, many clients, many agents. A single instance fans the
 inbound media stream out to every connected agent and routes any return
 traffic back to the originating client only.</p>
+<p>Only one hub runs on a machine. Every hub uses the same LiveKit container
+name, and by default the same IPC socket paths and LiveKit ports, and
+claiming them replaces whatever holds them, so before claiming anything the
+hub takes an exclusive lock on <code class="docutils literal notranslate"><span class="pre">/tmp/xr_hub.lock</span></code>. A second hub, for example
+from starting another sample by mistake, finds the lock held and exits,
+leaving the running sample untouched; <code class="docutils literal notranslate"><span class="pre">fuser</span> <span class="pre">-v</span> <span class="pre">/tmp/xr_hub.lock</span></code> shows the
+hub that holds it. The operating system releases the lock when the hub exits
+for any reason, so a crashed hub never blocks the next start. The lock covers
+hubs that share the host’s <code class="docutils literal notranslate"><span class="pre">/tmp</span></code>.</p>
 <p>On startup, <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> loads the configuration, constructs a <code class="docutils literal notranslate"><span class="pre">HubEndpoint</span></code>
 (the IPC server), registers hub-local callbacks (<code class="docutils literal notranslate"><span class="pre">on_frame</span></code>, <code class="docutils literal notranslate"><span class="pre">on_audio</span></code>,
 <code class="docutils literal notranslate"><span class="pre">on_data</span></code>, <code class="docutils literal notranslate"><span class="pre">on_participant</span></code>), and starts the hub receive loop before bringing

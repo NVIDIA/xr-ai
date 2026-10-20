@@ -105,7 +105,7 @@ Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, `health_check: true` or `health_check: false`,
 and `kind: preset:<name>`. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form with `adapter`,
+launcher must use the wrapped nested JSON form with `adapter`,
 `endpoint`, and `deployment` objects. Only the worker-side loader accepts omitted
 `deployment` metadata. Launcher credentials are explicit: endpoint credentials
 use `api_key_env`, while credentials needed by a managed service itself use

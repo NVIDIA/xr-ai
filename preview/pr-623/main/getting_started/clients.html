@@ -362,6 +362,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -507,8 +508,126 @@ imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
 network metrics, request-driven image capture, and file transfer remain separate
 operations.</p>
 </section>
+<section id="camera-streaming-quality">
+<span id="id1"></span><h2>Camera streaming quality<a class="headerlink" href="#camera-streaming-quality" title="Link to this heading">#</a></h2>
+<p>Pass an optional <code class="docutils literal notranslate"><span class="pre">CameraEncodingConfig</span></code> through <code class="docutils literal notranslate"><span class="pre">CameraConfig.encoding</span></code> when
+starting video. The settings belong to the local publishing client. No hub
+configuration or client-server policy exchange is involved. LiveKit mapping
+stays inside the backend; other backends apply the settings they support.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Preset</p></th>
+<th class="head"><p>Adaptation preference</p></th>
+<th class="head"><p>Multiple-resolution publication</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Detail</p></td>
+<td><p>Favor resolution; reduce FPS under pressure</p></td>
+<td><p>Disabled</p></td>
+</tr>
+<tr class="row-odd"><td><p>Motion</p></td>
+<td><p>Favor FPS; reduce resolution under pressure</p></td>
+<td><p>Backend default</p></td>
+</tr>
+<tr class="row-even"><td><p>Balanced</p></td>
+<td><p>Allow both resolution and FPS to change</p></td>
+<td><p>Backend default</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>All three presets start with ceilings of 3 Mbps per encoded stream and 30 FPS.
+These are configurable policy defaults, not values derived from a survey of
+glasses or device measurements. They match LiveKit’s 16:9 1080p preset reference;
+the adaptation preference distinguishes the three presets, not a measured
+quality or bandwidth guarantee for a particular device.
+Override the FPS ceiling for workloads that need fewer, more detailed frames.
+Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
+overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
+Omitting <code class="docutils literal notranslate"><span class="pre">encoding</span></code> preserves backend defaults. C++ also retains its existing
+zero-as-unset numeric fields; its named presets supply the explicit ceilings.
+The C++ LiveKit SDK exposes the primary encoding limit but not lower simulcast
+layer controls. With simulcast enabled, that SDK still chooses lower-layer
+budgets; StreamKit cannot enforce their ordering relative to a custom primary
+limit. No C++ runtime behavior is changed to hide this limitation. Explicitly
+disabling simulcast avoids that unsupported combination.</p>
+<div class="highlight-javascript notranslate"><div class="highlight"><pre><span></span><span class="kd">const</span><span class="w"> </span><span class="nx">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">CameraEncodingConfig</span><span class="p">({</span>
+<span class="w">  </span><span class="p">...</span><span class="nx">CameraEncodingConfig</span><span class="p">.</span><span class="nx">detail</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxFramerate</span><span class="o">:</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxBitrateBps</span><span class="o">:</span><span class="w"> </span><span class="mf">3</span><span class="nx">_000_000</span><span class="p">,</span>
+<span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">session</span><span class="p">.</span><span class="nx">startCamera</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">CameraConfig</span><span class="p">({</span><span class="w"> </span><span class="nx">encoding</span><span class="w"> </span><span class="p">}));</span>
+</pre></div>
+</div>
+<div class="highlight-swift notranslate"><div class="highlight"><pre><span></span><span class="kd">var</span><span class="w"> </span><span class="nv">encoding</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">CameraEncodingConfig</span><span class="p">.</span><span class="n">detail</span>
+<span class="n">encoding</span><span class="p">.</span><span class="n">maxFramerate</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">10</span>
+<span class="k">try</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">session</span><span class="p">.</span><span class="n">startCamera</span><span class="p">(</span><span class="n">config</span><span class="p">:</span><span class="w"> </span><span class="n">CameraConfig</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span><span class="w"> </span><span class="n">encoding</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="highlight-kotlin notranslate"><div class="highlight"><pre><span></span><span class="kd">val</span><span class="w"> </span><span class="nv">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CameraEncodingConfig</span><span class="p">.</span><span class="na">DETAIL</span><span class="p">.</span><span class="na">copy</span><span class="p">(</span><span class="n">maxFramerate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">10</span><span class="p">)</span>
+<span class="n">session</span><span class="p">.</span><span class="na">startCamera</span><span class="p">(</span><span class="n">CameraConfig</span><span class="p">(</span><span class="n">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">encoding</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">streamkit</span><span class="o">::</span><span class="n">CameraConfig</span><span class="w"> </span><span class="n">camera</span><span class="p">;</span>
+<span class="n">camera</span><span class="p">.</span><span class="n">encoding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">streamkit</span><span class="o">::</span><span class="n">CameraEncodingConfig</span><span class="o">::</span><span class="n">Detail</span><span class="p">();</span>
+<span class="n">camera</span><span class="p">.</span><span class="n">encoding</span><span class="o">-&gt;</span><span class="n">max_framerate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+<span class="n">session</span><span class="p">.</span><span class="n">StartCamera</span><span class="p">(</span><span class="n">camera</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The preference and <code class="docutils literal notranslate"><span class="pre">simulcast</span></code> switch can also be configured independently.
+On web, Android, and Apple clients, publishing with an explicit bitrate limit
+keeps configured lower-layer budgets at or below the primary budget. If the
+largest SDK lower-layer budget exceeds the requested primary budget, all lower
+budgets are reduced by the same SDK-derived proportion. This preserves their
+relative ordering, dimensions, and frame-rate settings without inventing a new
+layer profile. Lower budgets remain unchanged when no reduction is needed;
+when reduction is needed, even an already smaller lower-layer budget can decrease.
+An encoding profile that cannot preserve positive integer budgets and distinct
+budget ordering is rejected during publication rather than silently rounded into
+a different profile. This is not an aggregate bandwidth or power-management policy.
+Favoring detail alone changes encoder adaptation; the Detail preset additionally
+disables lower simulcast layers. Capture format remains selected by the platform
+or external frame producer, preserving the camera’s aspect ratio.</p>
+<p>For externally supplied Apple or Android frames, pass the same encoding policy
+as the optional <code class="docutils literal notranslate"><span class="pre">encoding</span></code> argument to <code class="docutils literal notranslate"><span class="pre">session.injectVideoFrame</span></code> on the first
+frame that publishes the track. Later frames keep the active policy. C++ takes
+the policy through <code class="docutils literal notranslate"><span class="pre">StartCamera</span></code> before the first <code class="docutils literal notranslate"><span class="pre">FrameSink</span></code> frame. Stop the
+camera and start a new publication to change settings. Custom backends using
+the original frame-injection method retain their existing behavior and ignore
+the optional encoding policy until they implement it.</p>
+<p>Android device cameras use LiveKit’s cached camera track; StreamKit does not
+dispose that SDK-owned allocation. Injected Android tracks remain explicit
+allocations. Camera stop during LiveKit reconnection reports not connected:
+the SDK can retain an unpublished track for republishing, so stop cannot safely
+release it until reconnection completes or the room disconnects. A reported
+partial native disposal failure prevents replacement rather than retrying an
+already partly disposed allocation. Retained camera failures do not prevent
+transport reconnection for audio or data. An explicit disconnect still reports
+cleanup failures after closing admission; a failed transport close is retained
+and is not silently treated as success. Android reclaims SDK-held capture only
+after actual custody evidence from that room, not merely its disconnected state
+or an absent publication. It does not wait for an event the SDK may never emit:
+an unentered room has no terminal obligation, and unknown entered-room capture
+remains quarantined until an actual receipt arrives. SDK-internal cleanup failures that LiveKit
+does not expose remain an SDK limitation; a capturer disposal callback is not
+proof that every private native source was released.</p>
+<p>Apple camera transitions use one ordered queue. Every stop cancels earlier
+queued starts and drains cleanup, including a stop admitted after an intervening
+start. Repeated stop when already idle performs no capture work; a later explicit
+start remains a new request. First-frame publication uses the same queue.
+Failed capture cleanup retains the exact track for a later stop or disconnect
+attempt, without preventing transport reconnect; input already admitted before
+or during stop cannot replace it. A terminal room disconnect also attempts
+that cleanup. Neither backend treats a removed publication as proof of completed
+capture release.</p>
+<p>These settings do not guarantee minimum streaming resolution, minimum FPS, or
+latency. Under insufficient bandwidth, delivery may stall or lose frames.
+Consumers must still handle changing frame dimensions. A receiver’s LiveKit
+quality request is also a preference, not a minimum-resolution guarantee.</p>
+</section>
 <section id="request-driven-image-capture">
-<span id="id1"></span><h2>Request-driven image capture<a class="headerlink" href="#request-driven-image-capture" title="Link to this heading">#</a></h2>
+<span id="id2"></span><h2>Request-driven image capture<a class="headerlink" href="#request-driven-image-capture" title="Link to this heading">#</a></h2>
 <p>Every StreamKit client can opt in to an image-capture handler. When an agent
 needs a picture for a participant whose video is not already streaming,
 DeviceIOHub sends a targeted <code class="docutils literal notranslate"><span class="pre">camera.capture.request</span></code>. The handler captures and
@@ -906,6 +1025,7 @@ interruption, and participant-routing contracts.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-matrix">Client matrix</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#camera-streaming-quality">Camera streaming quality</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-driven-image-capture">Request-driven image capture</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#client-to-agent-files">Client-to-agent files</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-connection-flow">Shared connection flow</a></li>
