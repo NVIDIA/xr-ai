@@ -112,7 +112,7 @@ request defaults:
 ```yaml
 adapter:
   preset: nemotron_embedding
-  model_name: nvidia/llama-nemotron-embed-1b-v2
+  model_name: nvidia/nemotron-3-embed-1b
   default_extras:
     input_type: passage
 ```
@@ -126,8 +126,14 @@ type labels. Send non-empty text after a label; a label alone does not supply
 embedding content. A mixed batch uses up to two sequential HTTP requests;
 the caller's `timeout` applies to each request, not an overall batch deadline.
 Local profiles omit `input_type`, preserving their original text payloads.
+The shipped SDK profile sends no `dimensions` field. The
+`nvidia/nemotron-3-embed-1b` NIM returns its native 2048-dimensional vectors;
+its API supports only 2048 dimensions. The tea and standalone RAG configurations
+use that native dimension, as described in NVIDIA's
+[Nemotron 3 Embed API documentation](https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-embed-1b).
 Refer to NVIDIA's
-[embedding API reference](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/reference.html).
+[embedding API reference](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/reference.html)
+and [NIM deployment instructions](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/getting-started.html).
 
 ### Readiness and voice behavior
 

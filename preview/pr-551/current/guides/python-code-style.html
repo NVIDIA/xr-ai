@@ -498,7 +498,7 @@ an interface as internal when any containing namespace is internal. The public
 API inventory and the contributing page’s statement that public references are
 generated from “each enrolled module’s literal <code class="docutils literal notranslate"><span class="pre">__all__</span></code>” define which modules
 are enrolled. The repository’s
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/b4137dd0995b02e871ac2153464812d7d628eb88/AGENTS.md#architecture-boundaries"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7fd0fdc39169d1b1a359ae33af742e698b647ee5/AGENTS.md#architecture-boundaries"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a>
 requires that LiveKit not appear in agent APIs and that workers use public SDK
 packages, and its change contract places public API documentation in
 <code class="docutils literal notranslate"><span class="pre">__all__</span></code> and co-located docstrings, and it keeps private imports inside their
@@ -760,7 +760,7 @@ Fowler’s <a class="reference external" href="https://martinfowler.com/bliki/Fl
 which prefers separate, explicit calls because they “communicate more clearly
 what my intention is”. The second-way rule restates the repository’s own
 <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/b4137dd0995b02e871ac2153464812d7d628eb88/AGENTS.md#change-contract">change contract</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7fd0fdc39169d1b1a359ae33af742e698b647ee5/AGENTS.md#change-contract">change contract</a>:
 “Do not add an abstraction until two concrete use cases need it.” The callback,
 <code class="docutils literal notranslate"><span class="pre">try_*</span></code>, idempotent <code class="docutils literal notranslate"><span class="pre">stop()</span></code>, and constructor-policy rules, and the preference
 for <code class="docutils literal notranslate"><span class="pre">Enum</span></code> or <code class="docutils literal notranslate"><span class="pre">Literal</span></code>, are <strong>repository conventions</strong>.</p>
@@ -771,7 +771,7 @@ for <code class="docutils literal notranslate"><span class="pre">Enum</span></co
 <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">isolation</span> <span class="pre">boundary:</span></code> and <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">ignored:</span></code> so policy sites are easy to find with
 a search.</p>
 <p><strong>Basis:</strong>
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/b4137dd0995b02e871ac2153464812d7d628eb88/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, Comments and documentation</a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7fd0fdc39169d1b1a359ae33af742e698b647ee5/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, Comments and documentation</a>
 limits comments to non-obvious invariants and failure modes. The tags are a
 <strong>repository convention</strong>.</p>
 </section>

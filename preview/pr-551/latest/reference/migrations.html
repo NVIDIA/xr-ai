@@ -447,6 +447,46 @@ below. Refer to <a class="reference internal" href="migration-history.html"><spa
 before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.</p>
+<section id="nemotron-3-embedding-model">
+<h3>Nemotron 3 embedding model<a class="headerlink" href="#nemotron-3-embedding-model" title="Link to this heading">#</a></h3>
+<p>The embedding server now defaults to <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>; the NIM
+consumer profile selects <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code>. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name <code class="docutils literal notranslate"><span class="pre">embed</span></code>.</p>
+<ol class="arabic">
+<li><p>Stop the agent and its persistent embedding server <strong>before updating</strong>.
+For the tea sample, run from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/tea-making-sample/model-servers<span class="w"> </span>tea_making_sample_model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>For a standalone deployment, stop the embedding process or container through
+the supervisor that started it. Check that its listener on port 8109 has
+stopped. Stopping only RAG or the embedding launcher does not stop persistent
+weights; the pip launcher reuses a healthy listener without comparing models.</p>
+</li>
+<li><p>Update the checkout and change <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">768</span></code> to <code class="docutils literal notranslate"><span class="pre">embedding_dim:</span> <span class="pre">2048</span></code>
+in copied tea <strong>and standalone</strong> <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> files. Restart the
+embedding server before RAG. Verify the <code class="docutils literal notranslate"><span class="pre">embed</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">root</span></code> in
+<code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> identifies Nemotron 3 Embed, not the previous model.</p></li>
+<li><p>Restart the agent. Changing the default dimension from 768 to 2048 changes
+the existing cache digest, so RAG rebuilds the index automatically. If a
+copied configuration already used 2048 dimensions, set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> or
+delete its generated cache before
+restarting RAG; a local served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights.
+If RAG started while the previous pip server was still listening, stop RAG,
+verify the new model is serving, and delete the generated cache
+(<code class="docutils literal notranslate"><span class="pre">models/tea-making-rag-cache</span></code> for tea, or the configured <code class="docutils literal notranslate"><span class="pre">.rag-cache</span></code> for
+standalone RAG) or set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> before restarting RAG. Otherwise,
+old-model vectors saved at 2048 dimensions remain reusable after the server
+switches models. The Docker launcher recreates its container on model changes.</p></li>
+</ol>
+<p>Old 768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.</p>
+<p>Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. For later model changes behind an unchanged profile, set
+an explicit model revision in <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models
+while RAG is running; its document vectors must match query embeddings.</p>
+</section>
 <section id="shared-accepted-query-display">
 <h3>Shared accepted-query display<a class="headerlink" href="#shared-accepted-query-display" title="Link to this heading">#</a></h3>
 <p>Every <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> now returns accepted query text to its originating participant
@@ -657,6 +697,7 @@ refer to <a class="reference internal" href="clef-flash.html"><span class="doc">
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changes-since-v0-3-0-beta">Changes since v0.3.0-beta</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-accepted-query-display">Shared accepted-query display</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>

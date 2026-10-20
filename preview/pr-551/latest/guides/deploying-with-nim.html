@@ -563,7 +563,7 @@ resolution. Refer to <a class="reference internal" href="../components/ai-servic
 request defaults:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nemotron_embedding</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/llama-nemotron-embed-1b-v2</span>
+<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/nemotron-3-embed-1b</span>
 <span class="w">  </span><span class="nt">default_extras</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">input_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">passage</span>
 </pre></div>
@@ -577,8 +577,14 @@ type labels. Send non-empty text after a label; a label alone does not supply
 embedding content. A mixed batch uses up to two sequential HTTP requests;
 the caller’s <code class="docutils literal notranslate"><span class="pre">timeout</span></code> applies to each request, not an overall batch deadline.
 Local profiles omit <code class="docutils literal notranslate"><span class="pre">input_type</span></code>, preserving their original text payloads.
+The shipped SDK profile sends no <code class="docutils literal notranslate"><span class="pre">dimensions</span></code> field. The
+<code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> NIM returns its native 2048-dimensional vectors;
+its API supports only 2048 dimensions. The tea and standalone RAG configurations
+use that native dimension, as described in NVIDIA’s
+<a class="reference external" href="https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-embed-1b">Nemotron 3 Embed API documentation</a>.
 Refer to NVIDIA’s
-<a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/1.13.0/reference.html">embedding API reference</a>.</p>
+<a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/reference.html">embedding API reference</a>
+and <a class="reference external" href="https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/getting-started.html">NIM deployment instructions</a>.</p>
 </section>
 <section id="readiness-and-voice-behavior">
 <h3>Readiness and voice behavior<a class="headerlink" href="#readiness-and-voice-behavior" title="Link to this heading">#</a></h3>

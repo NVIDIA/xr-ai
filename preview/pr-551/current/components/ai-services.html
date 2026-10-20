@@ -515,7 +515,7 @@ recorded video, and document retrieval.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
-<td><p>llama-nemotron-embed-1b-v2</p></td>
+<td><p>Nemotron-3-Embed-1B-BF16</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/ocr-server/</span></code></p></td>
@@ -593,6 +593,10 @@ The client sends one inline PNG or JPEG and returns text, confidence, and
 normalized polygons. Remote image URLs are intentionally unsupported.
 Word, sentence, and paragraph grouping are available; recognition results
 need not be identical across backends.</p>
+<p>The Hugging Face server clips finite bounding-box coordinates to the image’s
+normalized <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code> bounds while preserving recognized text and confidence.
+Non-finite model coordinates are an inference failure (HTTP 500), not valid
+detections. The SDK continues to reject malformed responses from any endpoint.</p>
 <p>The Hugging Face server accepts one image per request, at most 10 MiB encoded
 image bytes and 20 million pixels after full-resolution square padding:
 <code class="docutils literal notranslate"><span class="pre">max(width,</span> <span class="pre">height)²</span> <span class="pre">&lt;=</span> <span class="pre">20,000,000</span></code> (longest side at most 4,472 pixels).
@@ -615,9 +619,12 @@ command. Closing a client stops neither the local service nor an externally
 deployed NIM.</p>
 <p>To test transcription against a running endpoint, run from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">XR_AI_OCR_TEST_URL</span><span class="o">=</span>http://localhost:8112<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>pytest<span class="w"> </span>tests/test_ocr_server.py<span class="w"> </span>-m<span class="w"> </span>gpu
+<span class="w">  </span>pytest<span class="w"> </span>tests/test_ocr_server.py::test_live_ocr_equipment_text
 </pre></div>
 </div>
+<p>This opt-in HTTP test does not require a local GPU or Docker and never owns
+containers. It skips when <code class="docutils literal notranslate"><span class="pre">XR_AI_OCR_TEST_URL</span></code> is unset; do not mark it <code class="docutils literal notranslate"><span class="pre">gpu</span></code>
+or run it through container-management fixtures.</p>
 </section>
 <section id="speaker-conditioned-stt">
 <h2>Speaker-conditioned STT<a class="headerlink" href="#speaker-conditioned-stt" title="Link to this heading">#</a></h2>
@@ -1246,10 +1253,16 @@ and <code class="docutils literal notranslate"><span class="pre">stream</span></
 16-bit interleaved samples. Streaming with another response format returns
 HTTP 400.</p>
 </li>
-<li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/llama-nemotron-embed-1b-v2</span></code> through
-<code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code>. It emits 2048-dimensional Matryoshka embeddings and can
-truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
-configuration reserves 20% of a GPU and uses Docker.</p></li>
+<li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code> through
+<code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code> under the served name <code class="docutils literal notranslate"><span class="pre">embed</span></code>. It emits 2048-dimensional
+vectors. Retrieval inputs use <code class="docutils literal notranslate"><span class="pre">query:</span> </code> for queries and <code class="docutils literal notranslate"><span class="pre">passage:</span> </code> for
+documents, as specified in the
+<a class="reference external" href="https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16">model card</a>.
+The standalone configuration reserves 20% of a GPU and uses Docker;
+the tea sample applies its own memory budget and indexes all 2048 dimensions.
+Its Spark profile selects Triton attention for GB10 compatibility; other
+profiles leave attention-backend selection to vLLM. Refer to
+<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for the model upgrade steps.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
