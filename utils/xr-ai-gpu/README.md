@@ -7,5 +7,5 @@
 
 Standard-library GPU inspection shared by launcher profile detection and CloudXR PCI lookup.
 
-See [process and utility ownership](../../docs/source/components/launcher-and-process-model.md)
+Refer to [process and utility ownership](https://nvidia.github.io/xr-ai/latest/components/launcher-and-process-model.html)
 for the public API documentation entry point.
