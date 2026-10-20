@@ -75,10 +75,6 @@ def query_gpu_processes(*, timeout: float | None = None) -> dict[str, list[GPUPr
 
     Raises:
         GPUInventoryError: The command fails, times out, or contains malformed fields.
-
-        TypeError: timeout is not a float, integer, or None, or is a boolean.
-
-        ValueError: timeout is not positive and finite.
     """
     raw = _query("compute-apps", "gpu_uuid,pid,process_name,used_gpu_memory", timeout=timeout)
 
@@ -118,10 +114,6 @@ def query_gpu_inventory(*, timeout: float | None = None) -> tuple[GPUDevice, ...
     Raises:
         GPUInventoryError: The query fails, times out, returns no devices,
             or contains malformed fields.
-
-        TypeError: timeout is not a float, integer, or None, or is a boolean.
-
-        ValueError: timeout is not positive and finite.
     """
     raw = _query(
         "gpu", "index,uuid,pci.bus_id,name,compute_cap,memory.total,memory.free,memory.used",
@@ -168,10 +160,6 @@ def query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]:
 
     Raises:
         GPUInventoryError: The command cannot run, fails, or times out.
-
-        TypeError: timeout is not a float, integer, or None, or is a boolean.
-
-        ValueError: timeout is not positive and finite.
     """
     raw = _query("gpu", "index,pci.bus_id", timeout=timeout)
     result: dict[int, str] = {}
