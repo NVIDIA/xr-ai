@@ -218,12 +218,22 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 
 ### Utilities
 
-#### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
+#### `xr-ai-gpu` — [`utils/xr-ai-gpu/`](utils/xr-ai-gpu/)
 
 - Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
 - Runtime dependencies: none
+- Optional dependency groups: none
+- Commands: none
+
+#### `xr-ai-launcher` — [`utils/xr-ai-launcher/`](utils/xr-ai-launcher/)
+
+- Python: `>=3.11,<3.15`
+- Build dependencies:
+  - `hatchling`
+- Runtime dependencies:
+  - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
@@ -316,6 +326,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `isaacteleop[cloudxr]>=1.3.131`
   - `pyyaml`
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
 - Optional dependency groups: none
 - Commands:
@@ -882,6 +893,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
+  - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
   - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
   - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
@@ -1020,7 +1032,8 @@ Keep non-obvious fan-out in the same change:
 
 ## Dependency rules (enforced)
 
-- `utils/xr-ai-launcher/` has zero runtime dependencies and remains stdlib-only.
+- `utils/xr-ai-gpu/` has zero runtime dependencies and uses only the standard library.
+- `utils/xr-ai-launcher/` depends only on `xr-ai-gpu`; neither pulls in service dependencies.
 - `utils/xr-ai-logging/` depends only on `loguru`.
 - `utils/xr-ai-vllm/` has zero runtime dependencies. Adding dependencies would
   defeat docker mode by pulling vLLM-side packages into the wrapper environment.

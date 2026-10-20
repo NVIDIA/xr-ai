@@ -4,8 +4,8 @@
 """
 xr-ai-launcher — process management for the xr-ai stack.
 
-Intentionally stdlib-only so it can be added to any sample without pulling
-in the dependency chain of the processes it manages.
+Uses the standard library and the lightweight xr-ai-gpu utility so samples
+do not pull in the dependency chain of the processes they manage.
 
 Typical usage::
 
@@ -26,6 +26,8 @@ Typical usage::
         run_stack(PROCESSES, _BASE)
 """
 
+from xr_ai_gpu import GPUInventoryError
+
 from ._cloudxr_env import (
     NATIVE_DEVICE_PROFILES,
     XR_RUNTIME_VAR,
@@ -40,7 +42,7 @@ from ._credentials import (
     require_credentials,
     warn_if_missing,
 )
-from ._gpu import GPUInventoryError, detect_gpu_config
+from ._gpu import detect_gpu_config
 from ._models import ModelDeployment, load_deployment_profile, load_model_deployment
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
