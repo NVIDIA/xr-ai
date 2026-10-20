@@ -1256,7 +1256,8 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
 
 
 @pytest.mark.parametrize("timer", [False, True])
-def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer):
+@pytest.mark.parametrize("failed_probe", [None, "say", "observe"])
+def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe):
     monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
 
     import io
@@ -1276,6 +1277,12 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
                                if item.get("text") != "How much time remains?"]
         next_action = next(item for item in manifest["actions"] if item.get("text") == "Next")
         next_action["expect"] = "Indicator check finished"
+    if failed_probe == "say":
+        first_status = next(item for item in manifest["actions"] if item.get("text") == "What is my status?")
+        first_status["expect"] = "unexpected answer"
+    elif failed_probe == "observe":
+        observation = next(item for item in manifest["actions"] if item["action"] == "observe")
+        observation["answers"] = ["YES"]
     manifest["guides_dir"] = "."
     (tmp_path / "indicator.guide.yaml").write_text(yaml.safe_dump(guide))
     manifest_path = tmp_path / "scenario.yaml"
@@ -1311,9 +1318,15 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     monkeypatch.setattr(sys, "argv", ["guide.py", "--manifest", str(manifest_path), "--output", str(output)])
     with pytest.raises(SystemExit) as result:
         runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
-    assert result.value.code == 0
+    assert result.value.code == (0 if failed_probe is None else 1)
     report = json.loads((output / "result.json").read_text())
-    assert report["passed"] and report["checks_passed"] == len(manifest["actions"])
+    assert report["passed"] is (failed_probe is None)
+    assert report["checks_passed"] == len(manifest["actions"]) - (failed_probe is not None)
+    assert report["checks_not_scored"] == 0
+    events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
+    checks = [event for event in events if event["kind"] == "check"]
+    assert len(checks) == len(manifest["actions"])
+    assert checks[-1]["passed"]  # A mismatch must not hide later independent probes.
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
     assert vlm.ask_images.await_count >= 4

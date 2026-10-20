@@ -17,7 +17,9 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import re
+import sys
 import tempfile
 import time
 from dataclasses import replace
@@ -43,6 +45,23 @@ from xr_ai_voice import VOICE_OUTPUT_TOPIC, UserQuery, VoiceAggregationAgent, Vo
 
 _SAMPLE = Path(__file__).resolve().parents[1]
 _PID = "guide-eval"
+
+
+def _runtime_hashes(models_config: Path) -> dict[str, str]:
+    """Identify sample sources and loaded SDK code without scanning environments."""
+    paths = {models_config.resolve(), _SAMPLE / "yaml/worker.yaml",
+             _SAMPLE / "yaml/guide-agent-config.yaml", Path(__file__).resolve(),
+             Path(__file__).with_name("_recorded_camera.py").resolve()}
+    package = _SAMPLE / "worker/procedure_capture_guide_worker"
+    for pattern in ("*.py", "*.txt"):
+        paths.update(package.rglob(pattern))
+    sdk_packages = {"xr_ai_runtime", "xr_ai_hub", "xr_ai_models", "xr_ai_tools", "xr_ai_voice"}
+    for name, module in tuple(sys.modules.items()):
+        source = getattr(module, "__file__", None)
+        if name.split(".", 1)[0] in sdk_packages and source and Path(source).suffix == ".py":
+            paths.add(Path(source).resolve())
+    return {os.path.relpath(path, _SAMPLE): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(paths)}
 
 
 class Camera:
@@ -244,14 +263,6 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
 
     subscription = f"guide-eval-{time.time_ns()}"
     nemo_relay.subscribers.register(subscription, relay_event)
-    identities = [settings.models_config, _SAMPLE / "yaml/worker.yaml",
-                  _SAMPLE / "yaml/guide-agent-config.yaml"]
-    identities.extend((_SAMPLE / "worker").rglob("*.py"))
-    identities.extend((_SAMPLE / "worker").rglob("*.txt"))
-    (output / "runtime.json").write_text(json.dumps({
-        str(path.relative_to(_SAMPLE)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in identities
-    }, indent=2))
     try:
         async with runtime:
             await runtime.publish(PARTICIPANT_JOINED_TOPIC, VoiceParticipantJoined(), participant_id=_PID)
@@ -304,7 +315,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                                           step.is_complete(snapshot.context["state"]))
                 passed &= action_passed
                 log("check", index=index, action=kind, passed=action_passed)
-                if not action_passed:
+                if packet and not action_passed:
                     # Later turns depend on this state; do not score an imagined successful history.
                     break
             if packet:
@@ -325,6 +336,8 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
         await llm.close()
         await vlm.close()
         images.clear()
+        # Include SDK modules loaded lazily by model adapters and tools during execution.
+        (output / "runtime.json").write_text(json.dumps(_runtime_hashes(settings.models_config), indent=2))
         if hashlib.sha256(guide.path.read_bytes()).hexdigest() != guide.sha256:
             passed = False
             log("error", error="guide changed during evaluation; the saved snapshot was evaluated, not the new file")

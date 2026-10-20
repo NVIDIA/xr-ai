@@ -264,7 +264,7 @@ models and tools, then returns findings for revision. Both skills, their
 references, the validator and packet-playback support belong to this generation
 workflow. No separate sample regression suite is needed.
 
-The authoring model, such as GPT Luna, observes runtime results and edits the
+The authoring model observes runtime results and edits the
 guide. It does not replace the runtime VLM, invent tool answers, compile a plan
 into YAML, or approve the result. The capture worker does not invoke the skills.
 
@@ -363,9 +363,9 @@ guides, and the complete packet-runner invocation:
 uv run --project tests python -m pytest tests/test_sop_guide_generation.py tests/test_sop_recorded_replay.py -q
 ```
 
-Deterministic model doubles test runtime integration, not Cosmos or Luna
-accuracy. Keep guide-specific refinement results distinct from sample-level
-end-to-end regression results.
+Deterministic model doubles test runtime integration, not runtime-model
+perception or authoring-model guide quality. Keep guide-specific refinement
+results distinct from sample-level end-to-end regression results.
 
 ## Follow an approved guide
 
@@ -506,6 +506,13 @@ tools. It uses the sample's configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.
+
+Both manifest and packet modes use the production frame freshness and request
+timeouts from `yaml/worker.yaml`, and the visual verification timeout from
+`yaml/guide-agent-config.yaml` (15 seconds by default).
+Manifest mode continues scoring later probes after an answer or tool-call
+mismatch; a runtime exception or timeout still ends the run. Packet mode stops
+after a failed check because later steps depend on that progress.
 
 The checked-in `eval/guide_cases.yaml` and `eval/fixtures/indicator.guide.yaml`
 provide a synthetic visual-and-timer scenario. `eval/guide_routing.yaml`

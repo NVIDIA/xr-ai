@@ -3,8 +3,9 @@
 
 """Exercise recorded packet evaluation through the production guide runtime.
 
-Only model responses are deterministic doubles. Camera selection, evidence
-deduplication, conversation tools, timers and delivery run their normal code.
+Model responses are deterministic doubles. Camera selection, evidence
+deduplication, conversation tools, timers and delivery run their normal code;
+fault-injection tests also check that reported progress agrees with speech.
 These regressions test the harness contract, not local-model perception.
 """
 
@@ -13,6 +14,7 @@ import io
 import json
 import runpy
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -69,27 +71,10 @@ def test_invalid_packet_evidence_is_rejected(packets, tmp_path, case):
         packets.capture_frames(packet)
 
 
-@pytest.mark.parametrize("color,count,automatic,expected", [
-    ("blue", 16, True, True),
-    ("blue", 16, False, True),
-    ("red", 16, True, False),
-    ("blue", 1, True, False),
-])
-def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
-    packets, tmp_path, monkeypatch, color, count, automatic, expected,
-):
+@pytest.fixture
+def runtime_models(monkeypatch):
     import xr_ai_models
     from xr_ai_models import ChatResponse, ToolCall
-
-    packet = make_packet(tmp_path, count, color)
-    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
-    guide["task"]["status"] = "draft"
-    guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
-    guide["steps"][1]["finish_on_complete"] = automatic
-    path = tmp_path / "draft.guide.yaml"
-    path.write_text(yaml.safe_dump(guide))
-    original = path.read_bytes()
-    original_packet = packet.read_bytes()
 
     async def chat(messages, **kwargs):
         if messages[-1].role == "tool":
@@ -112,9 +97,31 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     vlm = Mock(ask_images=AsyncMock(side_effect=vision), close=AsyncMock())
     monkeypatch.setattr(xr_ai_models, "make_llm", lambda *_: llm)
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *_: vlm)
+    return llm, vlm
+
+
+@pytest.mark.parametrize("color,count,automatic,expected", [
+    ("blue", 16, True, True),
+    ("blue", 16, False, True),
+    ("red", 16, True, False),
+    ("blue", 1, True, False),
+])
+def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
+    packets, runtime_models, tmp_path, monkeypatch, color, count, automatic, expected,
+):
+    llm, vlm = runtime_models
+    packet = make_packet(tmp_path, count, color)
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide["task"]["status"] = "draft"
+    guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
+    guide["steps"][1]["finish_on_complete"] = automatic
+    path = tmp_path / "draft.guide.yaml"
+    path.write_text(yaml.safe_dump(guide))
+    original = path.read_bytes()
+    original_packet = packet.read_bytes()
     output = tmp_path / "result"
     monkeypatch.setattr(sys, "argv", ["guide.py", "--packet", str(packet), "--guide", str(path),
-                                    "--output", str(output), "--tail-s", "2"])
+                                    "--output", str(output), "--tail-s", "15" if expected else "2"])
     with pytest.raises(SystemExit) as exit_status:
         runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
     assert exit_status.value.code == (0 if expected else 1)
@@ -145,6 +152,91 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     assert (output / "relay.jsonl").is_file()
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize("fault", ["step_completion", "automatic_completion", "final_inactive"])
+def test_packet_cli_rejects_announcements_that_disagree_with_progress(
+    packets, runtime_models, tmp_path, monkeypatch, fault,
+):
+    from procedure_capture_guide_worker.guide.guiding import _Guide
+
+    packet = make_packet(tmp_path)
+    guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
+    guide["task"]["status"] = "draft"
+    guide["steps"] = guide["steps"][:1]
+    guide["steps"][0]["next"] = None
+    guide["steps"][0]["finish_on_complete"] = fault == "automatic_completion"
+    path = tmp_path / "draft.guide.yaml"
+    path.write_text(yaml.safe_dump(guide))
+    guidance = _Guide.guidance
+    was_active = False
+    injected = 0
+
+    async def inconsistent_progress(self, participant_id):
+        nonlocal was_active, injected
+        snapshot = await guidance(self, participant_id)
+        context = snapshot.context
+        was_active |= context["active"]
+        # Leave execution and speech intact; simulate a contradictory progress report.
+        if fault == "step_completion" and context["state"].get("visible"):
+            context = {**context, "state": {**context["state"], "visible": False}}
+        elif was_active and not context["active"] and (
+            fault == "final_inactive" or (fault == "automatic_completion" and injected == 0)
+        ):
+            context = {**context, "active": True}
+        else:
+            return snapshot
+        injected += 1
+        return replace(snapshot, context=context)
+
+    monkeypatch.setattr(_Guide, "guidance", inconsistent_progress)
+    output = tmp_path / "result"
+    monkeypatch.setattr(sys, "argv", ["guide.py", "--packet", str(packet), "--guide", str(path),
+                                    "--output", str(output), "--tail-s", "15"])
+    with pytest.raises(SystemExit) as exit_status:
+        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
+    assert exit_status.value.code == 1
+    assert injected > 0
+    result = json.loads((output / "result.json").read_text())
+    assert result["passed"] is False
+    events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
+    assert not any(event["kind"] == "error" for event in events), "Must fail on progress, not a timeout"
+    checks = [event for event in events if event["kind"] == "check"]
+    if fault == "final_inactive":
+        assert all(event["passed"] for event in checks)
+        assert result["checks_not_scored"] == 0
+    else:
+        assert checks[-1]["action"] == "wait_speech" and not checks[-1]["passed"]
+        assert [event["text"] for event in events if event["kind"] == "user"] == ["Start guide"]
+    completion = (guide["task"]["complete_message"] if fault != "step_completion"
+                  else guide["steps"][0]["messages"]["complete"])
+    assert any(event["kind"] == "speech" and completion in event["text"] for event in events)
+
+
+def test_runtime_provenance_excludes_environment_and_tracks_loaded_sdk(packets, tmp_path, monkeypatch):
+    runtime_hashes = runpy.run_path(str(_SAMPLE / "eval/guide.py"))["_runtime_hashes"]
+    sample = tmp_path / "sample"
+    sources = ["yaml/models.json", "yaml/worker.yaml", "yaml/guide-agent-config.yaml",
+               "worker/procedure_capture_guide_worker/guide/agent.py",
+               "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"]
+    excluded = ["worker/.venv/lib/dependency.py", "worker/.venv/lib/prompt.txt",
+                "worker/unrelated.py", "worker/sibling_package/other.py"]
+    for relative in sources + excluded:
+        path = sample / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative)
+    sdk = tmp_path / "sdk.py"
+    sdk.write_text("before")
+    monkeypatch.setitem(sys.modules, "xr_ai_tools.provenance_test", SimpleNamespace(__file__=str(sdk)))
+    monkeypatch.setitem(runtime_hashes.__globals__, "_SAMPLE", sample)
+    before = runtime_hashes(sample / "yaml/models.json")
+    assert set(sources) <= before.keys()
+    assert not set(excluded) & before.keys()
+    assert "../sdk.py" in before
+    sdk.write_text("after")
+    after = runtime_hashes(sample / "yaml/models.json")
+    assert before["../sdk.py"] != after["../sdk.py"]
+    assert all(before[path] == after[path] for path in sources)
 
 
 def test_generation_cases_have_separate_inputs_and_review_criteria():

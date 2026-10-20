@@ -28,8 +28,10 @@ Each saved frame is supplied once, in original chronological intervals at 1x.
 The current-frame tool selects only frames available at that time. It does not
 hold a frame until it passes or refresh the final frame. The deadline is the
 recording duration plus five real seconds (`--tail-s` changes this).
-A longer timer needs an explicit sufficiently long tail; recorded timestamps
-never initialize the runtime timer.
+The timer starts when "Next" enters its wait step, not when playback starts.
+Budget `--tail-s` for the full `duration_s` plus preceding-step verification
+and transition latency. For multiple waits, allow for their combined durations
+and transitions. Recorded timestamps never initialize the runtime timer.
 
 The simulated user says "Start guide", waits for completion, then says "Next"
 when required, through the configured conversation model. Terminal
@@ -43,7 +45,9 @@ Narration is authoring evidence, not injected as simulated user commands.
 - `guide.yaml`: exact evaluated YAML, including its original draft status.
 - `manifest.json`: source packet hash, source-frame IDs, paths, timestamps and
   hashes, simulated utterances and completion expectations.
-- `runtime.json`: hashes of runtime source, prompts and configuration.
+- `runtime.json`: hashes of the sample worker package, prompts, configuration,
+  evaluator sources, and loaded XR-AI SDK modules, with paths relative to the
+  sample. It does not scan the worker's virtual environment or unrelated dependencies.
 - `events.jsonl`: published and selected frames, VLM questions and responses,
   model tool requests, speech, guidance state snapshots, checks and failures.
 - `relay.jsonl`: SDK tool and model telemetry, with media sanitized by the SDK.
