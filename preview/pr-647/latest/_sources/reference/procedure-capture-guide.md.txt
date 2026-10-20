@@ -306,8 +306,9 @@ tea sample's workflow YAML:
   blend names such as **Chamomile Lemon**, regardless of brand. The brand does
   not need to be visible. The brewing settings are fixed in the guide; the
   brewing reference is not retrieved at runtime.
-- Its three visual steps require two distinct fresh frames. The first reads
-  the tea name and matches the word `CHAMOMILE`; the second reads a current
+- Its three visual steps require two distinct fresh frames. Identification
+  accepts only `YES` (case-insensitive) to visible `CHAMOMILE` text, not `NO`,
+  `UNKNOWN`, or explanatory prose; the second step reads a current
   `LABEL | NUMBER UNIT` reading and accepts `CURRENT`, `ACTUAL`, or `THERMOMETER`
   with `100 C` or `212 F`. It preserves `TARGET` and `SET` labels in the visual
   result so those readings cannot satisfy completion. Unlabeled displays are
@@ -315,11 +316,9 @@ tea sample's workflow YAML:
   equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
   not different temperatures. Immersion requires `YES` for
   visible bag contact with visible water, including a floating bag.
-  For identification, exact `UNKNOWN` responses and missing frames do not
-  satisfy the evidence requirement. Any single-line response containing the
-  whole word `CHAMOMILE` can match, regardless of letter case, so recognizing
-  only printed words depends on the VLM following its prompt. For temperature
-  and immersion, responses outside the accepted formats above do not match.
+  Missing frames and responses outside each step's accepted format cannot
+  satisfy its evidence requirement. A well-formed answer can still be a
+  visual misclassification; the response contract does not prove visual accuracy.
   These bounded evidence commits do not use an observation LLM; the foreground
   LLM still handles questions and controls.
 - The heating check verifies a displayed current temperature at the brewing
@@ -357,6 +356,12 @@ requests, and visual questions.
 Both run with the full permitted tool set; the evaluator does not preselect
 tools based on the utterance.
 
+`eval/tea_identification.yaml` tests the included tea guide with generated label
+cards: chamomile alone, longer chamomile names, other teas, and an unreadable
+label. It checks real VLM responses, rejection of premature advancement, and
+identification announcements. These cards test the response contract, not
+photographic accuracy.
+
 A YAML or JSON manifest selects `guides_dir` (relative to the manifest) and
 `guide` (name or ID), and lists ordered `actions`:
 
@@ -382,6 +387,8 @@ uv run --project worker python eval/guide.py \
   --output artifacts/guide-eval
 uv run --project worker python eval/guide.py \
   --manifest eval/guide_routing.yaml --output artifacts/guide-routing-eval
+uv run --project worker python eval/guide.py \
+  --manifest eval/tea_identification.yaml --output artifacts/tea-identification-eval
 ```
 
 Use a new output directory for each run. Supply `--manifest /path/to/scenario.yaml`

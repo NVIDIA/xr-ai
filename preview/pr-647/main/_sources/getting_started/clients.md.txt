@@ -28,6 +28,118 @@ imports a LiveKit SDK. Connection, microphone, camera, participant status, data,
 network metrics, request-driven image capture, and file transfer remain separate
 operations.
 
+(camera-streaming-quality)=
+## Camera streaming quality
+
+Pass an optional `CameraEncodingConfig` through `CameraConfig.encoding` when
+starting video. The settings belong to the local publishing client. No hub
+configuration or client-server policy exchange is involved. LiveKit mapping
+stays inside the backend; other backends apply the settings they support.
+
+| Preset | Adaptation preference | Multiple-resolution publication |
+|---|---|---|
+| Detail | Favor resolution; reduce FPS under pressure | Disabled |
+| Motion | Favor FPS; reduce resolution under pressure | Backend default |
+| Balanced | Allow both resolution and FPS to change | Backend default |
+
+All three presets start with ceilings of 3 Mbps per encoded stream and 30 FPS.
+These are configurable policy defaults, not values derived from a survey of
+glasses or device measurements. They match LiveKit's 16:9 1080p preset reference;
+the adaptation preference distinguishes the three presets, not a measured
+quality or bandwidth guarantee for a particular device.
+Override the FPS ceiling for workloads that need fewer, more detailed frames.
+Bitrate is an encoder ceiling, not a total bandwidth cap: simulcast, protocol
+overhead, and other media can add traffic. Actual FPS and bitrate may be lower.
+Omitting `encoding` preserves backend defaults. C++ also retains its existing
+zero-as-unset numeric fields; its named presets supply the explicit ceilings.
+The C++ LiveKit SDK exposes the primary encoding limit but not lower simulcast
+layer controls. With simulcast enabled, that SDK still chooses lower-layer
+budgets; StreamKit cannot enforce their ordering relative to a custom primary
+limit. No C++ runtime behavior is changed to hide this limitation. Explicitly
+disabling simulcast avoids that unsupported combination.
+
+```javascript
+const encoding = new CameraEncodingConfig({
+  ...CameraEncodingConfig.detail,
+  maxFramerate: 10,
+  maxBitrateBps: 3_000_000,
+});
+await session.startCamera(new CameraConfig({ encoding }));
+```
+
+```swift
+var encoding = CameraEncodingConfig.detail
+encoding.maxFramerate = 10
+try await session.startCamera(config: CameraConfig(encoding: encoding))
+```
+
+```kotlin
+val encoding = CameraEncodingConfig.DETAIL.copy(maxFramerate = 10)
+session.startCamera(CameraConfig(encoding = encoding))
+```
+
+```cpp
+streamkit::CameraConfig camera;
+camera.encoding = streamkit::CameraEncodingConfig::Detail();
+camera.encoding->max_framerate = 10;
+session.StartCamera(camera);
+```
+
+The preference and `simulcast` switch can also be configured independently.
+On web, Android, and Apple clients, publishing with an explicit bitrate limit
+keeps configured lower-layer budgets at or below the primary budget. If the
+largest SDK lower-layer budget exceeds the requested primary budget, all lower
+budgets are reduced by the same SDK-derived proportion. This preserves their
+relative ordering, dimensions, and frame-rate settings without inventing a new
+layer profile. Lower budgets remain unchanged when no reduction is needed;
+when reduction is needed, even an already smaller lower-layer budget can decrease.
+An encoding profile that cannot preserve positive integer budgets and distinct
+budget ordering is rejected during publication rather than silently rounded into
+a different profile. This is not an aggregate bandwidth or power-management policy.
+Favoring detail alone changes encoder adaptation; the Detail preset additionally
+disables lower simulcast layers. Capture format remains selected by the platform
+or external frame producer, preserving the camera's aspect ratio.
+
+For externally supplied Apple or Android frames, pass the same encoding policy
+as the optional `encoding` argument to `session.injectVideoFrame` on the first
+frame that publishes the track. Later frames keep the active policy. C++ takes
+the policy through `StartCamera` before the first `FrameSink` frame. Stop the
+camera and start a new publication to change settings. Custom backends using
+the original frame-injection method retain their existing behavior and ignore
+the optional encoding policy until they implement it.
+
+Android device cameras use LiveKit's cached camera track; StreamKit does not
+dispose that SDK-owned allocation. Injected Android tracks remain explicit
+allocations. Camera stop during LiveKit reconnection reports not connected:
+the SDK can retain an unpublished track for republishing, so stop cannot safely
+release it until reconnection completes or the room disconnects. A reported
+partial native disposal failure prevents replacement rather than retrying an
+already partly disposed allocation. Retained camera failures do not prevent
+transport reconnection for audio or data. An explicit disconnect still reports
+cleanup failures after closing admission; a failed transport close is retained
+and is not silently treated as success. Android reclaims SDK-held capture only
+after actual custody evidence from that room, not merely its disconnected state
+or an absent publication. It does not wait for an event the SDK may never emit:
+an unentered room has no terminal obligation, and unknown entered-room capture
+remains quarantined until an actual receipt arrives. SDK-internal cleanup failures that LiveKit
+does not expose remain an SDK limitation; a capturer disposal callback is not
+proof that every private native source was released.
+
+Apple camera transitions use one ordered queue. Every stop cancels earlier
+queued starts and drains cleanup, including a stop admitted after an intervening
+start. Repeated stop when already idle performs no capture work; a later explicit
+start remains a new request. First-frame publication uses the same queue.
+Failed capture cleanup retains the exact track for a later stop or disconnect
+attempt, without preventing transport reconnect; input already admitted before
+or during stop cannot replace it. A terminal room disconnect also attempts
+that cleanup. Neither backend treats a removed publication as proof of completed
+capture release.
+
+These settings do not guarantee minimum streaming resolution, minimum FPS, or
+latency. Under insufficient bandwidth, delivery may stall or lose frames.
+Consumers must still handle changing frame dimensions. A receiver's LiveKit
+quality request is also a preference, not a minimum-resolution guarantee.
+
 (request-driven-image-capture)=
 ## Request-driven image capture
 

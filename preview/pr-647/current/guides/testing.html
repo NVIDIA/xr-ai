@@ -436,6 +436,18 @@
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.</p>
+<p>The browser camera tests also import presets from the LiveKit version in the
+existing web dependency lock. A fresh checkout must install that artifact
+before running the suite. From the repository root, use the same setup as CI:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">camera_sdk_dir</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>mktemp<span class="w"> </span>-d<span class="k">)</span><span class="s2">"</span>
+<span class="nv">camera_sdk_version</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>node<span class="w"> </span>-p<span class="w"> </span><span class="s2">"require('./dependency-manifest/web-xr-build/package-lock.json').packages['node_modules/livekit-client'].version"</span><span class="k">)</span><span class="s2">"</span>
+npm<span class="w"> </span>install<span class="w"> </span>--prefix<span class="w"> </span><span class="s2">"</span><span class="nv">$camera_sdk_dir</span><span class="s2">"</span><span class="w"> </span>--ignore-scripts<span class="w"> </span>--no-package-lock<span class="w"> </span>--no-save<span class="w"> </span><span class="s2">"livekit-client@</span><span class="si">${</span><span class="nv">camera_sdk_version</span><span class="si">}</span><span class="s2">"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">STREAMKIT_LIVEKIT_SDK_MODULE</span><span class="o">=</span><span class="s2">"file://</span><span class="si">${</span><span class="nv">camera_sdk_dir</span><span class="si">}</span><span class="s2">/node_modules/livekit-client/dist/livekit-client.esm.mjs"</span>
+</pre></div>
+</div>
+<p>An existing <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/node_modules</span></code> installation can also
+supply the SDK when the environment override is unset. No LiveKit server or
+camera device is needed for these tests.</p>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
 <p>From the repository root:</p>

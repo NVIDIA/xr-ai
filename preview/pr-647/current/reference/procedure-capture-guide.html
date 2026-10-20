@@ -732,7 +732,7 @@ five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
 <p>Use a tea packet or box labeled <strong>chamomile</strong>, a stable heat-safe vessel,
 and a kettle or thermometer with a readable <strong>current</strong> water-temperature
 display. The example uses the chamomile settings in the tea sample’s
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/4926a0e191546211fd03099a2e694430c9f0a7a6/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/b8d4518615577b79897feca78eb30ed5399cdf58/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
 100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
 a displayed 100°C (212°F) current reading. If the packet requires a different
 recipe or local boiling temperature cannot reach that target, stop and adapt a
@@ -745,8 +745,9 @@ tea sample’s workflow YAML:</p>
 blend names such as <strong>Chamomile Lemon</strong>, regardless of brand. The brand does
 not need to be visible. The brewing settings are fixed in the guide; the
 brewing reference is not retrieved at runtime.</p></li>
-<li><p>Its three visual steps require two distinct fresh frames. The first reads
-the tea name and matches the word <code class="docutils literal notranslate"><span class="pre">CHAMOMILE</span></code>; the second reads a current
+<li><p>Its three visual steps require two distinct fresh frames. Identification
+accepts only <code class="docutils literal notranslate"><span class="pre">YES</span></code> (case-insensitive) to visible <code class="docutils literal notranslate"><span class="pre">CHAMOMILE</span></code> text, not <code class="docutils literal notranslate"><span class="pre">NO</span></code>,
+<code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code>, or explanatory prose; the second step reads a current
 <code class="docutils literal notranslate"><span class="pre">LABEL</span> <span class="pre">|</span> <span class="pre">NUMBER</span> <span class="pre">UNIT</span></code> reading and accepts <code class="docutils literal notranslate"><span class="pre">CURRENT</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTUAL</span></code>, or <code class="docutils literal notranslate"><span class="pre">THERMOMETER</span></code>
 with <code class="docutils literal notranslate"><span class="pre">100</span> <span class="pre">C</span></code> or <code class="docutils literal notranslate"><span class="pre">212</span> <span class="pre">F</span></code>. It preserves <code class="docutils literal notranslate"><span class="pre">TARGET</span></code> and <code class="docutils literal notranslate"><span class="pre">SET</span></code> labels in the visual
 result so those readings cannot satisfy completion. Unlabeled displays are
@@ -754,11 +755,9 @@ unavailable rather than assumed to show current temperature. Matching tolerates
 equivalent letter case, spacing, degree symbols, and trailing decimal zeros,
 not different temperatures. Immersion requires <code class="docutils literal notranslate"><span class="pre">YES</span></code> for
 visible bag contact with visible water, including a floating bag.
-For identification, exact <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> responses and missing frames do not
-satisfy the evidence requirement. Any single-line response containing the
-whole word <code class="docutils literal notranslate"><span class="pre">CHAMOMILE</span></code> can match, regardless of letter case, so recognizing
-only printed words depends on the VLM following its prompt. For temperature
-and immersion, responses outside the accepted formats above do not match.
+Missing frames and responses outside each step’s accepted format cannot
+satisfy its evidence requirement. A well-formed answer can still be a
+visual misclassification; the response contract does not prove visual accuracy.
 These bounded evidence commits do not use an observation LLM; the foreground
 LLM still handles questions and controls.</p></li>
 <li><p>The heating check verifies a displayed current temperature at the brewing
@@ -793,6 +792,11 @@ quoted commands, negation, requests to explain guide content, unsupported captur
 requests, and visual questions.
 Both run with the full permitted tool set; the evaluator does not preselect
 tools based on the utterance.</p>
+<p><code class="docutils literal notranslate"><span class="pre">eval/tea_identification.yaml</span></code> tests the included tea guide with generated label
+cards: chamomile alone, longer chamomile names, other teas, and an unreadable
+label. It checks real VLM responses, rejection of premature advancement, and
+identification announcements. These cards test the response contract, not
+photographic accuracy.</p>
 <p>A YAML or JSON manifest selects <code class="docutils literal notranslate"><span class="pre">guides_dir</span></code> (relative to the manifest) and
 <code class="docutils literal notranslate"><span class="pre">guide</span></code> (name or ID), and lists ordered <code class="docutils literal notranslate"><span class="pre">actions</span></code>:</p>
 <ul class="simple">
@@ -815,6 +819,8 @@ ones and explicitly test early advance, completion, stop, and restart as needed.
 <span class="w">  </span>--output<span class="w"> </span>artifacts/guide-eval
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--manifest<span class="w"> </span>eval/guide_routing.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/guide-routing-eval
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/guide.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--manifest<span class="w"> </span>eval/tea_identification.yaml<span class="w"> </span>--output<span class="w"> </span>artifacts/tea-identification-eval
 </pre></div>
 </div>
 <p>Use a new output directory for each run. Supply <code class="docutils literal notranslate"><span class="pre">--manifest</span> <span class="pre">/path/to/scenario.yaml</span></code>
