@@ -36,6 +36,7 @@ from isaacteleop.cloudxr.runtime import (
 )
 from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
+from xr_ai_gpu import GPUInventoryError, query_gpu_pci_bus_ids
 from xr_ai_launcher import is_native_profile, read_device_profile
 from xr_ai_logging import setup_logging
 
@@ -96,24 +97,10 @@ def _xr_gpu_env(idx: int) -> dict[str, str] | None:
         logger.warning("nvidia-smi not on PATH; skipping XR-side GPU pinning")
         return None
     try:
-        out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=index,pci.bus_id",
-             "--format=csv,noheader,nounits"],
-            text=True, timeout=5.0,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
+        by_index = query_gpu_pci_bus_ids(timeout=5.0)
+    except GPUInventoryError as exc:
         logger.warning("nvidia-smi failed ({}); skipping XR-side GPU pinning", exc)
         return None
-
-    by_index: dict[int, str] = {}
-    for line in out.strip().splitlines():
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 2:
-            continue
-        try:
-            by_index[int(parts[0])] = parts[1]
-        except ValueError:
-            continue
 
     if not by_index:
         logger.warning("nvidia-smi reported no GPUs; skipping XR-side GPU pinning")

@@ -57,7 +57,7 @@ _OUTPUT_DRAIN_TIMEOUT = 1.0
 _PROCESS_GROUP_OWNER_ENV = "_XR_AI_LAUNCHER_PROCESS_GROUP_OWNER"
 _READY_PROCESS_MAY_EXIT_ENV = "_XR_AI_LAUNCHER_READY_PROCESS_MAY_EXIT"
 
-# launcher/ stays stdlib-only per AGENTS.md, so this module uses
+# Launcher logging uses the standard library, so this module uses
 # ``logging.getLogger`` rather than loguru. The orchestrator's
 # ``setup_logging()`` installs an InterceptHandler that routes these
 # stdlib records into loguru, so output ends up in the same sinks as

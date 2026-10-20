@@ -308,8 +308,8 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
 ```
 
 The worker-side `xr-ai-models` loader accepts JSON or YAML, including flat
-legacy entries and direct role mappings. A profile shared with the stdlib-only
-launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
+legacy entries and direct role mappings. A profile shared with the launcher
+must use the wrapped nested `.json` contract; non-`.json` profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
 {doc}`/reference/agent-sdk-models`.

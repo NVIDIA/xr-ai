@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Stdlib-only process and credential view of a model deployment profile."""
+"""Standard-library parsing of process and credential settings in a model deployment profile."""
 from __future__ import annotations
 
 import json
