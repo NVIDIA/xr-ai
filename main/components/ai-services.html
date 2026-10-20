@@ -362,6 +362,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -827,8 +828,8 @@ never branch on backend.</p>
 </pre></div>
 </div>
 <p>The worker-side <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> loader accepts JSON or YAML, including flat
-legacy entries and direct role mappings. A profile shared with the stdlib-only
-launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
+legacy entries and direct role mappings. A profile shared with the launcher
+must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>

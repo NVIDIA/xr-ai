@@ -1,0 +1,194 @@
+xr_ai_gpu
+=========
+
+.. py:module:: xr_ai_gpu
+
+.. autoapi-nested-parse::
+
+   GPU hardware inspection without application orchestration dependencies.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   xr_ai_gpu.GPUInventoryError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   xr_ai_gpu.GPUDevice
+   xr_ai_gpu.GPUProcess
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   xr_ai_gpu.query_gpu_inventory
+   xr_ai_gpu.query_gpu_pci_bus_ids
+   xr_ai_gpu.query_gpu_processes
+
+
+Package Contents
+----------------
+
+.. py:class:: GPUDevice
+
+   Driver-visible GPU facts, independent of CUDA ordinal remapping.
+
+   Memory values are observations at query time, not reservations. Unknown
+   memory is None; it is never interpreted as zero or host memory.
+
+
+   .. py:attribute:: index
+      :type:  int
+
+      Physical driver index reported by nvidia-smi, not a CUDA-remapped ordinal.
+
+
+
+   .. py:attribute:: uuid
+      :type:  str
+
+      Stable GPU UUID.
+
+
+
+   .. py:attribute:: pci_bus_id
+      :type:  str
+
+      PCI bus address reported by the driver.
+
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      Driver-reported product name.
+
+
+
+   .. py:attribute:: compute_capability
+      :type:  float
+
+      CUDA compute capability.
+
+
+
+   .. py:attribute:: total_memory_gib
+      :type:  float | None
+
+      Total memory in GiB, or None when unavailable.
+
+
+
+   .. py:attribute:: free_memory_gib
+      :type:  float | None
+
+      Free memory in GiB, or None when unavailable.
+
+
+
+   .. py:attribute:: used_memory_gib
+      :type:  float | None
+
+      Used memory in GiB, or None when unavailable.
+
+
+
+.. py:exception:: GPUInventoryError
+
+
+
+   Raised when a driver query fails or strict inventory cannot be parsed.
+
+
+.. py:class:: GPUProcess
+
+   One compute process reported by ``nvidia-smi``.
+
+
+   .. py:attribute:: gpu_uuid
+      :type:  str
+
+      Driver UUID of the GPU hosting the process.
+
+
+
+   .. py:attribute:: pid
+      :type:  int
+
+      Host process ID.
+
+
+
+   .. py:attribute:: name
+      :type:  str
+
+      Driver-reported process name.
+
+
+
+   .. py:attribute:: used_memory_gib
+      :type:  float | None
+
+      Query-time GPU memory use in GiB, or None when unavailable.
+
+
+
+.. py:function:: query_gpu_inventory(*, timeout: float | None = None) -> tuple[GPUDevice, Ellipsis]
+
+   Return a strict inventory of all driver-visible physical GPUs.
+
+   Ignores CUDA_VISIBLE_DEVICES; indices are physical driver indices rather
+   than remapped CUDA ordinals. Memory is observed at query time, in GiB,
+   with unavailable values represented as None. No device filter is applied.
+
+   Args:
+       timeout: Positive, finite driver-command deadline in seconds; None
+           permits cold-driver initialization without a deadline.
+
+   Raises:
+       GPUInventoryError: The query fails, times out, returns no devices,
+           or contains malformed fields.
+
+
+.. py:function:: query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]
+
+   Return physical driver indices mapped to driver PCI bus addresses.
+
+   Ignores CUDA_VISIBLE_DEVICES. Skips rows with fewer than two columns or an
+   index that cannot be parsed as an integer. Returns the address column with
+   surrounding whitespace stripped, including empty or malformed addresses;
+   callers interpret and validate the address. Empty output returns an empty
+   mapping. This narrow query does not require compute capability or memory
+   support.
+
+   Args:
+       timeout: Positive, finite deadline in seconds; None means no deadline.
+
+   Raises:
+       GPUInventoryError: The command cannot run, fails, or times out.
+
+
+.. py:function:: query_gpu_processes(*, timeout: float | None = None) -> dict[str, list[GPUProcess]]
+
+   Return compute processes grouped by physical GPU UUID.
+
+   CUDA_VISIBLE_DEVICES does not filter this query. Unknown memory is None.
+
+   Args:
+       timeout: Positive, finite driver-command deadline in seconds; None
+           permits cold-driver initialization without a deadline.
+
+   Raises:
+       GPUInventoryError: The command fails, times out, or contains malformed fields.
+
+
