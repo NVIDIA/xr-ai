@@ -234,7 +234,7 @@ async def test_cancelled_request_closes_connection_and_releases_session(cancel_o
             if cancel_op == "open":
                 allocated.set()
                 await release_reply.wait()
-            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
+            await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
             await socket.recv()
             if cancel_op == "audio":
                 allocated.set()
@@ -320,6 +320,7 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     expected = "look around" if require_wake else "hey agent look around"
     assert len(queries) == 1 and queries[0].text == expected
     assert queries[0].pts_us == 123
+    assert queries[0].speaker_id == 7
     await gate.process_frame(_SpeakerEnrollmentFrame("a", "released"), FrameDirection.DOWNSTREAM)
     gate.push_frame.reset_mock()
     await speech("a", "hey agent look around")
@@ -327,6 +328,8 @@ async def test_enrollment_interacts_with_wake_gate_and_preserves_typed_input(tmp
     typed = TranscriptionFrame(text="hey agent typed query", user_id="a", timestamp="now")
     await gate.process_frame(typed, FrameDirection.DOWNSTREAM)
     assert any(isinstance(c.args[0], GatedQueryFrame) for c in gate.push_frame.call_args_list)
+    assert gate._feeding_speaker_id is None
+    assert not hasattr(gate.push_frame.call_args.args[0], "speaker_id")
 
 
 @pytest.mark.asyncio
@@ -424,7 +427,7 @@ async def test_stream_isolates_participants_and_reconnects_with_new_origin():
         opening = json.loads(await socket.recv())
         assert socket.request.path == "/v1/audio/transcriptions/stream"
         sessions[socket] = opening["audio_origin_us"]
-        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 4}))
+        await socket.send(json.dumps({"service": "xr-ai-speaker-stt", "protocol": 5}))
         count, samples = 0, 0
         try:
             async for audio in socket:
@@ -746,6 +749,7 @@ async def test_speaker_pipeline_honors_stop_policy_for_partial_and_final_transcr
 async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monkeypatch, use_speaker, require_wake):
     cfg = _config(tmp_path, require_wake=require_wake)
     stt, captions, accepted = SimpleNamespace(transcribe=AsyncMock()), AsyncMock(), []
+    display = AsyncMock()
 
     class Detector:
         def __init__(self, on_utterance, on_speech_start, **_kwargs):
@@ -758,7 +762,9 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
     async def accept(query):
         accepted.append(query)
     transport = HubVoiceTransport()
-    output = _VoiceIOProcessor(accept)
+    output = _VoiceIOProcessor(
+        accept, transport=SimpleNamespace(send_return_data=display),
+    )
     # This harness delivers frames directly instead of running Pipecat queues.
     output._enable_direct_mode = True
     output.push_frame = AsyncMock()
@@ -822,6 +828,12 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         await speak("do not send this")
         assert len(accepted) == count
         assert [call.args[1] for call in captions.await_args_list] == ["what is that", "describe this"]
+        messages = [call.args[0] for call in display.await_args_list]
+        assert len(messages) == len(accepted)
+        label = "Speaker 7" if use_speaker else "User"
+        assert [message.data.decode() for message in messages] == [f"{label}: {query.text}" for query in accepted]
+        assert all(message.topic == "voice.user-query" and message.participant_id == "a" for message in messages)
+        assert [message.pts_us for message in messages] == [query.timestamp_us for query in accepted]
         if use_speaker:
             stt.transcribe.assert_not_awaited()
     finally:
@@ -896,3 +908,113 @@ def test_conversation_can_use_ordinary_stt_or_preserve_legacy_wake_mode(tmp_path
     assert cfg._conversation is None and cfg._speaker is not None
     assert cfg._speaker.mode == "wake_only"
     assert cfg.magic_phrases == ("hey agent",)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("diagnostics", [False, True])
+@pytest.mark.parametrize("send_fails", [None, OSError, "zmq"])
+async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries(tmp_path, diagnostics, send_fails):
+    from zmq import ZMQError
+
+    cfg = _SpeakerConfig(diagnostics=diagnostics)
+    partial, final, accepted = AsyncMock(), AsyncMock(), AsyncMock()
+    error_type = ZMQError if send_fails == "zmq" else send_fails
+    sender = AsyncMock(side_effect=error_type("display unavailable") if error_type else None)
+    processor = _SpeakerSttProcessor(cfg=cfg, on_partial_transcript=partial, on_final_transcript=final)
+    gate = VoiceGateProcessor(cfg=_voice_cfg(tmp_path, diagnostics=diagnostics), tts=SimpleNamespace())
+    output = _VoiceIOProcessor(
+        accepted, transport=SimpleNamespace(send_return_data=sender),
+    )
+    output.push_frame = AsyncMock()
+
+    async def to_gate(frame, *_args):
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    async def to_output(frame, *_args):
+        await output.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    processor.push_frame = to_gate
+    gate.push_frame = to_output
+    try:
+        for enrolled in (False, True):
+            if enrolled:
+                await processor._event("wearer", {"kind": "enrolled"})
+                output.push_frame.reset_mock()
+            for text in ("", cfg.stop_phrase):
+                await processor._event("wearer", {
+                    "kind": "diagnostic", "speaker_id": 1, "status": "ignored", "pts_us": 42, "text": text,
+                })
+        assert sender.await_count == (4 if diagnostics else 0)
+        if diagnostics:
+            messages = [call.args[0] for call in sender.await_args_list]
+            assert all(m.topic == "voice.speaker-diagnostic" and m.participant_id == "wearer" and m.pts_us == 42
+                       for m in messages)
+            assert messages[0].data.decode() == "Speaker 1 [ignored] detected"
+            assert messages[1].data.decode() == f"Speaker 1 [ignored]: {cfg.stop_phrase}"
+        accepted.assert_not_awaited()
+        partial.assert_not_awaited()
+        final.assert_not_awaited()
+        output.push_frame.assert_not_awaited()
+        assert not processor._interrupted and "wearer" in processor._enrolled
+        await processor._event("wearer", {
+            "kind": "transcript", "speaker_id": 0, "text": "look around", "pts_us": 123,
+        })
+        await asyncio.gather(*output._input_tasks)
+        query = accepted.call_args.args[0]
+        assert not hasattr(query, "speaker_id")
+        assert query.text == "look around" and query.timestamp_us == 123
+        message = sender.call_args.args[0]
+        assert message.topic == "voice.user-query" and message.participant_id == "wearer"
+        assert message.pts_us == 123 and message.data.decode() == "Speaker 0: look around"
+        assert gate._feeding_speaker_id is None
+    finally:
+        await processor.cleanup()
+        await gate.cleanup()
+        await output.cleanup()
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_diagnostic_setting_requires_boolean(value):
+    with pytest.raises(ValueError, match="diagnostics"):
+        _SpeakerConfig._from_yaml({"enabled": True, "diagnostics": value})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [
+    {}, {"speaker_id": -1}, {"speaker_id": True}, {"pts_us": "123"},
+    {"status": None}, {"status": ""}, {"text": None},
+])
+async def test_malformed_diagnostic_cannot_reset_worker_enrollment(invalid):
+    from xr_ai_voice._frames import _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig(diagnostics=True))
+    complete = {"kind": "diagnostic", "speaker_id": 1, "pts_us": 123, "status": "ignored", "text": "noise"}
+    malformed = {"kind": "diagnostic"} if not invalid else {**complete, **invalid}
+    processor._client = SimpleNamespace(
+        _feed=AsyncMock(return_value=[
+            {"kind": "enrolled"}, malformed,
+            {"kind": "transcript", "speaker_id": 7, "pts_us": 321, "text": "owner query"},
+        ]),
+        _forget=AsyncMock(), _close=AsyncMock(),
+    )
+    frames, delivered = [], asyncio.Event()
+
+    async def push(frame, *_args):
+        frames.append(frame)
+        if isinstance(frame, _SpeakerTranscriptionFrame):
+            delivered.set()
+
+    processor.push_frame = push
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        audio = InputAudioRawFrame(audio=bytes(320), sample_rate=16000, num_channels=1)
+        audio.transport_source, audio.pts = "wearer", 123000
+        await processor.process_frame(audio, FrameDirection.DOWNSTREAM)
+        await asyncio.wait_for(delivered.wait(), 1)
+        assert "wearer" in processor._enrolled and "wearer" in processor._tasks
+        assert [frame.state for frame in frames if isinstance(frame, _SpeakerEnrollmentFrame)] == ["enrolled"]
+        assert [frame.text for frame in frames if isinstance(frame, _SpeakerTranscriptionFrame)] == ["owner query"]
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+    assert not processor._tasks and not processor._queues

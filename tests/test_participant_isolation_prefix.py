@@ -49,7 +49,8 @@ async def _bring_up_prefix_pair(make_connector):
     return short_conn, long_conn
 
 
-async def test_return_data_does_not_leak_to_prefix_participant(hub, make_connector, make_processor, settle):
+@pytest.mark.parametrize("topic", ["vlm.response", "voice.user-query", "voice.speaker-diagnostic"])
+async def test_return_data_does_not_leak_to_prefix_participant(hub, make_connector, make_processor, settle, topic):
     short_conn, long_conn = await _bring_up_prefix_pair(make_connector)
 
     short_received: list[DataMessage] = []
@@ -73,7 +74,7 @@ async def test_return_data_does_not_leak_to_prefix_participant(hub, make_connect
 
         # Targeted at alice2 only.
         await proc.send_return_data(DataMessage(
-            participant_id=_LONG, topic="vlm.response", pts_us=10, data=b"for-long",
+            participant_id=_LONG, topic=topic, pts_us=10, data=b"for-long",
         ))
 
         for _ in range(20):
@@ -85,6 +86,7 @@ async def test_return_data_does_not_leak_to_prefix_participant(hub, make_connect
 
         assert len(long_received) == 1
         assert long_received[0].participant_id == _LONG
+        assert long_received[0].topic == topic and long_received[0].data == b"for-long"
         # alice ⊂ alice2: alice's connector must NOT over-match alice2's data.
         assert short_received == []
     finally:

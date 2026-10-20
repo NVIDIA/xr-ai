@@ -22,12 +22,16 @@ from pipecat.frames.frames import (
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from xr_ai_hub import DataMessage
+from zmq import ZMQError
 
 from .._frames import (
     AssistantResponseEndFrame,
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    _SpeakerDiagnosticFrame,
+    _SpeakerGatedQueryFrame,
 )
 from .._types import VoiceInputSink, VoiceQuery, VoiceResponse
 
@@ -130,6 +134,15 @@ class _VoiceIOProcessor(FrameProcessor):
             await self._spawn_query(frame)
             return
 
+        if isinstance(frame, _SpeakerDiagnosticFrame):
+            label = f"Speaker {frame.speaker_id} [{frame.status}]"
+            text = f"{label}: {frame.text}" if frame.text else f"{label} detected"
+            await self._display(DataMessage(
+                topic="voice.speaker-diagnostic", participant_id=frame.participant_id,
+                pts_us=frame.pts_us, data=text.encode("utf-8"),
+            ))
+            return
+
         if isinstance(frame, ParticipantJoinedFrame):
             logger.info("voice participant joined pid={!r}", frame.participant_id)
             if self._transport is not None:
@@ -179,18 +192,41 @@ class _VoiceIOProcessor(FrameProcessor):
         try:
             if interrupted_response is not None:
                 await asyncio.gather(interrupted_response, return_exceptions=True)
-            await self._input_sink(
-                VoiceQuery(
-                    participant_id=pid,
-                    text=frame.text,
-                    timestamp_us=frame.pts_us,
-                    interrupted_output=interrupted_response is not None,
-                )
+            query = VoiceQuery(
+                participant_id=pid,
+                text=frame.text,
+                timestamp_us=frame.pts_us,
+                interrupted_output=interrupted_response is not None,
             )
+            speaker = f"Speaker {frame.speaker_id}" if isinstance(frame, _SpeakerGatedQueryFrame) else "User"
+            # Both deliveries belong to this input task, so shutdown drains them.
+            results = await asyncio.gather(
+                self._input_sink(query),
+                self._display(DataMessage(
+                    participant_id=pid, topic="voice.user-query",
+                    pts_us=frame.pts_us, data=f"{speaker}: {frame.text}".encode("utf-8"),
+                )),
+                return_exceptions=True,
+            )
+            failures = [result for result in results if isinstance(result, BaseException)]
+            for failure in failures:
+                if isinstance(failure, asyncio.CancelledError):
+                    raise failure
+            if failures:
+                raise BaseExceptionGroup("voice input delivery failed", failures)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("voice input sink raised pid={!r}", pid)
+            # isolation boundary: this task supervises both input deliveries.
+            logger.exception("voice input delivery failed pid={!r}", pid)
+
+    async def _display(self, message: DataMessage) -> None:
+        if self._transport is None:
+            return
+        try:
+            await self._transport.send_return_data(message)
+        except (OSError, ZMQError):
+            logger.exception("voice input display failed pid={!r}", message.participant_id)
 
     async def _spawn_response(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
