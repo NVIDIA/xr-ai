@@ -1,0 +1,185 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Packet and guide contract
+
+## Capture input
+
+Start with `packet.json`: `session_id`, `status`, `narration_status`, `counts`,
+`files`, and `hierarchy`. Resolve `files` paths relative to the
+packet directory. A complete packet can still contain caption errors or no
+narration; inspect the contents, not only its status.
+
+| Source | Fields used for evidence |
+|---|---|
+| `frames/index.jsonl` | `frame_id`, `timestamp_us`, `path`, `sequence`, `width`, `height` |
+| `captions.jsonl` | `caption_id`, `frame_id`, `frame_timestamp_us`, `frame_path`, `activity`, `phase`, `caption`, `delta` |
+| `transcript.jsonl` | `transcript_id`, `timestamp_us`, `text` |
+| `summary.md` and `hierarchy` | Derived orientation aids, not an exhaustive step inventory |
+| `errors.jsonl` if present | Capture gaps; absence of observations is not proof of inactivity |
+
+Source timestamps are Unix microseconds. Caption `generated_at_us` measures
+inference completion, not event time. STT timestamps are alignment hints, not
+precise action boundaries. Inspect nearby frames if timing is uncertain.
+Newer captions also contain pipeline-generated `delta_reference_frame_id` and
+`delta_reference_timestamp_us`: the earlier image actually supplied to the VLM.
+Both are `null` for an initial single-image observation. Resolve the reference
+through the frame index. Sampling can outpace captioning, and failed captions
+do not advance the comparison image, so do not subtract one from `frame_id`.
+Older packets may omit these fields; do not invent an exact comparison pair.
+Reference metadata identifies inputs, not the truth of the model's delta.
+Keep comparison IDs and source times in review notes, not executable guide state.
+No meaningful visible change differs from an indeterminate comparison: neither
+establishes inactivity throughout the interval. Uncertain labels are not actions
+and must not erase actions supported by narration or inspected images.
+SOP snapshots, captions, and narration cover the spoken "start capture" and
+"stop capture" boundary. Optional session media is not required for guide
+generation and may span multiple SOP packets.
+Use packet-local narration, not the whole shared transcript. New packets have
+no `media_capture` field. Older packets may link a bundle through
+`media_capture.manifest`; retain that bundle if present. Raw audio may help review
+missing narration, but generation does not automatically retranscribe it.
+Do not fabricate speech for silent recordings.
+
+## Executable YAML
+
+Exactly four root fields: `schema_version: 1`, `task`, `state`, `steps`. Unknown
+structural fields are rejected. Use block mappings and quote prose; commas in
+unquoted flow mappings (`{...}`) can silently create unintended fields.
+
+`task` requires `id`, `name`, `version`, `status`, `start_step`,
+`foreground_prompt`, `complete_message`. Use a stable lowercase identifier
+matching `^[a-z][a-z0-9_-]*$`, a 1–5 word punctuation-free name, a positive integer
+version, and `status: draft`. Only human-reviewed `approved` guides may run in guide mode.
+Name, ID, and filename are separate. Use the same intended task in all prompts
+and completion messages; do not copy the worked example's wording.
+
+`state` maps identifiers to `{type, description, initial?}`. Types are `boolean`,
+`integer`, `number`, `string`. Initial and committed values must match the type;
+`true` is not an integer and `"true"` is not a boolean.
+
+`steps` is a nonempty linear list of unique IDs, all reachable from
+`task.start_step`, without cycles. Each step contains:
+
+| Field | Contract |
+|---|---|
+| `id`, `title` | Stable identifier and short instruction title |
+| `reads`, `writes` | Lists of declared state fields; `writes` cannot be empty |
+| `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
+| `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list; `agent` may be omitted with direct `evidence.commit` |
+| `evidence` | Full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
+| `complete_when` | Nonempty typed mapping using only this step's writable fields |
+| `next` | Next step ID, or `null` for the last step |
+| `complete_on_skip` | Boolean; true ends the run if this incomplete step is skipped |
+| `finish_on_complete` | Optional boolean, only for a terminal step; true ends the run automatically after verified completion |
+| `state_on_skip` | Typed mapping using only writable fields; normally `{}` |
+| `messages` | Nonempty `enter`, `complete`, and `skip` strings |
+
+`evidence.commit` uses writable fields, not a literal placeholder like
+`done_field`. With it, matching evidence commits directly without an observation
+LLM; that agent's prompt and tools do not execute. Without it, the observation
+agent may call the engine-provided
+`workflow__commit`, still gated by the evidence threshold. Do not list that
+internal tool in `agent.tools`. Ordinary completion does not advance; messages ask the
+user to say next. A terminal `finish_on_complete: true` step ends the run without
+Next; its message must not request another advance. A skip is not verified success.
+
+Give each step its own completion boolean, initially false. Do not reuse a
+previous step's completion field: that would make the later step complete on
+entry without its own observation. Capture success never initializes guide
+completion to true. The visual example links two independent checks; it does
+not prescribe two steps for every recording.
+
+## Closed tool catalog
+
+| Name | Trigger | Policy tool | Arguments and result |
+|---|---|---|---|
+| `current_view` | Yes | Yes | `question`: 1–500 characters; result field `text` |
+| `clock__now` | No | Yes | No arguments; returns positive integer `epoch_us` |
+| `clock__timer` | Yes | Yes | Trigger: positive integer `duration_s`; policy tool: no arguments, reads the active runtime-owned timer. Result fields `elapsed_s`, `remaining_s`, `expired` |
+
+No participant ID, image path, sequence window, or `max_frames` argument is
+accepted. The engine binds the participant. The 500-character question limit
+applies to the parsed string including spaces and folded YAML, not each line.
+Use `result_field: text` for visual checks and `result_field: expired` for waits.
+Visual policies normally use `agent.tools: []`, `voice.tools: [current_view]`.
+`agent` handles background observations; `voice` answers current-step questions.
+Declaring a tool does not call it; the prompt must give the needed arguments.
+
+Trigger arguments can use `$state.<field>`. The field must be declared in state
+and in that step's `reads` or `writes`, with the argument's required type.
+These references are not general template substitutions for message text.
+
+For waits, read [the full timer example](timer.guide.yaml). Setup observes the
+prerequisite and commits its own boolean. Set setup `complete_on_skip: true`
+when a skip must not enter a wait without that prerequisite. The wait uses
+`clock__timer` with only `duration_s`, `result_field: expired`,
+`pattern: '^true$'`, `consecutive: 1`, and direct commit of its own boolean.
+Keep wait `agent.tools: []`, `voice.tools: [clock__timer]`; no visual requirement.
+The runtime starts a monotonic timer on entry to the wait step, not at the earlier
+placement check. The policy tool takes no arguments and cannot change that start.
+Do not supply `started_at_us`, save a start in model-writable state, or use
+`clock__now` to initialize a timer. Timing does not prove continuous contact.
+Unknown, ranged, or fractional durations require review instead of
+guessing an accepted positive integer.
+If an instruction requires timing from a physical event rather than wait-step
+entry, report the mismatch: user-controlled Next can introduce a delay. Do not
+claim the runtime measured from the event or silently change that requirement.
+
+## Evidence gaps and review-blocked steps
+
+Use normal live checks for clearly specified observable results, even when a
+saved image is missing or a caption is stale. Record that authoring gap in the
+review notes; it does not make the guide tool incapable of checking the result.
+This includes an explicitly instructed count or orientation: absent visual
+corroboration is not an unresolved instruction. Decide from the required result.
+For example, an explicit placement instruction with an unavailable saved image
+can still have a `current_view` placement check with `^ready$` evidence.
+
+Reserve a blocked step for an unresolved required condition or an unsupported
+verification, such as proving past ordering or a hidden fit from one image.
+Retain the action, not a fictitious verification.
+An unclear object identity can require this pattern without preventing a draft
+of the known action and target. Refer to
+[the complete blocked example](review-blocked.guide.yaml). Do not substitute a
+request for clarification for both requested output files when an action is known.
+Use a bounded `current_view` question about the observable context, a separate
+false-initialized completion field, and this never-matching evidence gate:
+
+```yaml
+evidence:
+  pattern: '(?!)'
+  consecutive: 1
+```
+
+Omit `evidence.commit`; set `agent.tools: []` and instruct the agent not to commit
+the step because its requirement cannot be verified. The gate prevents completion
+even if the model proposes it. Set `complete_on_skip: true` if later steps depend
+on this unresolved prerequisite. Explain the exact gap in the step prompts and
+review notes. Do not approve until it is resolved; schema validity alone is not
+approval. Never put invented triggers or extra `review_blockers` keys in the YAML.
+An ordinary ordered step list does not itself require a temporal tool: final
+visible states can verify ordinary placements. Block when the required success
+condition is the past motion or order itself, rather than the visible result.
+
+Store evidence mappings, caption corrections, and approval blockers in the
+separate `.review.md` file. It is a human review aid, not executable guide state.
+For consequential assumptions, explain their effect on the procedure or success
+criteria and the question needing human confirmation. Distinguish uncertainty
+about requirements from recording coverage gaps and unsupported verification;
+do not silently resolve the former or weaken requirements to fit the recording.
+Continue drafting sufficiently understood actions without seeking confirmation
+for ordinary organization and wording.
+Keep authoring changes in those notes. The
+[evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
+untested checks, and revision findings separately in `<slug>.evaluation.md`.
+Do not add test results to YAML.
+Runtime evaluation uses the guide runtime and configured local models with
+recorded camera input. The authoring model observes actual traces and revises
+the guide; it does not replace visual inference, tool results, or state commits.
+Test artifacts and recording timestamps stay outside the executable guide.
+Write these outputs under `agent-samples/procedure-capture-guide/guides/` from the repository
+root, unless a different output directory was requested. Links between these
+references resolve relative to their containing files, not the working directory.

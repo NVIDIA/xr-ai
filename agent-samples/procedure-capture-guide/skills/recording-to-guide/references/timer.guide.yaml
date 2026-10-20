@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Schema example only. Ten seconds must not be copied unless instructed.
+# Evaluation follows ../../evaluate-guide/SKILL.md using the real guide runtime
+# and local models. Inspect timer triggers and accepted commits: unexpired
+# before ten elapsed seconds in the wait step and expired afterward.
+# A calculated answer or author-provided ready is not a runtime test. Missing
+# boundary coverage is untested. Never write a recording timestamp into YAML.
+# The runtime starts its own monotonic timer on entry to the wait step.
+# Do not create a model-written timestamp or reuse the setup completion field.
+# Missing authoring images belong in review notes, not an automatic (?!) gate.
+# Read the blocked example only if the prerequisite or duration is unresolved;
+# an exact instructed wait with a clear placement uses this normal setup.
+schema_version: 1
+task:
+  id: pause_after_placement
+  name: "Pause After Placement"
+  version: 1
+  status: draft
+  start_step: place_workpiece
+  foreground_prompt: "Guide placement, then enter the elapsed wait. No claim of continuous contact."
+  complete_message: "Placement and the elapsed wait are complete."
+state:
+  placement_done:
+    type: boolean
+    description: "Placement was observed."
+    initial: false
+  wait_done:
+    type: boolean
+    description: "The instructed elapsed wait expired."
+    initial: false
+steps:
+  - id: place_workpiece
+    title: "Place the workpiece"
+    reads: []
+    writes: [placement_done]
+    trigger:
+      function: current_view
+      interval_s: 3
+      result_field: text
+      arguments:
+        question: "Is the workpiece resting flat inside the marked area? Answer exactly ready, not ready, or unclear."
+    agent:
+      prompt: "Use the direct visual classification; unclear is not completion."
+      tools: []
+    voice:
+      prompt: "Explain placement inside the marked area. The clock starts on entry to the waiting step."
+      tools: [current_view]
+    evidence:
+      pattern: '^ready$'
+      consecutive: 2
+      commit:
+        placement_done: true
+    complete_when:
+      placement_done: true
+    next: wait_elapsed
+    complete_on_skip: true
+    state_on_skip: {}
+    messages:
+      enter: "Place the workpiece flat inside the marked area."
+      complete: "Placement is verified. Say next to start the waiting step and its timer."
+      skip: "Ending this run because placement was not verified."
+  - id: wait_elapsed
+    title: "Wait for ten elapsed seconds"
+    reads: []
+    writes: [wait_done]
+    trigger:
+      function: clock__timer
+      interval_s: 1
+      arguments:
+        duration_s: 10
+      result_field: expired
+    agent:
+      prompt: "Use only the deterministic timer result; no visual check or estimated time."
+      tools: []
+    voice:
+      prompt: "Call clock__timer with no arguments to read the runtime-owned timer. Report remaining_s or expired. Do not inspect the scene or claim continuous contact."
+      tools: [clock__timer]
+    evidence:
+      pattern: '^true$'
+      consecutive: 1
+      commit:
+        wait_done: true
+    complete_when:
+      wait_done: true
+    next: null
+    complete_on_skip: false
+    state_on_skip: {}
+    messages:
+      enter: "The timer has started. Wait ten seconds."
+      complete: "Ten seconds have elapsed. Say next to finish."
+      skip: "Skipping the elapsed wait without verification."
