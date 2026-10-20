@@ -28,8 +28,9 @@ these steps:
    focus and return the same query to ordinary routing.
 4. A declined route is excluded from one reroute. After selected destinations
    decline, an eligible configured default gets one answer attempt without a
-   second admission check. If routing has no eligible candidate, the router
-   asks for clarification.
+   second admission check, provided it did not already decline this turn.
+   An explicit `clarify` decision or no eligible candidate produces clarification;
+   nonzero destination probabilities do not override a clarification decision.
 5. An accepted destination streams chunks through the callback, tagged with its
    registered route name. It returns an answer, keeps focus, or releases focus
    after the answer. A post-answer release consumes the current query; it does
@@ -52,10 +53,15 @@ result = await router.handle(turn, emit=publish_chunk)
 
 `AgentExchange` records a completed user request and its user-visible
 answer. The first turn for a participant uses the supplied `turn.history` as its
-initial history. Later turns use history retained by the router. Only whole
-recent exchanges that fit `context_budget_bytes` are passed to route decisions;
+initial history once. Later turns use history retained by the router. Only whole
+recent exchanges that fit `context_budget_bytes` are retained and passed to route decisions;
 the budget counts the serialized exchange and time label in UTF-8 bytes. An
-oversized exchange is dropped whole.
+oversized exchange is dropped whole, even when that leaves history empty; later
+caller-supplied history does not reseed that participant. The budget covers
+serialized completed-history entries, not the current request, destination
+descriptions, or the backend's total prompt/token limit. Configure it to suit the
+selected endpoint. Decision-service errors propagate to the caller; the router
+does not replace a failed routing decision with an unapproved default action.
 
 The router keeps each retained exchange's timestamp and private identity
 aligned as history is trimmed. When an admission release emits text, it records
@@ -95,6 +101,8 @@ provide `participant_left()` for stronger departure cleanup; otherwise its
 `release()` method is used. Failed releases remain tracked for a later retry.
 `stop()` interrupts all active turns and attempts departure cleanup for every
 tracked participant.
+It also clears history-only participants and rejects new turns while shutdown
+runs. A later turn after successful shutdown starts fresh participant state.
 
 ## Optional progress acknowledgment
 
@@ -112,6 +120,13 @@ The timing sample begins after destination admission and ends when the
 destination produces its first nonblank text. It excludes route selection,
 admission, acknowledgment-output serialization, and downstream playback.
 Admission preambles suppress the optional acknowledgment for that turn.
+If prediction or acknowledgment generation fails, the optional task logs the
+failure once and ends; the destination answer continues. The decision service
+does not define a separate expected-prediction-failure category, so errors are
+not silently converted into a delay fallback. Cancellation drains actual owned
+work before replacement or resource cleanup; an operation that does not finish
+its cancellation cleanup can delay the next turn, rather than being detached
+behind an arbitrary timeout.
 
 The router does not depend on a voice transport or a particular application.
 An application adapter translates its incoming request into a

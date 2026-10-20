@@ -105,6 +105,7 @@ source_pkgs = [
     "xr_ai_model_server_stack",
     "xr_ai_models",
     "xr_ai_runtime",
+    "xr_ai_routing",
     "xr_ai_tools",
     "xr_ai_vad",
     "xr_ai_vllm",

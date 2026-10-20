@@ -54,7 +54,9 @@ class AgentRouter:
     Route choices use the typed decision service; a declined route is excluded
     from one bounded reroute. If selected destinations decline through those
     attempts, the configured eligible default gets one final answer attempt
-    without another admission check. If routing cannot select an eligible
+    without another admission check unless it already declined this turn.
+    An explicit clarification decision is not overridden by probability scores.
+    If routing cannot select an eligible
     destination, the router asks for clarification. Destinations own their
     model and application state.
 
@@ -75,7 +77,7 @@ class AgentRouter:
     :param destinations: Registered destinations keyed by their stable route names.
     :param decisions: Typed Clef decision service used to select routes.
     :param default_destination: Registered route used for exhausted-decline fallback.
-    :param context_budget_bytes: UTF-8 byte budget for completed history supplied to route decisions.
+    :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
     :param acknowledgment_delay_secs: Finite positive delay before fallback
         acknowledgment; requires ``acknowledgment_llm``.
@@ -113,6 +115,7 @@ class AgentRouter:
         self._locks: dict[str, asyncio.Lock] = {}
         self._departing: set[str] = set()
         self._departure_calls: dict[str, int] = {}
+        self._stop_calls = 0
         self._history: dict[str, list[AgentExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
         self._history_exchange_ids: dict[str, list[object | None]] = {}
@@ -147,21 +150,31 @@ class AgentRouter:
         """
 
         participant_id = turn.participant_id
+        if self._stop_calls:
+            raise RuntimeError("router is stopping")
         # Departure owns the participant until destination cleanup finishes.
         if participant_id in self._departing:
             raise RuntimeError("participant is leaving")
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
+            if self._stop_calls:
+                raise RuntimeError("router is stopping")
             if participant_id in self._departing:
                 raise RuntimeError("participant is leaving")
             await self.interrupt(participant_id)
+            if self._stop_calls:
+                raise RuntimeError("router is stopping")
+            if participant_id in self._departing:
+                raise RuntimeError("participant is leaving")
             owned_history = self._history.get(participant_id)
-            if not owned_history and turn.history:
+            if participant_id not in self._history:
                 owned_history = list(turn.history)
                 self._history[participant_id] = owned_history
                 self._history_times[participant_id] = [None] * len(owned_history)
                 self._history_exchange_ids[participant_id] = [None] * len(owned_history)
-            history = tuple(owned_history) if owned_history else turn.history
+                self._trim_history(participant_id)
+                owned_history = self._history[participant_id]
+            history = tuple(owned_history)
             timestamps = tuple(self._history_times.get(participant_id, (None,) * len(history)))
             exchange_ids = tuple(self._history_exchange_ids.get(participant_id, (None,) * len(history)))
             history, timestamps, exchange_ids = _bounded_history_with_metadata(
@@ -199,12 +212,19 @@ class AgentRouter:
             )
             self._tasks[participant_id] = task
         try:
-            return await task
+            return await asyncio.shield(task)
         finally:
-            if self._tasks.get(turn.participant_id) is task:
-                self._tasks.pop(turn.participant_id, None)
-            if self._generation.get(turn.participant_id) is generation:
-                self._generation.pop(turn.participant_id, None)
+            try:
+                if not task.done():
+                    self._generation.pop(participant_id, None)
+                    if not task.cancelling():
+                        task.cancel()
+                    await _drain_tasks((task,))
+            finally:
+                if self._tasks.get(participant_id) is task and task.done():
+                    self._tasks.pop(participant_id, None)
+                if self._generation.get(participant_id) is generation:
+                    self._generation.pop(participant_id, None)
 
     async def interrupt(self, participant_id: str | None = None) -> None:
         """Cancel active response work while retaining completed history and focus.
@@ -216,17 +236,21 @@ class AgentRouter:
 
         if participant_id is None:
             tasks = tuple(self._tasks.values())
-            self._tasks.clear()
             self._generation.clear()
         else:
-            task = self._tasks.pop(participant_id, None)
+            task = self._tasks.get(participant_id)
             self._generation.pop(participant_id, None)
             tasks = () if task is None else (task,)
         for task in tasks:
-            if not task.done():
+            if not task.done() and not task.cancelling():
                 task.cancel()
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                await _drain_tasks(tasks)
+            finally:
+                for identity, task in tuple(self._tasks.items()):
+                    if task in tasks and task.done():
+                        self._tasks.pop(identity, None)
 
     async def participant_left(self, participant_id: str) -> None:
         """Release one participant's state and history.
@@ -287,19 +311,29 @@ class AgentRouter:
 
         Raises an ``ExceptionGroup`` after all participants are attempted.
         Destinations whose release failed remain tracked for a later retry.
+        New turns are rejected while shutdown runs. Successful shutdown clears
+        participant history, including when no destination was eligible; later
+        turns can begin a fresh lifecycle.
         """
 
-        await self.interrupt()
-        participants = self._destinations_used.keys() | self._focus.keys()
-        errors = []
-        for participant_id in tuple(participants):
-            try:
-                await self.participant_left(participant_id)
-            except Exception as error:  # noqa: BLE001
-                # Failure-only aggregation ensures every participant is attempted before re-raising.
-                errors.append(error)
-        if errors:
-            raise ExceptionGroup("failed to release conversation destinations", errors)
+        self._stop_calls += 1
+        try:
+            await self.interrupt()
+            participants = (
+                self._destinations_used.keys() | self._focus.keys() | self._history.keys()
+                | self._locks.keys() | self._departing | self._first_answer_samples.keys()
+            )
+            errors = []
+            for participant_id in tuple(participants):
+                try:
+                    await self.participant_left(participant_id)
+                except Exception as error:  # noqa: BLE001
+                    # Failure-only aggregation attempts every participant before re-raising.
+                    errors.append(error)
+            if errors:
+                raise ExceptionGroup("failed to release conversation destinations", errors)
+        finally:
+            self._stop_calls -= 1
 
     async def _handle(self, turn: AgentTurn, *, emit: _Emit, generation: object) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
@@ -308,16 +342,17 @@ class AgentRouter:
         if focused is not None:
             focused_route = self._destinations[focused].routing_aid(turn.participant_id)
             if not focused_route.eligible:
+                self._focus.pop(turn.participant_id, None)
                 await self._destinations[focused].release(turn.participant_id)
                 if self._generation.get(turn.participant_id) is not generation:
                     raise asyncio.CancelledError()
-                self._focus.pop(turn.participant_id, None)
                 candidates = [
                     destination_name
                     for destination_name in self._destinations
                     if destination_name != focused
                 ]
                 focused = None
+        declined: set[str] = set()
         for attempt in range(2):
             destination_name = candidates[0] if focused and attempt == 0 else await self._select(turn, candidates)
             if self._generation.get(turn.participant_id) is not generation:
@@ -356,6 +391,7 @@ class AgentRouter:
                     self._remember(turn, admission.text)
                 return DestinationResult("clarify", admission.text)
             if admission.disposition == "decline":
+                declined.add(destination_name)
                 declined_name = destination_name
                 if destination_name == focused:
                     self._focus.pop(turn.participant_id, None)
@@ -372,7 +408,7 @@ class AgentRouter:
                             f"routing aid name {default_route.name!r} does not match destination {destination_name!r}"
                         )
                     self._trace_default_fallback(turn, "exhausted_declines", eligible=default_route.eligible)
-                    if not default_route.eligible:
+                    if not default_route.eligible or destination_name in declined:
                         declined_destination = self._destinations[declined_name]
                         await declined_destination.release(turn.participant_id)
                         if self._generation.get(turn.participant_id) is not generation:
@@ -399,6 +435,8 @@ class AgentRouter:
 
             if admission.preamble:
                 await emit(destination_name, admission.preamble)
+            if self._generation.get(turn.participant_id) is not generation:
+                raise asyncio.CancelledError()
             acknowledgment_task: asyncio.Task[None] | None = None
             answer_started = asyncio.Event()
             acknowledgment_committed = asyncio.Event()
@@ -501,8 +539,9 @@ class AgentRouter:
             finally:
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
-                        acknowledgment_task.cancel()
-                    await asyncio.gather(acknowledgment_task, return_exceptions=True)
+                        if not acknowledgment_task.cancelling():
+                            acknowledgment_task.cancel()
+                    await _drain_tasks((acknowledgment_task,))
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
             if result.disposition not in {"answer", "focus", "release"}:
@@ -551,10 +590,23 @@ class AgentRouter:
         if exchange_id is None:
             exchange_id = object()
         self._history_exchange_ids.setdefault(turn.participant_id, []).append(exchange_id)
+        self._trim_history(turn.participant_id)
         # One route attempt can complete an admission-release message and then
         # a second destination's answer. Each visible history record needs its
         # own identity even though both belong to the same input turn.
         _active_exchange_id.set(object())
+
+    def _trim_history(self, participant_id: str) -> None:
+        history, timestamps, identities = _bounded_history_with_metadata(
+            tuple(self._history[participant_id]),
+            tuple(self._history_times[participant_id]),
+            tuple(self._history_exchange_ids[participant_id]),
+            self._context_budget_bytes,
+            participant_id,
+        )
+        self._history[participant_id] = list(history)
+        self._history_times[participant_id] = list(timestamps)
+        self._history_exchange_ids[participant_id] = list(identities)
 
     def _turn_with_latest_history(self, turn: AgentTurn) -> AgentTurn:
         """Include a completed admission-release message in a same-turn reroute."""
@@ -816,7 +868,6 @@ class AgentRouter:
             ),
             criteria=criteria,
         )
-        eligible = [route_aid.name for route_aid in route_aids if route_aid.eligible]
         with nemo_relay.scope.scope(
             "conversation.destination-route",
             nemo_relay.ScopeType.Agent,
@@ -825,66 +876,53 @@ class AgentRouter:
         ) as route_scope:
             response = await self._decisions.decide(state, {"destination": question})
             answer = response.answers["destination"]
-            probabilities = answer.probabilities
-            eligible_scores: dict[str, float] = {}
-            if isinstance(probabilities, Mapping):
-                for name in eligible:
-                    value = probabilities.get(name)
-                    if isinstance(value, bool) or not isinstance(value, (int, float)):
-                        continue
-                    try:
-                        probability = float(value)
-                    except (OverflowError, TypeError, ValueError):
-                        continue
-                    if math.isfinite(probability) and 0.0 <= probability <= 1.0:
-                        eligible_scores[name] = probability
-            if not any(eligible_scores.values()):
-                eligible_scores.clear()
-
+            current_eligible = []
+            for candidate_name in candidates:
+                route_aid = self._destinations[candidate_name].routing_aid(turn.participant_id)
+                if route_aid.name != candidate_name:
+                    raise ValueError(
+                        f"routing aid name {route_aid.name!r} does not match destination {candidate_name!r}"
+                    )
+                if route_aid.eligible:
+                    current_eligible.append(candidate_name)
             selected_probability = None
-            if answer.choice in eligible:
+            if answer.choice in current_eligible:
                 selected = answer.choice
                 selection_reason = "router_choice"
-                selected_probability = eligible_scores.get(selected)
-            elif answer.choice == "clarify" and eligible_scores:
-                # Preserve candidate registration order for equal probabilities.
-                selected = max(eligible_scores, key=eligible_scores.__getitem__)
-                selected_probability = eligible_scores[selected]
-                selection_reason = "highest_scored_eligible_after_clarify"
+                selected_probability = answer.probabilities[selected]
             else:
                 selected = None
                 selection_reason = (
-                    "clarify_without_eligible_scores" if answer.choice == "clarify" else "invalid_or_ineligible_choice"
+                    "router_clarify" if answer.choice == "clarify" else "invalid_or_ineligible_choice"
                 )
-
-            trace_probabilities = {}
-            if isinstance(probabilities, Mapping):
-                for label, value in probabilities.items():
-                    if not isinstance(label, str):
-                        continue
-                    try:
-                        number = float(value)
-                    except (OverflowError, TypeError, ValueError):
-                        number = math.nan
-                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(number):
-                        trace_probabilities[label] = None
-                    else:
-                        trace_probabilities[label] = number
             nemo_relay.scope.event(
                 "conversation.destination-route-choice",
                 handle=route_scope,
                 data={
                     "router_choice": answer.choice,
                     "router_confidence": answer.confidence,
-                    "router_probabilities": trace_probabilities,
+                    "router_probabilities": dict(answer.probabilities),
                     "selected_destination": selected,
                     "selected_destination_probability": selected_probability,
                     "selection_reason": selection_reason,
-                    "eligible_destinations": eligible,
-                    "eligible_scores_available": bool(eligible_scores),
+                    "eligible_destinations": current_eligible,
                 },
             )
         return selected
+
+
+async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:
+    """Keep cleanup owned through caller cancellation without canceling it again."""
+
+    drain = asyncio.gather(*tasks, return_exceptions=True)
+    cancelled = False
+    while not drain.done():
+        try:
+            await asyncio.shield(drain)
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 async def _emit_from(emit: _Emit, destination: str, _source: str, text: str) -> None:
@@ -954,27 +992,6 @@ def _record_acknowledgment_failure(
         cleanup_errors.append(error)
 
 
-def _bounded_history(
-    history: tuple[AgentExchange, ...],
-    budget_bytes: int,
-    participant_id: str,
-) -> tuple[AgentExchange, ...]:
-    bounded, _ = _bounded_history_with_times(history, (None,) * len(history), budget_bytes, participant_id)
-    return bounded
-
-
-def _bounded_history_with_times(
-    history: tuple[AgentExchange, ...],
-    timestamps: tuple[int | None, ...],
-    budget_bytes: int,
-    participant_id: str,
-) -> tuple[tuple[AgentExchange, ...], tuple[int | None, ...]]:
-    bounded, bounded_times, _ = _bounded_history_with_metadata(
-        history, timestamps, (None,) * len(history), budget_bytes, participant_id
-    )
-    return bounded, bounded_times
-
-
 def _bounded_history_with_metadata(
     history: tuple[AgentExchange, ...],
     timestamps: tuple[int | None, ...],
@@ -1000,7 +1017,7 @@ def _bounded_history_with_metadata(
         }
         item_size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if retained and size + item_size > budget_bytes:
-            _logger.error(
+            _logger.debug(
                 "dropping old routing context participant=%r source=%r size_bytes=%d budget_bytes=%d",
                 participant_id,
                 "conversation",
@@ -1009,7 +1026,7 @@ def _bounded_history_with_metadata(
             )
             break
         if not retained and item_size > budget_bytes:
-            _logger.error(
+            _logger.debug(
                 "dropping oversized routing context participant=%r source=%r size_bytes=%d budget_bytes=%d",
                 participant_id,
                 "conversation",

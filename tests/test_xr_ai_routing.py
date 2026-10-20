@@ -31,7 +31,6 @@ from xr_ai_routing._history import (
 )
 from xr_ai_routing._router import (
     _bounded_history_with_metadata,
-    _bounded_history_with_times,
     _is_valid_acknowledgment,
 )
 
@@ -49,10 +48,6 @@ def test_routable_agent_is_the_only_destination_protocol_export() -> None:
         "RoutingTurnContext",
         "current_turn_context",
     ]
-    assert not hasattr(routing_module, "ConversationDestination")
-    assert not hasattr(routing_module, "ConversationExchange")
-    assert not hasattr(routing_module, "ConversationFrontEnd")
-    assert not hasattr(routing_module, "ConversationTurn")
 
 
 class _Prediction:
@@ -193,11 +188,6 @@ async def _ack_output(front_end, query, output, *, participant="alice"):
 
 
 class _Decisions:
-    async def decide(self, *_args, **_kwargs):
-        raise AssertionError("one registered destination does not need route inference")
-
-
-class _Decisions:
     def __init__(self, *choices: str | DecisionAnswer) -> None:
         self.choices = deque(choices)
         self.calls = []
@@ -205,7 +195,9 @@ class _Decisions:
     async def decide(self, state, questions, *, timeout=None):
         self.calls.append((state, questions, timeout))
         choice = self.choices.popleft()
-        answer = choice if isinstance(choice, DecisionAnswer) else DecisionAnswer(choice, 1.0, {choice: 1.0})
+        answer = choice if isinstance(choice, DecisionAnswer) else DecisionAnswer(
+            choice, 1.0, {label: float(label == choice) for label in questions["destination"].criteria}
+        )
         return DecisionResponse(
             answers={"destination": answer},
             model="fake",
@@ -660,12 +652,9 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
 
     result, output = await _run(front_end, query="How can I move the objects behind me?")
 
-    assert result == DestinationResult("answer", "General answer.")
-    assert output == [("conversation", "General answer.")]
-    assert conversation.calls == [
-        ("admit", "How can I move the objects behind me?", False),
-        ("answer", "How can I move the objects behind me?"),
-    ]
+    assert result == DestinationResult("clarify", "Which part would you like help with?")
+    assert output == [("conversation", "Which part would you like help with?")]
+    assert conversation.calls == []
     assert observation.calls == []
     assert events == [
         (
@@ -674,22 +663,21 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
                 "router_choice": "clarify",
                 "router_confidence": 0.61,
                 "router_probabilities": {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
-                "selected_destination": "conversation",
-                "selected_destination_probability": 0.27,
-                "selection_reason": "highest_scored_eligible_after_clarify",
+                "selected_destination": None,
+                "selected_destination_probability": None,
+                "selection_reason": "router_clarify",
                 "eligible_destinations": ["conversation", "observation"],
-                "eligible_scores_available": True,
             },
         )
     ]
 
 
 @pytest.mark.asyncio
-async def test_uncertain_router_uses_highest_probability_eligible_visual_destination():
+async def test_router_uses_explicit_eligible_visual_destination():
     decisions = _Decisions(
         DecisionAnswer(
-            "clarify",
-            0.05,
+            "environment",
+            0.55,
             {"environment": 0.55, "clarify": 0.05, "observation": 0.25, "conversation": 0.15},
         )
     )
@@ -717,11 +705,11 @@ async def test_uncertain_router_uses_highest_probability_eligible_visual_destina
 
 
 @pytest.mark.asyncio
-async def test_uncertain_router_uses_observation_for_current_camera_question():
+async def test_router_uses_explicit_observation_for_current_camera_question():
     decisions = _Decisions(
         DecisionAnswer(
-            "clarify",
-            0.05,
+            "observation",
+            0.75,
             {"conversation": 0.1, "observation": 0.75, "environment": 0.1, "clarify": 0.05},
         )
     )
@@ -744,11 +732,11 @@ async def test_uncertain_router_uses_observation_for_current_camera_question():
 
 
 @pytest.mark.asyncio
-async def test_uncertain_router_tie_uses_destination_registration_order():
+async def test_router_respects_explicit_choice_with_tied_destination_probabilities():
     decisions = _Decisions(
         DecisionAnswer(
-            "clarify",
-            0.1,
+            "conversation",
+            0.45,
             {"observation": 0.45, "clarify": 0.1, "conversation": 0.45},
         )
     )
@@ -831,13 +819,13 @@ async def test_single_ineligible_destination_is_not_admitted():
 async def test_exhausted_declines_answer_once_with_default_and_shared_history():
     decisions = _Decisions(
         DecisionAnswer(
-            "clarify",
-            0.05,
+            "specialist",
+            0.8,
             {"conversation": 0.1, "specialist": 0.8, "visual": 0.05, "clarify": 0.05},
         ),
         DecisionAnswer(
-            "clarify",
-            0.05,
+            "visual",
+            0.85,
             {"conversation": 0.1, "visual": 0.85, "clarify": 0.05},
         ),
     )
@@ -895,7 +883,7 @@ async def test_ineligible_route_clarifies_instead_of_answering_default():
 
 
 @pytest.mark.asyncio
-async def test_default_fallback_records_route_reason(monkeypatch):
+async def test_already_declined_default_is_not_forced_to_answer(monkeypatch):
     default = _Destination(
         "conversation",
         admissions=(Admission("decline"),),
@@ -916,7 +904,8 @@ async def test_default_fallback_records_route_reason(monkeypatch):
 
     result, _output = await _run(front_end, query="Help me.")
 
-    assert result.disposition == "answer"
+    assert result.disposition == "clarify"
+    assert not default.answer_turns
     assert reasons == [("exhausted_declines", True)]
 
 
@@ -1155,8 +1144,12 @@ def test_routing_history_byte_budget_counts_timestamp_and_utf8_json_fields():
     try:
         rendered = '{"user":"質問","assistant":"答え","recorded_around_utc":"2026-10-01 12:00 UTC"}'
         exact_bytes = len(rendered.encode("utf-8"))
-        retained, retained_times = _bounded_history_with_times(history, (timestamp,), exact_bytes, "alice")
-        dropped, dropped_times = _bounded_history_with_times(history, (timestamp,), exact_bytes - 1, "alice")
+        retained, retained_times, _ = _bounded_history_with_metadata(
+            history, (timestamp,), (None,), exact_bytes, "alice"
+        )
+        dropped, dropped_times, _ = _bounded_history_with_metadata(
+            history, (timestamp,), (None,), exact_bytes - 1, "alice"
+        )
     finally:
         _active_history_timestamps.reset(token)
 

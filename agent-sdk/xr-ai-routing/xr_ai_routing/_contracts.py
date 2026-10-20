@@ -96,6 +96,10 @@ class Admission:
     text: str = ""
     """Optional text for clarification or release; release text precedes rerouting."""
 
+    def __post_init__(self) -> None:
+        if self.disposition not in {"accept", "decline", "clarify", "release"}:
+            raise ValueError("admission disposition must be accept, decline, clarify, or release")
+
 
 @dataclass(frozen=True, slots=True)
 class DestinationResult:
@@ -139,7 +143,8 @@ class RoutableAgent(Protocol):
 
         Stream chunks and return answer, focus, or release. After selected
         destinations decline through the bounded routing attempts, the front
-        end may call an eligible configured default once without ``admit()``;
+        end may call an eligible configured default once without ``admit()``,
+        unless that default already declined the current turn;
         destinations must support that standalone answer path.
 
         Destinations decline or clarify in ``admit()``, before output or work begins.
@@ -148,10 +153,9 @@ class RoutableAgent(Protocol):
         Destination exceptions and task cancellation propagate to the caller.
         The router suppresses later chunks after interruption but cannot
         retract output already delivered to ``emit``.
-        If routing returns ``clarify`` with usable scores for eligible
-        destinations, the router tries the highest-scoring candidate through
-        normal admission. Missing or invalid eligible scores, or no eligible
-        candidate, still produce a clarification. After exhausted declines,
+        A routing ``clarify`` decision ends selection without calling a
+        destination. After exhausted declines, the default is not retried if
+        it already declined this turn, and
         clarification is also used when the configured default is unavailable.
         """
 

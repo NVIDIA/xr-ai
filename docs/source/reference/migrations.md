@@ -78,17 +78,6 @@ catch-all message lists will show the additional messages, including typed echoe
 There is no new constructor switch. Routing remains participant-targeted;
 topic filtering is not an authorization boundary.
 
-### Conversation routing package
-
-The participant-scoped routing API is now distributed as `xr-ai-routing` and
-imported from `xr_ai_routing`. If you used an earlier preview of the routing
-SDK, change the dependency and move imports to `xr_ai_routing`. Rename
-`ConversationFrontEnd`, `ConversationTurn`, and `ConversationExchange` to
-`AgentRouter`, `AgentTurn`, and `AgentExchange`. Rename the protocol import
-from `ConversationDestination` to `RoutableAgent`. The routing package does
-not preserve the earlier import path. If you imported the implementation module
-directly, replace that private-module import with imports from `xr_ai_routing`.
-
 ### Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for
