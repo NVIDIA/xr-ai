@@ -98,6 +98,11 @@ normalized polygons. Remote image URLs are intentionally unsupported.
 Word, sentence, and paragraph grouping are available; recognition results
 need not be identical across backends.
 
+The Hugging Face server clips finite bounding-box coordinates to the image's
+normalized `[0, 1]` bounds while preserving recognized text and confidence.
+Non-finite model coordinates are an inference failure (HTTP 500), not valid
+detections. The SDK continues to reject malformed responses from any endpoint.
+
 The Hugging Face server accepts one image per request, at most 10 MiB encoded
 image bytes and 20 million pixels after full-resolution square padding:
 `max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
@@ -124,8 +129,12 @@ To test transcription against a running endpoint, run from the repository root:
 
 ```bash
 XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project tests \
-  pytest tests/test_ocr_server.py -m gpu
+  pytest tests/test_ocr_server.py::test_live_ocr_equipment_text
 ```
+
+This opt-in HTTP test does not require a local GPU or Docker and never owns
+containers. It skips when `XR_AI_OCR_TEST_URL` is unset; do not mark it `gpu`
+or run it through container-management fixtures.
 
 ## Speaker-conditioned STT
 

@@ -8,6 +8,7 @@ import asyncio
 import base64
 import binascii
 import io
+import math
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -93,9 +94,15 @@ def transcribe(model, request: OCRRequest) -> dict:
         predictions = model(np.asarray(image), merge_level=request.merge_levels[0])
     detections = []
     for prediction in predictions:
-        left, right = sorted((prediction["left"], prediction["right"]))
+        bounds = tuple(float(prediction[key]) for key in ("left", "right", "upper", "lower"))
+        if not all(math.isfinite(value) for value in bounds):
+            raise HTTPException(500, "OCR model returned non-finite bounding-box coordinates")
+        # Detector boxes can cross image edges; normalize at the protocol boundary.
+        # Validate before clipping so NaN/Inf cannot become plausible coordinates.
+        left, right, upper, lower = (min(1.0, max(0.0, value)) for value in bounds)
+        left, right = sorted((left, right))
         # Upstream's 'upper' is max-y and 'lower' is min-y.
-        top, bottom = sorted((prediction["upper"], prediction["lower"]))
+        top, bottom = sorted((upper, lower))
         detections.append({
             "text_prediction": {
                 "text": prediction["text"], "confidence": prediction["confidence"],

@@ -10,8 +10,10 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import threading
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -161,7 +163,6 @@ def test_exact_padded_area_boundary(monkeypatch):
 
 
 def test_normalizes_upstream_inverted_y(monkeypatch):
-    from contextlib import nullcontext
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=nullcontext))
     def model(image, merge_level):
         assert image.shape == (12, 16, 3) and merge_level == "word"
@@ -169,6 +170,100 @@ def test_normalizes_upstream_inverted_y(monkeypatch):
     result = server.transcribe(model, server.OCRRequest(input=[{"type": "image_url", "url": image_url()}]))
     points = result["data"][0]["text_detections"][0]["bounding_box"]["points"]
     assert points[0] == {"x": .1, "y": .2} and points[2] == {"x": .8, "y": .7}
+
+
+@pytest.mark.parametrize("bounds,expected", [
+    ((-.0625, .8, .2, .7), (0., .8, .2, .7)),
+    ((.1, 1.0625, .2, .7), (.1, 1., .2, .7)),
+    ((.1, .8, -.0625, .7), (.1, .8, 0., .7)),
+    ((.1, .8, .2, 1.0625), (.1, .8, .2, 1.)),
+    ((-.2, 1.2, -.3, 1.3), (0., 1., 0., 1.)),
+    ((0., 1., 0., 1.), (0., 1., 0., 1.)),
+    ((.1, .8, .2, .7), (.1, .8, .2, .7)),
+], ids=["left", "right", "top", "bottom", "all-edges", "boundary", "interior"])
+@pytest.mark.parametrize("reversed_bounds", [False, True])
+@pytest.mark.parametrize("merge_level", ["word", "sentence", "paragraph"])
+async def test_server_to_sdk_clips_finite_bounds(monkeypatch, bounds, expected, reversed_bounds, merge_level):
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=nullcontext))
+    left, right, top, bottom = bounds
+    if reversed_bounds:
+        left, right, top, bottom = right, left, bottom, top
+    predictions = [
+        {"text": "温度 23.5", "confidence": .95,
+         "left": left, "right": right, "upper": bottom, "lower": top},
+        {"text": "PRESSURE 120", "confidence": .9,
+         "left": .2, "right": .6, "upper": .8, "lower": .5},
+    ]
+
+    def model(image, **kwargs):
+        assert kwargs["merge_level"] == merge_level
+        return predictions
+
+    app = server.build_app(loader=lambda: model)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app)) as client:
+            spans = await NemotronOCR(config().ocr("ocr"), client=client).read_text(
+                image_url(), merge_level=merge_level,
+            )
+    left, right, top, bottom = expected
+    assert [span.text for span in spans] == ["温度 23.5", "PRESSURE 120"]
+    assert [span.confidence for span in spans] == [.95, .9]
+    assert spans[0].polygon == ((left, top), (right, top), (right, bottom), (left, bottom))
+    assert spans[1].polygon == ((.2, .5), (.6, .5), (.6, .8), (.2, .8))
+
+
+@pytest.mark.parametrize("coordinate", ["left", "right", "upper", "lower"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+async def test_server_rejects_nonfinite_model_bounds(monkeypatch, coordinate, value):
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=nullcontext))
+    prediction = {"text": "ABC", "confidence": .9, "left": .1, "right": .8, "upper": .7, "lower": .2}
+    prediction[coordinate] = value
+    app = server.build_app(loader=lambda: lambda *args, **kwargs: [prediction])
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app)) as client:
+            ocr = NemotronOCR(config().ocr("ocr"), client=client)
+            with pytest.raises(httpx.HTTPStatusError) as error:
+                await ocr.read_text(image_url())
+    assert error.value.response.status_code == 500
+    assert error.value.response.json()["detail"] == "OCR model returned non-finite bounding-box coordinates"
+
+
+@pytest.mark.parametrize("endpoint_configured", [False, True])
+def test_live_endpoint_smoke_never_manages_containers(endpoint_configured):
+    # Exercise actual pytest setup/teardown, including repository autouse fixtures.
+    script = '''
+import subprocess
+import sys
+import httpx
+import pytest
+
+run = subprocess.run
+def guarded_run(args, *pos, **kwargs):
+    assert args[0] != "docker", "Endpoint-only tests must not access Docker"
+    return run(args, *pos, **kwargs)
+subprocess.run = guarded_run
+
+def handle(request):
+    if request.method == "GET":
+        return httpx.Response(200)
+    return httpx.Response(200, json={"data": [{"index": 0, "text_detections": [{
+        "text_prediction": {"text": "TEMPERATURE 23.5 PRESSURE 120", "confidence": .95},
+        "bounding_box": {"points": [{"x": 0., "y": 0.}, {"x": 1., "y": 0.}, {"x": 1., "y": 1.}]},
+    }]}]})
+client = httpx.AsyncClient
+httpx.AsyncClient = lambda **kwargs: client(transport=httpx.MockTransport(handle), **kwargs)
+sys.exit(pytest.main([sys.argv[1], "-q"]))
+'''
+    env = dict(os.environ)
+    env.pop("XR_AI_OCR_TEST_URL", None)
+    if endpoint_configured:
+        env["XR_AI_OCR_TEST_URL"] = "https://ocr.example.test"
+    result = subprocess.run(
+        [sys.executable, "-c", script, f"{__file__}::test_live_ocr_equipment_text"],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ("3 passed" if endpoint_configured else "3 skipped") in result.stdout
 
 
 async def test_app_readiness_validation_and_inference():
@@ -265,10 +360,9 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     assert runs[0]["argv"] != runs[1]["argv"]
 
 
-@pytest.mark.gpu
 @pytest.mark.parametrize("merge_level", ["word", "sentence", "paragraph"])
 async def test_live_ocr_equipment_text(merge_level):
-    """Opt-in smoke test: set XR_AI_OCR_TEST_URL to a running OCR endpoint."""
+    """Opt-in HTTP-only probe; the caller owns the endpoint, not this test."""
     url = os.environ.get("XR_AI_OCR_TEST_URL")
     if not url:
         pytest.skip("set XR_AI_OCR_TEST_URL to the OCR server under test")
