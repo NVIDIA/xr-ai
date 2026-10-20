@@ -464,6 +464,13 @@ Package Contents
 
 
 
+.. py:exception:: ModelServiceError
+
+
+
+   Failure to determine or maintain an embedding model's reported identity.
+
+
 .. py:data:: ImageInput
 
    Image bytes, a filesystem path, a ``data:`` URL, or an HTTP(S) URL.
@@ -774,13 +781,6 @@ Package Contents
 
       Release resources owned by the service.
 
-
-
-.. py:exception:: ModelServiceError
-
-
-
-   Base exception for reported model-service operation failures.
 
 
 .. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)

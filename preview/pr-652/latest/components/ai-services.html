@@ -1181,15 +1181,20 @@ profiles leave attention-backend selection to vLLM. Refer to
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
 startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>. Start the
 embedding service first, RAG second, and the consuming worker last. The cache
-includes document content, indexing settings, the model-profile hash, the
-server-reported backing model (<code class="docutils literal notranslate"><span class="pre">root</span></code> from the matching <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> entry),
-and optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. A served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify
-weights. A successful lookup without backing-model metadata disables
-persistent caching and embeds documents on each startup. Failed metadata
-requests or invalid responses abort startup; they are not treated as absence.
-Change <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> if weights change under
-the same reported identity; this key supplements, not replaces, the profile
-hash. Restart RAG whenever the embedding model changes. Refer to
+includes document content, indexing settings, the resolved embedding-role
+hash, the server-reported <code class="docutils literal notranslate"><span class="pre">root</span></code> from the matching <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> entry, and
+optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. Unrelated model-role edits do not invalidate the cache.
+The reported identity is best-effort: this repository’s Docker launcher serves
+a resolved snapshot path, while pip serves the Hugging Face repository ID.
+Switching backends can rebuild the cache, and changing a Hub revision under
+the same pip model ID requires a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. A served alias such as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights. Providers omitting <code class="docutils literal notranslate"><span class="pre">root</span></code> cause documents
+to be re-embedded on every startup without persistent caching; <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+cannot opt back in. Failed metadata requests or invalid responses abort
+startup. The manual key supplements the role hash and reported identity.
+Every replica must remain on the same weights throughout indexing and serving;
+health probes check availability, not model consistency. Restart RAG whenever
+the embedding model changes. Refer to
 <a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for upgrading existing indexes and servers.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to

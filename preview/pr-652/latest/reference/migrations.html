@@ -505,14 +505,24 @@ lookup returns <code class="docutils literal notranslate"><span class="pre">None
 endpoint, credentials, or metadata response before restarting. Cancellation
 continues to propagate. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> does not override missing identity or a
 failed lookup.</p>
-<p>The cache format now combines backing-model identity, model-profile hash,
-manual <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>, indexing settings, and document content. Existing caches
-are rebuilt once and can be deleted afterward. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> now supplements
-the profile hash instead of replacing it. Bump it when weights change under
-the same reported identity, and restart RAG whenever the embedding model
-changes. Keep the endpoint stable throughout indexing and serving. A changed
-or lost identity after document embedding rejects the build before saving or
-serving the vectors; a failed post-build lookup also aborts startup.</p>
+<p>The cache format now combines the reported identity, a hash of the resolved
+embedding role, manual <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>, indexing settings, and document content.
+Existing caches are rebuilt once and can be deleted afterward. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+now supplements the role hash instead of replacing it. Unrelated LLM, VLM,
+or TTS edits and profile formatting changes do not rebuild the index.</p>
+<p>The reported identity is not a weight checksum. This repository’s Docker
+launcher reports a resolved snapshot path; pip reports the Hugging Face
+repository ID. Switching backends can rebuild the cache, while a Hub revision
+change under the same pip model ID requires a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>.</p>
+<p>The post-build check raises <code class="docutils literal notranslate"><span class="pre">ModelServiceError</span></code> if the reported identity changes,
+including appearing or disappearing, before saving or serving the vectors.
+A failed lookup also aborts startup. Metadata and embeddings are separate
+requests: matching before/after identities cannot detect a swap-and-restore
+or mixed replicas behind one endpoint. Every replica must remain on the same
+weights for the entire indexing run and serving lifetime. Health probes check
+availability, not model consistency. Stop RAG before changing models, bump
+<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> if weights change under the same reported identity, and restart
+against the stable deployment.</p>
 </section>
 <section id="shared-accepted-query-display">
 <h3>Shared accepted-query display<a class="headerlink" href="#shared-accepted-query-display" title="Link to this heading">#</a></h3>
