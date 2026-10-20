@@ -24,7 +24,7 @@ shared model services.
 | hub | sample | `services/device-io-hub/` | `device_io_hub` | 8080 (HTTPS and `/rtc` WSS proxy); 7880 (plaintext LiveKit direct-debug path; firewall-restricted) |
 | capture | sample, opt-in | `services/device-io-hub/` | `device_io_capture` | — |
 | cloudxr | sample | `services/cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy for WebRTC profiles; unused by `auto-native`) |
-| stt | reused | `services/stt-server/` | `stt_server` | 8103 |
+| speaker-stt | reused | `services/speaker-stt/` | `speaker_stt` | 8102 |
 | tts | reused | `services/pocket-tts/` | `pocket_tts_server` | 8105 |
 | omni | reused | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 (LLM) |
 | vlm | reused | `services/vlm-server/` | `vlm_server` | 8100 (Cosmos VLM) |
@@ -98,7 +98,8 @@ If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.
 
-The model-side fields live under `model-server-samples/model-servers/yaml/`. Set them
+The model-side fields live under `utils/xr-ai-model-server-stack/yaml/` and
+`agent-samples/xr-render-demo/model-servers/yaml/`. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.
 
@@ -132,7 +133,7 @@ overrides `lovr_bin` in `scene/scene_service.yaml`. Use a GPU index reported by
 settings are independent and must be planned together. Keep
 `allow_sim_pose: false` outside the live eval harness.
 
-Each `models.json` entry maps a logical role (`llm`, `agent_llm`, `stt`, `tts`,
+Each default `models.json` entry maps a logical role (`llm`, `tts`,
 or `vlm`) to an adapter and endpoint. Editing it changes which
 operator-owned endpoint the demo consumes; it does not reconfigure or restart
 the shared model. Refer to {doc}`/guides/customizing-model-servers` for
@@ -144,7 +145,7 @@ fields, checked-in values, and adjacent YAML comments.
 
 ## Opt-in session capture
 
-Capture is disabled by default. Run `uv run xr_render_demo --capture` to start
+Capture is disabled by default. Run `uv run xr_render_demo --session-recording` to start
 `device_io_capture` immediately after DeviceIOHub. Capture subscribes to
 normalized media-hub IPC rather than LiveKit, so the recording contract stays
 the same if the device transport changes. It requests video pixels through the
@@ -180,7 +181,7 @@ process uses DeviceIOHub's existing NumPy, ZMQ, and PyNvVideoCodec dependencies.
 Finalization additionally requires `ffmpeg` on `PATH`; it copies the H.264
 stream with its recorded frame timing, encodes the aligned PCM mix as AAC-LC,
 normalizes both streams to a shared zero-based timeline, and moves MP4 metadata
-ahead of media data for fast-start playback. Omit `--capture` when recording is
+ahead of media data for fast-start playback. Omit `--session-recording` when recording is
 prohibited, and treat the output as sensitive device data.
 
 The media-capture service itself also supports a `raw` projection and explicit
@@ -199,16 +200,15 @@ A small Python wrapper reads YAML configuration, sets the model environment,
 and starts vLLM through the selected `pip` or Docker backend. The vLLM process
 or container runs in a separate session so the shared model remains available
 across stack restarts; the wrapper monitors its health and reports readiness.
-The shared model-server stack reuses a healthy instance and replaces one whose
+The sample's model-server stack reuses a healthy instance and replaces one whose
 launch configuration changed.
 
 `vllm serve` uses `--tool-call-parser qwen3_coder` and
 `--reasoning-parser nemotron_v3`. The launcher selects NVFP4 on Blackwell and
 FP8 on Ada, Hopper, or Ampere, with BF16 available as an explicit fallback.
 
-One server backs both LLM roles in `yaml/models.json`: `agent_llm` runs the
-supervisor and subagent tool-calling loops, and `llm` remains available for
-untooled chat calls. Thinking stays off unless a call explicitly enables it.
+The `llm` entry in `yaml/models.json` runs the supervisor and subagent
+tool-calling loops. Thinking stays off unless a call explicitly enables it.
 
 ## VLM — Cosmos3 Nano Reasoner
 
@@ -241,13 +241,24 @@ Omitting `video_history_enabled` enables history. The checked-in worker YAML
 sets it to `false` because the sample hub disables recording. With history
 disabled, perception uses current frames only.
 
-Start the shared model-server stack and wait for its launcher to return before
+Start the sample's model-server stack and wait for its launcher to return before
 starting the sample. Server wrappers check model loading and service reuse.
-The worker does not poll model health endpoints. It retains a tool-shaped LLM
+The worker waits for required speaker ASR; it does not poll batch STT or TTS
+health endpoints. It retains a tool-shaped LLM
 inference warmup before announcing readiness so that LLM memory settles before
 LOVR creates its Vulkan device. This explicit warmup also runs for hosted LLMs.
 
-## STT — parakeet-tdt-0.6b-v3
+(stt-parakeet-tdt-0-6b-v3)=
+
+## Speech recognition
+
+The default requires speaker ASR on port 8102 before worker readiness and sends
+continuous audio to its private streaming endpoint. Enrollment selects which
+speaker may submit queries. The worker does not create a batch-STT client in
+this mode. Refer to {ref}`speaker-enrollment` for the stream and enrollment
+contract, and {doc}`/guides/customizing-model-servers` for explicit batch setup.
+
+### Optional batch STT — parakeet-tdt-0.6b-v3
 
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
@@ -293,7 +304,7 @@ cancelled before its reply is published, so no partial stream is left open.
 ## Agent runtime and voice topology
 
 ```
-VoiceAgent → private media session → VAD and STT ─→ voice.transcript topic
+VoiceAgent → private media session → selected speech processor ─→ voice.transcript topic
                                   └→ VoiceGate ─┐
            → typed hub text ingress ────────────┴→ xr-render.user-query topic
   → RenderAgent → SceneSupervisor → five focused subagents → voice.output topic

@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -509,16 +517,18 @@ entry point.</p>
 <p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, or any sample-specific name). Each role composes an
 adapter and endpoint spec, with optional deployment metadata. Consumer samples
-omit <code class="docutils literal notranslate"><span class="pre">deployment</span></code> and connect to shared endpoints; the shared model-server
-profiles use it to select managed services. For startup probes, refer to
-<a class="reference internal" href="../reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a> and <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.
+omit <code class="docutils literal notranslate"><span class="pre">deployment</span></code> and connect to configured endpoints. A sample-local
+<code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher declares the required local servers
+separately and owns small GPU-profile overrides; shared defaults live under
+<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code>. For startup probes, refer to
+<a class="reference internal" href="../reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a> and <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.
 Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
-shared with the stdlib-only orchestrator requires the wrapped nested JSON shape
-including deployment metadata. The worker passes either form to
+read through the generic launcher deployment loaders requires the
+wrapped nested JSON shape including deployment metadata. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services with <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>,
 <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, or <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>. Schema, preset
 table, compatibility formats, and the profile contract are in
-<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. To reuse a customized shared stack, follow
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>. To reuse a customized local stack, follow
 <a class="reference internal" href="customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and
@@ -577,6 +587,7 @@ build-backend = "hatchling.build"
 [project]
 name = "&lt;kebab-name&gt;"
 version = "0.1.0"
+description = "&lt;One-line description of the sample experience&gt;"
 requires-python = "&gt;=3.11,&lt;3.15"
 dependencies = [
     "xr-ai-launcher",
@@ -678,7 +689,7 @@ packages = ["&lt;snake_name&gt;_worker"]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/8c70a0fa115f0a8c0fcb1871d0901e12e8c9bb74/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/be68d1f645cc9c2e0a512920d9c3e37c40230705/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0

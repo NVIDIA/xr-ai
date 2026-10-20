@@ -8,7 +8,7 @@
 Read this when calling or operating an inference server. For the
 orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`. For an end-to-end procedure covering custom
-deployment profiles, hardware YAML, and consumer model configuration, refer to
+shared server defaults, sample GPU overrides, and consumer model configuration, refer to
 {doc}`/guides/customizing-model-servers`.
 
 Multiple reusable inference and typed capability services are available as
@@ -45,10 +45,13 @@ the exact layout per launch style is below.
 `services/speaker-stt` is a private local inference process. It shares
 Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
 while keeping each session's diarization history, enrollment and ASR caches
-separate. A session enrolls one speaker with the configured start phrase and
-releases that identity with the stop phrase. Background voices do not reach
-the transcript as separate speakers after enrollment: the decoder receives the
-mixed audio with owner and interference masks and is conditioned on the owner.
+separate. In conversation and hybrid modes, a session enrolls one speaker with
+the configured start phrase and
+releases that identity with the stop phrase. With diagnostics disabled,
+background voices do not reach the transcript as separate speakers after
+enrollment: the decoder receives the mixed audio with owner and interference
+masks and is conditioned on the owner. Optional diagnostics expose ignored
+transcripts for display only; they cannot query the agent or change enrollment.
 Before enrollment, each detected speaker has independent conditioned decoding
 and phrase-matching state. Someone already talking does not reserve ownership:
 another speaker can say the start phrase over that conversation and enroll when
@@ -64,17 +67,26 @@ a guarantee of distinguishing all acoustically simultaneous requests. Speaker
 labels are session-local identities; actual attribution and interference
 suppression require qualification on the intended microphones.
 
+Interaction mode is independent of the selected ASR backend. While closed,
+`wake_only` and `hybrid` can authorize an attributed, wake-addressed one-off
+without enrolling its speaker. A unique exact start takes priority in hybrid
+mode; ambiguous same-step requests authorize nobody. A bare wake permits only
+that recognized speaker's next utterance whose onset precedes the configured
+grace deadline. `always_on` accepts all recognized speakers without enrollment.
+Candidate transcripts themselves are not query authorization or diagnostics.
+
 The process follows the model-service HTTP pattern and exposes health and model
 identity endpoints. A private WebSocket carries mono signed 16-bit PCM
-at 16 kHz and returns enrollment and transcription events. It serializes
+at 16 kHz and returns enrollment, authorized one-turn, and transcription events. It serializes
 inference because model conditioning is mutable.
 Opening a session establishes the capture timestamp of its first sample.
 Subsequent audio requests form one ordered, contiguous PCM stream; the service
 derives all later timestamps from the number of samples it has accepted. The
 caller must close and reopen the session if its capture or transport layer drops
 audio, because that layer owns the information needed to detect the loss.
-Utterances forced to end at the configured duration limit cannot enroll or
-release a speaker; an enrolled owner's forced segment is still transcribed.
+Utterances forced to end at the configured duration limit cannot authorize a
+closed-state turn, enroll, or release a speaker; an enrolled owner's forced
+segment is still transcribed.
 Start and stop phrases can span utterances within the conversation phrase
 window, retaining separate enrollment fragments for each speaker. A truncated
 candidate cannot enroll from the tail of the same continuing speech episode;
@@ -91,6 +103,11 @@ complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
 or incomplete PCM samples are protocol errors. The server's standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.
+
+The private identity is protocol 5, adding the explicit diagnostics setting to
+protocol 4's interaction policy. Worker and speaker service must be restarted
+together after updating: earlier endpoints fail admission rather than silently
+selecting batch STT or accepting incompatible interaction settings.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
@@ -113,8 +130,12 @@ proxy alive.
 
 Each session owns one diarization cache and at most eight temporary ASR caches
 before enrollment, bounded by the model's speaker-label capacity. Features and
-model weights are shared. After enrollment only the owner's ASR cache is needed
-unless the dependent diagnostics layer requests other transcripts. With the
+model weights are shared. Always-on and wake-only keep candidate decoding as their
+steady state; hybrid uses it whenever no owner conversation is open. Every
+candidate remains required, so a decoder failure resets that session rather
+than silently ignoring a competing speaker. After enrollment only the owner's
+ASR cache is needed with diagnostics disabled. Enabled diagnostics share encoded features but add
+decoding work and separate temporary ASR caches for non-owner speakers. With the
 default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
 GPU memory and latency at that bound have not been qualified. Candidate-decoding
 failure revokes the session because dropping a candidate could conceal a phrase
@@ -202,7 +223,7 @@ and Docker images are already installed. To forbid downloads, set
 it into its containers:
 
 ```bash
-HF_HUB_OFFLINE=1 uv run --project model-server-samples/model-servers model_servers
+HF_HUB_OFFLINE=1 uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers
 ```
 
 In this mode, a service whose model is not cached fails at startup with an
@@ -241,13 +262,12 @@ start successfully without network access. Recreate project environments with
 
 ## Connecting a sample to shared model services
 
-Model services are operator-owned by the persistent `model-servers` stack.
-Application samples reuse those endpoints; they do not own model processes or
-copy server YAML into their own configuration directories. Follow
-{doc}`/guides/customizing-model-servers` to select a deployment profile, tune
-its hardware-specific server YAML, and copy compatible endpoint entries into
-the sample's models JSON. Omit the `deployment` object from copied entries;
-it belongs to the shared model-server profile.
+Each sample's `model-servers/` project conveniently starts its required local
+inference services. Shared defaults live under `utils/xr-ai-model-server-stack/`;
+sample GPU profiles contain only placement and workload overrides. Workers
+consume endpoints from their models JSON and can also use services started
+individually or independently operated endpoints. Refer to
+{doc}`/guides/customizing-model-servers` for configuration and the stop/start flow.
 
 Declare only application processes in the sample orchestrator. Application
 capability services such as RAG remain sample-owned. For startup ordering and
@@ -268,7 +288,7 @@ never branch on backend.
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
 config = load_models_config("yaml/models.json")
-async with make_llm(config, "agent_llm") as llm:
+async with make_llm(config, "llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
         max_tokens=128,
@@ -282,7 +302,7 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
 ```json
 {
   "models": {
-    "agent_llm": {
+    "llm": {
       "category": "llm",
       "adapter": {"preset": "nemotron_omni"},
       "endpoint": {"base_url": "http://localhost:8108"}
@@ -292,8 +312,8 @@ A consumer model profile specifies adapter behavior and endpoint connectivity:
 ```
 
 The worker-side `xr-ai-models` loader accepts JSON or YAML, including flat
-legacy entries and direct role mappings. A profile shared with the stdlib-only
-launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
+legacy entries and direct role mappings. A profile shared with the launcher
+must use the wrapped nested `.json` contract; non-`.json` profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
 {doc}`/reference/agent-sdk-models`.
@@ -323,9 +343,8 @@ configuration paths, smoke checks, and deployment qualification.
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-**survive stack restarts by design**, including when a deployment profile
-marks them `managed`: the stack starts them, but a clean shutdown leaves them
-serving so the next start reuses hot weights. Use `model_servers --stop`
+**survive agent restarts by design**: the sample's convenience launcher starts
+them and returns after readiness, leaving weights warm. Use the sample's model command with `--stop`
 for the selected local deployment. Startup does not sweep services omitted
 from its configuration. Independently deployed NIMs follow their operator's
 lifecycle. At startup a wrapper
@@ -356,8 +375,20 @@ Either way vLLM keeps running after the orchestrator exits.
 
 The STT server follows the same pattern without Docker: `stt_server` spawns
 its persistent process with `start_new_session=True`, reuses a healthy server
-that survived a previous stack run, and is stopped by the same
-`model_servers --stop` cleanup.
+that survived a previous stack run, and is stopped by the sample's model
+command with `--stop` when selected in that stack.
+
+Each sample's model-server list selects speaker ASR. The launcher waits for
+model loading, decoder warmup and HTTP readiness
+before reporting readiness, and reuses warm instances with matching configuration.
+Configuration changes require stopping and restarting the service. `--stop`
+stops only the sample's explicitly selected server list, using its configured
+ports and the existing process-ownership guards. The speaker service listens
+on port 8102 and supports streaming audio
+over a private WebSocket.
+Native NIM speech uses independently deployed Riva endpoints rather than this
+local model stack. Refer to {doc}`/guides/deploying-with-nim` and
+{doc}`/reference/agent-sdk-voice` for worker backend selection and enrollment.
 
 Pocket TTS uses the launcher's persistent process group directly. Its bootstrap
 reuses an existing healthy listener. In a monitored stack, the reuse invocation
@@ -376,7 +407,7 @@ with stale memory limits, entrypoint, setup commands, or model arguments.
 **Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -391,29 +422,20 @@ survive as orphans and launcher abort-time escalation can still reach Pocket
 TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
 other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
-`model_servers --stop` exits nonzero if any target could not be stopped. Absent
+the sample's model command with `--stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
 
-Stop targets are the managed services in the same launch plan used for
-startup, with ports read from the selected hardware YAMLs. Entries explicitly
-marked `external` or `reused`, and services omitted from the deployment, are
-not stop targets. For a custom deployment, use the same selection as at launch:
+Stop targets are only the servers listed by that sample's convenience launcher,
+with ports read from the shared defaults and selected sample GPU overrides.
+Use the same explicit `--gpu-profile NAME` on start and stop. Stop does not
+require model-download credentials.
 
-```bash
-uv run --project model-server-samples/model-servers model_servers \
-  --models /path/to/models.custom.json --gpu-profile dual_48G_ada --stop
-```
-
-Automatic GPU detection remains the default; use the same `--gpu-profile` when
-it was explicitly selected at launch or detection is unavailable. Stop does
-not require model-download credentials. Stop the old selection before changing
-its JSON, hardware profile, or service ports; no previous configuration is
-recorded or rediscovered.
-
-This is configuration-scoped cleanup, not exclusive launch-instance ownership.
-A matching managed-service listener on a selected port can be stopped even if
-it was started independently. Existing identity checks reject unknown listeners;
-they do not identify which deployment originally started a recognized service.
+Before switching samples, updating the checkout, or editing server settings,
+stop the current stack using its current checkout and profile. Then start the
+new stack. The convenience launchers do not track previous configurations or
+provide isolation between samples using the same ports. Cleanup can stop a
+recognized service used by another sample or manual invocation. Refer to
+{doc}`/guides/customizing-model-servers` for the complete development flow.
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
@@ -449,7 +471,7 @@ When upgrading an existing checkout, stop the persistent model stack before
 starting it with the new image:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers --stop
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers --stop
 docker pull nvcr.io/nvidia/vllm:26.09-py3
 ```
 
@@ -523,7 +545,7 @@ The selected image reports this in-container vLLM version:
 
 ### Cleanup
 
-`model_servers --stop` works for both modes within the selected managed launch
+the sample's model command with `--stop` works for both modes within the selected managed launch
 plan. Cleanup locates labelled Docker containers before inspecting ports, then
 stops them with `docker stop` (escalating to `docker kill` after 20 s).
 Pip-mode processes carry an `xr-ai-vllm` ownership marker; unknown listeners
@@ -548,6 +570,19 @@ cleanup.
   mapping. Cosmos-Reason1 remains available by pairing
   `model: nvidia/Cosmos-Reason1-7B` with the `cosmos_vlm` client preset. Hosting
   backend is selectable per YAML — refer to *Choosing the vLLM runtime* above.
+  When serving `nvidia/Cosmos3-Nano` with the default Docker image on SM12 GPUs,
+  including RTX Blackwell and GB10, the service selects Triton attention for
+  both the decoder and vision encoder.
+  This reduces cold image latency without depending on a previous container's
+  compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image's
+  FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
+  so that explanation does not apply to every SM12 deployment. Other GPUs,
+  custom images, and pip mode retain vLLM's backend selection. The optional
+  `attention_backend` and
+  `mm_encoder_attn_backend` YAML keys override each component independently;
+  explicit `auto` restores vLLM's selection. Cold starts still include model
+  loading and backend compilation. A healthy model HTTP endpoint is not a
+  guarantee that sample inference warmup has completed.
 - **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via
@@ -644,7 +679,7 @@ cleanup.
   and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - Standalone service YAMLs live beside services for direct single-service
-  launches; they are not sample configuration. Shared deployments use the
-  hardware-specific YAML under
-  `model-server-samples/model-servers/yaml/<gpu-profile>/`, while samples reuse the
-  resulting endpoints through their models JSON.
+  launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
+  `utils/xr-ai-model-server-stack/yaml/` with overrides under
+  `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml`. Workers
+  consume the resulting endpoints through their models JSON.

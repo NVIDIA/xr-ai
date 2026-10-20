@@ -181,16 +181,54 @@ Package Contents
 
 
 
-.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
+.. py:class:: VoiceAgent(*, query_topic: xr_ai_runtime.Topic[UserQuery], stt: xr_ai_models.STTService | None, tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False)
 
 
 
    Own voice media lifecycle and bridge runtime input and output topics.
 
-   Startup waits only for explicitly supplied ``probes``, such as an inference
-   warmup or an application capability dependency. STT and TTS health are not
-   polled automatically. Readiness reports initialized application transport
-   after those explicit probes, not availability of every model endpoint.
+   Startup waits for explicitly supplied ``probes``, such as an inference
+   warmup or an application capability dependency, and required speaker ASR.
+   Batch STT and TTS health are not polled automatically. Readiness reports
+   initialized application transport after those startup requirements, not
+   availability of every model endpoint.
+
+   ``voice_gate`` selects speech through its speaker settings. ``stt=None``
+   is accepted only with enabled, required speaker ASR; startup then waits
+   for that service. Ordinary STT and automatic speaker selection require a
+   batch ``STTService``. Missing that dependency raises :class:`ValueError`
+   before VoiceAgent allocates media. An injected transport is already allocated
+   by its caller, who retains cleanup responsibility if construction fails.
+
+   :meth:`from_models` resolves that dependency from an already-loaded model
+   profile and the same voice-gate configuration, without application-side
+   backend inspection. The normal constructor accepts explicitly owned clients.
+
+   Accepted queries also return participant-routed UTF-8 display text on
+   ``voice.user-query``. Speaker ASR includes its session-local speaker label;
+   ordinary STT and typed input use ``User``. This display does not change
+   :class:`UserQuery` or require an application subscriber. Delivery uses the
+   existing hub transport and retains its backpressure and best-effort semantics.
+
+
+   .. py:method:: from_models(*, models: xr_ai_models.ModelsConfig, query_topic: xr_ai_runtime.Topic[UserQuery], tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False) -> VoiceAgent
+      :classmethod:
+
+
+      Construct voice input from loaded models and voice-gate settings.
+
+      Enabled, required speaker ASR uses the configured streaming endpoint
+      without constructing a batch client. Disabled or automatic speaker
+      selection constructs the existing ``stt`` model role. Automatic
+      selection retains that real batch client for its startup fallback.
+      Other arguments and resource ownership match the normal constructor.
+
+      Raises :class:`KeyError` when the selected batch ``stt`` role is absent,
+      :class:`TypeError` when it names another model role, and
+      :class:`ValueError` for an unsupported adapter or non-positive response
+      capacity. Caller-created clients and transports remain caller-owned
+      when construction fails.
+
 
 
    .. py:method:: run(runtime: xr_ai_runtime.AgentRuntime, *, source: str = 'voice') -> None

@@ -335,6 +335,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -352,14 +353,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -392,6 +399,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -662,7 +670,7 @@ overflow, and shutdown discards queued items that have not been published.</p>
 <dl>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">query_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.UserQuery" title="xr_ai_voice.UserQuery"><span class="pre">UserQuery</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">stt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.STTService" title="xr_ai_models.STTService"><span class="pre">xr_ai_models.STTService</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">stt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.STTService" title="xr_ai_models.STTService"><span class="pre">xr_ai_models.STTService</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">tts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.TTSService" title="xr_ai_models.TTSService"><span class="pre">xr_ai_models.TTSService</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">vad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><span class="pre">xr_ai_voice.VadConfig</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">voice_gate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><span class="pre">xr_ai_voicegate.VoiceGateConfig</span></a></span></em>,</dd>
@@ -682,10 +690,64 @@ overflow, and shutdown discards queued items that have not been published.</p>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_voice.VoiceAgent" title="Link to this definition">#</a></dt>
 <dd><p>Own voice media lifecycle and bridge runtime input and output topics.</p>
-<p>Startup waits only for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>, such as an inference
-warmup or an application capability dependency. STT and TTS health are not
-polled automatically. Readiness reports initialized application transport
-after those explicit probes, not availability of every model endpoint.</p>
+<p>Startup waits for explicitly supplied <code class="docutils literal notranslate"><span class="pre">probes</span></code>, such as an inference
+warmup or an application capability dependency, and required speaker ASR.
+Batch STT and TTS health are not polled automatically. Readiness reports
+initialized application transport after those startup requirements, not
+availability of every model endpoint.</p>
+<p><code class="docutils literal notranslate"><span class="pre">voice_gate</span></code> selects speech through its speaker settings. <code class="docutils literal notranslate"><span class="pre">stt=None</span></code>
+is accepted only with enabled, required speaker ASR; startup then waits
+for that service. Ordinary STT and automatic speaker selection require a
+batch <code class="docutils literal notranslate"><span class="pre">STTService</span></code>. Missing that dependency raises <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code>
+before VoiceAgent allocates media. An injected transport is already allocated
+by its caller, who retains cleanup responsibility if construction fails.</p>
+<p><a class="reference internal" href="#xr_ai_voice.VoiceAgent.from_models" title="xr_ai_voice.VoiceAgent.from_models"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_models()</span></code></a> resolves that dependency from an already-loaded model
+profile and the same voice-gate configuration, without application-side
+backend inspection. The normal constructor accepts explicitly owned clients.</p>
+<p>Accepted queries also return participant-routed UTF-8 display text on
+<code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>. Speaker ASR includes its session-local speaker label;
+ordinary STT and typed input use <code class="docutils literal notranslate"><span class="pre">User</span></code>. This display does not change
+<a class="reference internal" href="#xr_ai_voice.UserQuery" title="xr_ai_voice.UserQuery"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserQuery</span></code></a> or require an application subscriber. Delivery uses the
+existing hub transport and retains its backpressure and best-effort semantics.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_voice.VoiceAgent.from_models">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_models</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><span class="pre">xr_ai_models.ModelsConfig</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">query_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.UserQuery" title="xr_ai_voice.UserQuery"><span class="pre">UserQuery</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.TTSService" title="xr_ai_models.TTSService"><span class="pre">xr_ai_models.TTSService</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">vad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.VadConfig" title="xr_ai_voice.VadConfig"><span class="pre">xr_ai_voice.VadConfig</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">voice_gate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGateConfig" title="xr_ai_voicegate.VoiceGateConfig"><span class="pre">xr_ai_voicegate.VoiceGateConfig</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">probes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">ready_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">closeables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">text_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'agent.response'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">idle_timeout_secs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">transport</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_voice.HubVoiceTransport" title="xr_ai_voice.HubVoiceTransport"><span class="pre">xr_ai_voice.HubVoiceTransport</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">response_capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">text_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_joined_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceParticipantJoined" title="xr_ai_voice.VoiceParticipantJoined"><span class="pre">VoiceParticipantJoined</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">participant_left_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceParticipantLeft" title="xr_ai_voice.VoiceParticipantLeft"><span class="pre">VoiceParticipantLeft</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">interrupted_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_runtime/index.html#xr_ai_runtime.Topic" title="xr_ai_runtime.Topic"><span class="pre">xr_ai_runtime.Topic</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_voice.VoiceInterrupted" title="xr_ai_voice.VoiceInterrupted"><span class="pre">VoiceInterrupted</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">interrupt_on_supersede</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><span class="pre">VoiceAgent</span></a></span></span><a class="headerlink" href="#xr_ai_voice.VoiceAgent.from_models" title="Link to this definition">#</a></dt>
+<dd><p>Construct voice input from loaded models and voice-gate settings.</p>
+<p>Enabled, required speaker ASR uses the configured streaming endpoint
+without constructing a batch client. Disabled or automatic speaker
+selection constructs the existing <code class="docutils literal notranslate"><span class="pre">stt</span></code> model role. Automatic
+selection retains that real batch client for its startup fallback.
+Other arguments and resource ownership match the normal constructor.</p>
+<p>Raises <code class="xref py py-class docutils literal notranslate"><span class="pre">KeyError</span></code> when the selected batch <code class="docutils literal notranslate"><span class="pre">stt</span></code> role is absent,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code> when it names another model role, and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unsupported adapter or non-positive response
+capacity. Caller-created clients and transports remain caller-owned
+when construction fails.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAgent.run">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span>
@@ -925,6 +987,7 @@ after those explicit probes, not availability of every model endpoint.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAgent"><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAgent.from_models"><code class="docutils literal notranslate"><span class="pre">from_models()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAgent.run"><code class="docutils literal notranslate"><span class="pre">run()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_voice.VoiceAgent.output"><code class="docutils literal notranslate"><span class="pre">output()</span></code></a></li>
 </ul>

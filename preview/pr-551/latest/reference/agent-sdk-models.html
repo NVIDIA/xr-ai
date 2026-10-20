@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -441,7 +449,7 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span>
 
 <span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">"yaml/models.json"</span><span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"agent_llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">"llm"</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
         <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">"hello"</span><span class="p">)],</span>
         <span class="n">max_tokens</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
@@ -470,10 +478,13 @@ protocols instead of hand-written HTTP or vendor SDK calls. Refer to
 <p>The profile entry uses <code class="docutils literal notranslate"><span class="pre">category:</span> <span class="pre">decision</span></code>, <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">systemone</span></code>, a model name,
 and an endpoint. The standalone <a class="reference internal" href="clef-flash.html"><span class="doc">Clef-Flash guide</span></a>
 documents the local service and its pinned model release.</p>
-<p id="profile-contract">A client profile names logical roles and declares adapters and endpoints:</p>
+<p id="profile-contract">Model entry names are application-defined. Applications can configure multiple
+LLMs under distinct names with <code class="docutils literal notranslate"><span class="pre">make_llm(config,</span> <span class="pre">name)</span></code>, using the same endpoint
+or different endpoints.</p>
+<p>A client profile names logical roles and declares adapters and endpoints:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"agent_llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"llm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llm"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_omni"</span><span class="p">},</span>
 <span class="w">      </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -496,11 +507,96 @@ orchestrator manages. Consumer profiles omit it: their endpoints are operated
 outside the sample, whether locally or remotely. Existing explicit <code class="docutils literal notranslate"><span class="pre">reused</span></code>
 and <code class="docutils literal notranslate"><span class="pre">external</span></code> entries remain supported for compatibility.</p></li>
 </ul>
+</section>
+<section id="annotated-consumer-configuration">
+<h2>Annotated consumer configuration<a class="headerlink" href="#annotated-consumer-configuration" title="Link to this heading">#</a></h2>
+<p>The package reference below shows local endpoint examples, not a default launch
+stack. Copy <code class="docutils literal notranslate"><span class="pre">models.yaml.sample</span></code> to your application’s <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code>, keep only
+the roles it uses, and pass that file explicitly to <code class="docutils literal notranslate"><span class="pre">load_models_config</span></code>.
+Loading it does not connect to or launch a model server.
+The launcher requires JSON deployment profiles; this worker-side YAML reference
+does not replace a launcher’s <code class="docutils literal notranslate"><span class="pre">models.json</span></code>.
+Refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for the separate annotated NIM profile
+and its transport-specific settings.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Copy-only model consumer reference: copy to models.yaml, keeping only the</span>
+<span class="c1"># roles your application uses, then select that working file explicitly.</span>
+<span class="c1"># load_models_config accepts YAML or JSON; it does not auto-discover this file,</span>
+<span class="c1"># start services, expand environment variables, or resolve URLs as file paths.</span>
+<span class="c1"># These local endpoints are examples, not loader defaults or a launch profile.</span>
+<span class="c1"># A sample's own models.json remains authoritative for that sample.</span>
+<span class="c1"># YAML is supported by the worker-side SDK; launcher deployment profiles must</span>
+<span class="c1"># remain JSON. Do not replace a launcher's models.json with this file.</span>
+<span class="c1"># Speaker-conditioned ASR is configured separately in voice_gate.yaml; the stt</span>
+<span class="c1"># role below is ordinary batch STT, needed only when the application uses it.</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Logical role names are application-defined; use the same names in make_*.</span>
+<span class="w">  </span><span class="nt">llm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Presets supply category, model identifier, capabilities, and wire quirks.</span>
+<span class="w">      </span><span class="c1"># Explicit settings override the preset. Do not also set adapter.kind.</span>
+<span class="w">      </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nemotron_omni</span>
+<span class="w">      </span><span class="c1"># Optional overrides (must match the serving model's real contract):</span>
+<span class="w">      </span><span class="c1"># model_name: llm</span>
+<span class="w">      </span><span class="c1"># reasoning_field: reasoning_content</span>
+<span class="w">      </span><span class="c1"># capabilities: {streaming: true, tool_calls: true}</span>
+<span class="w">      </span><span class="c1"># default_extras: {chat_template_kwargs: {enable_thinking: false}}</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8108</span><span class="w"> </span><span class="c1"># HTTP origin, without /v1 routes.</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span><span class="w">                  </span><span class="c1"># Positive seconds; speech defaults to 30.</span>
+<span class="w">      </span><span class="nt">readiness</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">health</span><span class="w">             </span><span class="c1"># Explicit health() calls only, not polling.</span>
+<span class="w">      </span><span class="nt">health_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/health</span><span class="w">          </span><span class="c1"># HTTP health route; NIM: /v1/health/ready.</span>
+<span class="w">      </span><span class="c1"># Name an environment variable, never put the actual token in this file.</span>
+<span class="w">      </span><span class="c1"># api_key_env: MODEL_ENDPOINT_API_KEY</span>
+<span class="w">    </span><span class="c1"># Omission means external ownership: consumers never stop this endpoint.</span>
+<span class="w">    </span><span class="c1"># Managed JSON launch profiles additionally name the service and server-side</span>
+<span class="w">    </span><span class="c1"># credentials (environment-variable names, not endpoint bearer tokens):</span>
+<span class="w">    </span><span class="c1"># deployment:</span>
+<span class="w">    </span><span class="c1">#   ownership: managed</span>
+<span class="w">    </span><span class="c1">#   service: nemotron_omni_llm_server</span>
+<span class="w">    </span><span class="c1">#   credentials: []</span>
+<span class="w">  </span><span class="nt">vlm</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cosmos3_nano_reasoner</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8100</span>
+<span class="w">  </span><span class="nt">stt</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parakeet_stt</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8103</span>
+<span class="w">  </span><span class="nt">tts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pocket_tts</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8105</span>
+<span class="w">  </span><span class="nt">embedding</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nemotron_embedding</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8109</span>
+<span class="w">  </span><span class="c1"># A decision role without a preset declares category and the SystemOne adapter.</span>
+<span class="w">  </span><span class="nt">decision</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">decision</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">systemone</span>
+<span class="w">      </span><span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cloudflare/clef-flash</span>
+<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8120</span>
+
+<span class="c1"># For Riva speech, including TLS, language, voice, sample rate, function IDs,</span>
+<span class="c1"># endpoint credentials, and independently deployed NIM examples, refer to</span>
+<span class="c1"># docs/source/reference/agent-sdk-models.md and deployment/nim/models.yaml.</span>
+</pre></div>
+</div>
 <p id="deployment-profiles">Workers may load JSON or YAML. For compatibility, the loader accepts a direct
 role mapping, legacy flat entries, <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code>,
 and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code>. The public role-spec classes also retain their legacy
 flat constructors and read-only flat properties. Profiles shared with the
-stdlib-only launcher must use the wrapped nested JSON form with <code class="docutils literal notranslate"><span class="pre">adapter</span></code>,
+launcher must use the wrapped nested JSON form with <code class="docutils literal notranslate"><span class="pre">adapter</span></code>,
 <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>, and <code class="docutils literal notranslate"><span class="pre">deployment</span></code> objects. Only the worker-side loader accepts omitted
 <code class="docutils literal notranslate"><span class="pre">deployment</span></code> metadata. Launcher credentials are explicit: endpoint credentials
 use <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>, while credentials needed by a managed service itself use
@@ -509,7 +605,7 @@ use <code class="docutils literal notranslate"><span class="pre">api_key_env</sp
 <section id="request-failures">
 <h2>Request failures<a class="headerlink" href="#request-failures" title="Link to this heading">#</a></h2>
 <p>Applications handle errors from model requests. For worker startup behavior,
-refer to <a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
+refer to <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 </section>
 <section id="built-in-adapters">
 <h2>Built-in adapters<a class="headerlink" href="#built-in-adapters" title="Link to this heading">#</a></h2>
@@ -693,6 +789,7 @@ repository root:</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-a-model-client">Construct a model client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#annotated-consumer-configuration">Annotated consumer configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#request-failures">Request failures</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-adapters">Built-in adapters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosted-endpoints">Hosted endpoints</a></li>

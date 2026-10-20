@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -448,8 +456,8 @@ NVDEC.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>model-servers (all models)</p></td>
-<td><p>~55 GB</p></td>
+<tr class="row-even"><td><p>Local model stacks</p></td>
+<td><p>Depends on the sample and its selected models</p></td>
 </tr>
 <tr class="row-odd"><td><p>simple-vlm-example (requires model services)</p></td>
 <td><p>Uses the model-services allocation</p></td>
@@ -460,8 +468,8 @@ NVDEC.</p>
 <tr class="row-odd"><td><p>tea-making-sample (requires model services)</p></td>
 <td><p>Uses the model-services allocation</p></td>
 </tr>
-<tr class="row-even"><td><p>xr-render-demo (requires model-servers)</p></td>
-<td><p>~55 GB for models and ~2 GB for CloudXR and the hub</p></td>
+<tr class="row-even"><td><p>xr-render-demo (requires model services)</p></td>
+<td><p>Model allocation plus ~2 GB for CloudXR and the hub</p></td>
 </tr>
 <tr class="row-odd"><td><p>Hub only</p></td>
 <td><p>No model allocation; NVENC and NVDEC are still required</p></td>
@@ -525,7 +533,7 @@ is registered.</p>
 <section id="docker-access">
 <h4>Docker access<a class="headerlink" href="#docker-access" title="Link to this heading">#</a></h4>
 <p>Run this command without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>, in the same login session that will launch
-<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>:</p>
+the sample’s model-server command:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>ps
 </pre></div>
 </div>
@@ -540,7 +548,7 @@ picked up the new group membership, reboot the host. Opening another terminal
 in the same desktop session does not refresh its group membership.</p>
 <p>For an immediate alternative after adding your user to the group, run
 <code class="docutils literal notranslate"><span class="pre">newgrp</span> <span class="pre">docker</span></code> to start a shell with the updated group. Run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span></code> and
-launch <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> from that shell; existing terminals and applications
+launch the sample’s model-server command from that shell; existing terminals and applications
 keep their previous group membership.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">docker</span></code> group grants root-level privileges; refer to
 <a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">Docker’s Linux post-installation instructions</a>
@@ -586,7 +594,7 @@ runtime, refer to <a class="reference internal" href="../guides/troubleshooting.
 <h2>GPU-profile prerequisites<a class="headerlink" href="#gpu-profile-prerequisites" title="Link to this heading">#</a></h2>
 <p>Install before <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> for these targets:</p>
 <ul class="simple">
-<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
+<li><p><strong>DGX Spark</strong> (<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/spark.yaml</span></code>): <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3-dev</span></code></p></li>
 </ul>
 <p>All GPU profiles default to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">docker</span></code>, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code>, refer to the
@@ -600,7 +608,7 @@ from a single field report (Windows 11, RTX PRO 6000 Blackwell, Ubuntu WSL2
 distribution with in-distro Docker Engine) and may not generalize to other
 setups:</p>
 <ul class="simple">
-<li><p><strong>model-servers and simple-vlm-example ran end-to-end</strong> in that
+<li><p><strong>the shared model stack and simple-vlm-example ran end-to-end</strong> in that
 configuration. Docker Desktop’s WSL integration did not work for this
 stack: <code class="docutils literal notranslate"><span class="pre">--network</span> <span class="pre">host</span></code> attaches containers to the Docker Desktop VM’s
 network namespace, not the distribution’s, so LiveKit signaling succeeds
@@ -638,7 +646,7 @@ service occupies port 8000. Refer to the <code class="docutils literal notransla
 </section>
 <section id="running-on-other-gpus">
 <h2>Running on other GPUs<a class="headerlink" href="#running-on-other-gpus" title="Link to this heading">#</a></h2>
-<p>A profile (<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/&lt;profile&gt;/</span></code>) is a convenience preset
+<p>A profile (<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/&lt;profile&gt;.yaml</span></code>) is a convenience preset
 that pins the memory policy for each model server so the stack fits a known
 configuration:</p>
 <ul class="simple">
@@ -653,10 +661,10 @@ profiles set it for Cosmos and Nemotron Omni to make resident cache capacity
 deterministic. This intentionally bounds capacity; it is not a cap on the
 model server’s total GPU memory use.</p></li>
 </ul>
-<p>To run on a GPU that is not one of the presets, copy the closest profile directory
+<p>To run on a GPU that is not one of the presets, copy the closest sample profile YAML
 and adjust those knobs to your hardware:</p>
 <ol class="arabic simple">
-<li><p>Set <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> in each server’s YAML to your GPU index, or spread
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> in each server entry to your GPU index, or spread
 the servers across the GPUs you have.</p></li>
 <li><p>For a server without explicit cache bytes, tune <code class="docutils literal notranslate"><span class="pre">gpu_memory_utilization</span></code> so
 the automatically sized allocations fit alongside the colocated services.
@@ -673,8 +681,8 @@ concurrency, and cold-start the full profile on the target hardware. On
 lower-memory GPUs, running fewer models concurrently may also be necessary.</p></li>
 </ol>
 <p>Then select the reviewed profile explicitly:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-directory-name&gt;
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gpu-profile<span class="w"> </span>&lt;profile-name&gt;
 </pre></div>
 </div>
 <p>Automatic detection intentionally accepts only bundled profiles whose hardware

@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -475,7 +483,7 @@ docker path stays light even when pip vllm is not installed.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.gpu_compute_major" title="xr_ai_vllm.gpu_compute_major"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gpu_compute_major</span></code></a>(→ int)</p></td>
-<td><p>Return the GPU's compute-capability major version, or 0 if unknown.</p></td>
+<td><p>Return the first selected GPU's compute-capability major, or 0 if unknown.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.load_config" title="xr_ai_vllm.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>(→ tuple[dict, pathlib.Path, ...)</p></td>
 <td><p>Parse <code class="docutils literal notranslate"><span class="pre">--config</span></code>/<code class="docutils literal notranslate"><span class="pre">--ready-file</span></code> and load the YAML config.</p></td>
@@ -501,7 +509,7 @@ docker path stays light even when pip vllm is not installed.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_vllm.gpu_compute_major">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">gpu_compute_major</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#xr_ai_vllm.gpu_compute_major" title="Link to this definition">#</a></dt>
-<dd><p>Return the GPU’s compute-capability major version, or 0 if unknown.</p>
+<dd><p>Return the first selected GPU’s compute-capability major, or 0 if unknown.</p>
 <p>Reads <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> from the env, so set the device filter
 before calling. Logs a warning on failure and falls back to 0.</p>
 </dd></dl>
@@ -549,8 +557,8 @@ provided), <code class="docutils literal notranslate"><span class="pre">HF_XET_H
 docs/source/getting_started/credentials.md. <code class="docutils literal notranslate"><span class="pre">TRANSFORMERS_CACHE</span></code> mirrors
 <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> for Transformers &lt;4.36 and libraries that have not adopted
 <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>.</p>
-<p>Returns the resolved <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> string (or <code class="docutils literal notranslate"><span class="pre">None</span></code>) so
-callers that run GPU detection can confirm the device filter is applied.</p>
+<p>Returns the YAML device selection when configured, otherwise inherited
+<code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> (or <code class="docutils literal notranslate"><span class="pre">None</span></code>), for GPU probes and Docker placement.</p>
 </dd></dl>
 
 <dl class="py data">

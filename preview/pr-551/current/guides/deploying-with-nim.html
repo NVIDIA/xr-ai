@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -479,12 +487,14 @@ GPU layout or manage NIM container lifecycle. Refer to NVIDIA’s
 <a class="reference external" href="https://github.com/NVIDIA/nim-deploy">NIM deployment reference implementations</a>,
 <a class="reference external" href="https://docs.nvidia.com/nim/speech/latest/deployment/index.html">Speech NIM deployment guide</a>,
 and the deployment guide for each selected model and container version.</p>
-<p>The example in <code class="docutils literal notranslate"><span class="pre">deployment/nim/models.yaml</span></code> selects Nemotron Omni for both LLM
-roles, Cosmos3 for vision, Parakeet for recognition, Magpie for synthesis,
-Llama Nemotron Embed for retrieval, and multilingual Nemotron OCR v2 for text
-recognition. These are endpoint configuration examples,
-not a claim of production or hardware qualification. Match model IDs, supported
-languages, voices, input limits, and inference options to the deployed versions.
+<p>The example in <code class="docutils literal notranslate"><span class="pre">deployment/nim/models.yaml</span></code> selects Nemotron Omni for LLM
+chat and tool calls, Cosmos3 for vision, Parakeet for recognition, Magpie for
+synthesis, Llama Nemotron Embed for retrieval, and multilingual Nemotron OCR v2
+for text recognition. The OCR entry is available for future integrations; no
+supplied sample consumes it. These are endpoint
+configuration examples, not a claim of production or hardware qualification.
+Match model IDs, supported languages, voices, input limits, and inference options
+to the deployed versions.
 Changing the serving model can change sample behavior; validate the application’s
 prompts and evaluations as well as its transport.</p>
 <p>Configure tool calling and reasoning parsing on the server as well as in the
@@ -522,6 +532,16 @@ services to start and stop.</p>
 Applications copied from an earlier sample must enable that extra in their
 worker’s dependency before selecting Riva speech. The SDK base installation
 continues to defer the vendor dependency until a Riva factory is selected.</p>
+<p>When selecting native NIM speech, disable the local enrolled-speaker backend
+in each consuming worker’s voice-gate YAML:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">speaker</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+<p>Model endpoint selection and speaker-backend selection are separate settings.
+Changing the model profile alone does not disable required speaker selection.
+The native deployment profile connects to external Riva endpoints;
+it does not start, stop, or use the local speaker-ASR service.</p>
 <section id="ocr-inputs-and-model-variant">
 <h3>OCR inputs and model variant<a class="headerlink" href="#ocr-inputs-and-model-variant" title="Link to this heading">#</a></h3>
 <p>Deploy Nemotron OCR v2 with <code class="docutils literal notranslate"><span class="pre">NIM_ENGINE_MODEL_VARIANT=multilingual</span></code> in the
@@ -567,7 +587,7 @@ Refer to NVIDIA’s
 route can use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code>; this skips the health probe, not inference.
 Riva <code class="docutils literal notranslate"><span class="pre">health()</span></code> checks gRPC channel connectivity, which does not prove model
 inference or authorization. Run the smoke check and application validation.
-Worker startup follows the existing <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a> policy;
+Worker startup follows the existing <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a> policy;
 tea making’s RAG service separately checks embedding health.</p>
 <p>Direct Magpie synthesis produces mono 16-bit PCM at the configured sample rate,
 with streaming and cancellation handled by the SDK. Recognition timeout and
@@ -608,19 +628,34 @@ application latency in the deployment environment.</p>
 </section>
 <section id="switch-an-existing-sample">
 <h2>Switch an existing sample<a class="headerlink" href="#switch-an-existing-sample" title="Link to this heading">#</a></h2>
-<p>Keep a copy of the sample’s active local JSON. Replace only the roles it already
-consumes with entries from the customized endpoint profile. This example adapts
+<p>Stop the agent and its local model stack before switching to NIM endpoints.
+Use the current sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and the same explicit
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at startup. Refer to
+<a class="reference internal" href="customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the stop/start workflow.</p>
+<p>Keep copies of the sample’s active local JSON and selected voice-gate YAML. Replace its model entries with
+the roles required for native deployment in the table below, including the
+explicit <code class="docutils literal notranslate"><span class="pre">stt</span></code> entry for ordinary Riva speech. This example adapts
 simple VLM; run it from the repository root after validation:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>agent-samples/simple-vlm-example/yaml/models.json<span class="w"> </span>/tmp/simple-vlm.models.local.json
-uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-sdk/xr-ai-models<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PYTHON'</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-sdk/xr-ai-models<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PYTHON'</span>
 <span class="s">import json</span>
+<span class="s">import shutil</span>
 <span class="s">from pathlib import Path</span>
 <span class="s">import yaml</span>
 <span class="s">source = yaml.safe_load(Path('/tmp/models.nim.yaml').read_text())['models']</span>
 <span class="s">target = Path('agent-samples/simple-vlm-example/yaml/models.json')</span>
+<span class="s">gate_path = Path('agent-samples/simple-vlm-example/yaml/voice_gate.yaml')</span>
 <span class="s">active = json.loads(target.read_text())</span>
 <span class="s">active['models'] = {name: source[name] for name in active['models']}</span>
+<span class="s">active['models']['stt'] = source['stt']</span>
+<span class="s">gate = yaml.safe_load(gate_path.read_text())</span>
+<span class="s">gate['speaker']['enabled'] = False</span>
+<span class="s">backup_dir = Path('/tmp/simple-vlm.local-backup')</span>
+<span class="s"># Refuse a repeated switch before modifying files or the original backup.</span>
+<span class="s">backup_dir.mkdir()</span>
+<span class="s">shutil.copyfile(target, backup_dir / target.name)</span>
+<span class="s">shutil.copyfile(gate_path, backup_dir / gate_path.name)</span>
 <span class="s">target.write_text(json.dumps(active, indent=2) + '\n')</span>
+<span class="s">gate_path.write_text(yaml.safe_dump(gate, sort_keys=False))</span>
 <span class="s">PYTHON</span>
 uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-sdk/xr-ai-models<span class="w"> </span>--extra<span class="w"> </span>riva<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--with<span class="w"> </span><span class="s1">'audioop-lts; python_version &gt;= "3.13"'</span><span class="w"> </span>python<span class="w"> </span>deployment/nim/smoke_test.py<span class="w"> </span><span class="se">\</span>
@@ -646,7 +681,7 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </tr>
 <tr class="row-even"><td><p>XR render demo</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Tea making</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code></p></td>
@@ -660,9 +695,33 @@ worker YAML. Tea making’s worker and RAG YAML each select <code class="docutil
 update both when choosing a different profile path. Paths are relative to the
 respective YAML. Keep application-specific extra roles when adapting other
 samples. No sample launcher option or model-serving process is needed.</p>
-<p>To return simple VLM to local development, restore its saved profile, start
-<code class="docutils literal notranslate"><span class="pre">model_servers</span></code>, and restart the sample. Restoring a profile does not stop remote
-NIMs; the deployment operator controls them.</p>
+<p>Use the worker’s selected <code class="docutils literal notranslate"><span class="pre">voice_gate_yaml</span></code> path for <code class="docutils literal notranslate"><span class="pre">gate_path</span></code> (Tea making
+defaults to <code class="docutils literal notranslate"><span class="pre">voice_gate.yaml</span></code>). Disable speaker ASR in that file, and back up
+and restore the same file. Interaction
+mode does not select the ASR backend: keep the selected conversation mode, or
+choose another mode independently. Use a
+different backup directory when adapting another sample. If the directory
+already exists, this procedure fails without overwriting its original local
+configuration or changing the active files. Do not rerun the switch to replace
+a backup; restore first and retain the backup for recovery. To switch again
+after restoring, choose a new unused backup directory.</p>
+<p>When all required roles use NIM endpoints, run only the agent sample; skip its
+<code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher. That launcher always starts its declared
+local servers and does not read the consumer profile’s <code class="docutils literal notranslate"><span class="pre">external</span></code> ownership.
+For a mixture of local and NIM models, keep only the local servers in the model
+launcher’s list and GPU-profile entries, and tune their budgets together.</p>
+<p>To return simple VLM to local development, restore both saved configurations,
+start the local stack, and restart the sample:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cp<span class="w"> </span>/tmp/simple-vlm.local-backup/models.json<span class="w"> </span>agent-samples/simple-vlm-example/yaml/models.json
+cp<span class="w"> </span>/tmp/simple-vlm.local-backup/voice_gate.yaml<span class="w"> </span>agent-samples/simple-vlm-example/yaml/voice_gate.yaml
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example<span class="w"> </span>simple_vlm_example
+</pre></div>
+</div>
+<p>Restoring the voice-gate YAML reselects required local speaker ASR. Restoring a
+profile does not stop remote NIMs; the deployment operator controls them. These
+copies preserve your local customization; resetting tracked files to repository
+defaults would discard it.</p>
 </section>
 <section id="removed-managed-nim-stack">
 <h2>Removed managed NIM stack<a class="headerlink" href="#removed-managed-nim-stack" title="Link to this heading">#</a></h2>
@@ -670,8 +729,9 @@ NIMs; the deployment operator controls them.</p>
 and HTTP compatibility services are removed. They duplicated infrastructure
 lifecycle and model adapter behavior. Deploy the native NIM services with the
 operator’s tooling, then replace local aliases such as <code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">vlm</span></code>, and <code class="docutils literal notranslate"><span class="pre">embed</span></code>
-with native model IDs in a consumer profile. Refer to
-<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for the removed commands and services.</p>
+with native model IDs in a consumer profile. The removed compatibility surfaces
+include <code class="docutils literal notranslate"><span class="pre">nim_model_adapter</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_riva_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nim_server</span></code>, <code class="docutils literal notranslate"><span class="pre">magpie_nim_tts</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">xr_ai_vllm.serve_nim</span></code>.</p>
 </section>
 </section>
 

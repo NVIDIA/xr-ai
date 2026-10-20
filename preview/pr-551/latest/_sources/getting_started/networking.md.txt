@@ -76,6 +76,37 @@ NAT also affects the TLS certificate: clients dial the VM's public IP, which
 must be listed in the certificate's SAN via `web_server_extra_sans`. Refer to
 [TLS for the web client](#tls-for-the-web-client) below.
 
+## Deployment-owned hub configuration
+
+Keep host listener ports, networking, TLS, and browser assets in one
+customer-owned hub YAML. Application workers retain their own prompts, tools,
+and model-client settings. The sample's checked-in hub YAML remains a standalone
+convenience default.
+
+Each shipped agent sample accepts `--hub-config PATH`. For example, from
+`agent-samples/simple-vlm-example/`, after starting its required model services:
+
+```bash
+uv run simple_vlm_example --hub-config /srv/xr-ai/hub.yaml
+```
+
+The sample passes this file through `Process(config=...)` to DeviceIOHub's
+existing `--config` option. It replaces the sample hub YAML; it is not an
+overlay. Omit the option to use the sample default. A relative CLI filename
+resolves against the launch directory. Relative asset and certificate paths
+inside the selected YAML resolve against that file's directory. No tracked
+sample files are modified, and no separate validation rules or certificate
+restrictions apply to deployment-owned configuration.
+
+When selecting a deployment hub configuration for XR Render, supply its browser
+assets through that configuration. The launcher skips its sample-default web
+vendor preparation and automatic browser-page suppression in this mode.
+
+When URLs are omitted, DeviceIOHub derives `lk_internal_url` from `lk_port_ws`
+and the legacy token server's advertised `token_server_url` from
+`token_server_port`. Explicit URLs retain their scheme, host, port, and path.
+The normal web server's same-origin signaling behavior is unchanged.
+
 ## RHEL, Fedora, or CentOS (`firewall-cmd`)
 
 ```bash

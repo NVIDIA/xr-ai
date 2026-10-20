@@ -7,7 +7,7 @@
 
 Application samples own their DeviceIOHub and worker processes. Model services may
 instead be declared with `launch_mode="reuse"` and started separately through the
-shared `model-servers` stack.
+sample's separate `model-servers/` convenience launcher.
 
 An application sample has at least these two sub-projects:
 
@@ -16,8 +16,11 @@ An application sample has at least these two sub-projects:
 | `<sample>/` | Orchestrator — declares owned and reused processes in code | `xr-ai-launcher`, `xr-ai-logging`, and sample-specific orchestration dependencies |
 | `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-hub-client`, numpy, etc. |
 
-Samples may add capability or eval sub-projects. `model-servers` is a dedicated
-orchestrator and has no worker sub-project.
+Samples may add capability or eval sub-projects. Each sample's `model-servers/`
+project is a separate inference convenience launcher with no worker. It combines
+shared defaults under `utils/xr-ai-model-server-stack/yaml/` with sample-owned GPU
+profiles. Refer to {doc}`/guides/customizing-model-servers` for configuration and
+startup, shutdown, and sample-switching workflows.
 
 **Configuration convention** — the YAML configuration path for each process is declared
 explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
@@ -37,9 +40,9 @@ Launcher profile loaders require the wrapped JSON form with `adapter`,
 `endpoint`, and `deployment` objects for each model. `load_model_deployment()`
 reads the profile selected by the worker YAML, while `load_deployment_profile()`
 reads a profile path directly. Both use only the standard library and expose
-deployment metadata and credential requirements. The shared `model-servers`
-sample uses the direct loader and managed entries to select servers. Legacy
-explicit reused and external deployment entries remain accepted. Refer to
+deployment metadata and credential requirements. The sample-local model
+launchers declare their service lists directly and do not use these loaders.
+Explicit reused and external deployment entries remain accepted by the loaders. Refer to
 {ref}`model profile formats <deployment-profiles>` for the worker and launcher
 requirements.
 
@@ -79,6 +82,28 @@ def run() -> None:
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast while monitoring: if any spawned process exits, the
   rest are terminated.
+
+(consumer-model-readiness)=
+## Consumer model readiness
+
+Worker readiness reports local initialization, not general model availability.
+Batch STT, TTS, LLM, and VLM health are not polled automatically. Start the
+sample's model-server stack and wait for its launcher to return before starting
+the sample, or provision and validate external endpoints first. Server wrappers
+perform their own startup and reuse checks.
+
+`VoiceAgent` waits for explicitly supplied `probes`. It also selects the
+configured speaker ASR backend; `speaker.backend: required` waits for that
+service before worker readiness. Endpoint `readiness` and `health_path` settings
+control explicit `health()` calls and do not enable automatic worker polling.
+Applications that need batch STT and TTS health checks can pass
+`probes={"stt": stt.health, "tts": tts.health}` to `VoiceAgent`.
+
+{doc}`Simple VLM </reference/simple-vlm-example>` performs a streaming image
+warmup, and {doc}`XR Render </reference/xr-render-demo>` performs an LLM warmup,
+including for hosted LLMs. Tea making checks its RAG capability and
+{ref}`embedding health <rag-embedding-health>`. These application-specific
+checks can delay readiness independently of the voice runtime.
 
 ## Serial and parallel items
 
@@ -219,15 +244,17 @@ signatures, types, defaults, fields, and method behavior are generated in the
 **`xr-ai-launcher`** — process management for the xr-ai stack: the `Process`,
 `Parallel`, and `run_stack` API described above, plus helpers for CloudXR
 environment setup, credential loading, and GPU detection. Intentionally
-stdlib-only so it can be added to any sample without pulling in the dependency
+based on the standard library and the dependency-free `xr-ai-gpu` utility so
+it can be added to any sample without pulling in the dependency
 chain of the processes it manages.
 
 **`xr-ai-logging`** — shared loguru setup for the monorepo. Every process calls
 `setup_logging()` once at startup to get a unified logging stack: a stderr sink
 (level controlled by `XR_AI_VERBOSE`), a DEBUG file sink under
 `/tmp/log_<namespace>_<timestamp>/`, and a stdlib bridge that routes records
-emitted via `logging.getLogger(...)` into loguru — so stdlib-only packages
-(`xr-ai-launcher`) and the agent SDK end up in the same sinks. The orchestrator
+emitted via `logging.getLogger(...)` into loguru. The launcher depends only on
+`xr-ai-gpu` and uses standard-library logging; its records and the agent SDK's
+records end up in the same sinks without either package importing loguru. The orchestrator
 stamps namespace, timestamp, and root env vars so all spawned subprocesses write into
 the same per-run folder.
 
@@ -249,3 +276,10 @@ the wrapper's venv, the default) or `docker` (the image selected by
 YAML. Both paths honor identical configuration keys; only the runtime hosting
 vllm differs. Stdlib-only by contract, so the docker path stays light even when
 pip vllm is not installed.
+
+GPU hardware facts live in `xr-ai-gpu`, independently of application
+orchestration. Launcher profile matching uses its strict full inventory with no
+driver deadline. CloudXR uses its narrow PCI lookup with a five-second deadline
+and continues without pinning on failure. vLLM retains its existing selected-GPU
+queries and fallback behavior. Profile recommendations and environment
+construction remain with their consuming packages.

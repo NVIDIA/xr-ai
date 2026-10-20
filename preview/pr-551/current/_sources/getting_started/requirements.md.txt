@@ -21,11 +21,11 @@ NVDEC.
 
 | Sample | Local GPU-visible memory needed |
 |---|---|
-| model-servers (all models) | ~55 GB |
+| Local model stacks | Depends on the sample and its selected models |
 | simple-vlm-example (requires model services) | Uses the model-services allocation |
 | lab-instrument-monitoring (requires model services) | Uses the model-services allocation |
 | tea-making-sample (requires model services) | Uses the model-services allocation |
-| xr-render-demo (requires model-servers) | ~55 GB for models and ~2 GB for CloudXR and the hub |
+| xr-render-demo (requires model services) | Model allocation plus ~2 GB for CloudXR and the hub |
 | Hub only | No model allocation; NVENC and NVDEC are still required |
 
 ## Software
@@ -59,7 +59,7 @@ is registered.
 #### Docker access
 
 Run this command without `sudo`, in the same login session that will launch
-`model_servers`:
+the sample's model-server command:
 
 ```bash
 docker ps
@@ -79,7 +79,7 @@ in the same desktop session does not refresh its group membership.
 
 For an immediate alternative after adding your user to the group, run
 `newgrp docker` to start a shell with the updated group. Run `docker ps` and
-launch `model_servers` from that shell; existing terminals and applications
+launch the sample's model-server command from that shell; existing terminals and applications
 keep their previous group membership.
 
 The `docker` group grants root-level privileges; refer to
@@ -134,7 +134,7 @@ runtime, refer to {doc}`/guides/troubleshooting`.
 
 Install before `uv sync` for these targets:
 
-- **DGX Spark** (`model-server-samples/model-servers/yaml/spark/`): `sudo apt install python3-dev`
+- **DGX Spark** (`agent-samples/<sample>/model-servers/yaml/spark.yaml`): `sudo apt install python3-dev`
 
 All GPU profiles default to `vllm_backend: docker`, so the vLLM container ships
 nvcc + FlashInfer. If you switch a profile to `vllm_backend: pip`, refer to the
@@ -149,7 +149,7 @@ from a single field report (Windows 11, RTX PRO 6000 Blackwell, Ubuntu WSL2
 distribution with in-distro Docker Engine) and may not generalize to other
 setups:
 
-- **model-servers and simple-vlm-example ran end-to-end** in that
+- **the shared model stack and simple-vlm-example ran end-to-end** in that
   configuration. Docker Desktop's WSL integration did not work for this
   stack: `--network host` attaches containers to the Docker Desktop VM's
   network namespace, not the distribution's, so LiveKit signaling succeeds
@@ -186,7 +186,7 @@ setups:
 
 ## Running on other GPUs
 
-A profile (`model-server-samples/model-servers/yaml/<profile>/`) is a convenience preset
+A profile (`agent-samples/<sample>/model-servers/yaml/<profile>.yaml`) is a convenience preset
 that pins the memory policy for each model server so the stack fits a known
 configuration:
 
@@ -201,10 +201,10 @@ configuration:
   deterministic. This intentionally bounds capacity; it is not a cap on the
   model server's total GPU memory use.
 
-To run on a GPU that is not one of the presets, copy the closest profile directory
+To run on a GPU that is not one of the presets, copy the closest sample profile YAML
 and adjust those knobs to your hardware:
 
-1. Set `cuda_visible_devices` in each server's YAML to your GPU index, or spread
+1. Set `cuda_visible_devices` in each server entry to your GPU index, or spread
    the servers across the GPUs you have.
 2. For a server without explicit cache bytes, tune `gpu_memory_utilization` so
    the automatically sized allocations fit alongside the colocated services.
@@ -223,8 +223,8 @@ and adjust those knobs to your hardware:
 Then select the reviewed profile explicitly:
 
 ```bash
-uv run --project model-server-samples/model-servers model_servers \
-  --gpu-profile <profile-directory-name>
+uv run --project agent-samples/simple-vlm-example/model-servers simple_vlm_example_model_servers \
+  --gpu-profile <profile-name>
 ```
 
 Automatic detection intentionally accepts only bundled profiles whose hardware

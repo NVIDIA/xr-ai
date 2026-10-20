@@ -199,6 +199,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -306,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -323,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -363,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -426,13 +438,15 @@
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8c70a0fa115f0a8c0fcb1871d0901e12e8c9bb74/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/be68d1f645cc9c2e0a512920d9c3e37c40230705/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8c70a0fa115f0a8c0fcb1871d0901e12e8c9bb74/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/be68d1f645cc9c2e0a512920d9c3e37c40230705/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8c70a0fa115f0a8c0fcb1871d0901e12e8c9bb74/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference internal" href="python-code-style.html"><span class="doc">Python code style</span></a> for the public API, exception handling,
+and module layout conventions for Python code. Refer to
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/be68d1f645cc9c2e0a512920d9c3e37c40230705/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -445,11 +459,22 @@ uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
-and add a migration entry for a breaking change.</p>
+and add a migration entry for a breaking change. Refer to
+<a class="reference internal" href="#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for the migration guide’s release scope.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8c70a0fa115f0a8c0fcb1871d0901e12e8c9bb74/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/be68d1f645cc9c2e0a512920d9c3e37c40230705/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
+<p>Ruff enforces exception-handling rules (<code class="docutils literal notranslate"><span class="pre">BLE001</span></code>, <code class="docutils literal notranslate"><span class="pre">S110</span></code>, <code class="docutils literal notranslate"><span class="pre">S112</span></code>, <code class="docutils literal notranslate"><span class="pre">B904</span></code>) on
+all new code. Violations that predate the rules are grandfathered in the
+generated <code class="docutils literal notranslate"><span class="pre">ruff-baseline.toml</span></code>, which records the exact count per file and rule
+and can only shrink. When a change fixes violations, run
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/ruff_baseline.py</span> <span class="pre">--write</span></code> and commit the
+lowered entries. Running the script without <code class="docutils literal notranslate"><span class="pre">--write</span></code> checks that the baseline
+matches the code and prints how much of the repository each rule covers; the
+pre-commit hook runs that check when Python files change. To keep
+a deliberate broad catch in new code, add an inline <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">noqa:</span> <span class="pre">BLE001</span></code> comment with
+the reason.</p>
 <p>The user-facing command catalog is generated from top-level sample
 <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code> entries and literal <code class="docutils literal notranslate"><span class="pre">argparse</span></code> declarations. Keep option
 descriptions in <code class="docutils literal notranslate"><span class="pre">help=</span></code> and do not repeat flag tables in narrative pages.</p>
@@ -479,7 +504,10 @@ with <code class="docutils literal notranslate"><span class="pre">uv</span> <spa
 the full test suite. The generated per-project lockfiles are validation
 artifacts and remain gitignored. The same change regenerates the committed
 locks under <code class="docutils literal notranslate"><span class="pre">dependency-manifest/</span></code>; the pre-commit hook does the Python one when
-<code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is staged.</p>
+<code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> is staged. Ordinary dependency or project changes remain deferred to
+the next qualification or targeted security refresh. The generator
+explicitly excludes Speaker STT because its NeMo Speech sources conflict with
+the other ASR services; validate its local lock separately.</p>
 <p>For a targeted security refresh, add an <code class="docutils literal notranslate"><span class="pre">exclude-newer-package</span></code> timestamp in
 <code class="docutils literal notranslate"><span class="pre">uv.toml</span></code> for each fixed package and add its minimum safe version to the
 affected service dependencies. This qualifies the fix without advancing the
@@ -487,6 +515,54 @@ global cutoff. Resolve each affected project with the root config explicitly
 supplied, validate the affected behavior, and regenerate the dependency
 manifest with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--script</span> <span class="pre">.github/scripts/generate_dependency_manifest.py</span></code>.
 Commit the generated manifest changes alongside the dependency declarations.</p>
+<section id="migration-entries-and-release-rollover">
+<span id="migration-release-rollover"></span><h2>Migration entries and release rollover<a class="headerlink" href="#migration-entries-and-release-rollover" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> covers changes from the latest published release
+to the checked-out version. Use a <code class="docutils literal notranslate"><span class="pre">Changes</span> <span class="pre">since</span> <span class="pre">&lt;baseline</span> <span class="pre">tag&gt;</span></code> heading and
+state that <code class="docutils literal notranslate"><span class="pre">main</span></code> is unreleased. Add entries as third-level headings under
+that heading, before <code class="docutils literal notranslate"><span class="pre">Earlier</span> <span class="pre">releases</span></code>. Link to the baseline release’s
+archived guide and <a class="reference internal" href="../reference/migration-history.html"><span class="doc">Migration history</span></a>; users skipping releases
+apply earlier guides in release order.</p>
+<p>For each breaking change, name who is affected, state the required action, and
+include a before-and-after example when useful. Update the entry when another
+change in the same development cycle supersedes it, so the instructions lead
+directly from the baseline release to the final behavior.</p>
+<p>Use this checklist for every release:</p>
+<ol class="arabic simple">
+<li><p>Prepare the guide on the branch being released. Compare its code with the
+previous release, consolidate superseded instructions, and include only
+changes shipped by this release. State the release version in the opening
+paragraph. Release branches can contain a different set of changes from
+<code class="docutils literal notranslate"><span class="pre">main</span></code>.</p></li>
+<li><p>Preserve the completed guide under
+<code class="docutils literal notranslate"><span class="pre">docs/source/reference/migration-history/&lt;from-tag&gt;-to-&lt;to-tag&gt;.md</span></code>, with a
+title and introduction naming both releases. Copy from the branch being
+released and retain the upgrade instructions. Scope explicit labels to the
+archive and pin historical cross-references to the release’s tagged
+documentation so current topics cannot change their meaning. Add the guide
+to the toctree in <code class="docutils literal notranslate"><span class="pre">docs/source/reference/migration-history.md</span></code>.</p></li>
+<li><p>Publish the release tag and its versioned documentation. Verify that the
+archived guide is published, its historical links resolve, and
+<code class="docutils literal notranslate"><span class="pre">https://nvidia.github.io/xr-ai/&lt;tag&gt;/reference/migrations.html</span></code> contains the
+completed guide. Use a concrete tag in historical links; <code class="docutils literal notranslate"><span class="pre">latest</span></code> and <code class="docutils literal notranslate"><span class="pre">main</span></code>
+change over time.</p></li>
+<li><p>After verifying publication, bring the completed archive and its index entry
+into <code class="docutils literal notranslate"><span class="pre">main</span></code>, then reconcile the current entries with the tag. Use
+<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">merge-base</span> <span class="pre">&lt;tag&gt;</span> <span class="pre">main</span></code> to establish shared history and
+<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">diff</span> <span class="pre">&lt;tag&gt;</span> <span class="pre">main</span> <span class="pre">--</span> <span class="pre">docs/source/reference/migrations.md</span></code> to compare
+guides, then verify the corresponding code changes, including equivalent
+cherry-picks. Retire an entry only when the published tag covers its change
+and the archive retains its upgrade instructions. Keep main-only entries.
+Carry a release-branch entry into the current guide only when its code is
+also present on <code class="docutils literal notranslate"><span class="pre">main</span></code>. Update the baseline and archive link to the new
+release, state that <code class="docutils literal notranslate"><span class="pre">main</span></code> is unreleased, and mark the current guide empty
+only if no entries remain. Keep completed archives unchanged.</p></li>
+<li><p>Preserve published URL fragments with compact forwarding links to the
+appropriate archived guide or canonical topic. Keep ongoing explanations in
+canonical documentation and update their incoming references before retiring
+the entry.</p></li>
+</ol>
+</section>
 </section>
 
 
@@ -524,9 +600,25 @@ Commit the generated manifest changes alongside the dependency declarations.</p>
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-entries-and-release-rollover">Migration entries and release rollover</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

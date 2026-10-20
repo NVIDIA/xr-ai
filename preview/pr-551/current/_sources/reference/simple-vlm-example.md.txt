@@ -14,11 +14,12 @@ sample's design and operational details.
 
 ## Composition
 
-The orchestrator starts DeviceIOHub and the worker. Passing `--capture` also
+The orchestrator starts DeviceIOHub and the worker. Passing `--session-recording` also
 starts passive session capture; capture is disabled by default. The
-`yaml/models.json` profile configures client adapters and shared endpoints for
-Parakeet STT, Cosmos3 Nano, and Pocket TTS. Start those endpoints together with
-the shared model-server stack.
+`yaml/models.json` profile configures the Cosmos3 Nano and Pocket TTS client
+adapters and endpoints. `yaml/voice_gate.yaml` configures the speaker-ASR
+endpoint. Start those endpoints together with
+the sample's model-server stack.
 
 `VoiceAgent` owns application readiness, hub transport, voice gating, TTS, signals,
 and cleanup. It publishes accepted speech and typed text as a participant-scoped
@@ -41,6 +42,24 @@ its voice response. Participant departure releases the sample agent's cached
 frames and tasks. This is the reference composition for a single foreground
 streaming image query.
 
+The shared voice layer returns accepted queries as UTF-8 text on
+`voice.user-query`; the sample has no display adapter. The web
+client's **RECEIVED** list displays it using the existing text-message handling,
+for example `Speaker 0: What is in front of me?`. The number is the diarization
+model's label within this participant's voice connection. Typed input and
+ordinary STT use `User: ...`. Conversation controls do not produce query messages.
+
+The sample enables `speaker.diagnostics: true` in `yaml/voice_gate.yaml`.
+**RECEIVED** also shows detections and ignored transcripts on
+`voice.speaker-diagnostic`, for example `Speaker 1 [ignored] detected` and
+`Speaker 1 [ignored]: What time is it?`. Before enrollment, detections are
+marked `waiting for enrollment`. These display-only messages cannot invoke or
+interrupt the agent. Set `speaker.diagnostics: false` to stop displaying
+diagnostics and stop transcribing non-owner voices after enrollment. See
+{doc}`../components/ai-services` for decoding and resource cost. Ordinary STT,
+including the NIM path, returns
+accepted queries without speaker diagnostics.
+
 ## Source map
 
 The worker package is under
@@ -61,7 +80,7 @@ a 1280×720 JPEG and consumes the response. This exercises the production
 multimodal path so the first user query does not pay its initialization cost.
 The warmup retries failed inference requests until one succeeds. It does not
 call a health endpoint first. STT and TTS do not gate worker startup; start the
-shared model-server stack before the sample so speech requests can succeed.
+sample's model-server stack before the sample so speech requests can succeed.
 
 ## Configuration
 
@@ -85,13 +104,16 @@ Edit the owning file, preserve the field's YAML type, and restart
 example, lower `silero_threshold` in the worker YAML if quieter speech is being
 missed, or change `conversation.start_phrase` and `conversation.stop_phrase`
 in the voice-gate YAML. Set `conversation.require_wake_phrase: true` to require
-its configured `magic_phrases` during an active conversation. Relative paths in the worker YAML are resolved from `yaml/`, not
+its configured `magic_phrases` during an active conversation. Set `mode: hybrid`
+to also accept wake-addressed one-off questions while closed, or `mode: wake_only`
+to use wake-addressed turns without a persistent conversation. Refer to
+{ref}`voice-conversation-controls`. Relative paths in the worker YAML are resolved from `yaml/`, not
 from the shell's current directory.
 
 Changing an entry in `models.json` changes only the client adapter or endpoint
 that this sample uses. It does not reconfigure or restart the shared server.
 For a checkpoint, port, GPU, or model-runtime change, refer to
-{doc}`/guides/customizing-model-servers`, update the shared stack, stop that
+{doc}`/guides/customizing-model-servers`, update the sample model stack, stop that
 persistent stack, and start it again before restarting this sample.
 
 Refer to the generated {doc}`configuration <configuration>` reference for exact
@@ -104,7 +126,7 @@ controls work with the sample's existing STT endpoint, including NIM. Refer to
 
 ## Opt-in session capture
 
-Capture is disabled by default. Run `uv run simple_vlm_example --capture` to
+Capture is disabled by default. Run `uv run simple_vlm_example --session-recording` to
 start `device_io_capture` immediately after DeviceIOHub and record normalized
 hub media without joining the LiveKit room. Each participant connection then
 creates a bundle under
@@ -121,7 +143,7 @@ participant-lifetime bundle closes.
 Encoding and file writes run in the separate capture process behind bounded
 queues. If recording falls behind, it drops pending capture frames rather than
 backpressuring the hub or worker. MP4 finalization requires `ffmpeg` on `PATH`.
-Omit `--capture` when a deployment must not retain device media.
+Omit `--session-recording` when a deployment must not retain device media.
 
 Wake phrases match at the start of a final transcript or after sentence-final
 `.`, `?`, or `!` punctuation followed by whitespace or a closing quote. Text

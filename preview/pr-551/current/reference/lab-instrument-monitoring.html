@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/testing.html">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -435,6 +443,8 @@ visual identification, and event-driven notifications. Refer to the
 <a class="reference internal" href="../getting_started/quickstart.html"><span class="doc">quickstart</span></a> to run the sample. This
 architecture reference focuses on reusing the sample’s structure for another
 application.</p>
+<p>For speech deployment and explicit batch-STT selection, refer to
+<a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a>.</p>
 <p>The central design choice is to separate perception, interpretation, state,
 policy, and presentation. A marker scan identifies an instrument, a VLM reads
 its display, a stateful agent decides whether the reading changed, and a
@@ -618,7 +628,7 @@ command syntax.</p>
 </section>
 <section id="opt-in-session-capture">
 <h2>Opt-in session capture<a class="headerlink" href="#opt-in-session-capture" title="Link to this heading">#</a></h2>
-<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">lab_instrument_monitoring</span> <span class="pre">--capture</span></code>
+<p>Capture is disabled by default. Run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">lab_instrument_monitoring</span> <span class="pre">--session-recording</span></code>
 from <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code> to start <code class="docutils literal notranslate"><span class="pre">device_io_capture</span></code>
 immediately after DeviceIOHub. It records participant video, device and agent
 audio, and inbound and outbound data in a separate process. The option can be
@@ -630,7 +640,7 @@ the capture renderer produces a captioned NVENC H.264 MP4 with timestamp-aligned
 AAC-LC audio. Raw media and the exact data timeline are retained. Demo encoding
 requires an NVIDIA GPU with NVENC support and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p>
 <p>Capture uses bounded queues and drops pending capture frames if encoding falls
-behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--capture</span></code>
+behind, so recording does not backpressure the hub or worker. Omit <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code>
 when the deployment must not retain device media. Refer to
 <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the capture bundle and renderer contract.</p>
 </section>
@@ -676,7 +686,7 @@ hot-reloaded. The <code class="docutils literal notranslate"><span class="pre">-
 the host to expose the unauthenticated viewer. Changing <code class="docutils literal notranslate"><span class="pre">models.json</span></code> changes
 only the endpoints consumed by this sample. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for server-side model, GPU, port, or
-memory changes, then restart the persistent shared stack.</p>
+memory changes, then restart the sample’s persistent model stack.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
@@ -817,14 +827,17 @@ proxy in front of it.</p>
 <h2>File outputs and persistence<a class="headerlink" href="#file-outputs-and-persistence" title="Link to this heading">#</a></h2>
 <p>Each non-empty final STT result delivered on <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> is written to
 <code class="docutils literal notranslate"><span class="pre">transcript.jsonl</span></code> during an active conversation, before optional wake gating.
-Conversation controls and closed-conversation speech are withheld. Transcript
+With <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code>, accepted closed-state one-off queries are also delivered;
+ignored closed-state speech and conversation controls are withheld. Transcript
 delivery is bounded and best effort; overflow drops the oldest pending
 transcript, and shutdown discards pending items. Speech rejected by a wake
 phrase during an active conversation is still persisted.</p>
 <p>After connecting, say <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">start</span> <span class="pre">talking</span></code>, then speak without a
 wake phrase until <code class="docutils literal notranslate"><span class="pre">Hey</span> <span class="pre">agent,</span> <span class="pre">let's</span> <span class="pre">stop</span> <span class="pre">talking</span></code>. Set
-<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">agent</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code>,
-with the optional chime and five-second follow-up window. Accepted speech reaches
+<code class="docutils literal notranslate"><span class="pre">conversation.require_wake_phrase:</span> <span class="pre">true</span></code> to require <code class="docutils literal notranslate"><span class="pre">agent</span></code> or <code class="docutils literal notranslate"><span class="pre">hey</span> <span class="pre">agent</span></code> inside
+the open conversation, with the optional chime and five-second bare-wake
+follow-up window. Set <code class="docutils literal notranslate"><span class="pre">mode:</span> <span class="pre">hybrid</span></code> to additionally accept wake-addressed
+one-off questions while the conversation is closed. Accepted speech reaches
 the foreground as a <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code>. Typed text reaches the foreground but is not an
 STT transcript. Refer to <a class="reference internal" href="agent-sdk-voice.html#voice-conversation-controls"><span class="std std-ref">Conversation controls</span></a>.</p>
 <p>Each connection writes to a new participant-scoped directory:</p>
@@ -917,7 +930,7 @@ participant JSONL files to follow the tool call, reading, state update, and
 notification as distinct stages.</p>
 <section id="routing-and-visual-evals">
 <h3>Routing and visual evals<a class="headerlink" href="#routing-and-visual-evals" title="Link to this heading">#</a></h3>
-<p>Start the shared model servers, then run these commands from
+<p>Start the sample’s local model servers, then run these commands from
 <code class="docutils literal notranslate"><span class="pre">agent-samples/lab-instrument-monitoring/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/eval.py
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>worker<span class="w"> </span>python<span class="w"> </span>eval/visual_eval.py

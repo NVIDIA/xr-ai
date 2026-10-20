@@ -348,6 +348,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -380,6 +381,7 @@
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -660,6 +662,8 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.command">command (xr_ai_launcher.Process attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.compute_capability">compute_capability (xr_ai_gpu.GPUDevice attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionAnswer.confidence">confidence (xr_ai_models.DecisionAnswer attribute)</a>
 
       <ul>
@@ -914,10 +918,10 @@
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.forget">forget() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.format_phrase_help">format_phrase_help() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.forward">forward (xr_ai_tools.tracking.HeadPose attribute)</a>
 
       <ul>
@@ -945,6 +949,10 @@
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameSignal">FrameSignal (class in xr_ai_hub)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FrameUnavailable">FrameUnavailable</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.free_memory_gib">free_memory_gib (xr_ai_gpu.GPUDevice attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent.from_models">from_models() (xr_ai_voice.VoiceAgent class method)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.function_id">function_id (xr_ai_models.AdapterSpec attribute)</a>
 </li>
@@ -980,7 +988,13 @@
 </li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.gpu_compute_major">gpu_compute_major() (in module xr_ai_vllm)</a>
 </li>
-      <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.GPUInventoryError">GPUInventoryError</a>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess.gpu_uuid">gpu_uuid (xr_ai_gpu.GPUProcess attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice">GPUDevice (class in xr_ai_gpu)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUInventoryError">GPUInventoryError</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess">GPUProcess (class in xr_ai_gpu)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -1102,10 +1116,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.ImagePolygonFillResult">ImagePolygonFillResult (class in xr_ai_tools.image_polygon)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#xr_ai_tools.image_polygon.ImagePolygonFillTool">ImagePolygonFillTool (class in xr_ai_tools.image_polygon)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryChunk">ImageQueryChunk (class in xr_ai_tools.vision)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryRequest">ImageQueryRequest (class in xr_ai_tools.vision)</a>
@@ -1119,6 +1133,8 @@
       <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry">ImageRegistry (class in xr_ai_tools.image)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.MultiImageQueryRequest.images">images (xr_ai_tools.vision.MultiImageQueryRequest attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.index">index (xr_ai_gpu.GPUDevice attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionQuestion.instructions">instructions (xr_ai_models.DecisionQuestion attribute)</a>
 </li>
@@ -1304,10 +1320,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.ModelCallback">ModelCallback (in module xr_ai_tools.tool_calling)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.ModelDeployment">ModelDeployment (class in xr_ai_launcher)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelKind">ModelKind (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelsConfig">ModelsConfig (class in xr_ai_models)</a>
@@ -1316,11 +1332,15 @@
     module
 
       <ul>
+        <li><a href="reference/python/xr_ai_gpu/index.html#module-xr_ai_gpu">xr_ai_gpu</a>
+</li>
         <li><a href="reference/python/xr_ai_hub/index.html#module-xr_ai_hub">xr_ai_hub</a>
 </li>
         <li><a href="reference/python/xr_ai_launcher/index.html#module-xr_ai_launcher">xr_ai_launcher</a>
 </li>
         <li><a href="reference/python/xr_ai_logging/index.html#module-xr_ai_logging">xr_ai_logging</a>
+</li>
+        <li><a href="reference/python/xr_ai_model_server_stack/index.html#module-xr_ai_model_server_stack">xr_ai_model_server_stack</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#module-xr_ai_models">xr_ai_models</a>
 </li>
@@ -1385,9 +1405,13 @@
 <h2 id="N">N</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.name">name (xr_ai_hub.FileMessage attribute)</a>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.name">name (xr_ai_gpu.GPUDevice attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess.name">(xr_ai_gpu.GPUProcess attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.name">(xr_ai_hub.FileMessage attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.name">(xr_ai_launcher.Process attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall.name">(xr_ai_models.ToolCall attribute)</a>
@@ -1541,16 +1565,20 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.participants">participants() (xr_ai_hub.LiveFrameSource method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ControlMessage.payload">payload (xr_ai_hub.ControlMessage attribute)</a>
 
       <ul>
         <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEvent.payload">(xr_ai_web_events.WebEvent attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.pci_bus_id">pci_bus_id (xr_ai_gpu.GPUDevice attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess.pid">pid (xr_ai_gpu.GPUProcess attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.pitch_deg">pitch_deg (xr_ai_tools.tracking.HeadPose attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.PixelFormat">PixelFormat (class in xr_ai_hub)</a>
@@ -1621,8 +1649,14 @@
         <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.VideoQueryRequest.query">(xr_ai_tools.vision.VideoQueryRequest attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_inventory">query_gpu_inventory() (in module xr_ai_gpu)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_pci_bus_ids">query_gpu_pci_bus_ids() (in module xr_ai_gpu)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_processes">query_gpu_processes() (in module xr_ai_gpu)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrieveRequest.query_must_not_be_blank">query_must_not_be_blank() (xr_ai_tools.rag.RetrieveRequest class method)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.QueryTranscriptsRequest">QueryTranscriptsRequest (class in xr_ai_tools.text_memory)</a>
@@ -1793,6 +1827,8 @@
         <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent.run">(xr_ai_voice.VoiceAgent method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_model_server_stack/index.html#xr_ai_model_server_stack.run_model_stack">run_model_stack() (in module xr_ai_model_server_stack)</a>
+</li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.run_stack">run_stack() (in module xr_ai_launcher)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.run_tool_loop">run_tool_loop() (in module xr_ai_tools.tool_calling)</a>
@@ -2169,6 +2205,8 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.TranscriptStatsResult.total_chars">total_chars (xr_ai_tools.text_memory.TranscriptStatsResult attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.total_memory_gib">total_memory_gib (xr_ai_gpu.GPUDevice attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.toward">toward() (in module xr_ai_tools.spatial)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AudioChunk.track_id">track_id (xr_ai_hub.AudioChunk attribute)</a>
@@ -2253,9 +2291,17 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.use_ssl">use_ssl (xr_ai_models.AdapterSpec attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.used_memory_gib">used_memory_gib (xr_ai_gpu.GPUDevice attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess.used_memory_gib">(xr_ai_gpu.GPUProcess attribute)</a>
+</li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.user_relative">user_relative() (in module xr_ai_tools.spatial)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.UserQuery">UserQuery (class in xr_ai_voice)</a>
+</li>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.uuid">uuid (xr_ai_gpu.GPUDevice attribute)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -2388,6 +2434,13 @@
 </li>
       </ul></li>
       <li>
+    xr_ai_gpu
+
+      <ul>
+        <li><a href="reference/python/xr_ai_gpu/index.html#module-xr_ai_gpu">module</a>
+</li>
+      </ul></li>
+      <li>
     xr_ai_hub
 
       <ul>
@@ -2406,6 +2459,13 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_logging/index.html#module-xr_ai_logging">module</a>
+</li>
+      </ul></li>
+      <li>
+    xr_ai_model_server_stack
+
+      <ul>
+        <li><a href="reference/python/xr_ai_model_server_stack/index.html#module-xr_ai_model_server_stack">module</a>
 </li>
       </ul></li>
       <li>
@@ -2478,6 +2538,8 @@
         <li><a href="reference/python/xr_ai_tools/marker_tracking/index.html#module-xr_ai_tools.marker_tracking">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     xr_ai_tools.rag
 
@@ -2485,8 +2547,6 @@
         <li><a href="reference/python/xr_ai_tools/rag/index.html#module-xr_ai_tools.rag">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     xr_ai_tools.rpc
 

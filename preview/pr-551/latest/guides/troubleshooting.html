@@ -310,6 +310,7 @@
 <li class="toctree-l2"><a class="reference internal" href="customizing-model-servers.html">Customizing model servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploying-with-nim.html">Deploying samples with NIM endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-code-style.html">Python code style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Troubleshooting</a></li>
@@ -327,14 +328,20 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -367,6 +374,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
 </ul>
@@ -445,13 +453,13 @@ exit codes, and process ownership.</p>
 <h2>Setup-time issues<a class="headerlink" href="#setup-time-issues" title="Link to this heading">#</a></h2>
 <section id="docker-socket-permission-denied-during-model-server-cleanup">
 <span id="dgx-spark-docker-socket-permission-denied-during-model-server-cleanup"></span><h3>Docker socket permission denied during model-server cleanup<a class="headerlink" href="#docker-socket-permission-denied-during-model-server-cleanup" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> stopping <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> prints a line like this for a selected port
+<p><strong>Symptom:</strong> stopping the sample’s model-server command prints a line like this for a selected port
 whose ownership cannot be inspected:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[&lt;service&gt;] cannot inspect :&lt;port&gt; ownership — not stopping
 </pre></div>
 </div>
 <p>It can then print <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">persistent</span> <span class="pre">servers</span> <span class="pre">found</span> <span class="pre">running</span></code> before ending with:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>model-servers: failed to stop persistent servers: one or more persistent servers are still running
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>simple_vlm_example_model_servers: error: one or more configured model servers could not be stopped
 </pre></div>
 </div>
 <p><strong>Cause:</strong> the login session lacks Docker socket access. This can affect DGX
@@ -478,11 +486,11 @@ headers.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>python3-dev
 </pre></div>
 </div>
-<p>This applies to the <code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/spark/</span></code> profile.</p>
+<p>This applies to the <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/spark.yaml</span></code> profile.</p>
 </section>
 <section id="dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start">
 <h3>DGX Spark — CUDA allocation fails during a vLLM cold start<a class="headerlink" href="#dgx-spark-cuda-allocation-fails-during-a-vllm-cold-start" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> aborts while starting a vLLM service, often the
+<p><strong>Symptom:</strong> the sample’s model-server command aborts while starting a vLLM service, often the
 embedding server after the larger services have started. The traceback reaches
 <code class="docutils literal notranslate"><span class="pre">MemorySnapshot.measure()</span></code>, then ends in <code class="docutils literal notranslate"><span class="pre">torch.cuda.mem_get_info()</span></code> or
 <code class="docutils literal notranslate"><span class="pre">cudaMemGetInfo</span></code> with a CUDA out-of-memory error. Another form ends in
@@ -618,7 +626,7 @@ compilation occurs inside the container; host NVCC is not required.</p>
 NVIDIA runtime if needed, and check GPU access from a container. Retain the
 vLLM image pinned by the reviewed hardware profile.</p>
 <p>This applies to the
-<code class="docutils literal notranslate"><span class="pre">model-server-samples/model-servers/yaml/96G_blackwell/</span></code> profile.</p>
+<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/96G_blackwell.yaml</span></code> profile.</p>
 </section>
 <section id="gpu-service-aborts-with-cudnn-version-incompatibility">
 <h3>GPU service aborts with <code class="docutils literal notranslate"><span class="pre">cuDNN</span> <span class="pre">version</span> <span class="pre">incompatibility</span></code><a class="headerlink" href="#gpu-service-aborts-with-cudnn-version-incompatibility" title="Link to this heading">#</a></h3>
@@ -633,7 +641,7 @@ import with:</p>
 (common on cloud GPU images). It shadows the cuDNN bundled in the service’s
 venv — the exact version that venv’s PyTorch was compiled against — so torch
 loads the wrong runtime and aborts.</p>
-<p><strong>Fix:</strong> the launcher handles this automatically — <code class="docutils literal notranslate"><span class="pre">model_servers</span></code> or
+<p><strong>Fix:</strong> the launcher handles this automatically — the sample’s model-server command or
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code> strip any <code class="docutils literal notranslate"><span class="pre">libcudnn</span></code>-bearing directory from each child’s
 <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code> before spawning (logged once as a WARNING), so the
 venv-bundled cuDNN is used. If you hit this running a service <strong>directly</strong>
@@ -757,6 +765,19 @@ timeout disabled, so a quiet session stays connected indefinitely.</p>
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> or
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
 owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceAgent</span></code>.</p>
+</section>
+<section id="browser-reports-an-empty-response-on-the-hub-port">
+<span id="web-client-empty-response"></span><h3>Browser reports an empty response on the hub port<a class="headerlink" href="#browser-reports-an-empty-response-on-the-hub-port" title="Link to this heading">#</a></h3>
+<p><strong>Symptom:</strong> opening the web client reports <code class="docutils literal notranslate"><span class="pre">ERR_EMPTY_RESPONSE</span></code>, or an HTTP
+client reports an empty reply.</p>
+<p><strong>Cause:</strong> plain HTTP sent to the hub’s HTTPS listener can produce this error.
+HTTPS is enabled by default. Check the URL scheme against the hub’s launch
+output.</p>
+<p><strong>Fix:</strong> open the full URL printed by DeviceIOHub, including <code class="docutils literal notranslate"><span class="pre">https://</span></code> and the
+configured web-server port. For example, the default HTTPS listener uses
+<code class="docutils literal notranslate"><span class="pre">https://&lt;host&gt;:8080</span></code>. Refer to <a class="reference internal" href="../getting_started/networking.html#tls-for-the-web-client"><span class="std std-ref">TLS for clients</span></a> for trusting the
+development certificate on the client device. If the configured URL still
+fails, inspect the hub’s log using the failed-run procedure above.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
@@ -915,14 +936,13 @@ restarts. Refer to <a class="reference internal" href="../components/ai-services
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>model-server-samples/model-servers<span class="w"> </span>model_servers<span class="w"> </span>--stop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/simple-vlm-example/model-servers<span class="w"> </span>simple_vlm_example_model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>For a custom deployment, add the same <code class="docutils literal notranslate"><span class="pre">--models</span> <span class="pre">PATH</span></code> and any explicit
-<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at launch. This stops the selected managed services,
-not every model server on the host. Stop before changing the old configuration
-so its service ports can still be resolved. A recognized matching service on
-a selected port can be stopped even if another invocation started it.</p>
+<p>Use the current sample’s own model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and the same explicit
+<code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> used at launch. Stop before switching samples, updating the
+checkout, or changing the old configuration. Refer to
+<a class="reference internal" href="customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for the flow.</p>
 <p>For Pocket TTS this sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> to its verified launcher-owned process
 group, waits up to 20 s, then sends <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Pocket TTS remains in that group
 so the same escalation also reaches it during an aborted stack startup. Cleanup
@@ -934,13 +954,13 @@ success if server ownership cannot be verified or any target remains running.</p
 </section>
 <section id="first-run-downloads-models-silently">
 <h3>First run downloads models silently<a class="headerlink" href="#first-run-downloads-models-silently" title="Link to this heading">#</a></h3>
-<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">model-server-samples/model-servers</span> <span class="pre">model_servers</span></code>
+<p><strong>Symptom:</strong> <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">--project</span> <span class="pre">agent-samples/simple-vlm-example/model-servers</span> <span class="pre">simple_vlm_example_model_servers</span></code>
 appears to hang at startup the first time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored; the Cosmos3 checkpoint alone is tens of GB).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If the download makes no progress, note that unauthenticated
-downloads (model-server runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
+downloads are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart. Refer to
 <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>.</p>
 </section>
@@ -1013,6 +1033,7 @@ stall indefinitely; set <code class="docutils literal notranslate"><span class="
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime-and-connection-issues">Runtime and connection issues</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-session-drops-or-agent-goes-silent-after-a-few-minutes-idle">Voice session drops or agent goes silent after a few minutes idle</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#browser-reports-an-empty-response-on-the-hub-port">Browser reports an empty response on the hub port</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#browser-client-connects-but-no-audio-or-no-video">Browser client connects but no audio or no video</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#https-web-client-ws-mixed-content-warning">HTTPS web client → <code class="docutils literal notranslate"><span class="pre">ws://</span></code> mixed-content warning</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#android-connection-fails-with-tls-or-certificate-errors">Android — connection fails with TLS or certificate errors</a></li>
