@@ -7,6 +7,7 @@
 # External ownership never grants a consumer permission to start or stop a NIM.
 models:
   ocr:
+    # Optional reference for future integrations; no supplied sample uses OCR.
     # Deploy Nemotron OCR v2 with NIM_ENGINE_MODEL_VARIANT=multilingual.
     # Variant, GPU allocation, and container lifecycle are operator-owned.
     adapter:

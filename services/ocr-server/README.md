@@ -10,5 +10,5 @@ model. The launcher builds an isolated CUDA container; the model stays local.
 
 Refer to [OCR serving](https://nvidia.github.io/xr-ai/latest/components/ai-services.html#ocr-serving)
 for setup, client usage, request limits, and hardware qualification.
-Hardware settings live in
-`model-server-samples/model-servers/yaml/<gpu-profile>/ocr_server.yaml`.
+Standalone hardware settings live in [`ocr_server.yaml`](ocr_server.yaml).
+No sample launches or consumes this service.

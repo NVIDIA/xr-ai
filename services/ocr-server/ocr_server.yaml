@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Standalone service only; not loaded by any sample model-server stack.
+port: 8112
+container_name: xr-ai-ocr
+# Relative to this file; weights persist across container restarts.
+model_cache: ../../models/ocr
+cuda_visible_devices: "0"
+# Match the selected GPU: Ada = "8.9", Blackwell = "12.0", Spark = "12.1".
+cuda_arch: "12.0"
+# Server-wide detector length: 640 or 1024. No cropping or enhancement.
+infer_length: 1024

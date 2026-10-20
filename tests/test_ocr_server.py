@@ -20,7 +20,7 @@ import pytest
 import yaml
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
-from xr_ai_models import OCRService, OCRSpec, load_models_config, load_models_config_from_dict, make_ocr
+from xr_ai_models import OCRService, OCRSpec, load_models_config_from_dict, make_ocr
 from xr_ai_models._ocr import NemotronOCR
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,17 +95,15 @@ def test_reject_wrong_adapter_category(kind, category):
         load_models_config_from_dict({"bad": {"category": category, "kind": kind, "base_url": "http://localhost"}})
 
 
-@pytest.mark.parametrize("hardware,arch", [
-    ("96G_blackwell", "12.0"), ("dual_48G_ada", "8.9"), ("spark", "12.1"),
-])
-async def test_local_hardware_profiles(hardware, arch):
-    local = ROOT / "model-server-samples/model-servers/yaml"
-    hf = yaml.safe_load((local / hardware / "ocr_server.yaml").read_text())
-    assert hf["cuda_arch"] == arch
+async def test_standalone_service_config():
+    local = ROOT / "services/ocr-server"
+    hf = yaml.safe_load((local / "ocr_server.yaml").read_text())
+    assert hf["cuda_arch"] == "12.0"
     assert hf["cuda_visible_devices"] == "0"
     assert hf["infer_length"] == 1024
     assert hf["port"] == 8112
-    models = load_models_config(local / "models.default.json")
+    assert (local / hf["model_cache"]).resolve() == ROOT / "models/ocr"
+    models = config()
     assert isinstance(models.ocr("ocr"), OCRSpec)
     await make_ocr(models, "ocr").close()
 
@@ -238,13 +236,14 @@ def test_local_loader_pins_multilingual_and_bounds_chunks(monkeypatch):
     }]
 
 
-def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch, tmp_path):
+@pytest.mark.parametrize("arch", ["8.9", "12.0", "12.1"])
+def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch, tmp_path, arch):
     import_spec = importlib.util.spec_from_file_location(
         "ocr_launcher", ROOT / "services/ocr-server/ocr_server/__main__.py",
     )
     launcher = importlib.util.module_from_spec(import_spec)
     import_spec.loader.exec_module(launcher)
-    cfg = {"port": 8112, "infer_length": 640, "cuda_arch": "8.9", "cuda_visible_devices": "1",
+    cfg = {"port": 8112, "infer_length": 640, "cuda_arch": arch, "cuda_visible_devices": "1",
            "model_cache": "cache", "container_name": "xr-ai-ocr-test"}
     monkeypatch.setattr(launcher, "setup_logging", lambda name: None)
     monkeypatch.setattr(launcher, "load_config", lambda: (cfg, tmp_path, tmp_path / "ready"))
@@ -254,7 +253,7 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     monkeypatch.setattr(launcher._docker, "run_container", lambda **kw: runs.append(kw))
     monkeypatch.setenv("HF_TOKEN", "private-test-token")
     launcher.run()
-    assert "TORCH_CUDA_ARCH_LIST=8.9" in builds[0]
+    assert f"TORCH_CUDA_ARCH_LIST={arch}" in builds[0]
     assert "--provenance=false" in builds[0]
     assert runs[0]["ready_file"] == tmp_path / "ready"
     assert "OCR_INFER_LENGTH=640" in runs[0]["argv"]

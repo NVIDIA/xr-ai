@@ -44,14 +44,29 @@ the exact layout per launch style is below.
 
 ## OCR serving
 
-The local `model-servers` sample provides multilingual Nemotron OCR v2 on
-port `8112`. The launcher builds an isolated Python 3.12, PyTorch 2.9.1,
+The standalone `services/ocr-server` provides multilingual Nemotron OCR v2 on
+port `8112`. No supplied sample launches or consumes OCR. The launcher builds
+an isolated Python 3.12, PyTorch 2.9.1,
 CUDA 13 container, downloads NVIDIA's pinned Hugging Face source and
 `v2_multilingual` weights, and keeps the model loaded across requests.
 Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
 are required; a host CUDA toolkit is not. The first build takes several minutes.
 Refer to the
 [upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
+
+Set `cuda_visible_devices` and `cuda_arch` in
+`services/ocr-server/ocr_server.yaml` for the selected GPU: `8.9` for Ada,
+`12.0` for Blackwell, or `12.1` for Spark. From the repository root, launch:
+
+```bash
+uv --config-file uv.toml run --project services/ocr-server ocr_server \
+  --config services/ocr-server/ocr_server.yaml
+```
+
+The service has its own configuration and lifecycle; it is not registered with
+sample model-server launchers. Provision GPU capacity before starting it
+alongside other services. This integration does not change sample GPU allocations
+or qualify concurrent workloads on every supported GPU.
 
 For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
 consumer profile. The operator selects the multilingual variant and owns GPU
@@ -64,9 +79,13 @@ Both backends expose `POST /v1/ocr` and readiness at
 
 ```python
 from pathlib import Path
-from xr_ai_models import load_models_config, make_ocr
+from xr_ai_models import load_models_config_from_dict, make_ocr
 
-config = load_models_config("yaml/models.json")
+config = load_models_config_from_dict({"ocr": {
+    "adapter": {"preset": "nemotron_ocr"},
+    "endpoint": {"base_url": "http://localhost:8112"},
+    "deployment": {"ownership": "external"},
+}})
 async with make_ocr(config, "ocr") as ocr:
     spans = await ocr.read_text(Path("image.png"))
     for span in spans:
@@ -93,17 +112,13 @@ Its detector length is configured server-wide in `ocr_server.yaml` (640 or
 not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.
 
-The local stack loads OCR last, after embeddings, on GPU 0 for all three
-profiles. Existing model allocations are unchanged. The profiles are not a
-complete-stack hardware qualification: test concurrent GPU memory use and
-application latency on the target machine. Externally deployed NIMs have no
-repository-prescribed GPU layout.
-
 Local weights and the torchvision backbone are cached beneath the OCR YAML's
 `model_cache`; the compiled CUDA extension stays in the Docker image.
 Changes to the local YAML or service source invalidate container reuse as
-needed. Stop and restart the local server through the sample's normal
-lifecycle. Closing a client never stops an externally deployed NIM.
+needed. Stop the standalone container with `docker stop xr-ai-ocr` (or the
+configured `container_name`) before changing its settings, then repeat the launch
+command. Closing a client stops neither the local service nor an externally
+deployed NIM.
 
 To test transcription against a running endpoint, run from the repository root:
 
