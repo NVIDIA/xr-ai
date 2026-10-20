@@ -1252,6 +1252,35 @@ class TestRunContainer:
         ]
         assert any(command[-1] == old_id for command in mutations[:-2])
 
+    def test_test_session_pins_id_for_docker_but_logs_under_requested_name(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        kwargs = self._kwargs(tmp_path)
+        owned_id = "c" * 64
+        seen: dict = {}
+
+        class Streamer(self._FakeStreamer):
+            def __init__(self, name, **kw):
+                seen["name"], seen["kw"] = name, kw
+
+        monkeypatch.setattr(_docker, "_LogStreamer", Streamer)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+        monkeypatch.setattr(
+            _docker, "container_label",
+            lambda name, label: _docker._requested_fingerprint(kwargs["argv"]),
+        )
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *a, **kw: False)
+        monkeypatch.setattr(
+            _docker.subprocess, "check_output",
+            lambda argv, **kw: owned_id + "\tmine",
+        )
+        _docker.run_container(**kwargs)
+        assert seen["name"] == owned_id
+        assert seen["kw"]["log_name"] == "xr-ai-test-ctr"
+
     def test_reuse_healthy_touches_ready_file_without_popen(self, monkeypatch, tmp_path):
         self._common_stubs(monkeypatch, _docker)
         monkeypatch.setattr(_docker, "container_exists", lambda name: True)

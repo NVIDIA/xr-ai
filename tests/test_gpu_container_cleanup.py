@@ -3,9 +3,10 @@
 
 """The gpu-test container fixture removes only containers its session created.
 
-Uses throwaway ``busybox sleep`` containers with unique names and a unique
-session id, so it can never match a live model server. Needs a docker daemon
-and a local ``busybox`` image; skipped otherwise.
+Most tests here are CPU-only (mocked or fake ``docker`` CLI). The two
+``gpu``-marked tests use throwaway ``busybox sleep`` containers with unique
+names and a unique session id, so they can never match a live model server;
+they need a docker daemon and a local ``busybox`` image and skip otherwise.
 """
 from __future__ import annotations
 
