@@ -5,7 +5,9 @@
 
 import asyncio
 import hashlib
+import json
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +17,7 @@ from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
 from rag_service import __main__ as main
 from rag_service.index import _chunk_text
-from xr_ai_models import ModelServiceError
+from xr_ai_models import ModelServiceError, presets
 from xr_ai_tools.rag import RAGTools, RetrieveRequest
 from xr_ai_tools.rpc import RPCServer
 from xr_ai_tools.types import EmptyRequest
@@ -164,8 +166,14 @@ async def test_legacy_cache_without_model_identity_is_not_reused(tmp_path) -> No
     assert len(list(cache.glob("*.npz"))) == 2
 
 
-@pytest.mark.parametrize("final_identity", ["different-weights", None])
-async def test_model_change_during_indexing_never_persists_or_serves_vectors(tmp_path, final_identity):
+@pytest.mark.parametrize("initial_identity, final_identity", [
+    ("test-model-v1", "different-weights"),
+    ("test-model-v1", None),
+    (None, "weights"),
+])
+async def test_model_change_during_indexing_never_persists_or_serves_vectors(
+    tmp_path, initial_identity, final_identity,
+):
     class ChangingEmbedding(_Embedding):
         async def embed(self, texts, *, timeout=None):
             rows = await super().embed(texts, timeout=timeout)
@@ -178,7 +186,8 @@ async def test_model_change_during_indexing_never_persists_or_serves_vectors(tmp
     (documents / "count.md").write_text("Count the tasks.")
     cache = tmp_path / "cache"
     embedder = ChangingEmbedding()
-    with pytest.raises(RuntimeError, match="identity changed.*restart RAG"):
+    embedder.identity = initial_identity
+    with pytest.raises(ModelServiceError, match="identity changed.*restart RAG"):
         await DenseIndex.build(documents, embedder, cache_dir=cache, embedding_dim=3, batch_size=1)
     assert len(embedder.calls) == 2
     assert not list(cache.glob("*.npz"))
@@ -217,25 +226,78 @@ async def test_identity_lookup_failure_aborts_before_cache_reuse_or_publication(
     assert {path.name: path.read_bytes() for path in cache.glob("*.npz")} == before
 
 
-async def test_profile_identity_is_not_replaced_by_manual_cache_key(tmp_path, monkeypatch) -> None:
-    profile = tmp_path / "models.json"
-    profile.write_text("profile-v1")
-    monkeypatch.setattr(main, "load_models_config", lambda _path: object())
-    monkeypatch.setattr(main, "make_embedding", lambda *_args: _Embedding())
-    captured = []
+@pytest.mark.parametrize("change, rebuild", [
+    ("tts", False), ("llm", False), ("vlm", False),
+    ("format", False), ("explicit_defaults", False),
+    ("model", True), ("endpoint", True), ("extras", True),
+    ("preset", True), ("manual_key", True),
+])
+async def test_cache_depends_only_on_resolved_embedding_role_and_manual_key(
+    tmp_path, monkeypatch, change, rebuild,
+) -> None:
+    profile = tmp_path / "models.yaml"
+    roles = {
+        "retrieval": {
+            "adapter": {"preset": "nemotron_embedding"},
+            "endpoint": {"base_url": "http://embedding-v1"},
+        },
+        "tts": {"adapter": {"preset": "pocket_tts"}, "endpoint": {"base_url": "http://tts"}},
+        "llm": {"adapter": {"preset": "nemotron3_nano"}, "endpoint": {"base_url": "http://llm"}},
+        "vlm": {"adapter": {"preset": "cosmos_vlm"}, "endpoint": {"base_url": "http://vlm"}},
+    }
+    profile.write_text(yaml.safe_dump({"models": roles}, sort_keys=False))
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    cache = tmp_path / "cache"
+    config = {
+        "models_config": "models.yaml", "embedding_role": "retrieval",
+        "documents_dir": "documents", "cache_dir": "cache",
+        "embedding_dim": 3, "cache_key": "manual-v1",
+    }
+    embedder = _Embedding()
+    monkeypatch.setattr(main, "make_embedding", lambda *_args: embedder)
 
-    async def build(*args, **kwargs):
-        captured.append(kwargs)
-        raise RuntimeError("stop before serving")
+    async def serve(_self, *, ready):
+        pass
 
-    monkeypatch.setattr(main.DenseIndex, "build", build)
-    config = {"models_config": "models.json", "documents_dir": ".", "cache_key": "manual-v1"}
-    for content in ("profile-v1", "profile-v2"):
-        profile.write_text(content)
-        with pytest.raises(RuntimeError, match="stop before serving"):
-            await main._serve(config, tmp_path / "rag.yaml", None)
-    assert captured[0]["cache_key"] == captured[1]["cache_key"] == "manual-v1"
-    assert captured[0]["profile_key"] != captured[1]["profile_key"]
+    monkeypatch.setattr(main.RPCServer, "serve", serve)
+    await main._serve(config, tmp_path / "rag.yaml", None)
+    assert embedder.calls
+    original = {p.name: p.read_bytes() for p in cache.glob("*.npz")}
+    embedder.calls.clear()
+
+    if change in ("tts", "llm", "vlm"):
+        roles[change]["endpoint"] = {"base_url": "http://unrelated-v2"}
+    elif change == "explicit_defaults":
+        spec = main.load_models_config(profile).embedding("retrieval")
+        roles["retrieval"] = {"category": "embedding", **asdict(spec)}
+    elif change == "model":
+        roles["retrieval"]["adapter"]["model_name"] = "embed-v2"
+    elif change == "endpoint":
+        roles["retrieval"]["endpoint"]["base_url"] = "http://embedding-v2"
+    elif change == "extras":
+        roles["retrieval"]["adapter"]["default_extras"] = {"input_type": "passage"}
+    elif change == "preset":
+        get_preset = presets.get_preset
+
+        def updated_preset(name):
+            preset = get_preset(name)
+            if name == "nemotron_embedding":
+                preset["model_name"] = "embed-v2"
+            return preset
+
+        monkeypatch.setattr(presets, "get_preset", updated_preset)
+    elif change == "manual_key":
+        config["cache_key"] = "manual-v2"
+    profile.write_text(
+        json.dumps({"models": roles}, sort_keys=True, indent=4)
+        if change == "format" else yaml.safe_dump({"models": roles}, sort_keys=False)
+    )
+    await main._serve(config, tmp_path / "rag.yaml", None)
+    assert bool(embedder.calls) is rebuild
+    assert len(list(cache.glob("*.npz"))) == (2 if rebuild else 1)
+    assert all((cache / name).read_bytes() == content for name, content in original.items())
 
 
 async def test_profile_change_invalidates_cache_with_same_manual_key(tmp_path) -> None:

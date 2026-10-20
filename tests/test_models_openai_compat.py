@@ -169,6 +169,28 @@ async def test_embedding_identity_lookup_failure_and_cancellation(failure):
                     assert f"HTTP {failure}" in str(raised.value)
 
 
+@pytest.mark.parametrize("status", [200, 401, 404])
+async def test_embedding_identity_is_required_even_when_health_checks_are_disabled(status):
+    requests = []
+
+    def handle(request):
+        requests.append(request.url.path)
+        return httpx.Response(status, json={"data": [{"id": "embed"}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding(
+            "http://stub", "embed", health_check=False, client=client,
+        ) as embedding:
+            assert await embedding.health()
+            assert requests == []
+            if status == 200:
+                assert await embedding.model_identity() is None
+            else:
+                with pytest.raises(ModelServiceError, match=f"HTTP {status}"):
+                    await embedding.model_identity()
+            assert requests == ["/v1/models"]
+
+
 async def test_embedding_identity_respects_configured_client_timeout(monkeypatch):
     real_client = httpx.AsyncClient
 

@@ -18,6 +18,7 @@ from ._protocols import (
     ChatStreamEvent,
     ContentPart,
     EmbeddingService,
+    ModelServiceError,
     ImageInput,
     ImagePart,
     LLMService,
@@ -31,7 +32,6 @@ from ._protocols import (
     VLMService,
 )
 from ._openai_compat import (
-    ModelServiceError,
     OpenAICompatLLM,
     OpenAICompatEmbedding,
     OpenAICompatSTT,

@@ -516,6 +516,10 @@ class _StreamingTTSService(TTSService, Protocol):
         pass
 
 
+class ModelServiceError(RuntimeError):
+    """Failure to determine or maintain an embedding model's reported identity."""
+
+
 @runtime_checkable
 class EmbeddingService(Protocol):
     """Structural interface for text-embedding services."""

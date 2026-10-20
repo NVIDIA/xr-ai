@@ -29,6 +29,7 @@ from ._protocols import (
     ChatResponse,
     ChatStreamEvent,
     ContentPart,
+    ModelServiceError,
     ImageInput,
     ImagePart,
     TextPart,
@@ -38,10 +39,6 @@ from ._protocols import (
     VideoInput,
     VideoPart,
 )
-
-
-class ModelServiceError(RuntimeError):
-    """Base exception for reported model-service operation failures."""
 
 
 # Hosts where plaintext http is acceptable for a bearer token (never leaves

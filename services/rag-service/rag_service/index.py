@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
-from xr_ai_models import EmbeddingService
+from xr_ai_models import EmbeddingService, ModelServiceError
 
 
 @dataclass(frozen=True)
@@ -121,13 +121,15 @@ class DenseIndex:
         disables persistent cache reads and writes while allowing retrieval.
         Lookup failures propagate: RAG does not degrade a failed lookup into
         permission to reuse or serve unverified embeddings.
-        If identity changes during embedding, fail startup rather than save or
-        serve potentially mixed-model vectors. Keep the endpoint stable for
-        the entire lifetime of the index.
+        A different identity after embedding rejects the build. These separate
+        metadata reads cannot detect swap-and-restore or inconsistent replicas;
+        every replica must stay on the same weights throughout indexing and
+        serving. Health probes check availability, not model consistency.
 
         Raises:
-            xr_ai_models.ModelServiceError: A backing-model identity lookup
-                failed, before cache reuse or after document embedding.
+            xr_ai_models.ModelServiceError: An identity lookup failed, or the
+                reported identity changed during document embedding (including
+                appearing or disappearing).
         """
 
         if chunk_size <= 0 or not 0 <= overlap < chunk_size:
@@ -151,7 +153,7 @@ class DenseIndex:
         cache_path = None
         if identity:
             # Structured fields prevent ambiguous concatenation and keep manual
-            # revisions additive to the endpoint profile and actual model.
+            # revisions additive to the embedding profile and reported identity.
             key = json.dumps([
                 "rag-index-v2", identity, profile_key, cache_key,
                 chunk_size, overlap, embedding_dim, passage_prefix,
@@ -179,8 +181,8 @@ class DenseIndex:
             for offset in range(0, len(texts), batch_size):
                 rows.extend(await embedder.embed(texts[offset:offset + batch_size]))
             if await embedder.model_identity() != identity:
-                raise RuntimeError(
-                    "embedding model identity changed or became unavailable during indexing; "
+                raise ModelServiceError(
+                    "embedding model identity changed during indexing; "
                     "stabilize the embedding server and restart RAG"
                 )
             vectors = np.asarray(rows, dtype=np.float32)

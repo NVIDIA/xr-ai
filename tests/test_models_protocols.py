@@ -29,6 +29,20 @@ def test_openai_compat_embedding_satisfies_embedding_service() -> None:
     assert isinstance(embedding, EmbeddingService)
 
 
+def test_embedding_service_requires_identity_lookup() -> None:
+    class LegacyEmbedding:
+        async def embed(self, texts, *, timeout=None):
+            return []
+
+        async def health(self):
+            return True
+
+        async def close(self):
+            pass
+
+    assert not isinstance(LegacyEmbedding(), EmbeddingService)
+
+
 def test_openai_compat_vlm_satisfies_vlm_service() -> None:
     vlm = OpenAICompatVLM("http://stub", "vlm")
     assert isinstance(vlm, VLMService)
