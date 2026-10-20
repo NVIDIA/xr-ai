@@ -252,8 +252,7 @@ silently switches to batch after reset.
 The speaker service and client use protocol **5** for diagnostics configuration
 and explicit attributed one-turn authorization. Update/restart both together;
 earlier peers are rejected rather than silently changing transcript display or
-authorization. Refer to
-{doc}`migrations` for configuration migration.
+authorization.
 
 ## Voice gating and early probes
 

@@ -83,13 +83,6 @@ closed-state one-off questions. Applications needing ungated final transcripts
 must select `always_on`. Restart workers after configuration edits. Refer to
 {ref}`voice-conversation-controls` for interaction behavior.
 
-Speaker streaming protocol 5 carries explicit diagnostics configuration alongside
-protocol 4's interaction policy and attributed one-turn events. Restart/update
-the service and client together; old peers fail
-the identity check rather than silently changing speech authorization. There
-is no cross-version service reuse, anonymous transcript fallback, or upgrade
-reconciliation machinery.
-
 ### Single LLM entry in model profiles
 
 XR Render and its eval commands now use `llm` instead of `agent_llm`.
