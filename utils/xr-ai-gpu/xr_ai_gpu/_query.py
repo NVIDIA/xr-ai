@@ -156,9 +156,12 @@ def query_gpu_inventory(*, timeout: float | None = None) -> tuple[GPUDevice, ...
 def query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]:
     """Return physical driver indices mapped to driver PCI bus addresses.
 
-    Ignores CUDA_VISIBLE_DEVICES and skips malformed index/address rows. Empty
-    output returns an empty mapping. This narrow query does not require compute
-    capability or memory support. PCI addresses retain the driver's formatting.
+    Ignores CUDA_VISIBLE_DEVICES. Skips rows with fewer than two columns or an
+    index that cannot be parsed as an integer. Returns the address column with
+    surrounding whitespace stripped, including empty or malformed addresses;
+    callers interpret and validate the address. Empty output returns an empty
+    mapping. This narrow query does not require compute capability or memory
+    support.
 
     Args:
         timeout: Positive, finite deadline in seconds; None means no deadline.

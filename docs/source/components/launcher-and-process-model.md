@@ -230,8 +230,9 @@ chain of the processes it manages.
 `setup_logging()` once at startup to get a unified logging stack: a stderr sink
 (level controlled by `XR_AI_VERBOSE`), a DEBUG file sink under
 `/tmp/log_<namespace>_<timestamp>/`, and a stdlib bridge that routes records
-emitted via `logging.getLogger(...)` into loguru — so stdlib-only packages
-(`xr-ai-launcher`) and the agent SDK end up in the same sinks. The orchestrator
+emitted via `logging.getLogger(...)` into loguru. The launcher depends only on
+`xr-ai-gpu` and uses standard-library logging; its records and the agent SDK's
+records end up in the same sinks without either package importing loguru. The orchestrator
 stamps namespace, timestamp, and root env vars so all spawned subprocesses write into
 the same per-run folder.
 
