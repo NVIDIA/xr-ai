@@ -56,6 +56,18 @@ again to begin a fresh run of the same command-line-selected guide.
 Refer to the [guide reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#follow-an-approved-guide)
 for verification and step-advance controls. Capture mode and guide mode run separately.
 
+To also record the whole participant session in either mode, independently of
+spoken capture or guide commands, use:
+
+```bash
+uv run main.py --mode capture --session-recording
+uv run main.py --mode guide "Tea Making" --session-recording
+```
+
+In capture mode, this flag can also be combined with `--output-root PATH`. Refer to the
+[session recording guide](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#session-recording)
+for output locations and encoding requirements.
+
 Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
@@ -69,6 +81,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | `yaml/worker.yaml` | Shared frame and speech detection settings; capture configuration path |
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
 | `yaml/guide-agent-config.yaml` | Local guide directory and verification timeout |
+| `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
 | `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
