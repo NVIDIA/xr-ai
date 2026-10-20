@@ -458,6 +458,24 @@
 -->
 <section id="release-migration">
 <h1>Release migration<a class="headerlink" href="#release-migration" title="Link to this heading">#</a></h1>
+<section id="shared-accepted-query-display">
+<h2>Shared accepted-query display<a class="headerlink" href="#shared-accepted-query-display" title="Link to this heading">#</a></h2>
+<p>Every <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> now returns accepted query text to its originating participant
+on the new <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code> client data topic. This generic display supports
+checking what the voice layer understood without a sample-specific echo agent.
+Payloads are UTF-8 <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">N:</span> <span class="pre">&lt;text&gt;</span></code> for speaker ASR or <code class="docutils literal notranslate"><span class="pre">User:</span> <span class="pre">&lt;text&gt;</span></code> for batch
+STT and typed input. Text is gate-normalized accepted input, not all raw STT;
+control phrases do not become queries. The separate internal <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code>
+event retains its existing mode/backend publication policy. Optional ignored-speaker display remains
+on <code class="docutils literal notranslate"><span class="pre">voice.speaker-diagnostic</span></code>, controlled by <code class="docutils literal notranslate"><span class="pre">speaker.diagnostics</span></code>.</p>
+<p>Internal application query topics, including <code class="docutils literal notranslate"><span class="pre">tea-making.user-query</span></code>,
+<code class="docutils literal notranslate"><span class="pre">lab-instrument-monitoring.user-query</span></code>, <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code>, <code class="docutils literal notranslate"><span class="pre">task.capture.input</span></code>
+and <code class="docutils literal notranslate"><span class="pre">simple-vlm.user-query</span></code>, are unchanged and are not used for client display.
+Clients with topic-specific handlers can handle or ignore <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>;
+catch-all message lists will show the additional messages, including typed echoes.
+There is no new constructor switch. Routing remains participant-targeted;
+topic filtering is not an authorization boundary.</p>
+</section>
 <section id="session-recording-flag">
 <h2>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h2>
 <p>Replace <code class="docutils literal notranslate"><span class="pre">--capture</span></code> with <code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> in saved launch commands for
@@ -504,8 +522,9 @@ custom phrases. The advanced setting
 Speaker backend selection is now independent: disabling conversation controls
 does not disable a configured speaker backend. To use batch STT, explicitly set
 <code class="docutils literal notranslate"><span class="pre">speaker.enabled:</span> <span class="pre">false</span></code> and supply the batch STT model client/service.</p>
-<p>Speaker streaming protocol 4 carries explicit interaction policy and attributed
-one-turn events. Restart/update the service and client together; old peers fail
+<p>Speaker streaming protocol 5 carries explicit diagnostics configuration alongside
+protocol 4’s interaction policy and attributed one-turn events. Restart/update
+the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.</p>
@@ -922,6 +941,7 @@ reuse the ignored caches rather than downloading them again.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-accepted-query-display">Shared accepted-query display</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
