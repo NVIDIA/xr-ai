@@ -1364,3 +1364,40 @@ async def test_voice_owns_query_display_without_sample_adapter(speaker_id, displ
 
 async def _discard_frame(*_args):
     pass
+
+
+@pytest.mark.parametrize("cancelled_delivery", ["input", "display"])
+async def test_query_delivery_child_cancellation_preserves_owned_task_cancellation(cancelled_delivery):
+    from types import SimpleNamespace
+
+    from pipecat.processors.frame_processor import FrameDirection
+    from xr_ai_voice._frames import GatedQueryFrame
+    from xr_ai_voice._processors.io import _VoiceIOProcessor
+
+    started = []
+
+    async def deliver(name):
+        started.append(name)
+        if name == cancelled_delivery:
+            raise asyncio.CancelledError()
+
+    async def sink(_query):
+        await deliver("input")
+
+    async def display(_message):
+        await deliver("display")
+
+    output = _VoiceIOProcessor(sink, transport=SimpleNamespace(send_return_data=display))
+    output.push_frame = _discard_frame
+    try:
+        await output.process_frame(GatedQueryFrame(
+            participant_id="alice", text="look around", pts_us=123, fresh_match=False,
+        ), FrameDirection.DOWNSTREAM)
+        task, = output._input_tasks
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert task.cancelled() and set(started) == {"input", "display"}
+        assert not output._input_tasks
+    finally:
+        await output._shutdown()
+        await output.cleanup()

@@ -209,6 +209,9 @@ class _VoiceIOProcessor(FrameProcessor):
                 return_exceptions=True,
             )
             failures = [result for result in results if isinstance(result, BaseException)]
+            for failure in failures:
+                if isinstance(failure, asyncio.CancelledError):
+                    raise failure
             if failures:
                 raise BaseExceptionGroup("voice input delivery failed", failures)
         except asyncio.CancelledError:
