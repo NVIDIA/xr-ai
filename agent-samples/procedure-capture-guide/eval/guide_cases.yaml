@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 guide_path: fixtures/indicator.guide.yaml
+fail_fast: true
 scenes:
   red: {rectangle: red}
   blue: {rectangle: blue}

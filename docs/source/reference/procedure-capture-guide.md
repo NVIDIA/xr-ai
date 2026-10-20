@@ -584,8 +584,13 @@ to evaluate another guide and its images.
 Outputs include the exact guide, manifest, image hashes, model tool calls, visual
 answers, speech text, and result JSON. Synthetic controls can isolate label or
 setpoint mistakes but do not establish accuracy on a user's actual camera views.
-The first failed action stops the scenario: later dependent actions are reported
-as not scored, rather than run against an assumed successful history.
+The manifest's optional boolean `fail_fast` defaults to `false`: mismatched
+answers or tool calls fail the run but do not hide later independent probes.
+`guide_routing.yaml` uses this continuation policy and restarts between probes.
+The dependent indicator and tea scenarios set `fail_fast: true`, so a failed
+check stops the scenario and later actions are reported as not scored rather
+than run against an assumed successful history. Runtime exceptions and timeouts
+stop either mode; they do not count as ordinary answer mismatches.
 
 #### Generated tea-image evaluation
 

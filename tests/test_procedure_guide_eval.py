@@ -154,3 +154,26 @@ def test_flow_uses_brand_neutral_guide_and_control_contract(evaluator, filename)
     for action in manifest["actions"]:
         if "expect" in action:
             re.compile(action["expect"])
+
+
+@pytest.mark.parametrize("filename,fail_fast", [
+    ("tea_guide.yaml", True),
+    ("tea_guide_complete.yaml", True),
+    ("guide_cases.yaml", True),
+    ("guide_routing.yaml", False),
+])
+def test_manifest_declares_dependent_or_independent_checks(filename, fail_fast):
+    manifest = yaml.safe_load((_SAMPLE / "eval" / filename).read_text())
+    assert manifest["fail_fast"] is fail_fast
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["false", 1, None])
+async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value):
+    spec = importlib.util.spec_from_file_location("guide_eval", _SAMPLE / "eval/guide.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    manifest = tmp_path / "scenario.yaml"
+    manifest.write_text(yaml.safe_dump({"fail_fast": value}))
+    with pytest.raises(ValueError, match="fail_fast must be a boolean"):
+        await module.evaluate(manifest, tmp_path / "results")

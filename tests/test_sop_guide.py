@@ -1416,7 +1416,8 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
 
 @pytest.mark.parametrize("timer", [False, True])
 @pytest.mark.parametrize("failed_probe", [None, "say", "observe"])
-def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe):
+@pytest.mark.parametrize("fail_fast", [None, False, True])
+def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer, failed_probe, fail_fast):
     monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
 
     import io
@@ -1427,6 +1428,10 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
 
     guide = yaml.safe_load((_SAMPLE / "eval/fixtures/indicator.guide.yaml").read_text())
     manifest = yaml.safe_load((_SAMPLE / "eval/guide_cases.yaml").read_text())
+    if fail_fast is None:
+        manifest.pop("fail_fast", None)
+    else:
+        manifest["fail_fast"] = fail_fast
     if timer:
         guide["steps"][1]["trigger"]["arguments"]["duration_s"] = 1
         completion = next(action for action in manifest["actions"]
@@ -1483,15 +1488,26 @@ def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, time
     assert result.value.code == (0 if failed_probe is None else 1)
     report = json.loads((output / "result.json").read_text())
     assert report["passed"] is (failed_probe is None)
-    assert report["checks_passed"] == len(manifest["actions"]) - (failed_probe is not None)
-    assert report["checks_not_scored"] == 0
+    assert report["fail_fast"] is bool(fail_fast)
+    stopped_early = failed_probe is not None and fail_fast
+    scored = len(manifest["actions"])
+    if stopped_early:
+        failed_action = first_status if failed_probe == "say" else observation
+        scored = manifest["actions"].index(failed_action) + 1
+    assert report["checks_passed"] == scored - (failed_probe is not None)
+    assert report["checks_not_scored"] == len(manifest["actions"]) - scored
     events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
     checks = [event for event in events if event["kind"] == "check"]
-    assert len(checks) == len(manifest["actions"])
-    assert checks[-1]["passed"]  # A mismatch must not hide later independent probes.
+    assert len(checks) == scored
+    assert checks[-1]["passed"] is not bool(stopped_early)
     llm.close.assert_awaited_once()
     vlm.close.assert_awaited_once()
-    assert vlm.ask_images.await_count >= 4
+    if stopped_early and failed_probe == "say":
+        assert vlm.ask_images.await_count == 0
+    elif stopped_early:
+        assert vlm.ask_images.await_count >= 2
+    else:
+        assert vlm.ask_images.await_count >= 4
 
 
 @pytest.mark.parametrize("session_recording", [False, True])

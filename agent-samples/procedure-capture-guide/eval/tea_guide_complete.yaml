@@ -5,6 +5,7 @@
 # timer and lifecycle coverage. No runtime state or observations are injected.
 guides_dir: fixtures
 guide: Chamomile Evaluation
+fail_fast: true
 scenes_file: tea_scenes.yaml
 actions:
   - {action: image, scene: chamomile}

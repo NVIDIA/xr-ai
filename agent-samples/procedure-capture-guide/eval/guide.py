@@ -149,9 +149,13 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
             step_id = step.next_step
         manifest = {"packet": str(packet.resolve()), "packet_sha256": hashlib.sha256(packet.read_bytes()).hexdigest(),
                     "frames": rows, "source_status": workflow.status, "draft_test_only": True,
-                    "tail_s": tail_s, "actions": actions}
+                    "tail_s": tail_s, "actions": actions, "fail_fast": True}
     else:
         manifest = yaml.safe_load(manifest_path.read_text())
+    fail_fast = manifest.get("fail_fast", False)
+    if not isinstance(fail_fast, bool):
+        raise ValueError("fail_fast must be a boolean")
+    if not packet:
         guide = load_guide(manifest_path.parent / manifest["guide_path"])
         raw = guide.path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != guide.sha256:
@@ -332,7 +336,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                                           step.is_complete(snapshot.context["state"]))
                 passed &= action_passed
                 log("check", index=index, action=kind, passed=action_passed)
-                if packet and not action_passed:
+                if fail_fast and not action_passed:
                     # Later turns depend on this state; do not score an imagined successful history.
                     break
             if packet:
@@ -360,6 +364,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
             log("error", error="guide changed during evaluation; the saved snapshot was evaluated, not the new file")
         (output / "result.json").write_text(json.dumps({
             "passed": passed, "checks_passed": sum(event["kind"] == "check" and event["passed"] for event in events),
+            "fail_fast": fail_fast,
             "guide_sha256": guide.sha256, "elapsed_s": time.monotonic() - started,
             "checks_planned": len(manifest["actions"]),
             "checks_not_scored": len(manifest["actions"]) - sum(event["kind"] == "check" for event in events),
