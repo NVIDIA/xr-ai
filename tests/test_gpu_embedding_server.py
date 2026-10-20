@@ -5,7 +5,8 @@
 
 Run on an idle supported GPU host with Docker and model-download access:
 ``tests/run_local_gpu_tests.sh test_gpu_embedding_server.py``.
-The shared GPU fixture removes managed vLLM containers; stop other samples first.
+The shared GPU fixture removes only this test session's containers and skips
+when other model-server containers exist.
 This checks embedding startup and retrieval, not full-stack memory coexistence.
 """
 
