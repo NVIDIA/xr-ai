@@ -73,7 +73,54 @@ does not relocate model or voice configuration and does not edit the YAML.
 The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
 captions use the configured VLM, and recording acknowledgements use TTS. Refer to
 {doc}`/getting_started/requirements` for model and hub deployment. The sample
-does not launch a raw audio/video recorder or require NVENC for its snapshots.
+does not require NVENC for its snapshots. Session recording is a separate opt-in
+feature described below.
+
+## Session recording
+
+To record the whole participant connection in either mode, run:
+
+```bash
+uv run main.py --mode capture --session-recording
+uv run main.py --mode guide "Tea Making" --session-recording
+```
+
+The shared recorder starts immediately after DeviceIOHub and records participant
+video, device and agent audio, and data-channel traffic from join to leave.
+Recording continues while the selected agent is idle, capturing a demonstration,
+or following a guide. **start capture** and **stop capture** control only procedure
+packets; **start guide** and **stop guide** control only guided execution.
+Neither pair starts or stops session recording, and enabling session recording
+does not start either procedure mode's work. Guide mode still waits for **start guide**
+and retains its verification and timer rules. Disconnecting closes the raw bundle
+and then starts rendering while the recorder remains running.
+
+`yaml/media_capture.yaml` selects `session_mode: participant` and the `demo`
+profile. It saves recordings under
+`~/.local/share/xr-ai/captures/procedure-capture-guide/`, retaining raw media and
+rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
+and `ffmpeg` on `PATH`. Refer to {doc}`../components/server-runtime` for the shared
+recorder's output and encoding contract.
+
+For a captioned video, disconnect the client first and wait for the bundle's
+`video/session.mp4` and its `renderings.captioned_mp4` manifest entry before
+pressing Ctrl+C. Stack shutdown commits active raw bundles without starting new
+renders. A render already running can also exceed the launcher's 20-second
+shutdown timeout and be interrupted. For a completed raw-only bundle, use
+[device_io_capture_render](../components/server-runtime.md#media-hub-session-capture)
+to render it separately after the stack stops.
+
+Session recordings have a separate retention policy: the shared recorder
+automatically prunes the oldest completed bundles under `out_dir` to meet its
+default **10 GiB** limit. Set `max_total_bytes` in `yaml/media_capture.yaml` to
+change that limit; `0` disables automatic pruning. Copy recordings you need to
+keep outside that directory, and monitor disk usage if pruning is disabled.
+This policy does not prune procedure evidence packets.
+
+The flag does not enable the client camera or microphone. Enable live video for
+continuous camera recording. In capture mode, `--output-root` can be combined with this flag and
+changes only the procedure-packet destination; configure session recording output
+through `out_dir` in `yaml/media_capture.yaml`.
 
 ## Recording boundaries
 
@@ -94,7 +141,7 @@ does not launch a raw audio/video recorder or require NVENC for its snapshots.
 Commands take effect after speech recognition finishes. Keep the microphone
 enabled and pause after the final narration before saying **stop capture** or
 disconnecting. A late transcript can miss the recording boundary; source audio
-is not retained by this sample.
+is retained only when session recording is enabled.
 
 A new recording waits for the preceding packet to finish saving. Narration after
 its start command is queued in order, but snapshots during this brief restart
@@ -186,7 +233,7 @@ incorrect. Review the counts, errors, and source images before using the packet.
 Persistence failures mark a packet `incomplete` when storage permits saving that
 status; otherwise the process log reports the failure. Failed packets are closed
 so subsequent recording commands create separate packets.
-Recordings are retained until manually removed, so monitor disk usage.
+Procedure packets are retained until manually removed, so monitor disk usage.
 
 ## Caption evaluation
 
@@ -464,7 +511,8 @@ commits for timer triggers are rejected until their configured duration expires.
 
 ## Composition and configuration
 
-The outer `main.py` launches the hub and worker. The worker's `__main__.py`
+The outer `main.py` launches the hub and worker, plus the shared recorder when
+`--session-recording` is enabled. The worker's `__main__.py`
 accepts configuration and readiness arguments; `procedure_capture_guide_worker/app.py` constructs
 the hub endpoint, model clients, voice runtime, and frame/image tools.
 The worker uses `VoiceAgent` for transcripts, `CurrentFrameTool` for snapshots,
@@ -520,6 +568,7 @@ cannot cancel its own response.
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
 | `yaml/guide-agent-config.yaml` | Local guide directory and visual verification timeout |
 | `yaml/models.json` | Shared batch STT, LLM, VLM, and TTS services and endpoints |
+| `yaml/media_capture.yaml` | Opt-in session recording output, profile, and participant lifetime |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free input with sample-owned recording commands |
 | `yaml/voice_gate.guide.yaml` | Wake-word-free guide questions and guide controls |
 | `yaml/device_io_hub.yaml` | Room and web server |

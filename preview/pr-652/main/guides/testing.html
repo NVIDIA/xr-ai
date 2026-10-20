@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -495,6 +499,29 @@ only on a suitably configured developer host:</p>
 </pre></div>
 </div>
 <p>Pass extra pytest arguments after the script name to select a file or test.</p>
+<p>Run GPU tests serially, without pytest-xdist (<code class="docutils literal notranslate"><span class="pre">-n</span></code>). Each invocation generates
+a fresh session ID and exports <code class="docutils literal notranslate"><span class="pre">XR_AI_TEST_SESSION</span></code> only while a GPU test runs.
+<code class="docutils literal notranslate"><span class="pre">xr_ai_vllm</span></code> labels newly created containers <code class="docutils literal notranslate"><span class="pre">xr-ai-test-session=&lt;id&gt;</span></code> without
+changing their launch fingerprint. Before and after each GPU test, the fixture
+removes only containers with that exact session label, using immutable IDs.
+Test-mode launcher operations also check ownership before reusing, restarting,
+stopping, or removing a container. Ordinary sample launches are unchanged.</p>
+<p>If Docker ownership inventory fails or times out, the test is skipped rather
+than assuming the host is empty. Any foreign <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-*</span></code> or <code class="docutils literal notranslate"><span class="pre">xr-ai-nim-*</span></code>
+container, running or stopped, causes <strong>all</strong> GPU tests to skip, including
+NVENC and LiveKit tests that launch no model server. This conservative guard
+avoids GPU contention and accidental reuse or replacement of stopped servers.</p>
+<p>Fixture teardown handles test and fixture failures, but cannot run after
+pytest is forcibly killed. A later session does not adopt the dead session’s
+label or automatically reclaim its containers. To recover, inspect
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">ps</span> <span class="pre">-a</span> <span class="pre">--filter</span> <span class="pre">label=xr-ai-test-session</span></code> and confirm the owner of each
+leftover container is no longer running. Remove only that confirmed container
+with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">rm</span> <span class="pre">-f</span> <span class="pre">&lt;container-id&gt;</span></code>, then rerun the tests. Never purge by label
+presence alone: another worktree may still be using a different session.</p>
+<p>The two Docker cleanup integration tests are marked <code class="docutils literal notranslate"><span class="pre">gpu</span></code> and additionally
+require a local <code class="docutils literal notranslate"><span class="pre">busybox</span></code> image. They use uniquely named, labelled throwaway
+containers; CPU runs do not contact Docker during their collection. The nightly
+workflow retains its separate dedicated-runner cleanup policy.</p>
 </section>
 <section id="apple-microphone-transaction-tests">
 <h2>Apple microphone transaction tests<a class="headerlink" href="#apple-microphone-transaction-tests" title="Link to this heading">#</a></h2>

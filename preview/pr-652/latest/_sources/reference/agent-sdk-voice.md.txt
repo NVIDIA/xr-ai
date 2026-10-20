@@ -49,7 +49,7 @@ session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
 
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
-For deployment order and migration of existing applications, refer to
+For deployment order and model availability requirements, refer to
 {ref}`consumer-model-readiness`.
 
 Each non-empty final STT result during an active conversation is queued for
@@ -249,10 +249,10 @@ independently. `auto` may select batch STT at startup if the speaker endpoint is
 absent; protocol mismatch is an error, not a fallback. Required speaker ASR never
 silently switches to batch after reset.
 
-The speaker service and client use protocol **4** for explicit attributed
-one-turn authorization. Update/restart both together; protocol 3 peers are
-rejected rather than treating their transcripts as permissions. Refer to
-{doc}`migrations` for configuration migration.
+The speaker service and client use protocol **5** for diagnostics configuration
+and explicit attributed one-turn authorization. Update/restart both together;
+earlier peers are rejected rather than silently changing transcript display or
+authorization.
 
 ## Voice gating and early probes
 
@@ -352,7 +352,7 @@ each event response before sending the next frame. The service derives timestamp
 from accepted sample counts; reconnecting starts a fresh timeline and clears
 temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
-diarization and interference conditioning, but are not transcribed after
+diarization and interference conditioning, but by default are not transcribed after
 enrollment. Before enrollment, the service independently decodes each detected
 speaker and enrolls the one whose conditioned transcript completes the start
 phrase, including during overlapping speech. If multiple speakers complete the
@@ -366,6 +366,35 @@ Microphone stop and republish therefore cannot join old phrase fragments across
 tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
 do not establish capture continuity, and delivery jitter does not trigger guessed
 resets. Explicit same-track capture epochs are outside this integration.
+
+The annotated voice-gate configuration reference above documents
+`speaker.diagnostics`, which defaults to `false`. Setting it to `true` displays
+candidate transcripts before
+enrollment and additionally transcribes non-owner voices after enrollment. It
+returns activity and ignored text on `voice.speaker-diagnostic` through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. See
+{doc}`../components/ai-services` for decoder ownership and diagnostic resource cost. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.
+
+The shared voice I/O layer also returns accepted, gate-normalized query text
+on the stable `voice.user-query` client data topic. Speaker ASR uses `Speaker N`;
+ordinary STT and typed queries use `User`. The application receives the same
+typed query as before, without speaker-display metadata or a sample-specific
+echo subscriber. Disabling speaker diagnostics does not disable accepted-query
+display. Application `query_topic` names remain internal runtime routing, not
+client display topics. This is accepted text after wake-prefix/control handling,
+not every raw STT word. The separate runtime `voice.transcript` event retains its
+existing mode/backend transcript-publication policy. Typed input is echoed too.
+Applications may handle or ignore the new
+topic in their data callback; the sample clients' catch-all message lists display it.
+Participant targeting, not topic selection, provides routing isolation. The
+existing hub return path is best effort, not an end-to-end receipt acknowledgment.
+Display errors do not reject accepted queries. Accepted display and application
+delivery start concurrently within one owned input task and both are awaited;
+ignored diagnostic sends are awaited inline. A saturated local hub can therefore
+delay input completion or later frames. No display-dropping policy is introduced.
 
 Start the inference process separately from the repository root:
 

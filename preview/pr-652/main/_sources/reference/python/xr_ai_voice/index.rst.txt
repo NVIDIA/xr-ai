@@ -204,6 +204,12 @@ Package Contents
    profile and the same voice-gate configuration, without application-side
    backend inspection. The normal constructor accepts explicitly owned clients.
 
+   Accepted queries also return participant-routed UTF-8 display text on
+   ``voice.user-query``. Speaker ASR includes its session-local speaker label;
+   ordinary STT and typed input use ``User``. This display does not change
+   :class:`UserQuery` or require an application subscriber. Delivery uses the
+   existing hub transport and retains its backpressure and best-effort semantics.
+
 
    .. py:method:: from_models(*, models: xr_ai_models.ModelsConfig, query_topic: xr_ai_runtime.Topic[UserQuery], tts: xr_ai_models.TTSService, vad: xr_ai_voice.VadConfig, voice_gate: xr_ai_voicegate.VoiceGateConfig, probes: collections.abc.Mapping[str, collections.abc.Callable[[], collections.abc.Awaitable[bool]]] | None = None, ready_file: pathlib.Path | None = None, closeables: collections.abc.Iterable[Any] = (), text_topic: str = 'agent.response', idle_timeout_secs: float | None = None, transport: xr_ai_voice.HubVoiceTransport | None = None, response_capacity: int = 32, text_input: bool = True, participant_joined_topic: xr_ai_runtime.Topic[VoiceParticipantJoined] | None = None, participant_left_topic: xr_ai_runtime.Topic[VoiceParticipantLeft] | None = None, interrupted_topic: xr_ai_runtime.Topic[VoiceInterrupted] | None = None, interrupt_on_supersede: bool = False) -> VoiceAgent
       :classmethod:

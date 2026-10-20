@@ -328,6 +328,10 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -794,6 +798,19 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
+<section id="config-procedure-capture-guide-yaml-media-capture-yaml">
+<h3>yaml/media_capture.yaml<a class="headerlink" href="#config-procedure-capture-guide-yaml-media-capture-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Session recording covers the whole participant connection, independently of</span>
+<span class="c1"># spoken capture or guide commands in either mode. Other settings use shared defaults.</span>
+<span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.local/share/xr-ai/captures/procedure-capture-guide</span>
+<span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="nt">session_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">participant</span>
+</pre></div>
+</div>
+</section>
 <section id="config-procedure-capture-guide-yaml-models-json">
 <h3>yaml/models.json<a class="headerlink" href="#config-procedure-capture-guide-yaml-models-json" title="Link to this heading">#</a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -1082,6 +1099,8 @@ workflow.</p></li>
 <span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required</span>
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://127.0.0.1:8102</span>
+<span class="w">  </span><span class="c1"># Display detected/ignored speakers in RECEIVED; adds ASR work for other voices.</span>
+<span class="w">  </span><span class="nt">diagnostics</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -1152,6 +1171,9 @@ workflow.</p></li>
 <span class="nt">embedding</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">gpu_memory_utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.08</span>
 <span class="w">  </span><span class="nt">spark_uma</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="c1"># Avoid FlashAttention kernels incompatible with GB10 SM121 on driver 580</span>
+<span class="w">  </span><span class="c1"># in the qualified vLLM 26.09 image. Other GPU profiles retain auto-selection.</span>
+<span class="w">  </span><span class="nt">attention_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TRITON_ATTN</span>
 </pre></div>
 </div>
 </section>
@@ -1237,7 +1259,8 @@ workflow.</p></li>
 <span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models/tea-making-rag-cache</span>
 <span class="nt">chunk_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">700</span>
 <span class="nt">overlap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-<span class="nt">embedding_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">768</span>
+<span class="c1"># Native output dimension of both Nemotron 3 Embed 1B BF16 and its NIM.</span>
+<span class="nt">embedding_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2048</span>
 <span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
 <span class="nt">min_score</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
 </pre></div>
@@ -1925,7 +1948,7 @@ workflow.</p></li>
 <span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
 
 <span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
-<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/llama-nemotron-embed-1b-v2</span>
+<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvidia/Nemotron-3-Embed-1B-BF16</span>
 <span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0.0.0</span>
 <span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8109</span>
 <span class="nt">served_model_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">embed</span>
@@ -2103,6 +2126,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-capture-agent-config-yaml">yaml/capture-agent-config.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-guide-agent-config-yaml">yaml/guide-agent-config.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-models-json">yaml/models.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-guide-yaml">yaml/voice_gate.guide.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>

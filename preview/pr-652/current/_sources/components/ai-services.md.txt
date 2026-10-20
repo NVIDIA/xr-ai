@@ -29,7 +29,7 @@ recorded video, and document retrieval.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` via `model-server-samples/clef-flash/` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
-| `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -45,10 +45,13 @@ the exact layout per launch style is below.
 `services/speaker-stt` is a private local inference process. It shares
 Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
 while keeping each session's diarization history, enrollment and ASR caches
-separate. In conversation and hybrid modes, a session enrolls one speaker with the configured start phrase and
-releases that identity with the stop phrase. Background voices do not reach
-the transcript as separate speakers after enrollment: the decoder receives the
-mixed audio with owner and interference masks and is conditioned on the owner.
+separate. In conversation and hybrid modes, a session enrolls one speaker with
+the configured start phrase and
+releases that identity with the stop phrase. With diagnostics disabled,
+background voices do not reach the transcript as separate speakers after
+enrollment: the decoder receives the mixed audio with owner and interference
+masks and is conditioned on the owner. Optional diagnostics expose ignored
+transcripts for display only; they cannot query the agent or change enrollment.
 Before enrollment, each detected speaker has independent conditioned decoding
 and phrase-matching state. Someone already talking does not reserve ownership:
 another speaker can say the start phrase over that conversation and enroll when
@@ -101,9 +104,10 @@ or incomplete PCM samples are protocol errors. The server's standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.
 
-The private identity is protocol 4. Worker and speaker service must be restarted
-together after updating: protocol-3 endpoints fail admission rather than
-silently selecting batch STT or accepting incompatible interaction settings.
+The private identity is protocol 5, adding the explicit diagnostics setting to
+protocol 4's interaction policy. Worker and speaker service must be restarted
+together after updating: earlier endpoints fail admission rather than silently
+selecting batch STT or accepting incompatible interaction settings.
 
 Configure model IDs, device, precision, host, port and session capacity
 in `services/speaker-stt/speaker_stt.yaml`. The default HTTP base URL is
@@ -130,8 +134,8 @@ model weights are shared. Always-on and wake-only keep candidate decoding as the
 steady state; hybrid uses it whenever no owner conversation is open. Every
 candidate remains required, so a decoder failure resets that session rather
 than silently ignoring a competing speaker. After enrollment only the owner's
-ASR cache is needed, unless the dependent diagnostics layer requests other
-transcripts. With the
+ASR cache is needed with diagnostics disabled. Enabled diagnostics share encoded features but add
+decoding work and separate temporary ASR caches for non-owner speakers. With the
 default `max_sessions: 16`, up to 128 enrollment decoder caches can coexist;
 GPU memory and latency at that bound have not been qualified. Candidate-decoding
 failure revokes the session because dropping a candidate could conceal a phrase
@@ -647,10 +651,16 @@ cleanup.
   `x-audio-sample-rate` and `x-audio-channels` headers describe the signed
   16-bit interleaved samples. Streaming with another response format returns
   HTTP 400.
-- **embedding-server** serves `nvidia/llama-nemotron-embed-1b-v2` through
-  `/v1/embeddings`. It emits 2048-dimensional Matryoshka embeddings and can
-  truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
-  configuration reserves 20% of a GPU and uses Docker.
+- **embedding-server** serves `nvidia/Nemotron-3-Embed-1B-BF16` through
+  `/v1/embeddings` under the served name `embed`. It emits 2048-dimensional
+  vectors. Retrieval inputs use `query: ` for queries and `passage: ` for
+  documents, as specified in the
+  [model card](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16).
+  The standalone configuration reserves 20% of a GPU and uses Docker;
+  the tea sample applies its own memory budget and indexes all 2048 dimensions.
+  Its Spark profile selects Triton attention for GB10 compatibility; other
+  profiles leave attention-backend selection to vLLM. Refer to
+  {doc}`/reference/migrations` for the model upgrade steps.
 - **rag-service** is a typed dense document-retrieval capability. Point
   `documents_dir` at an application-owned tree and `models_config` at a profile
   with an `embedding` role. It chunks and embeds supported documents at

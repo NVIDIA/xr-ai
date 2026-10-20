@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Procedure capture and guidance</a></li>
@@ -514,7 +518,48 @@ does not relocate model or voice configuration and does not edit the YAML.</p>
 <p>The sample saves JPEG snapshots and text evidence. Audio is transcribed by STT;
 captions use the configured VLM, and recording acknowledgements use TTS. Refer to
 <a class="reference internal" href="../getting_started/requirements.html"><span class="doc">Requirements</span></a> for model and hub deployment. The sample
-does not launch a raw audio/video recorder or require NVENC for its snapshots.</p>
+does not require NVENC for its snapshots. Session recording is a separate opt-in
+feature described below.</p>
+</section>
+<section id="session-recording">
+<h2>Session recording<a class="headerlink" href="#session-recording" title="Link to this heading">#</a></h2>
+<p>To record the whole participant connection in either mode, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>capture<span class="w"> </span>--session-recording
+uv<span class="w"> </span>run<span class="w"> </span>main.py<span class="w"> </span>--mode<span class="w"> </span>guide<span class="w"> </span><span class="s2">"Tea Making"</span><span class="w"> </span>--session-recording
+</pre></div>
+</div>
+<p>The shared recorder starts immediately after DeviceIOHub and records participant
+video, device and agent audio, and data-channel traffic from join to leave.
+Recording continues while the selected agent is idle, capturing a demonstration,
+or following a guide. <strong>start capture</strong> and <strong>stop capture</strong> control only procedure
+packets; <strong>start guide</strong> and <strong>stop guide</strong> control only guided execution.
+Neither pair starts or stops session recording, and enabling session recording
+does not start either procedure mode’s work. Guide mode still waits for <strong>start guide</strong>
+and retains its verification and timer rules. Disconnecting closes the raw bundle
+and then starts rendering while the recorder remains running.</p>
+<p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> selects <code class="docutils literal notranslate"><span class="pre">session_mode:</span> <span class="pre">participant</span></code> and the <code class="docutils literal notranslate"><span class="pre">demo</span></code>
+profile. It saves recordings under
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/captures/procedure-capture-guide/</span></code>, retaining raw media and
+rendering a captioned MP4 after disconnect. This option requires an NVIDIA GPU with NVENC support
+and <code class="docutils literal notranslate"><span class="pre">ffmpeg</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. Refer to <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Server runtime</span></a> for the shared
+recorder’s output and encoding contract.</p>
+<p>For a captioned video, disconnect the client first and wait for the bundle’s
+<code class="docutils literal notranslate"><span class="pre">video/session.mp4</span></code> and its <code class="docutils literal notranslate"><span class="pre">renderings.captioned_mp4</span></code> manifest entry before
+pressing Ctrl+C. Stack shutdown commits active raw bundles without starting new
+renders. A render already running can also exceed the launcher’s 20-second
+shutdown timeout and be interrupted. For a completed raw-only bundle, use
+<a class="reference internal" href="../components/server-runtime.html#media-hub-session-capture"><span class="std std-ref">device_io_capture_render</span></a>
+to render it separately after the stack stops.</p>
+<p>Session recordings have a separate retention policy: the shared recorder
+automatically prunes the oldest completed bundles under <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> to meet its
+default <strong>10 GiB</strong> limit. Set <code class="docutils literal notranslate"><span class="pre">max_total_bytes</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code> to
+change that limit; <code class="docutils literal notranslate"><span class="pre">0</span></code> disables automatic pruning. Copy recordings you need to
+keep outside that directory, and monitor disk usage if pruning is disabled.
+This policy does not prune procedure evidence packets.</p>
+<p>The flag does not enable the client camera or microphone. Enable live video for
+continuous camera recording. In capture mode, <code class="docutils literal notranslate"><span class="pre">--output-root</span></code> can be combined with this flag and
+changes only the procedure-packet destination; configure session recording output
+through <code class="docutils literal notranslate"><span class="pre">out_dir</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code>.</p>
 </section>
 <section id="recording-boundaries">
 <h2>Recording boundaries<a class="headerlink" href="#recording-boundaries" title="Link to this heading">#</a></h2>
@@ -536,7 +581,7 @@ returns the worker to waiting for <strong>start capture</strong>.</p></li>
 <p>Commands take effect after speech recognition finishes. Keep the microphone
 enabled and pause after the final narration before saying <strong>stop capture</strong> or
 disconnecting. A late transcript can miss the recording boundary; source audio
-is not retained by this sample.</p>
+is retained only when session recording is enabled.</p>
 <p>A new recording waits for the preceding packet to finish saving. Narration after
 its start command is queued in order, but snapshots during this brief restart
 gap are not buffered.</p>
@@ -636,7 +681,7 @@ incorrect. Review the counts, errors, and source images before using the packet.
 Persistence failures mark a packet <code class="docutils literal notranslate"><span class="pre">incomplete</span></code> when storage permits saving that
 status; otherwise the process log reports the failure. Failed packets are closed
 so subsequent recording commands create separate packets.
-Recordings are retained until manually removed, so monitor disk usage.</p>
+Procedure packets are retained until manually removed, so monitor disk usage.</p>
 </section>
 </section>
 <section id="caption-evaluation">
@@ -923,7 +968,8 @@ commits for timer triggers are rejected until their configured duration expires.
 </section>
 <section id="composition-and-configuration">
 <h2>Composition and configuration<a class="headerlink" href="#composition-and-configuration" title="Link to this heading">#</a></h2>
-<p>The outer <code class="docutils literal notranslate"><span class="pre">main.py</span></code> launches the hub and worker. The worker’s <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>
+<p>The outer <code class="docutils literal notranslate"><span class="pre">main.py</span></code> launches the hub and worker, plus the shared recorder when
+<code class="docutils literal notranslate"><span class="pre">--session-recording</span></code> is enabled. The worker’s <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>
 accepts configuration and readiness arguments; <code class="docutils literal notranslate"><span class="pre">procedure_capture_guide_worker/app.py</span></code> constructs
 the hub endpoint, model clients, voice runtime, and frame/image tools.
 The worker uses <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> for transcripts, <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> for snapshots,
@@ -987,13 +1033,16 @@ cannot cancel its own response.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/models.json</span></code></p></td>
 <td><p>Shared batch STT, LLM, VLM, and TTS services and endpoints</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/media_capture.yaml</span></code></p></td>
+<td><p>Opt-in session recording output, profile, and participant lifetime</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code></p></td>
 <td><p>Silent, wake-word-free input with sample-owned recording commands</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.guide.yaml</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.guide.yaml</span></code></p></td>
 <td><p>Wake-word-free guide questions and guide controls</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml/device_io_hub.yaml</span></code></p></td>
 <td><p>Room and web server</p></td>
 </tr>
 </tbody>
@@ -1081,6 +1130,7 @@ tool routing and visual judgments; the runner never manages their lifecycle.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-a-demonstration">Run a demonstration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-destination">Output destination</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording">Session recording</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recording-boundaries">Recording boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#outputs">Outputs</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#evidence-packet-contract">Evidence-packet contract</a></li>

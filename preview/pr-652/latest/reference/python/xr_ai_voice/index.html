@@ -328,6 +328,10 @@
 <li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -675,6 +679,11 @@ by its caller, who retains cleanup responsibility if construction fails.</p>
 <p><a class="reference internal" href="#xr_ai_voice.VoiceAgent.from_models" title="xr_ai_voice.VoiceAgent.from_models"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_models()</span></code></a> resolves that dependency from an already-loaded model
 profile and the same voice-gate configuration, without application-side
 backend inspection. The normal constructor accepts explicitly owned clients.</p>
+<p>Accepted queries also return participant-routed UTF-8 display text on
+<code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>. Speaker ASR includes its session-local speaker label;
+ordinary STT and typed input use <code class="docutils literal notranslate"><span class="pre">User</span></code>. This display does not change
+<a class="reference internal" href="#xr_ai_voice.UserQuery" title="xr_ai_voice.UserQuery"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserQuery</span></code></a> or require an application subscriber. Delivery uses the
+existing hub transport and retains its backpressure and best-effort semantics.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_voice.VoiceAgent.from_models">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_models</span></span><span class="sig-paren">(</span>

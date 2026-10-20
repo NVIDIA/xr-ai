@@ -328,6 +328,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -770,6 +774,10 @@ the runtime copy. Changing <code class="docutils literal notranslate"><span clas
 the worker and RAG service but not the persistent servers. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for a server-side model, GPU, port, or
 memory change, then restart the sample’s model stack.</p>
+<p>The local embedding server uses <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>, served as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> on port 8109. RAG retains its native 2048-dimensional vectors. The
+external NIM profile uses <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> with the same dimension;
+refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for endpoint configuration.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
