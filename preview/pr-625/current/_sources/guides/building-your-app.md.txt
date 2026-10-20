@@ -63,8 +63,8 @@ host as described in the system requirements.
 * - {doc}`xr-ai-launcher </reference/python/xr_ai_launcher/index>`\
     Import: `xr_ai_launcher`\
     Source: `utils/xr-ai-launcher`
-  - Stdlib-only process management for starting DeviceIOHub, workers, and
-    application services in dependency order.
+  - Process management for starting DeviceIOHub, workers, and application
+    services in dependency order, with only `xr-ai-gpu` as a runtime dependency.
 * - {doc}`xr-ai-hub-client </reference/python/xr_ai_hub/index>`\
     Import: `xr_ai_hub`\
     Source: `agent-sdk/xr-ai-hub`
@@ -158,7 +158,7 @@ Use this map to separate reusable scaffolding from the VLM example:
 
 | Files | Reuse | Replace or adapt |
 |---|---|---|
-| `main.py` and the root `pyproject.toml` | Keep the `run_stack` entry point, DeviceIOHub process, worker process, and launcher source entries. | Rename the project, command, logging namespace, worker command, and worker YAML path. Add only application-owned service processes. |
+| `main.py` and the root `pyproject.toml` | Keep the `run_stack` entry point, DeviceIOHub process, worker process, and launcher source entries. | Rename the project, command, logging namespace, worker command, and worker YAML path. Update `project.description` to describe the application. Add only application-owned service processes. |
 | `yaml/device_io_hub.yaml` | Keep the typed DeviceIOHub configuration shape. | Set the room, ports, web client, and network behavior. Refer to the [DeviceIOHub reference YAML](https://github.com/NVIDIA/xr-ai/blob/main/services/device-io-hub/device_io_hub.yaml) for coupled port and URL changes. |
 | `worker/pyproject.toml`, `__init__.py`, and `__main__.py` | Keep the named-package layout, console entry point, argument parsing, and delegation to `run_app()`. | Rename the distribution, package, and entry point. Remove dependencies only after their imports and features are gone. |
 | `worker/.../config.py` and `yaml/*_worker.yaml` | Keep typed loading and paths resolved relative to the YAML file. | Replace the prompt, frame, model, voice, and application-specific settings with the fields the application consumes. |

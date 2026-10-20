@@ -330,13 +330,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-replay.html">Procedure capture and replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -436,6 +437,18 @@
 behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.</p>
+<p>The browser camera tests also import presets from the LiveKit version in the
+existing web dependency lock. A fresh checkout must install that artifact
+before running the suite. From the repository root, use the same setup as CI:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">camera_sdk_dir</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>mktemp<span class="w"> </span>-d<span class="k">)</span><span class="s2">"</span>
+<span class="nv">camera_sdk_version</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>node<span class="w"> </span>-p<span class="w"> </span><span class="s2">"require('./dependency-manifest/web-xr-build/package-lock.json').packages['node_modules/livekit-client'].version"</span><span class="k">)</span><span class="s2">"</span>
+npm<span class="w"> </span>install<span class="w"> </span>--prefix<span class="w"> </span><span class="s2">"</span><span class="nv">$camera_sdk_dir</span><span class="s2">"</span><span class="w"> </span>--ignore-scripts<span class="w"> </span>--no-package-lock<span class="w"> </span>--no-save<span class="w"> </span><span class="s2">"livekit-client@</span><span class="si">${</span><span class="nv">camera_sdk_version</span><span class="si">}</span><span class="s2">"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">STREAMKIT_LIVEKIT_SDK_MODULE</span><span class="o">=</span><span class="s2">"file://</span><span class="si">${</span><span class="nv">camera_sdk_dir</span><span class="si">}</span><span class="s2">/node_modules/livekit-client/dist/livekit-client.esm.mjs"</span>
+</pre></div>
+</div>
+<p>An existing <code class="docutils literal notranslate"><span class="pre">client-samples/web-xr-build/node_modules</span></code> installation can also
+supply the SDK when the environment override is unset. No LiveKit server or
+camera device is needed for these tests.</p>
 <section id="run-the-suite">
 <h2>Run the suite<a class="headerlink" href="#run-the-suite" title="Link to this heading">#</a></h2>
 <p>From the repository root:</p>
@@ -494,6 +507,25 @@ as distinct agents. <code class="docutils literal notranslate"><span class="pre"
 it covers multi-client and multi-agent fan-out, interleaving, join and leave
 events, filter isolation, attribution, ordering, and participant-targeted return
 traffic.</p>
+</section>
+<section id="measure-coverage">
+<h2>Measure coverage<a class="headerlink" href="#measure-coverage" title="Link to this heading">#</a></h2>
+<p>CI measures coverage on Python 3.12 and publishes a per-project table to the job
+summary, with the raw reports attached as the <code class="docutils literal notranslate"><span class="pre">coverage</span></code> artifact. The report is
+informational and does not gate the build. The measured packages are listed in
+<code class="docutils literal notranslate"><span class="pre">source_pkgs</span></code> in <code class="docutils literal notranslate"><span class="pre">tests/pyproject.toml</span></code>: the SDK, utilities, and services that
+the test project installs or puts on its <code class="docutils literal notranslate"><span class="pre">pythonpath</span></code>. A package missing from
+that list does not appear in the table. To reproduce the report, run from
+<code class="docutils literal notranslate"><span class="pre">tests/</span></code> with the project environment at the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">UV_PROJECT_ENVIRONMENT</span><span class="o">=</span>../.venv<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>../uv.toml<span class="w"> </span>run<span class="w"> </span>coverage<span class="w"> </span>run<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span>
+<span class="nv">UV_PROJECT_ENVIRONMENT</span><span class="o">=</span>../.venv<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>../uv.toml<span class="w"> </span>run<span class="w"> </span>coverage<span class="w"> </span>json
+python3<span class="w"> </span>../.github/scripts/coverage_summary.py<span class="w"> </span>coverage.json
+</pre></div>
+</div>
+<p>Beyond line and branch coverage, the table counts the <code class="docutils literal notranslate"><span class="pre">except</span></code> clauses in each
+project and how many of them ran at least once. An <code class="docutils literal notranslate"><span class="pre">except</span></code> body runs only when
+a test provokes the failure, so this number shows where failure handling is
+untested. Add a test that exercises a handler before changing it.</p>
 </section>
 <section id="adding-tests">
 <h2>Adding tests<a class="headerlink" href="#adding-tests" title="Link to this heading">#</a></h2>
@@ -557,6 +589,7 @@ test only when a real process boundary is material to the contract.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-suite">Run the suite</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#apple-microphone-transaction-tests">Apple microphone transaction tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coverage-boundaries">Coverage boundaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#measure-coverage">Measure coverage</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-tests">Adding tests</a></li>
 </ul>
   </nav></div>

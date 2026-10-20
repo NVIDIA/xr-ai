@@ -355,13 +355,14 @@
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="procedure-capture-replay.html">Procedure capture and replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -508,19 +509,6 @@ one-turn events. Restart/update the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.</p>
-</section>
-<section id="procedure-replay-development-guides">
-<h2>Procedure replay development guides<a class="headerlink" href="#procedure-replay-development-guides" title="Link to this heading">#</a></h2>
-<p>For guides authored against earlier versions of the procedure replay sample,
-remove the unused <code class="docutils literal notranslate"><span class="pre">task.source_session</span></code> field. Steps with <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code>
-can omit <code class="docutils literal notranslate"><span class="pre">agent</span></code>; the deterministic patch must satisfy all <code class="docutils literal notranslate"><span class="pre">complete_when</span></code>
-requirements. Each step needs at least one initially unmet completion field
-that preceding steps cannot write. Give successive steps separate completion
-flags when adapting a guide that reused the same flag.</p>
-<p>The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> result now includes <code class="docutils literal notranslate"><span class="pre">available</span></code> and
-<code class="docutils literal notranslate"><span class="pre">unavailable_reason</span></code>. Elapsed time, remaining time, and expiration are <code class="docutils literal notranslate"><span class="pre">null</span></code>
-when unavailable, rather than raising a tool error. Refer to
-<a class="reference internal" href="procedure-capture-replay.html"><span class="doc">Procedure capture and replay</span></a> for the current guide and evaluation contracts.</p>
 </section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
@@ -937,7 +925,6 @@ reuse the ignored caches rather than downloading them again.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#procedure-replay-development-guides">Procedure replay development guides</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>

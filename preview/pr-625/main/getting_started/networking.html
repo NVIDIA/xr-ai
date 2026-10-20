@@ -355,13 +355,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-replay.html">Procedure capture and replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -543,6 +544,32 @@ disabled for local and private-network deployments.</p>
 <p>NAT also affects the TLS certificate: clients dial the VM’s public IP, which
 must be listed in the certificate’s SAN via <code class="docutils literal notranslate"><span class="pre">web_server_extra_sans</span></code>. Refer to
 <a class="reference internal" href="#tls-for-the-web-client">TLS for the web client</a> below.</p>
+</section>
+<section id="deployment-owned-hub-configuration">
+<h2>Deployment-owned hub configuration<a class="headerlink" href="#deployment-owned-hub-configuration" title="Link to this heading">#</a></h2>
+<p>Keep host listener ports, networking, TLS, and browser assets in one
+customer-owned hub YAML. Application workers retain their own prompts, tools,
+and model-client settings. The sample’s checked-in hub YAML remains a standalone
+convenience default.</p>
+<p>Each shipped agent sample accepts <code class="docutils literal notranslate"><span class="pre">--hub-config</span> <span class="pre">PATH</span></code>. For example, from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/</span></code>, after starting its required model services:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example<span class="w"> </span>--hub-config<span class="w"> </span>/srv/xr-ai/hub.yaml
+</pre></div>
+</div>
+<p>The sample passes this file through <code class="docutils literal notranslate"><span class="pre">Process(config=...)</span></code> to DeviceIOHub’s
+existing <code class="docutils literal notranslate"><span class="pre">--config</span></code> option. It replaces the sample hub YAML; it is not an
+overlay. Omit the option to use the sample default. A relative CLI filename
+resolves against the launch directory. Relative asset and certificate paths
+inside the selected YAML resolve against that file’s directory. No tracked
+sample files are modified, and no separate validation rules or certificate
+restrictions apply to deployment-owned configuration.</p>
+<p>When selecting a deployment hub configuration for XR Render, supply its browser
+assets through that configuration. The launcher skips its sample-default web
+vendor preparation and automatic browser-page suppression in this mode.</p>
+<p>When URLs are omitted, DeviceIOHub derives <code class="docutils literal notranslate"><span class="pre">lk_internal_url</span></code> from <code class="docutils literal notranslate"><span class="pre">lk_port_ws</span></code>
+and the legacy token server’s advertised <code class="docutils literal notranslate"><span class="pre">token_server_url</span></code> from
+<code class="docutils literal notranslate"><span class="pre">token_server_port</span></code>. Explicit URLs retain their scheme, host, port, and path.
+The normal web server’s same-origin signaling behavior is unchanged.</p>
 </section>
 <section id="rhel-fedora-or-centos-firewall-cmd">
 <h2>RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)<a class="headerlink" href="#rhel-fedora-or-centos-firewall-cmd" title="Link to this heading">#</a></h2>
@@ -738,6 +765,7 @@ certificate with one from a public CA by setting <code class="docutils literal n
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ubuntu-or-debian-ufw">Ubuntu or Debian (<code class="docutils literal notranslate"><span class="pre">ufw</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cloud-vms-behind-nat">Cloud VMs behind NAT</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deployment-owned-hub-configuration">Deployment-owned hub configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rhel-fedora-or-centos-firewall-cmd">RHEL, Fedora, or CentOS (<code class="docutils literal notranslate"><span class="pre">firewall-cmd</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#live-agent-event-viewer">Live agent-event viewer</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tls-for-clients">TLS for clients</a><ul class="nav section-nav flex-column">

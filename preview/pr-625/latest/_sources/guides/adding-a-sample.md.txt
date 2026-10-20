@@ -59,7 +59,7 @@ separately and owns small GPU-profile overrides; shared defaults live under
 `utils/xr-ai-model-server-stack/yaml/`. For startup probes, refer to
 {py:class}`~xr_ai_voice.VoiceAgent` and {ref}`consumer-model-readiness`.
 Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
-read through the generic stdlib-only launcher deployment loaders requires the
+read through the generic launcher deployment loaders requires the
 wrapped nested JSON shape including deployment metadata. The worker passes either form to
 `load_models_config(...)` and constructs services with `make_llm`, `make_vlm`,
 `make_stt`, or `make_tts` from `xr_ai_models`. Schema, preset
@@ -111,6 +111,7 @@ build-backend = "hatchling.build"
 [project]
 name = "<kebab-name>"
 version = "0.1.0"
+description = "<One-line description of the sample experience>"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",

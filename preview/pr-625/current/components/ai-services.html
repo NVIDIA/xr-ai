@@ -330,13 +330,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-replay.html">Procedure capture and replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -802,8 +803,8 @@ never branch on backend.</p>
 </pre></div>
 </div>
 <p>The worker-side <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> loader accepts JSON or YAML, including flat
-legacy entries and direct role mappings. A profile shared with the stdlib-only
-launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
+legacy entries and direct role mappings. A profile shared with the launcher
+must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
 <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>
@@ -1075,7 +1076,20 @@ template emits the assistant answer directly and has no <code class="docutils li
 branch or <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> delimiters, so the client preset needs no reasoning-field
 mapping. Cosmos-Reason1 remains available by pairing
 <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> with the <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> client preset. Hosting
-backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
+backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> above.
+When serving <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> with the default Docker image on SM12 GPUs,
+including RTX Blackwell and GB10, the service selects Triton attention for
+both the decoder and vision encoder.
+This reduces cold image latency without depending on a previous container’s
+compilation cache. On x86 SM12 GPUs, it avoids the pinned 26.09 image’s
+FlashAttention-2 PTX fallback. The ARM image includes native Blackwell kernels,
+so that explanation does not apply to every SM12 deployment. Other GPUs,
+custom images, and pip mode retain vLLM’s backend selection. The optional
+<code class="docutils literal notranslate"><span class="pre">attention_backend</span></code> and
+<code class="docutils literal notranslate"><span class="pre">mm_encoder_attn_backend</span></code> YAML keys override each component independently;
+explicit <code class="docutils literal notranslate"><span class="pre">auto</span></code> restores vLLM’s selection. Cold starts still include model
+loading and backend compilation. A healthy model HTTP endpoint is not a
+guarantee that sample inference warmup has completed.</p></li>
 <li><p><strong>llama-nemotron-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">Llama-3.1-Nemotron-Nano-8B-v1</span></code>. vLLM handles native Llama-3.1 tool calling
 via the <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> parser — <code class="docutils literal notranslate"><span class="pre">tools=[...]</span></code> in the request is rendered via
@@ -1152,20 +1166,16 @@ documents, as specified in the
 The standalone configuration reserves 20% of a GPU and uses Docker;
 the tea sample applies its own memory budget and indexes all 2048 dimensions.
 Its Spark profile selects Triton attention for GB10 compatibility; other
-profiles leave attention-backend selection to vLLM.</p></li>
+profiles leave attention-backend selection to vLLM. Refer to
+<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for the model upgrade steps.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at
 startup, caches its index, and returns matches above <code class="docutils literal notranslate"><span class="pre">min_score</span></code>. Start the
 embedding service first, RAG second, and the consuming worker last. The cache
-includes document content, indexing settings, the model-profile hash, the
-server-reported backing model (<code class="docutils literal notranslate"><span class="pre">root</span></code> from the matching <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> entry),
-and optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. A served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify
-weights. Without backing-model metadata, RAG disables persistent caching and
-embeds documents on each startup. Change <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> if weights change under
-the same reported identity; this key supplements, not replaces, the profile
-hash. Restart RAG whenever the embedding model changes. Refer to
-<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for upgrading existing indexes and servers.</p></li>
+includes document content, indexing settings, and the model profile; change
+<code class="docutils literal notranslate"><span class="pre">cache_key</span></code> when a remote endpoint changes its backing model without changing
+that profile.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack over ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s

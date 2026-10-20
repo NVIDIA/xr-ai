@@ -415,18 +415,6 @@ Package Contents
    Structural interface for text-embedding services.
 
 
-   .. py:method:: model_identity() -> str | None
-      :async:
-
-
-      Return the server-reported backing model, or ``None`` if unknown.
-
-      Consumers must not reuse persistent embeddings when identity is
-      unknown. This is not a weight checksum: deployments that replace
-      weights under the same identity need an explicit cache revision.
-
-
-
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]
       :async:
 
@@ -846,21 +834,6 @@ Package Contents
 
    The API key is read once from ``api_key_env`` during construction. An
    injected HTTP client remains owned by the caller and is not closed here.
-
-
-   .. py:method:: model_identity() -> str | None
-      :async:
-
-
-      Read the configured model's backing ``root`` from ``/v1/models``.
-
-      vLLM reports its checkpoint here even when the served ID is an alias.
-      Missing, ambiguous, or unavailable metadata returns ``None``; the
-      configured alias alone is not evidence of which weights are loaded.
-      Endpoints exposing only an ID therefore cannot support cache reuse.
-      Uses the HTTP client's configured timeout and logs unavailable metadata
-      reasons at debug level without logging response bodies or credentials.
-
 
 
    .. py:method:: embed(texts: Sequence[str], *, timeout: float | None = None) -> list[list[float]]

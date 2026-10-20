@@ -330,13 +330,14 @@
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="procedure-capture-replay.html">Procedure capture and replay</a></li>
+<li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="simple-vlm-example.html">Simple VLM example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="python/index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_gpu/index.html">xr_ai_gpu</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_hub/index.html">xr_ai_hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vad/index.html">xr_ai_vad</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_vllm/index.html">xr_ai_vllm</a></li>
@@ -453,34 +454,18 @@ weights; the pip launcher reuses a healthy listener without comparing models.</p
 in copied tea <strong>and standalone</strong> <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> files. Restart the
 embedding server before RAG. Verify the <code class="docutils literal notranslate"><span class="pre">embed</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">root</span></code> in
 <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code> identifies Nemotron 3 Embed, not the previous model.</p></li>
-<li><p>Restart the agent. RAG rebuilds legacy caches automatically. Its new cache
-key includes the server-reported backing model, model-profile hash,
-indexing settings, document content, and optional <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>. The manual
-key no longer replaces the profile hash. If backing-model metadata is
-unavailable, RAG rebuilds without reading or writing a persistent cache.</p></li>
+<li><p>Restart the agent. Changing the default dimension from 768 to 2048 changes
+the existing cache digest, so RAG rebuilds the index automatically. If a
+copied configuration already used
+2048 dimensions, set a new <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> or delete its generated cache before
+restarting RAG; a local served alias such as <code class="docutils literal notranslate"><span class="pre">embed</span></code> does not identify weights.</p></li>
 </ol>
 <p>Old 768-dimensional <code class="docutils literal notranslate"><span class="pre">.npz</span></code> caches are no longer used by the default
 configuration and can be deleted to reclaim space without losing documents.</p>
 <p>Independently deployed NIM endpoints must serve the new model before using the
-updated NIM profile. A served ID alone is not a backing-model identity: endpoints
-without a <code class="docutils literal notranslate"><span class="pre">root</span></code> field rebuild on each RAG startup. If weights change under an
-unchanged <code class="docutils literal notranslate"><span class="pre">root</span></code>, bump <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models while
-RAG is running; its in-memory document vectors must match query embeddings.
-If model identity changes or becomes unavailable during indexing, startup fails
-without saving or serving those vectors. Stabilize the endpoint and restart RAG.</p>
-</section>
-<section id="embedding-sdk-identity-contract">
-<span id="embedding-service-identity-migration"></span><h2>Embedding SDK identity contract<a class="headerlink" href="#embedding-sdk-identity-contract" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code> now requires <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">model_identity()</span> <span class="pre">-&gt;</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span></code>.
-Custom implementations must add this method to satisfy the runtime-checkable
-protocol and support RAG startup. Return a stable backing-model identifier when
-known, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when identity cannot be established; do not return a served
-alias that can silently switch weights. The built-in OpenAI-compatible client
-implements this lookup through <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code>.</p>
-<p>Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> permits embedding and retrieval, but disables persistent RAG
-cache reads and writes. Setting <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> does not override this safeguard.
-Existing adapters without the method fail <code class="docutils literal notranslate"><span class="pre">isinstance(...,</span> <span class="pre">EmbeddingService)</span></code>
-checks and cannot be passed to <code class="docutils literal notranslate"><span class="pre">DenseIndex.build()</span></code> until updated.</p>
+updated NIM profile. For later model changes behind an unchanged profile, set
+an explicit model revision in <code class="docutils literal notranslate"><span class="pre">cache_key</span></code> and restart RAG. Do not change models
+while RAG is running; its document vectors must match query embeddings.</p>
 </section>
 <section id="session-recording-flag">
 <h2>Session recording flag<a class="headerlink" href="#session-recording-flag" title="Link to this heading">#</a></h2>
@@ -533,19 +518,6 @@ one-turn events. Restart/update the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.</p>
-</section>
-<section id="procedure-replay-development-guides">
-<h2>Procedure replay development guides<a class="headerlink" href="#procedure-replay-development-guides" title="Link to this heading">#</a></h2>
-<p>For guides authored against earlier versions of the procedure replay sample,
-remove the unused <code class="docutils literal notranslate"><span class="pre">task.source_session</span></code> field. Steps with <code class="docutils literal notranslate"><span class="pre">evidence.commit</span></code>
-can omit <code class="docutils literal notranslate"><span class="pre">agent</span></code>; the deterministic patch must satisfy all <code class="docutils literal notranslate"><span class="pre">complete_when</span></code>
-requirements. Each step needs at least one initially unmet completion field
-that preceding steps cannot write. Give successive steps separate completion
-flags when adapting a guide that reused the same flag.</p>
-<p>The foreground <code class="docutils literal notranslate"><span class="pre">clock__timer</span></code> result now includes <code class="docutils literal notranslate"><span class="pre">available</span></code> and
-<code class="docutils literal notranslate"><span class="pre">unavailable_reason</span></code>. Elapsed time, remaining time, and expiration are <code class="docutils literal notranslate"><span class="pre">null</span></code>
-when unavailable, rather than raising a tool error. Refer to
-<a class="reference internal" href="procedure-capture-replay.html"><span class="doc">Procedure capture and replay</span></a> for the current guide and evaluation contracts.</p>
 </section>
 <section id="single-llm-entry-in-model-profiles">
 <h2>Single LLM entry in model profiles<a class="headerlink" href="#single-llm-entry-in-model-profiles" title="Link to this heading">#</a></h2>
@@ -960,11 +932,9 @@ reuse the ignored caches rather than downloading them again.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nemotron-3-embedding-model">Nemotron 3 embedding model</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#embedding-sdk-identity-contract">Embedding SDK identity contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#session-recording-flag">Session recording flag</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#clef-image-decision-inputs">Clef image decision inputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-voice-interaction-modes">Explicit voice interaction modes</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#procedure-replay-development-guides">Procedure replay development guides</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#single-llm-entry-in-model-profiles">Single LLM entry in model profiles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-local-model-server-launchers">Sample-local model-server launchers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#selected-model-server-cleanup">Selected model-server cleanup</a></li>

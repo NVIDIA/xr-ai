@@ -27,37 +27,19 @@ port 8109 with the served name `embed`.
    in copied tea **and standalone** `rag_service.yaml` files. Restart the
    embedding server before RAG. Verify the `embed` entry's `root` in
    `/v1/models` identifies Nemotron 3 Embed, not the previous model.
-3. Restart the agent. RAG rebuilds legacy caches automatically. Its new cache
-   key includes the server-reported backing model, model-profile hash,
-   indexing settings, document content, and optional `cache_key`. The manual
-   key no longer replaces the profile hash. If backing-model metadata is
-   unavailable, RAG rebuilds without reading or writing a persistent cache.
+3. Restart the agent. Changing the default dimension from 768 to 2048 changes
+   the existing cache digest, so RAG rebuilds the index automatically. If a
+   copied configuration already used
+   2048 dimensions, set a new `cache_key` or delete its generated cache before
+   restarting RAG; a local served alias such as `embed` does not identify weights.
 
 Old 768-dimensional `.npz` caches are no longer used by the default
 configuration and can be deleted to reclaim space without losing documents.
 
 Independently deployed NIM endpoints must serve the new model before using the
-updated NIM profile. A served ID alone is not a backing-model identity: endpoints
-without a `root` field rebuild on each RAG startup. If weights change under an
-unchanged `root`, bump `cache_key` and restart RAG. Do not change models while
-RAG is running; its in-memory document vectors must match query embeddings.
-If model identity changes or becomes unavailable during indexing, startup fails
-without saving or serving those vectors. Stabilize the endpoint and restart RAG.
-
-(embedding-service-identity-migration)=
-## Embedding SDK identity contract
-
-`EmbeddingService` now requires `async model_identity() -> str | None`.
-Custom implementations must add this method to satisfy the runtime-checkable
-protocol and support RAG startup. Return a stable backing-model identifier when
-known, or `None` when identity cannot be established; do not return a served
-alias that can silently switch weights. The built-in OpenAI-compatible client
-implements this lookup through `/v1/models`.
-
-Returning `None` permits embedding and retrieval, but disables persistent RAG
-cache reads and writes. Setting `cache_key` does not override this safeguard.
-Existing adapters without the method fail `isinstance(..., EmbeddingService)`
-checks and cannot be passed to `DenseIndex.build()` until updated.
+updated NIM profile. For later model changes behind an unchanged profile, set
+an explicit model revision in `cache_key` and restart RAG. Do not change models
+while RAG is running; its document vectors must match query embeddings.
 
 ## Session recording flag
 
@@ -116,20 +98,6 @@ one-turn events. Restart/update the service and client together; old peers fail
 the identity check rather than silently changing speech authorization. There
 is no cross-version service reuse, anonymous transcript fallback, or upgrade
 reconciliation machinery.
-
-## Procedure replay development guides
-
-For guides authored against earlier versions of the procedure replay sample,
-remove the unused `task.source_session` field. Steps with `evidence.commit`
-can omit `agent`; the deterministic patch must satisfy all `complete_when`
-requirements. Each step needs at least one initially unmet completion field
-that preceding steps cannot write. Give successive steps separate completion
-flags when adapting a guide that reused the same flag.
-
-The foreground `clock__timer` result now includes `available` and
-`unavailable_reason`. Elapsed time, remaining time, and expiration are `null`
-when unavailable, rather than raising a tool error. Refer to
-{doc}`procedure-capture-replay` for the current guide and evaluation contracts.
 
 ## Single LLM entry in model profiles
 
