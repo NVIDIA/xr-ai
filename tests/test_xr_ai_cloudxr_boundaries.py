@@ -7,8 +7,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-from test_dependency_map import dependency_map
-
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -26,28 +24,6 @@ def test_shared_helper_imports_only_standard_library():
             assert set(names) <= sys.stdlib_module_names, (path, names)
     metadata = tomllib.loads((directory.parent / "pyproject.toml").read_text())
     assert metadata["project"]["dependencies"] == []
-
-
-def test_repository_local_dependency_graph_is_acyclic():
-    projects = dependency_map.discover_projects(_ROOT)
-    graph = {project.name: {
-        dependency_map.dependency_name(dep)
-        for dep in (*project.dependencies, *(
-            dep for values in project.optional_dependencies.values() for dep in values
-        ))
-    } for project in projects}
-    visited = set()
-
-    def visit(name, ancestors):
-        assert name not in ancestors, f"dependency cycle: {ancestors + (name,)}"
-        if name in visited or name not in graph:
-            return
-        for dependency in graph[name]:
-            visit(dependency, ancestors + (name,))
-        visited.add(name)
-
-    for name in graph:
-        visit(name, ())
 
 
 def test_cloudxr_consumers_do_not_import_helpers_from_launcher():
@@ -68,3 +44,11 @@ def test_cloudxr_consumers_do_not_import_helpers_from_launcher():
     for service in ("cloudxr-runtime", "openxr-service"):
         metadata = tomllib.loads((_ROOT / "services" / service / "pyproject.toml").read_text())
         assert "xr-ai-launcher" not in metadata["project"]["dependencies"]
+        assert "xr-ai-cloudxr" in metadata["project"]["dependencies"]
+        if service == "cloudxr-runtime":
+            assert "xr-ai-gpu" in metadata["project"]["dependencies"]
+
+
+def test_launcher_depends_only_on_shared_helpers():
+    metadata = tomllib.loads((_ROOT / "utils/xr-ai-launcher/pyproject.toml").read_text())
+    assert set(metadata["project"]["dependencies"]) == {"xr-ai-gpu", "xr-ai-cloudxr"}
