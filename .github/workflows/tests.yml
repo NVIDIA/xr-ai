@@ -42,6 +42,13 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Install existing locked LiveKit SDK for browser camera tests
+        run: |
+          sdk_dir="${RUNNER_TEMP}/streamkit-camera-sdk"
+          sdk_version="$(node -p "require('./dependency-manifest/web-xr-build/package-lock.json').packages['node_modules/livekit-client'].version")"
+          npm install --prefix "$sdk_dir" --ignore-scripts --no-package-lock --no-save "livekit-client@${sdk_version}"
+          echo "STREAMKIT_LIVEKIT_SDK_MODULE=file://${sdk_dir}/node_modules/livekit-client/dist/livekit-client.esm.mjs" >> "$GITHUB_ENV"
+
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3
         with:

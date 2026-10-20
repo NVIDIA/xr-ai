@@ -22,6 +22,23 @@ import LiveKit
 /// `StreamSession(.liveKit(LiveKitConfig(…)))`.
 public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, @unchecked Sendable {
 
+    /// Internal SDK boundary; production uses the live operations unchanged.
+    struct SDKOperations: Sendable {
+        var connect: @MainActor @Sendable (Room, String, String, ConnectOptions, RoomOptions) async throws -> Void = {
+            try await $0.connect(url: $1, token: $2, connectOptions: $3, roomOptions: $4)
+        }
+        var disconnect: @MainActor @Sendable (Room) async -> Void = { await $0.disconnect() }
+        var publish: @MainActor @Sendable (Room, LocalVideoTrack, VideoPublishOptions?) async throws -> LocalTrackPublication = {
+            try await $0.localParticipant.publish(videoTrack: $1, options: $2)
+        }
+        var unpublish: @MainActor @Sendable (Room, LocalTrackPublication) async throws -> Void = {
+            try await $0.localParticipant.unpublish(publication: $1)
+        }
+        var stop: @MainActor @Sendable (LocalVideoTrack) async throws -> Void = { try await $0.stop() }
+        var start: @MainActor @Sendable (LocalVideoTrack) async throws -> Void = { try await $0.start() }
+        var publicationHandoff: @MainActor @Sendable () async -> Void = {}
+    }
+
     // MARK: StreamingBackend hooks
 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
@@ -46,6 +63,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     // MARK: Private state
 
     private let config: LiveKitConfig
+    private let sdk: SDKOperations
     private var room: Room?
     private var sessionConfig: SessionConfig = .default
     private var networkMetricsTask: Task<Void, Never>?
@@ -66,6 +84,11 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     /// Publication for the buffer-capturer track. Published after the first injected frame.
     private var bufferPublication: LocalTrackPublication?
+    private var cameraPublishDefaults = VideoPublishOptions()
+    private var cameraPublishTask: (track: LocalVideoTrack, generation: UInt64, task: Task<LocalTrackPublication, any Error>)?
+    private let cameraOperations = CameraOperations()
+    private var cameraCaptureCleanup: [LocalVideoTrack] = []
+    private var partialCameraStarts: [LocalVideoTrack] = []
 
     /// Currently active local camera track (device camera, ARKit, or simulator
     /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
@@ -80,8 +103,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     // MARK: - Init
 
-    init(config: LiveKitConfig) {
+    init(config: LiveKitConfig, sdk: SDKOperations = SDKOperations()) {
         self.config = config
+        self.sdk = sdk
     }
 
     // MARK: - Audio preparation
@@ -127,7 +151,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     public func connect(config sessionConfig: SessionConfig) async throws {
         self.sessionConfig = sessionConfig
 
-        try await tearDown()
+        try await tearDown(.reconnect)
+        let generation = connectionGeneration
 
         guard !config.host.isEmpty else {
             throw StreamError.invalidHost(config.host)
@@ -143,6 +168,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         } else {
             throw StreamError.missingToken
         }
+        guard connectionGeneration == generation else { throw StreamError.notConnected }
 
         #if targetEnvironment(simulator)
         // Disable Voice-Processing I/O (AUVoiceIO) before the room connects.
@@ -158,6 +184,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         room.delegates.add(delegate: self)
 
         let roomOptions = RoomOptions(stopLocalTrackOnUnpublish: true)
+        cameraPublishDefaults = roomOptions.defaultVideoPublishOptions
         // Audio isolation: when hubIdentity is set, disable auto-subscribe and
         // subscribe only to the hub participant's tracks (post-connect below +
         // the didPublishTrack delegate), so a client never receives another
@@ -167,7 +194,11 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             socketConnectTimeoutInterval: 5,   // fail fast if the host is unreachable
             primaryTransportConnectTimeout: 5  // fail fast if ICE/DTLS stalls
         )
-        try await room.connect(url: url, token: token, connectOptions: connectOptions, roomOptions: roomOptions)
+        try await sdk.connect(room, url, token, connectOptions, roomOptions)
+        guard self.room === room, connectionGeneration == generation else {
+            await sdk.disconnect(room)
+            throw StreamError.notConnected
+        }
 
         // Subscribe to any hub tracks already published before we connected.
         if let hub = config.hubIdentity {
@@ -180,12 +211,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
                 }
             }
         }
+        guard self.room === room, connectionGeneration == generation else { throw StreamError.notConnected }
         startNetworkMetricsReporting(for: room)
     }
 
     @MainActor
     public func disconnect() async throws {
-        try await tearDown()
+        try await tearDown(.disconnect)
     }
 
     // MARK: - StreamingBackend: audio
@@ -243,13 +275,122 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
     // MARK: - StreamingBackend: camera
 
+    private func videoPublishOptions(_ encoding: CameraEncodingConfig?) throws -> VideoPublishOptions? {
+        try cameraPublishOptions(encoding, defaults: cameraPublishDefaults)
+    }
+
+    @MainActor
+    private func publishCameraTrack(_ track: LocalVideoTrack, room: Room,
+                                    encoding: CameraEncodingConfig?) async throws -> LocalTrackPublication {
+        let generation = cameraGeneration
+        if let pending = cameraPublishTask, pending.track === track {
+            guard pending.generation == generation else { throw CancellationError() }
+            let publication = try await pending.task.value
+            try Task.checkCancellation()
+            guard cameraGeneration == generation else { throw CancellationError() }
+            return publication
+        }
+        let connection = connectionGeneration
+        let task = Task {
+            try await performCameraPublication(track, room: room, encoding: encoding,
+                                               generation: generation, connection: connection)
+        }
+        cameraPublishTask = (track, generation, task)
+        defer {
+            if cameraPublishTask?.track === track,
+               cameraPublishTask?.generation == generation { cameraPublishTask = nil }
+        }
+        let publication = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: { task.cancel() }
+        await sdk.publicationHandoff()
+        guard cameraGeneration == generation else { throw CancellationError() }
+        return publication
+    }
+
+    @MainActor
+    private func performCameraPublication(_ track: LocalVideoTrack, room: Room,
+                                          encoding: CameraEncodingConfig?,
+                                          generation: UInt64, connection: UInt64) async throws -> LocalTrackPublication {
+        var options = try videoPublishOptions(encoding)
+        do {
+            try Task.checkCancellation()
+            // A failed rollback remains owned; a retry must release it before
+            // replacing the retained cleanup obligation with another track.
+            try await stopCameraCaptureCleanup()
+            try Task.checkCancellation()
+            retainCameraCapture(track)
+            do { try await sdk.start(track) }
+            catch {
+                // LiveKit's capturer increments its start counter before a
+                // device start can throw; Track.start has not committed its
+                // started state, so Track.stop alone would be a no-op.
+                partialCameraStarts.append(track)
+                throw error
+            }
+            if let encoding, options?.simulcast == true, cameraPublishDefaults.simulcastLayers.isEmpty {
+                // The SDK starts capture before computing its default layers.
+                // Resolve the same real metadata, not capture hints or ratios.
+                let dimensions = try await cameraDimensions(track.capturer)
+                options = try cameraPublishOptions(encoding, defaults: cameraPublishDefaults, dimensions: dimensions)
+            }
+            try Task.checkCancellation()
+            guard self.room === room, room.connectionState == .connected,
+                  connectionGeneration == connection else { throw StreamError.notConnected }
+            guard cameraGeneration == generation else { throw CancellationError() }
+            let publication = try await sdk.publish(room, track, options)
+            guard !Task.isCancelled, self.room === room, connectionGeneration == connection,
+                  cameraGeneration == generation else {
+                // Retain the exact artifact if its unpublish fails, so stop
+                // can retry instead of treating a failed task as released.
+                if track === bufferTrack { bufferPublication = publication }
+                else { cameraPublication = publication }
+                try await Task { try await sdk.unpublish(room, publication) }.value
+                if bufferPublication === publication { bufferPublication = nil }
+                if cameraPublication === publication { cameraPublication = nil }
+                throw CancellationError()
+            }
+            // The producer commits cleanup ownership before exposing its result
+            // to a caller that may already have been invalidated by stop.
+            if track === bufferTrack { bufferPublication = publication }
+            else { cameraPublication = publication }
+            cameraCaptureCleanup.removeAll { $0 === track }
+            return publication
+        } catch {
+            // This helper owns capture until a publication is handed back.
+            // SDK stop is idempotent when publish already rolled capture back.
+            try await stopCameraCaptureCleanup()
+            throw error
+        }
+    }
+
+    @MainActor
     public func startCamera(config: CameraConfig) async throws {
+        guard let requestedRoom = room, requestedRoom.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let connection = connectionGeneration
+        try await cameraOperations.start { [self] in
+            guard self.room === requestedRoom, connectionGeneration == connection else {
+                throw StreamError.notConnected
+            }
+            try await performCameraStart(config: config)
+        }
+    }
+
+    @MainActor
+    private func performCameraStart(config: CameraConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
 
+        _ = try videoPublishOptions(config.encoding)
+
         // Stop any currently active camera before starting a new one.
-        try await stopCamera()
+        cameraGeneration &+= 1
+        try await performCameraStop()
+        try Task.checkCancellation()
+        let publicationGeneration = cameraGeneration
 
         #if targetEnvironment(simulator)
         // No physical camera in any simulator (iOS or visionOS). Set up the buffer track, capture one synthetic
@@ -277,7 +418,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         if let seed = seedBuffer, let capturer = simTrack.capturer as? BufferCapturer {
             capturer.capture(seed)
         }
-        bufferPublication = try await room.localParticipant.publish(videoTrack: simTrack)
+        let publication = try await publishCameraTrack(simTrack, room: room, encoding: config.encoding)
+        guard cameraGeneration == publicationGeneration else { throw CancellationError() }
+        bufferPublication = publication
         localCameraTrack = simTrack
         simulatorFrameTask = Task { [weak self] in
             await self?.runSimulatorFrameLoop(startingAt: 1)
@@ -287,40 +430,94 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // ARKit passthrough camera — device only, requires an open ImmersiveSpace and
         // the com.apple.developer.arkit.main-camera-access.allow enterprise entitlement.
         let track = makeVisionOSTrack()
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        let publication = try await publishCameraTrack(track, room: room, encoding: config.encoding)
+        guard cameraGeneration == publicationGeneration else { throw CancellationError() }
+        cameraPublication = publication
         localCameraTrack = track
 
         #else
         // Physical iOS/iPadOS camera.
         let track = makeIOSTrack(config: config)
-        cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        let publication = try await publishCameraTrack(track, room: room, encoding: config.encoding)
+        guard cameraGeneration == publicationGeneration else { throw CancellationError() }
+        cameraPublication = publication
         localCameraTrack = track
         #endif
     }
 
+    @MainActor
     public func stopCamera() async throws {
         cameraGeneration &+= 1
+        try await cameraOperations.stop { [self] in try await performCameraStop() }
+    }
+
+    @MainActor
+    private func performCameraStop() async throws {
+        if let pending = cameraPublishTask {
+            pending.task.cancel()
+            // Drain owned capture/publication before releasing its track. If
+            // the task completed just before stop, take its exact publication
+            // into the usual retryable cleanup fields before the caller resumes.
+            // ignored: the start caller observes failure; cleanup still drains its exact owned resources.
+            if let publication = try? await pending.task.value {
+                if pending.track === bufferTrack { bufferPublication = publication }
+                else { cameraPublication = publication }
+            }
+        }
         #if targetEnvironment(simulator)
         // Stop the synthetic frame generator first so no more frames are injected.
         simulatorFrameTask?.cancel()
         simulatorFrameTask = nil
         #endif
 
+        var failure: (any Error)?
         // Unpublish device / ARKit camera track.
         if let pub = cameraPublication {
-            try await room?.localParticipant.unpublish(publication: pub)
-            cameraPublication = nil
+            if let track = pub.track as? LocalVideoTrack { retainCameraCapture(track) }
+            do {
+                if let room { try await sdk.unpublish(room, pub) }
+                if cameraPublication === pub { cameraPublication = nil }
+            } catch { failure = error }
         }
 
         // Unpublish and teardown the buffer-capturer track.
         if let pub = bufferPublication {
-            try await room?.localParticipant.unpublish(publication: pub)
-            bufferPublication = nil
+            if let track = pub.track as? LocalVideoTrack { retainCameraCapture(track) }
+            do {
+                if let room { try await sdk.unpublish(room, pub) }
+                if bufferPublication === pub { bufferPublication = nil }
+            } catch { if failure == nil { failure = error } }
         }
+        do { try await stopCameraCaptureCleanup() }
+        catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
         bufferTrack = nil
         localCameraTrack = nil
     }
 
+    @MainActor
+    private func retainCameraCapture(_ track: LocalVideoTrack) {
+        if !cameraCaptureCleanup.contains(where: { $0 === track }) { cameraCaptureCleanup.append(track) }
+    }
+
+    @MainActor
+    private func stopCameraCaptureCleanup() async throws {
+        var failure: (any Error)?
+        for track in cameraCaptureCleanup {
+            do {
+                if partialCameraStarts.contains(where: { $0 === track }) {
+                    _ = try await Task { try await track.capturer.stopCapture() }.value
+                    partialCameraStarts.removeAll { $0 === track }
+                } else {
+                    try await Task { try await sdk.stop(track) }.value
+                }
+                cameraCaptureCleanup.removeAll { $0 === track }
+            } catch { if failure == nil { failure = error } }
+        }
+        if let failure { throw failure }
+    }
+
+    @MainActor
     public func captureImage(config: CameraConfig) async throws -> CapturedImage {
         guard let room, room.connectionState == .connected else { throw StreamError.notConnected }
         if let localCameraTrack {
@@ -382,9 +579,43 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     ///   (`kCVPixelFormatType_420YpCbCr8BiPlanarFullRange`, `kCVPixelFormatType_32BGRA`, etc.).
     /// - Throws: ``StreamError/notConnected`` if not connected.
     public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws {
+        try await injectVideoFrame(sampleBuffer, encoding: nil)
+    }
+
+    public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer,
+                                 encoding: CameraEncodingConfig?) async throws {
+        try await injectCameraFrame(sampleBuffer, encoding: encoding)
+    }
+
+    @MainActor
+    private func injectCameraFrame(_ sampleBuffer: sending CMSampleBuffer,
+                                   encoding: CameraEncodingConfig?) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
+        guard !cameraOperations.isStopping,
+              cameraCaptureCleanup.isEmpty || cameraPublishTask?.generation == cameraGeneration else {
+            throw CancellationError()
+        }
+        if bufferPublication != nil && !cameraOperations.hasPendingStart {
+            (bufferTrack?.capturer as? BufferCapturer)?.capture(sampleBuffer)
+            return
+        }
+        let generation = cameraGeneration
+        let connection = connectionGeneration
+        try await cameraOperations.start { [self] in
+            guard self.room === room, connectionGeneration == connection else { throw StreamError.notConnected }
+            guard cameraGeneration == generation else { throw CancellationError() }
+            try await performInjectCameraFrame(sampleBuffer, room: room, encoding: encoding)
+        }
+    }
+
+    @MainActor
+    private func performInjectCameraFrame(_ sampleBuffer: CMSampleBuffer, room: Room,
+                                          encoding: CameraEncodingConfig?) async throws {
+        // Subsequent frames retain the publication's policy. Validate/map only
+        // when these options can actually be consumed by a first publication.
+        if bufferPublication == nil { _ = try videoPublishOptions(encoding) }
 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
@@ -411,7 +642,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
         // Publish the track lazily — dimensions are now known from the frame above.
         if bufferPublication == nil {
-            bufferPublication = try await room.localParticipant.publish(videoTrack: track)
+            let generation = cameraGeneration
+            let publication = try await publishCameraTrack(track, room: room, encoding: encoding)
+            guard cameraGeneration == generation else { throw CancellationError() }
+            bufferPublication = publication
         }
     }
 
@@ -649,19 +883,40 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         return value
     }
 
+    private enum TeardownPurpose { case disconnect, reconnect }
+
     @MainActor
-    private func tearDown() async throws {
+    private func tearDown(_ purpose: TeardownPurpose) async throws {
         connectionGeneration &+= 1
         cameraGeneration &+= 1
         let room = room
+        self.room = nil
         try await microphoneOperations.disconnect { [self] in
             try await stopMicrophone(in: room)
         } close: { [self] in
-            await closeRoom()
+            do { try await closeRoom(room) }
+            catch {
+                switch purpose {
+                case .disconnect: throw error
+                case .reconnect:
+                    // isolation boundary: camera quarantine must not prevent transport admission.
+                    mediaLog.error("Camera remains unavailable after transport close: \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
 
-    private func closeRoom() async {
+    @MainActor
+    private func closeRoom(_ closingRoom: Room?) async throws {
+        try await cameraOperations.stop { [self] in try await closeCameraRoom(closingRoom) }
+    }
+
+    @MainActor
+    private func closeCameraRoom(_ closingRoom: Room?) async throws {
+        let cameraTask = cameraPublishTask
+        cameraTask?.task.cancel()
+        if let track = cameraPublication?.track as? LocalVideoTrack { retainCameraCapture(track) }
+        if let track = bufferPublication?.track as? LocalVideoTrack { retainCameraCapture(track) }
         let metricsTask = networkMetricsTask
         metricsTask?.cancel()
         networkMetricsTask = nil
@@ -676,15 +931,24 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         simulatorFrameTask = nil
         #endif
 
-        if let room {
-            room.delegates.remove(delegate: self)
-            await room.disconnect()
+        if let closingRoom {
+            closingRoom.delegates.remove(delegate: self)
+            await sdk.disconnect(closingRoom)
         }
-        room = nil
-        cameraPublication = nil
-        bufferPublication = nil
-        bufferTrack = nil
-        localCameraTrack = nil
+        // ignored: the start caller owns its result; retained capture cleanup below owns release failure.
+        _ = try? await cameraTask?.task.value
+        cameraPublishTask = nil
+        if let track = cameraPublication?.track as? LocalVideoTrack { retainCameraCapture(track) }
+        if let track = bufferPublication?.track as? LocalVideoTrack { retainCameraCapture(track) }
+        defer {
+            cameraPublication = nil
+            bufferPublication = nil
+            bufferTrack = nil
+            localCameraTrack = nil
+        }
+        // The connection is closed even if native capture release fails. Its
+        // exact owner survives for retry and the caller receives the failure.
+        try await stopCameraCaptureCleanup()
     }
 
     private func startNetworkMetricsReporting(for room: Room) {
@@ -1017,10 +1281,18 @@ extension LiveKitBackend: RoomDelegate {
         didUpdateConnectionState connectionState: LiveKit.ConnectionState,
         from oldState: LiveKit.ConnectionState
     ) {
-        if self.room === room, oldState == .connected, connectionState != .connected {
-            connectionGeneration &+= 1
+        Task { @MainActor [weak self] in
+            guard let self, self.room === room else { return }
+            if oldState == .connected, connectionState != .connected {
+                self.connectionGeneration &+= 1
+            }
+            if connectionState == .disconnected {
+                do { try await self.tearDown(.disconnect) }
+                catch { mediaLog.error("Camera cleanup after disconnect failed: \(error.localizedDescription, privacy: .public)") }
+                guard self.room == nil else { return }
+            }
+            self.onConnectionStateChanged?(connectionState.toStreamKitState())
         }
-        onConnectionStateChanged?(connectionState.toStreamKitState())
     }
 
     public func room(
@@ -1030,6 +1302,8 @@ extension LiveKitBackend: RoomDelegate {
         forTopic topic: String,
         encryptionType _: EncryptionType
     ) {
+        Task { @MainActor [weak self] in
+            guard let self, self.room === room else { return }
         // Intercept the reserved agent-status topic — never forward to onDataReceived.
         if topic == Self.agentStatusTopic {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1044,6 +1318,7 @@ extension LiveKitBackend: RoomDelegate {
             return
         }
         onDataReceived?(topic, data)
+        }
     }
 
     public func room(
@@ -1052,9 +1327,11 @@ extension LiveKitBackend: RoomDelegate {
         didPublishTrack publication: RemoteTrackPublication
     ) {
         // Audio isolation: subscribe only to the hub participant's tracks.
-        guard let hub = config.hubIdentity,
+        Task { @MainActor [weak self] in
+        guard let self, self.room === room, let hub = self.config.hubIdentity,
               participant.identity == Participant.Identity(from: hub) else { return }
-        Task { try? await publication.set(subscribed: true) }
+        try? await publication.set(subscribed: true)
+        }
     }
 
     // Diagnostic (DEBUG only): LiveKit's own view of our local mic/camera. These

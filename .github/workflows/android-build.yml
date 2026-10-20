@@ -3,8 +3,7 @@
 
 name: android-build
 
-# Build-only smoke test for the Android sample client. Catches wrapper
-# breakage and AGP/Kotlin/Gradle incompatibilities; no emulator, no tests.
+# Build and JVM boundary tests for the Android sample client; no emulator.
 
 on:
   push:
@@ -46,6 +45,9 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
+
+      - name: Camera publication boundary tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Verify Netty pin
         run: ./gradlew verifyNettyPin
