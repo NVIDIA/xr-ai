@@ -49,7 +49,7 @@ session remains private. Applications that need a shared public
 `HubVoiceTransport` construct and inject one explicitly.
 
 For the startup probe contract, refer to {py:class}`~xr_ai_voice.VoiceAgent`.
-For deployment order and migration of existing applications, refer to
+For deployment order and model availability requirements, refer to
 {ref}`consumer-model-readiness`.
 
 Each non-empty final STT result during an active conversation is queued for
@@ -252,8 +252,7 @@ silently switches to batch after reset.
 The speaker service and client use protocol **5** for diagnostics configuration
 and explicit attributed one-turn authorization. Update/restart both together;
 earlier peers are rejected rather than silently changing transcript display or
-authorization. Refer to
-{doc}`migrations` for configuration migration.
+authorization.
 
 ## Voice gating and early probes
 

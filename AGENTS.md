@@ -124,7 +124,10 @@ When preparing a repository sample, refer to
   in `__all__`, declarations, and co-located docstrings; Sphinx generates their
   reference pages. Update narrative README or `docs/source/` content only when
   concepts, workflows, operations, or architecture change. Breaking changes
-  also require a migration entry.
+  also require an entry in the current release transition of
+  `docs/source/reference/migrations.md`. Refer to
+  [Migration entries and release rollover](docs/source/guides/contributing-and-conventions.md#migration-entries-and-release-rollover)
+  for entry scope and the release checklist.
 - Top-level sample commands and options live in their `[project.scripts]` and
   `argparse` declarations; Sphinx generates the user-facing CLI reference.
 - Sample configuration values and field guidance live in checked-in YAML/JSON
