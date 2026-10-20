@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CloudXR environment and device-profile integration helpers."""
+"""CloudXR environment and device-profile helpers; private to xr_ai_cloudxr."""
 from __future__ import annotations
 
 import logging
