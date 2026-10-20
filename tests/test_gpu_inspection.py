@@ -78,3 +78,35 @@ def test_cloudxr_continues_without_pinning_on_driver_failure(monkeypatch, error)
     monkeypatch.setattr(module.shutil, "which", lambda _: "/usr/bin/nvidia-smi")
     with patch("xr_ai_gpu._query.subprocess.check_output", side_effect=error):
         assert module._xr_gpu_env(0) is None
+
+
+@pytest.mark.parametrize("query", [query_gpu_inventory, query_gpu_pci_bus_ids, query_gpu_processes])
+@pytest.mark.parametrize("timeout", [0, -1, -0.5, float("nan"), float("inf"), -float("inf"), 10**1000])
+def test_invalid_numeric_deadlines_never_launch_command(query, timeout):
+    with patch("xr_ai_gpu._query.subprocess.check_output") as command:
+        with pytest.raises(ValueError, match="positive and finite"):
+            query(timeout=timeout)
+        command.assert_not_called()
+
+
+@pytest.mark.parametrize("query", [query_gpu_inventory, query_gpu_pci_bus_ids, query_gpu_processes])
+@pytest.mark.parametrize("timeout", [True, False, "5", [], object(), complex(1, 2)])
+def test_invalid_deadline_types_never_launch_command(query, timeout):
+    with patch("xr_ai_gpu._query.subprocess.check_output") as command:
+        with pytest.raises(TypeError, match="float, integer, or None"):
+            query(timeout=timeout)
+        command.assert_not_called()
+
+
+@pytest.mark.parametrize("query", [query_gpu_inventory, query_gpu_pci_bus_ids, query_gpu_processes])
+@pytest.mark.parametrize("timeout", [None, 0.25, 5])
+def test_valid_deadline_reaches_command(query, timeout):
+    with patch("xr_ai_gpu._query.subprocess.check_output", return_value=(
+        "0, GPU-0, 00000000:01:00.0, GB10, 10.0, 131072, 131072, 0"
+        if query is query_gpu_inventory else ""
+    )) as command:
+        query(timeout=timeout)
+    if timeout is None:
+        assert "timeout" not in command.call_args.kwargs
+    else:
+        assert command.call_args.kwargs["timeout"] == timeout

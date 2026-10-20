@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Driver queries shared by inventory and PCI lookup consumers."""
+"""Internal implementation for xr_ai_gpu driver queries; use the package root API."""
 from __future__ import annotations
 
+import math
 import subprocess
 from dataclasses import dataclass
 
@@ -67,8 +68,14 @@ def query_gpu_processes(*, timeout: float | None = None) -> dict[str, list[GPUPr
     """Return compute processes grouped by physical GPU UUID.
 
     CUDA_VISIBLE_DEVICES does not filter this query. Unknown memory is None.
-    The deadline in seconds defaults to no deadline, including cold-driver
-    startup. Raises GPUInventoryError on command, deadline, or parsing failure.
+    Args:
+        timeout: Positive, finite driver-command deadline in seconds; None
+            permits cold-driver initialization without a deadline.
+
+    Raises:
+        GPUInventoryError: The command fails, times out, or contains malformed fields.
+        TypeError: timeout is not a float, integer, or None, or is a boolean.
+        ValueError: timeout is not positive and finite.
     """
     raw = _query("compute-apps", "gpu_uuid,pid,process_name,used_gpu_memory", timeout=timeout)
 
@@ -102,12 +109,14 @@ def query_gpu_inventory(*, timeout: float | None = None) -> tuple[GPUDevice, ...
     with unavailable values represented as None. No device filter is applied.
 
     Args:
-        timeout: Driver-command deadline in seconds; None permits cold-driver
-            initialization without a deadline.
+        timeout: Positive, finite driver-command deadline in seconds; None
+            permits cold-driver initialization without a deadline.
 
     Raises:
         GPUInventoryError: The query fails, times out, returns no devices,
             or contains malformed fields.
+        TypeError: timeout is not a float, integer, or None, or is a boolean.
+        ValueError: timeout is not positive and finite.
     """
     raw = _query(
         "gpu", "index,uuid,pci.bus_id,name,compute_cap,memory.total,memory.free,memory.used",
@@ -147,10 +156,12 @@ def query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]:
     capability or memory support. PCI addresses retain the driver's formatting.
 
     Args:
-        timeout: Deadline in seconds; None means no deadline.
+        timeout: Positive, finite deadline in seconds; None means no deadline.
 
     Raises:
         GPUInventoryError: The command cannot run, fails, or times out.
+        TypeError: timeout is not a float, integer, or None, or is a boolean.
+        ValueError: timeout is not positive and finite.
     """
     raw = _query("gpu", "index,pci.bus_id", timeout=timeout)
     result: dict[int, str] = {}
@@ -167,6 +178,15 @@ def query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]:
 
 
 def _query(kind: str, fields: str, *, timeout: float | None) -> str:
+    if timeout is not None:
+        if isinstance(timeout, bool) or not isinstance(timeout, (float, int)):
+            raise TypeError("timeout must be a float, integer, or None")
+        try:
+            finite = math.isfinite(timeout)
+        except OverflowError as exc:
+            raise ValueError("timeout must be positive and finite") from exc
+        if not finite or timeout <= 0:
+            raise ValueError("timeout must be positive and finite")
     kwargs = {"timeout": timeout} if timeout is not None else {}
     try:
         return subprocess.check_output(
