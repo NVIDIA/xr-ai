@@ -41,13 +41,13 @@ and finalization.
 
 To choose where packets are saved, launch with `uv run main.py --mode capture --output-root PATH`.
 
-To test guide mode with the included Numi Chamomile Lemon example:
+To test guide mode with the included chamomile tea example:
 
 ```bash
 uv run main.py --mode guide "Tea Making"
 ```
 
-Use Numi Chamomile Lemon tea, boiling water, a five-minute steep, and a kettle
+Use tea labeled chamomile, boiling water, a five-minute steep, and a kettle
 or thermometer that shows the current water temperature. For another locally
 reviewed guide under `guides/`, replace `Tea Making` with its exact name or ID.
 The guide must have `task.status: approved`. Guide mode uses the same model servers;
