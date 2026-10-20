@@ -8,6 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "procedure-capture-guide"
 version = "0.1.0"
+description = "Record narrated demonstrations and replay approved guides with spoken guidance and visual evidence checks."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",

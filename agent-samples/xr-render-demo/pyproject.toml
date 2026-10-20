@@ -8,6 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "xr-render-demo"
 version = "0.1.0"
+description = "Conversational control of a live CloudXR scene through specialized agents and tools."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
