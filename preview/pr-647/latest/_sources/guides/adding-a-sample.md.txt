@@ -111,6 +111,7 @@ build-backend = "hatchling.build"
 [project]
 name = "<kebab-name>"
 version = "0.1.0"
+description = "<One-line description of the sample experience>"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
