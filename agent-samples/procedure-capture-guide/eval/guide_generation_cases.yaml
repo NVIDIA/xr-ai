@@ -84,13 +84,14 @@
     media_access: "No images supplied."
   checks:
     - "Separate visual setup and timer wait with duration_s 15, not the example's 10."
-    - "Setup uses clock__now and atomically saves its live epoch_us plus setup boolean."
-    - "Setup has no evidence.commit, and complete_on_skip true prevents uninitialized timer entry."
-    - "Wait uses clock__timer, saved start in reads, expired result, ^true$ and direct boolean commit."
+    - "Setup directly commits its own boolean after visual evidence; no model-written timer start."
+    - "Setup complete_on_skip true prevents waiting without verified placement."
+    - "Wait uses clock__timer with duration_s only, expired result, ^true$ and direct boolean commit."
     - "No visual checks on wait, invented timestamp, or claim of continuously maintained placement."
-    - "Exactly one placement-and-clock setup followed by the wait; unavailable source images alone do not disable setup."
+    - "Exactly one placement setup followed by the wait; unavailable source images alone do not disable setup."
+    - "Flag that the runtime starts on wait-step entry, not physical placement; Next delay means the requested from-placement timing is not verified."
     - "Setup and wait each have distinct initially false completion booleans, so one cannot complete the other."
-    - "Replay labels before/at-expiry checks as simulated, not observed elapsed time or production clock calls; no historic timestamp in YAML."
+    - "Report real runtime timer results before and after expiry, or mark missing boundary coverage untested; no historic timestamp in YAML."
 
 - id: unsupported_sequence_and_duration
   input:

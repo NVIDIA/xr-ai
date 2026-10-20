@@ -39,17 +39,17 @@ Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 ## Run the recorded-camera test
 
 Refer to [the runner contract](references/runtime-replay.md) for prerequisites,
-the exact command, artifacts, and limits. The bundled
-[runner](scripts/replay_capture.py) supplies recorded images through isolated hub
-IPC to the real current-frame tool at original relative timing. It runs the real
+the exact command, artifacts, and limits. The sample's `eval/replay.py --packet`
+mode supplies recorded pixels at the camera endpoint boundary to the real
+current-frame tool at original relative timing. It runs the real
 guide agent and voice aggregation without a browser or physical microphone.
-Its synthetic user says Next after observed completion through the configured
+Its synthetic user says "start replay", then Next after observed completion through the configured
 local conversation model; it never directly advances or commits a step.
 Real clock tools measure elapsed wall time. Old source timestamps are not timer
 starts. The source guide stays draft; test eligibility exists only in memory.
 
 Validate the YAML, then run into a new output directory for each fixed version.
-Preserve its manifest, evaluated YAML, trace, and Relay events. A changed guide
+Preserve its manifest, evaluated YAML, events, and Relay events. A changed guide
 needs a new run from fresh state. A connection error is a failed test environment,
 not evidence that a guide's condition is wrong.
 
@@ -65,17 +65,19 @@ not evidence that a guide's condition is wrong.
    replace a response with what you believe the model should have said.
    Identify false positives, supported completions missed, occlusion, and
    missing negative coverage. Do not weaken requirements to fit a bad demo.
-3. Read executed tool requests and results, evidence hits, accepted or rejected
-   commits, state changes, completion notices, and conversation responses.
+3. Read executed tool requests and results, guidance state snapshots,
+   completion notices, and conversation responses. Do not claim internal
+   evidence-hit counts or commits that the trace does not expose.
    Distinguish a declared tool from a called tool. Direct `evidence.commit`
-   bypasses the observation LLM; timer setup must actually call `clock__now`
-   and commit its returned value. A spoken timer-start message is not a state write.
+   bypasses the observation LLM. Timer starts belong to the runtime on entry
+   to the wait step, never to model-written state or a spoken acknowledgment.
 4. Check that the engine did not accept incomplete states, inherit a previous
    step's completion, advance without its configured control, or claim more
-   than it verified. Check reset after the final completion. Steps unreachable
+   than it verified. Check the inactive reset after the final completion,
+   including terminal steps with `finish_on_complete: true`. Steps unreachable
    because an earlier step stalled are untested, not passed.
-5. For timers, inspect real `clock__now` and `clock__timer` results and the
-   committed start. Report whether false-before and true-after expiration
+5. For timers, inspect runtime timer results and entry to the wait step.
+   Report whether false-before and true-after expiration
    were actually exercised. No image proves elapsed time or continuous contact.
    Missing boundary coverage remains untested; never infer it from video length.
 6. Classify failures: guide wording or state wiring, model perception, missing
@@ -95,7 +97,7 @@ Report the guide hash and version, runtime and prompt identities, local models,
 source IDs and times, exact questions, actual results, committed state, completed
 and untested steps, and trace paths. Separate observed execution from your
 interpretation. List all simulated inputs and excluded layers (STT, TTS,
-browser, and LiveKit); this is not a full audiovisual end-to-end test.
+browser, hub IPC, and LiveKit); this is not a full audiovisual end-to-end test.
 
 Return actionable findings to the author without changing the guide. After an
 authorized revision, run the new YAML again; a previous pass cannot validate an

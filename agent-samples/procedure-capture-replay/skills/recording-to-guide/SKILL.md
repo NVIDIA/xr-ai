@@ -87,7 +87,7 @@ proves success:
 | Requirement | Guide check |
 |---|---|
 | Clearly specified visible result, including a narrated count or direction | Normal `current_view` check, even if the saved image is missing or disagrees. Put the authoring evidence gap in the review notes, not a disabled gate. |
-| Exact instructed elapsed wait | One visual setup that calls `clock__now` and saves its returned timestamp plus its own boolean, then a `clock__timer` wait. Use the timer example; no visual check on the wait. |
+| Exact instructed elapsed wait | Verify the visible prerequisite, then enter a `clock__timer` wait with the instructed duration. The runtime starts the timer on step entry; no timestamp state or visual check on the wait. Use the timer example. |
 | Required identity or duration is unresolved, or success needs hidden fit, historical motion/order, or continuous contact | Retain the action as a review-blocked draft step using the blocked example. Do not invent a tool, choose a duration from a range, or claim success. |
 
 Ordinary ordered placement instructions can use visible end states. A current
@@ -105,8 +105,8 @@ commits. Prefer direct `evidence.commit`; uncertainty and failure never complete
 
 Write `agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml` and the matching
 `<slug>.review.md`, or use the user's specified directory. Do not overwrite
-without permission. Keep `task.status: draft`, the exact packet session ID,
-a 1–5 word punctuation-free name, and a
+without permission. Put the exact packet session ID in review notes, not in
+the strict guide YAML. Keep `task.status: draft`, a 1–5 word punctuation-free name, and a
 version increment for an authorized replacement. Use block-style YAML and
 quoted prose. Keep review notes outside the strict guide schema.
 
@@ -137,7 +137,7 @@ Evaluation must execute the recorded-camera runner with the real XR-AI replay
 engine, configured local models, prompts, tools, and clock. You are only the
 observer and guide author: do not act as the runtime VLM, supply imagined tool
 answers, modify the runner, or mark a walkthrough as a runtime pass. Read actual
-frame selections, model responses, tool calls, commits, and agent output before
+frame selections, model responses, tool calls, guidance state, and agent output before
 editing. Report unavailable local models or replay dependencies as blocked tests.
 
 Use its findings to revise the draft's questions, instructions, steps, or state

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from ._workflow_spec import load_workflow
+from .replay._workflow_spec import load_workflow
 
 
 def main(argv: list[str] | None = None) -> int:

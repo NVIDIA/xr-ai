@@ -3,14 +3,12 @@
 
 # Schema example only. Ten seconds must not be copied unless instructed.
 # Evaluation follows ../../evaluate-guide/SKILL.md using the real replay engine
-# and local models. Inspect the actual clock__now result, accepted commit, and
-# clock__timer calls: unexpired before ten elapsed seconds and expired afterward.
+# and local models. Inspect timer triggers and accepted commits: unexpired
+# before ten elapsed seconds in the wait step and expired afterward.
 # A calculated answer or author-provided ready is not a runtime test. Missing
 # boundary coverage is untested. Never write a recording timestamp into YAML.
-# Placement and live clock initialization form ONE setup step. Do not insert
-# another placement step or reuse an already-completed boolean for setup.
-# Evaluation traces the actual setup dispatch: evidence.commit is absent,
-# so the observation agent can call clock__now before committing its result.
+# The runtime starts its own monotonic timer on entry to the wait step.
+# Do not create a model-written timestamp or reuse the setup completion field.
 # Missing authoring images belong in review notes, not an automatic (?!) gate.
 # Read the blocked example only if the prerequisite or duration is unresolved;
 # an exact instructed wait with a clear placement uses this normal setup.
@@ -20,28 +18,23 @@ task:
   name: "Pause After Placement"
   version: 1
   status: draft
-  source_session: example-timer-session
   start_step: place_workpiece
-  foreground_prompt: "Guide placement and start its clock, then the elapsed wait. No claim of continuous contact."
+  foreground_prompt: "Guide placement, then enter the elapsed wait. No claim of continuous contact."
   complete_message: "Placement and the elapsed wait are complete."
 state:
   placement_done:
     type: boolean
-    description: "Placement was observed and the live clock start was saved."
+    description: "Placement was observed."
     initial: false
-  started_us:
-    type: integer
-    description: "Exact epoch_us returned by clock__now after placement, never a recording timestamp."
-    initial: 0
   wait_done:
     type: boolean
     description: "The instructed elapsed wait expired."
     initial: false
 steps:
   - id: place_workpiece
-    title: "Place the workpiece and start the timer"
+    title: "Place the workpiece"
     reads: []
-    writes: [placement_done, started_us]
+    writes: [placement_done]
     trigger:
       function: current_view
       interval_s: 3
@@ -49,19 +42,16 @@ steps:
       arguments:
         question: "Is the workpiece resting flat inside the marked area? Answer exactly ready, not ready, or unclear."
     agent:
-      prompt: >-
-        Only on ready, call clock__now with no arguments. Commit the exact
-        returned epoch_us to started_us and placement_done to true together
-        using workflow__commit. Never invent a timestamp or commit placement
-        without saving the returned positive timestamp. On other observations,
-        do not commit. The evidence gate requires two ready matches.
-      tools: [clock__now]
+      prompt: "Use the direct visual classification; unclear is not completion."
+      tools: []
     voice:
-      prompt: "Explain placement inside the marked area. The clock starts once placement is verified, not when the user says next."
+      prompt: "Explain placement inside the marked area. The clock starts on entry to the waiting step."
       tools: [current_view]
     evidence:
       pattern: '^ready$'
       consecutive: 2
+      commit:
+        placement_done: true
     complete_when:
       placement_done: true
     next: wait_elapsed
@@ -69,24 +59,23 @@ steps:
     state_on_skip: {}
     messages:
       enter: "Place the workpiece flat inside the marked area."
-      complete: "Placement is verified and the timer has started. Say next for the waiting step."
-      skip: "Ending this run because the timer start was not established."
+      complete: "Placement is verified. Say next to start the waiting step and its timer."
+      skip: "Ending this run because placement was not verified."
   - id: wait_elapsed
     title: "Wait for ten elapsed seconds"
-    reads: [started_us]
+    reads: []
     writes: [wait_done]
     trigger:
       function: clock__timer
       interval_s: 1
       arguments:
-        started_at_us: $state.started_us
         duration_s: 10
       result_field: expired
     agent:
       prompt: "Use only the deterministic timer result; no visual check or estimated time."
       tools: []
     voice:
-      prompt: "Call clock__timer with started_at_us equal to state.started_us and duration_s 10. Report remaining_s or expired. Do not inspect the scene or claim continuous contact."
+      prompt: "Call clock__timer with no arguments to read the runtime-owned timer. Report remaining_s or expired. Do not inspect the scene or claim continuous contact."
       tools: [clock__timer]
     evidence:
       pattern: '^true$'
@@ -99,6 +88,6 @@ steps:
     complete_on_skip: false
     state_on_skip: {}
     messages:
-      enter: "Wait until ten seconds have elapsed since the saved placement check."
+      enter: "The timer has started. Wait ten seconds."
       complete: "Ten seconds have elapsed. Say next to finish."
       skip: "Skipping the elapsed wait without verification."

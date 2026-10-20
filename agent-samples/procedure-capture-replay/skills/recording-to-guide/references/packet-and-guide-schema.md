@@ -34,9 +34,9 @@ Keep comparison IDs and source times in review notes, not executable guide state
 No meaningful visible change differs from an indeterminate comparison: neither
 establishes inactivity throughout the interval. Uncertain labels are not actions
 and must not erase actions supported by narration or inspected images.
-SOP snapshots, captions, and narration cover the spoken start/stop recording
-boundary. Optional `--capture` media covers the whole participant connection;
-it is not required for guide generation and may span multiple SOP packets.
+SOP snapshots, captions, and narration cover the spoken "start capture" and
+"stop capture" boundary. Optional session media is not required for guide
+generation and may span multiple SOP packets.
 Use packet-local narration, not the whole shared transcript. New packets have
 no `media_capture` field. Older packets may link a bundle through
 `media_capture.manifest`; retain that bundle if present. Raw audio may help review
@@ -49,7 +49,7 @@ Exactly four root fields: `schema_version: 1`, `task`, `state`, `steps`. Unknown
 structural fields are rejected. Use block mappings and quote prose; commas in
 unquoted flow mappings (`{...}`) can silently create unintended fields.
 
-`task` requires `id`, `name`, `version`, `status`, `source_session`, `start_step`,
+`task` requires `id`, `name`, `version`, `status`, `start_step`,
 `foreground_prompt`, `complete_message`. Use a stable lowercase identifier
 matching `^[a-z][a-z0-9_-]*$`, a 1–5 word punctuation-free name, a positive integer
 version, and `status: draft`. Only human-reviewed `approved` guides may replay.
@@ -68,11 +68,12 @@ and completion messages; do not copy the worked example's wording.
 | `id`, `title` | Stable identifier and short instruction title |
 | `reads`, `writes` | Lists of declared state fields; `writes` cannot be empty |
 | `trigger` | `function`, positive `interval_s`, `arguments`, optional `result_field` |
-| `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list |
+| `agent`, `voice` | Each has a nonempty `prompt` and an allowed `tools` list; `agent` may be omitted with direct `evidence.commit` |
 | `evidence` | Full-match regex `pattern`, positive integer `consecutive`, optional typed `commit` mapping |
 | `complete_when` | Nonempty typed mapping using only this step's writable fields |
 | `next` | Next step ID, or `null` for the last step |
 | `complete_on_skip` | Boolean; true ends the run if this incomplete step is skipped |
+| `finish_on_complete` | Optional boolean, only for a terminal step; true ends the run automatically after verified completion |
 | `state_on_skip` | Typed mapping using only writable fields; normally `{}` |
 | `messages` | Nonempty `enter`, `complete`, and `skip` strings |
 
@@ -81,8 +82,9 @@ and completion messages; do not copy the worked example's wording.
 LLM; that agent's prompt and tools do not execute. Without it, the observation
 agent may call the engine-provided
 `workflow__commit`, still gated by the evidence threshold. Do not list that
-internal tool in `agent.tools`. Completion does not advance; messages ask the
-user to say next. A skip is not verified success.
+internal tool in `agent.tools`. Ordinary completion does not advance; messages ask the
+user to say next. A terminal `finish_on_complete: true` step ends the run without
+Next; its message must not request another advance. A skip is not verified success.
 
 Give each step its own completion boolean, initially false. Do not reuse a
 previous step's completion field: that would make the later step complete on
@@ -96,7 +98,7 @@ not prescribe two steps for every recording.
 |---|---|---|---|
 | `current_view` | Yes | Yes | `question`: 1–500 characters; result field `text` |
 | `clock__now` | No | Yes | No arguments; returns positive integer `epoch_us` |
-| `clock__timer` | Yes | Yes | Positive integers `started_at_us`, `duration_s`; result fields `elapsed_s`, `remaining_s`, `expired` |
+| `clock__timer` | Yes | Yes | Trigger: positive integer `duration_s`; policy tool: no arguments, reads the active runtime-owned timer. Result fields `elapsed_s`, `remaining_s`, `expired` |
 
 No participant ID, image path, sequence window, or `max_frames` argument is
 accepted. The engine binds the participant. The 500-character question limit
@@ -111,15 +113,20 @@ and in that step's `reads` or `writes`, with the argument's required type.
 These references are not general template substitutions for message text.
 
 For waits, read [the full timer example](timer.guide.yaml). Setup observes the
-prerequisite, calls `clock__now`, and commits its exact returned timestamp plus
-a separate setup boolean. Do not use `evidence.commit` on setup, since its clock
-value is dynamic. Set setup `complete_on_skip: true` so a skip cannot enter an
-uninitialized timer. The wait uses `clock__timer`, `result_field: expired`,
+prerequisite and commits its own boolean. Set setup `complete_on_skip: true`
+when a skip must not enter a wait without that prerequisite. The wait uses
+`clock__timer` with only `duration_s`, `result_field: expired`,
 `pattern: '^true$'`, `consecutive: 1`, and direct commit of its own boolean.
 Keep wait `agent.tools: []`, `voice.tools: [clock__timer]`; no visual requirement.
-Timing starts at setup, not when the user says next. It does not prove continuous
-contact. Unknown, ranged, or fractional durations require review instead of
+The runtime starts a monotonic timer on entry to the wait step, not at the earlier
+placement check. The policy tool takes no arguments and cannot change that start.
+Do not supply `started_at_us`, save a start in model-writable state, or use
+`clock__now` to initialize a timer. Timing does not prove continuous contact.
+Unknown, ranged, or fractional durations require review instead of
 guessing an accepted positive integer.
+If an instruction requires timing from a physical event rather than wait-step
+entry, report the mismatch: user-controlled Next can introduce a delay. Do not
+claim the runtime measured from the event or silently change that requirement.
 
 ## Evidence gaps and review-blocked steps
 

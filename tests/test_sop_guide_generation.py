@@ -19,12 +19,11 @@ _REFERENCES = _SAMPLE / "skills/recording-to-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from procedure_capture_replay_worker._validate_guide import main  # noqa: E402
-from procedure_capture_replay_worker._workflow_spec import load_workflow, parse_workflow  # noqa: E402
+from procedure_capture_replay_worker.replay._workflow_spec import load_workflow, parse_workflow  # noqa: E402
 
 
 def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
-    # Test the documented sibling installation, not links that only work from
-    # the repository root. Evaluation shares the authoring contract and examples.
+    # The generation package includes both authoring and runtime-evaluation skills.
     for name in ("recording-to-guide", "evaluate-guide"):
         shutil.copytree(_SAMPLE / "skills" / name, tmp_path / name)
     for path in tmp_path.rglob("*.md"):
@@ -39,6 +38,20 @@ def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
         assert metadata["name"] == name
         interface = yaml.safe_load((skill / "agents/openai.yaml").read_text())["interface"]
         assert f"${name}" in interface["default_prompt"]
+
+
+def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(capsys):
+    from procedure_capture_replay_worker import _validate_guide
+
+    assert _validate_guide.load_workflow is load_workflow
+    paths = (sorted(_REFERENCES.glob("*.guide.yaml"))
+             + sorted((_SAMPLE / "guides").glob("*.guide.yaml"))
+             + sorted((_SAMPLE / "eval/fixtures").glob("*.guide.yaml")))
+    assert len(paths) >= 5
+    originals = {path: path.read_bytes() for path in paths}
+    assert main([str(path) for path in paths]) == 0
+    assert not capsys.readouterr().err
+    assert originals == {path: path.read_bytes() for path in paths}
 
 
 @pytest.fixture
@@ -87,22 +100,52 @@ def test_timer_example_requires_live_setup_before_elapsed_only_wait():
     setup = workflow.steps[workflow.start_step]
     wait = workflow.steps[setup.next_step]
     assert setup.trigger.function == "current_view"
-    assert setup.agent.tools == ("clock__now",)
-    assert not setup.evidence.commit
+    assert setup.agent.tools == ()
+    assert setup.evidence.commit == {"placement_done": True}
     assert setup.complete_on_skip
     assert not setup.state_on_skip
-    assert set(setup.writes) == {"placement_done", "started_us"}
+    assert setup.writes == ("placement_done",)
     assert setup.complete_when == {"placement_done": True}
-    assert workflow.initial_state()["started_us"] == 0
+    assert "started_us" not in workflow.initial_state()
     assert wait.trigger.function == "clock__timer"
-    assert wait.trigger.arguments == {"started_at_us": "$state.started_us", "duration_s": 10}
-    assert wait.reads == ("started_us",)
+    assert wait.trigger.arguments == {"duration_s": 10}
+    assert wait.reads == ()
     assert wait.trigger.result_field == "expired"
     assert wait.agent.tools == ()
     assert wait.voice.tools == ("clock__timer",)
     assert wait.evidence.commit == wait.complete_when == {"wait_done": True}
     assert re.fullmatch(wait.evidence.pattern, "true")
     assert not re.fullmatch(wait.evidence.pattern, "false")
+
+
+def test_examples_follow_current_replay_completion_contract(visual):
+    for step in visual["steps"]:
+        step.pop("agent")  # Direct evidence commits do not need an observation policy.
+    visual["steps"][-1]["finish_on_complete"] = True
+    workflow = parse_workflow(yaml.safe_dump(visual))
+    assert workflow.steps["attach_clips"].finish_on_complete
+    assert workflow.steps["attach_clips"].agent is None
+    visual["steps"][0]["finish_on_complete"] = True
+    with pytest.raises(ValueError, match="requires a terminal step"):
+        parse_workflow(yaml.safe_dump(visual))
+
+
+def test_source_session_belongs_in_review_notes_not_executable_yaml(visual):
+    visual["task"]["source_session"] = "capture-id"
+    with pytest.raises(ValueError, match="unknown fields"):
+        parse_workflow(yaml.safe_dump(visual))
+
+
+def test_completion_must_require_new_evidence(visual):
+    visual["state"]["workpiece_positioned"]["initial"] = True
+    with pytest.raises(ValueError, match="complete on entry"):
+        parse_workflow(yaml.safe_dump(visual))
+
+
+def test_direct_commit_must_satisfy_completion(visual):
+    visual["steps"][0]["evidence"]["commit"]["workpiece_positioned"] = False
+    with pytest.raises(ValueError, match="must satisfy complete_when"):
+        parse_workflow(yaml.safe_dump(visual))
 
 
 def test_unresolved_identity_example_preserves_action_without_false_success():
