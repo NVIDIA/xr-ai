@@ -7,8 +7,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tea-making-sample"
-description = "Guided tea making with voice interaction, visual observations, and evidence-aware workflow steps."
 version = "0.1.0"
+description = "Guided tea making with voice interaction, visual observations, and evidence-aware workflow steps."
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "xr-ai-launcher",
