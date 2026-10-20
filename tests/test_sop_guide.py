@@ -140,7 +140,7 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
         assert "{{" not in step.enter_message  # Guide messages are not Jinja templates.
         if step.trigger.function == "current_view":
             assert not step.finish_on_complete
-            expected = {"identify": r"(?i)^.*\bCHAMOMILE\b.*$",
+            expected = {"identify": "(?i)^YES$",
                         "start_steeping": "(?i)^YES$"}
             assert step.evidence.consecutive == 2
             if step.id in expected:
@@ -155,8 +155,31 @@ def test_shipped_tea_guide_is_selectable_with_default_configuration(name):
             assert step.voice.tools == ("clock__timer",)
 
 
-@pytest.mark.parametrize("tea_label", ["CHAMOMILE", "chamomile lemon", "ORGANIC CHAMOMILE HERBAL TEA"])
-async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch, tea_label):
+@pytest.mark.parametrize(("answer", "should_match"), [
+    ("YES", True), ("yes", True), ("Yes", True),
+    ("NO", False), ("UNKNOWN", False), ("", False),
+    ("NO chamomile", False), ("NOT CHAMOMILE", False),
+    ("UNKNOWN (POSSIBLY CHAMOMILE)", False),
+    ("CHAMOMILE", False), ("CHAMOMILES", False),
+    ("YES, CHAMOMILE", False), ("YES\nNO", False),
+])
+def test_shipped_tea_identification_requires_an_affirmative_answer(answer, should_match):
+    guide = select_guide(_SAMPLE / "guides", "Tea Making")
+    pattern = guide.workflow.steps["identify"].evidence.pattern
+    assert (re.fullmatch(pattern, answer.strip()) is not None) == should_match
+
+
+def test_tea_identification_eval_uses_the_shipped_guide():
+    path = _SAMPLE / "eval/tea_identification.yaml"
+    manifest = yaml.safe_load(path.read_text())
+    guide = select_guide((path.parent / manifest["guides_dir"]).resolve(), manifest["guide"])
+    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
+    scenes = manifest["scenes"]
+    assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
+    assert any(action.get("answers") == ["UNKNOWN", "Unknown", "unknown"] for action in manifest["actions"])
+
+
+async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypatch):
     from procedure_capture_guide_worker.guide import guiding
 
     now = 1000.0
@@ -179,11 +202,17 @@ async def test_shipped_tea_guide_verification_and_runtime_timer(engine, monkeypa
         session.next_tick = 0
         await backend._tick(session)
 
+    # Malformed negatives must not commit progress even across fresh frames.
+    for answer in ("NO chamomile", "NOT CHAMOMILE", "UNKNOWN (POSSIBLY CHAMOMILE)"):
+        await observe(answer)
+        await observe(answer)
+        assert session.evidence_hits == 0 and not backend._is_complete(session)
+
     for step_id in ("identify", "heat_water", "start_steeping"):
         assert session.step_id == step_id and session.timer is None
-        positive = {"identify": tea_label, "heat_water": "CURRENT | 100 C",
+        positive = {"identify": "YES", "heat_water": "CURRENT | 100 C",
                     "start_steeping": "YES"}[step_id]
-        negative = {"identify": "MOROCCAN MINT", "heat_water": "CURRENT | 80 C", "start_steeping": "NO"}[step_id]
+        negative = {"identify": "NO", "heat_water": "CURRENT | 80 C", "start_steeping": "NO"}[step_id]
         for answer in (negative, "UNKNOWN", positive):
             await observe(answer)
             assert not backend._is_complete(session)

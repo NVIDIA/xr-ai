@@ -56,15 +56,16 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Read the tea name printed on the visible tea packet or box. Return
-          only the legible printed words in uppercase on one line. The brand
-          does not need to be visible. Do not substitute the desired tea for
-          the visible label. Use printed words, not colors, flowers, nearby
-          cups, or knowledge of likely products. If the tea name cannot be
-          read, return UNKNOWN.
+          Is CHAMOMILE visibly printed on the tea packet or box? Answer YES
+          if the word is legible, alone or within a longer tea name, regardless
+          of case or brand; the brand need not be visible. Answer NO if the
+          tea name is readable but lacks CHAMOMILE. Answer UNKNOWN if no packet
+          or box is visible or its label is obscured or unreadable. Read actual
+          words; do not infer from colors, flowers, or the requested tea.
+          Output only YES, NO, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '(?i)^.*\bCHAMOMILE\b.*$'
+      pattern: '(?i)^YES$'
       consecutive: 2
       commit: {tea_identified: true}
     voice:
