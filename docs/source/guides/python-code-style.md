@@ -5,9 +5,9 @@
 
 # Python code style
 
-This reference governs Python code throughout the repository:
-where the public API ends, how failures are represented, and how modules are
-laid out. It covers the SDK, utilities, services, samples, and tests.
+This reference governs Python contributions to NVIDIA/xr-ai: where the public
+API ends, how failures are represented, and how modules are laid out. It covers
+the SDK, utilities, services, samples, and tests.
 Application-owned projects under `apps/` are outside repository tooling and
 outside this reference. Package surfaces and their documented behavior live in
 each package's `__all__` and docstrings; this reference covers only the
@@ -17,8 +17,10 @@ These rules describe the target state of all Python code. Code that does not yet
 follow them is brought into line by cleanup changes and tracked outside this
 reference. Making a supported public name conform to a rule is a breaking
 change: keep the code working in every merged state, update every use in the
-repository, and add a migration entry. Until then the name keeps working as it
-is, and an unrelated change is not asked to rename it.
+repository, and add a migration entry for released behavior. Until a scoped
+change addresses it, the name keeps working as it is; an unrelated change is
+not asked to rename it. Refer to {ref}`migration-release-rollover` for entry
+scope.
 
 A package that other projects import, such as everything under `agent-sdk/` and
 `utils/` and any library a service or sample publishes, follows every section.
@@ -73,10 +75,10 @@ generated from "each enrolled module's literal `__all__`" define which modules
 are enrolled. The repository's
 [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#architecture-boundaries)
 requires that LiveKit not appear in agent APIs and that workers use public SDK
-packages, and its change contract places public API documentation in
-`__all__` and co-located docstrings, and it keeps private imports inside their
-owning packages or implementation tests. The private-module docstring is a
-**repository convention**.
+packages, and keeps private imports inside their owning packages or
+implementation tests. The {doc}`contributing-and-conventions` change contract
+places public API documentation in `__all__` and co-located docstrings. The
+private-module docstring is a **repository convention**.
 
 ## Exports
 
@@ -301,6 +303,8 @@ These rules follow:
 
 ## API design
 
+- Follow {ref}`resource-lifecycle` for ownership, thread cancellation, and
+  shutdown budgets.
 - Do not model a behavior with a boolean flag plus an optional argument. Use one
   typed choice. Use an `Enum` or `Literal` instead of a string for a kind or
   state.
@@ -329,7 +333,7 @@ Fowler's [Flag Argument](https://martinfowler.com/bliki/FlagArgument.html),
 which prefers separate, explicit calls because they "communicate more clearly
 what my intention is". The second-way rule restates the repository's own
 `AGENTS.md`
-[change contract](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#change-contract):
+[engineering guidance](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#engineering-guidance):
 "Do not add an abstraction until two concrete use cases need it." The callback,
 `try_*`, idempotent `stop()`, and constructor-policy rules, and the preference
 for `Enum` or `Literal`, are **repository conventions**.
@@ -347,7 +351,7 @@ limits comments to non-obvious invariants and failure modes. The tags are a
 
 ## Structuring a change
 
-- Keep one concern per pull request, ideally under 300 changed lines.
+- Follow the upstream {ref}`pull-request-scope` rules.
 - Do not mix a file move with an edit. Put the move in its own commit so
   `git diff -M` shows it as a pure rename.
 - When splitting a module, keep the old import path working through a
@@ -356,12 +360,11 @@ limits comments to non-obvious invariants and failure modes. The tags are a
   supported, such as an enrolled module, is a breaking change.
 - State in the pull request whether the change alters behavior. A refactor that
   must not change behavior passes the existing tests unmodified.
-- Add a migration entry for a breaking change.
+- Add a migration entry for a breaking change to released behavior.
 
 **Basis:** Google's engineering practices on
 [small changes](https://google.github.io/eng-practices/review/developer/small-cls.html)
 say the right size is "one self-contained change" and that refactorings
 belong in a separate change from bug fixes, with "moving and renaming a class"
 as the example. The migration entry is required by the `AGENTS.md` change
-contract. The 300-line guideline and the re-export step are **repository
-conventions**.
+contract. The re-export step is a **repository convention**.

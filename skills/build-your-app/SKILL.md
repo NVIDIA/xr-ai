@@ -23,6 +23,8 @@ guide for `main`. Once the guide creates the checkout, confirm that
 `skills/build-your-app/SKILL.md` and
 `docs/source/guides/building-your-app.md` exist at the selected ref. If either
 is absent, ask the user before using `main` for the skill, guide, and checkout.
-Then read `AGENTS.md` and continue with the guide from the checkout.
+Then read `AGENTS.md` for shared engineering guidance and workflow routing.
+Continue with the guide from the checkout as a reference workflow adapted to
+the application's needs.
 Follow the guide's selected model-environment path and verification steps.
 Report which requirements passed and which remain unverified.

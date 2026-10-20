@@ -10,6 +10,8 @@ behavior, generated documentation invariants, and the DeviceIOHub IPC path.
 Most tests are CPU-only and run without Docker or LiveKit. Node.js 24 is also
 required for the browser camera tests.
 
+Refer to {doc}`building-your-app` for application test examples.
+
 The browser camera tests also import presets from the LiveKit version in the
 existing web dependency lock. A fresh checkout must install that artifact
 before running the suite. From the repository root, use the same setup as CI:
@@ -31,7 +33,7 @@ From the repository root:
 
 ```bash
 uv --config-file uv.toml sync --project tests
-uv --config-file uv.toml run --project tests pytest -v
+uv --config-file uv.toml run --project tests pytest -v -m "not gpu"
 ```
 
 CI runs the same selection on Python 3.11 through 3.14 from `tests/`, with the
@@ -101,6 +103,19 @@ and disabled audio.
 They do not verify usable remote audio or the operating system's microphone
 indicator; those checks require a physical device and a running server.
 
+## Android JVM boundary tests
+
+With JDK 17 and the Android SDK configured, run from `client-samples/android`:
+
+```bash
+./gradlew assembleDebug testDebugUnitTest verifyNettyPin
+```
+
+These are the build, JVM test, and Netty pin verification tasks used by
+`android-build` CI. They need no emulator and do not establish physical camera,
+microphone, or remote playback behavior. Validate affected device behavior on
+hardware and report the device and result separately.
+
 ## Coverage boundaries
 
 The suite includes:
@@ -147,3 +162,38 @@ Keep shared endpoint and polling helpers in `conftest.py`, `_helpers.py`, or
 Docker, or NVENC; otherwise it is expected to run on the stock CI runner. Use
 the narrowest existing test module for the behavior, and add an integration
 test only when a real process boundary is material to the contract.
+
+Put repository Python tests under `tests/`; native or browser tests elsewhere
+need an explicit repository CI collection path.
+
+(test-design)=
+## Test design
+
+Apply these principles to both repository and consumer code.
+
+- Exercise the production entry point for the changed behavior, at the
+  narrowest boundary that can expose the defect. Do not copy methods into a
+  synthetic harness or inject input after the path being changed. Broader
+  application coverage is needed only when the change affects that boundary.
+- For a regression fix, run the test with the fix reverted or the original
+  defect restored and confirm a failure for the intended reason. For new
+  behavior, check that removing it breaks the assertion. A collection error
+  or a missing dependency is not evidence that the test detects the defect.
+- Assert the observable property: payload, ownership, ordering, isolation, or
+  output. A status or call count suffices only when that is the contract. Do
+  not derive the expected value from the same constant as the actual value.
+  Fakes must preserve the real SDK's event and cancellation guarantees.
+- For checks covering all shipped presets or samples, discover them from the
+  project and assert the selection is non-empty so new variants cannot silently
+  escape coverage.
+- Bound waits, subprocesses, and thread joins so regressions fail with useful
+  diagnostics. A test timeout does not stop background work; fixture teardown
+  must release its own tasks and resources even when assertions fail.
+- Restore environment variables and global state with fixtures or scoped
+  patching, including mutations performed by setup helpers. Avoid persistent
+  `os.environ.setdefault()` calls in test setup.
+- Tests must pass from a fresh checkout with declared dependencies and any
+  checked-in lockfiles, without requiring pre-existing `node_modules` or
+  untracked developer locks. Provision tools and network artifacts in setup or
+  CI, not inside tests; skip optional unavailable prerequisites with a reason.
+  Required CI coverage must provision them.
