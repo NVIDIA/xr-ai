@@ -540,7 +540,7 @@ recorded video, and document retrieval.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
-<td><p>llama-nemotron-embed-1b-v2</p></td>
+<td><p>Nemotron-3-Embed-1B-BF16</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
@@ -1191,10 +1191,16 @@ and <code class="docutils literal notranslate"><span class="pre">stream</span></
 16-bit interleaved samples. Streaming with another response format returns
 HTTP 400.</p>
 </li>
-<li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/llama-nemotron-embed-1b-v2</span></code> through
-<code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code>. It emits 2048-dimensional Matryoshka embeddings and can
-truncate them to 384, 512, 768, 1024, or 2048 dimensions. The checked-in
-configuration reserves 20% of a GPU and uses Docker.</p></li>
+<li><p><strong>embedding-server</strong> serves <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code> through
+<code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code> under the served name <code class="docutils literal notranslate"><span class="pre">embed</span></code>. It emits 2048-dimensional
+vectors. Retrieval inputs use <code class="docutils literal notranslate"><span class="pre">query:</span> </code> for queries and <code class="docutils literal notranslate"><span class="pre">passage:</span> </code> for
+documents, as specified in the
+<a class="reference external" href="https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16">model card</a>.
+The standalone configuration reserves 20% of a GPU and uses Docker;
+the tea sample applies its own memory budget and indexes all 2048 dimensions.
+Its Spark profile selects Triton attention for GB10 compatibility; other
+profiles leave attention-backend selection to vLLM. Refer to
+<a class="reference internal" href="../reference/migrations.html"><span class="doc">Release migration</span></a> for the model upgrade steps.</p></li>
 <li><p><strong>rag-service</strong> is a typed dense document-retrieval capability. Point
 <code class="docutils literal notranslate"><span class="pre">documents_dir</span></code> at an application-owned tree and <code class="docutils literal notranslate"><span class="pre">models_config</span></code> at a profile
 with an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role. It chunks and embeds supported documents at

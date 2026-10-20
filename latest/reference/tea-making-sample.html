@@ -799,6 +799,10 @@ the runtime copy. Changing <code class="docutils literal notranslate"><span clas
 the worker and RAG service but not the persistent servers. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for a server-side model, GPU, port, or
 memory change, then restart the sample’s model stack.</p>
+<p>The local embedding server uses <code class="docutils literal notranslate"><span class="pre">nvidia/Nemotron-3-Embed-1B-BF16</span></code>, served as
+<code class="docutils literal notranslate"><span class="pre">embed</span></code> on port 8109. RAG retains its native 2048-dimensional vectors. The
+external NIM profile uses <code class="docutils literal notranslate"><span class="pre">nvidia/nemotron-3-embed-1b</span></code> with the same dimension;
+refer to <a class="reference internal" href="../guides/deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for endpoint configuration.</p>
 <p>Refer to the generated <a class="reference internal" href="configuration.html"><span class="doc">configuration</span></a> reference for exact
 fields, checked-in values, and adjacent YAML comments.</p>
 </section>
