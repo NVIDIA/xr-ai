@@ -277,10 +277,18 @@ Use agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/packet
 Write the demonstrated procedure directly as draft guide YAML and matching
 evidence review notes under agent-samples/procedure-capture-guide/guides/.
 Reuse narration and captions; inspect original images where evidence is unclear.
+Interpret all capture sources together as complementary, fallible evidence of
+the intended task, not observations to translate literally into steps. Use
+judgment for ordinary organization and wording. Document consequential assumptions,
+their effects and questions needing human confirmation in .review.md, while
+continuing to draft sufficiently understood parts.
 Preserve distinct actions, counts, orientation, order, and required durations.
 Validate with the runtime parser, then follow
 agent-samples/procedure-capture-guide/skills/evaluate-guide/SKILL.md to test the
 draft with the captured images and configured local XR-AI models and tools.
+Assess fidelity to the intended task and clarity for someone performing it
+afresh, not just whether the recording passes. Distinguish recording coverage
+gaps, uncertain requirements and actual runtime verification limitations.
 Observe the actual outputs and revise only the guide when findings justify it.
 Revalidate and rerun revised guides without weakening requirements to fit the
 demonstration. Follow the skill's iteration and final-verification rules.
@@ -298,9 +306,10 @@ The outputs are local and Git-ignored:
 
 - `guides/<slug>.guide.yaml`: model-authored draft.
 - `guides/<slug>.review.md`: action-to-evidence mapping, capture ID, source
-  frame references, corrections, revisions and unresolved requirements.
-- `guides/<slug>.evaluation.md`: runtime observations, evaluated hash,
-  untested checks and findings for the next revision.
+  frame references, corrections, revisions, consequential assumptions and
+  questions needing human confirmation.
+- `guides/<slug>.evaluation.md`: task fidelity and clarity assessment, runtime
+  observations, evaluated hash, untested checks and findings for the next revision.
 
 Source session IDs and recording timestamps belong in review notes, not
 executable YAML. Update the request, both skills, schema reference and examples
@@ -339,6 +348,9 @@ Default to at most three evaluation-and-update rounds and always verify the
 final revision. Report actual rounds, not retries or formatting-only edits.
 Missing models or evidence are blocked tests, never a pass. A fixed recording
 cannot react to guidance, so distinguish timing gaps from guide defects.
+Missing visual evidence in the recording does not by itself invalidate an
+appropriate completion check for a future worker. Preserve that requirement
+and disclose the coverage gap rather than weakening the SOP to make the test pass.
 
 The timer example verifies a visual setup, then starts the timer on entry to
 the wait step. It accepts `duration_s` only; no model-written start timestamp.

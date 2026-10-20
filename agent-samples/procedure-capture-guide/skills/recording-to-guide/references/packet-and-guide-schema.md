@@ -166,6 +166,12 @@ condition is the past motion or order itself, rather than the visible result.
 
 Store evidence mappings, caption corrections, and approval blockers in the
 separate `.review.md` file. It is a human review aid, not executable guide state.
+For consequential assumptions, explain their effect on the procedure or success
+criteria and the question needing human confirmation. Distinguish uncertainty
+about requirements from recording coverage gaps and unsupported verification;
+do not silently resolve the former or weaken requirements to fit the recording.
+Continue drafting sufficiently understood actions without seeking confirmation
+for ordinary organization and wording.
 Keep authoring changes in those notes. The
 [evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
 untested checks, and revision findings separately in `<slug>.evaluation.md`.

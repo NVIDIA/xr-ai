@@ -28,8 +28,9 @@ for unresolved requirements. These links are relative to this skill.
 The authoring LLM, including GPT Luna, is the **observer**, not the runtime VLM,
 conversation model, or tool executor. It may inspect source images to establish
 expected actions and assess a false positive, but its own answer to a completion
-question is never a measured tool result. Captions and narration establish
-requirements; neither is proof that the runtime observed success.
+question is never a measured tool result. Interpret narration, captions,
+summaries, and original images together as complementary, fallible evidence
+of the intended task; none is proof that the runtime observed success.
 
 Use the actual guide checkout, its configured local models, runtime prompts,
 tool implementations, evidence thresholds, state transitions, and clock.
@@ -58,7 +59,11 @@ not evidence that a guide's condition is wrong.
 1. Independently map source actions and required objects, counts, orientation,
    placement, order, and durations to the guide's instructions and exact checks.
    Group repeated observations of one action without erasing distinct actions.
-   Follow the linked step chain, not YAML listing order.
+   Follow the linked step chain, not YAML listing order. Assess whether the
+   transformation faithfully represents the intended task and is understandable
+   to someone performing it afresh, not merely whether the recording passes.
+   Identify consequential assumptions and questions needing human confirmation;
+   ordinary organization and wording do not require individual confirmation.
 2. Read the recorded frame selection and actual local VLM responses. Compare
    incomplete, in-progress, completed, and available incorrect states against
    the exact questions. Inspect their source frames when necessary. Do not
@@ -84,6 +89,9 @@ not evidence that a guide's condition is wrong.
    evidence, runtime defect, or unavailable infrastructure. Propose guide edits
    only when supported. Rewording cannot repair an unreachable model service or
    add a nonexistent temporal tool. Preserve unsupported checks as review blockers.
+   Distinguish missing recording coverage from uncertainty about the intended
+   requirement and from a limitation of runtime verification. Missing visual
+   evidence does not by itself invalidate a suitable check for a future worker.
 
 The recorded demonstration is open-loop: it cannot adapt to an instruction or
 wait for the agent as a person could. If inference or a stalled earlier step
@@ -104,5 +112,9 @@ authorized revision, run the new YAML again; a previous pass cannot validate an
 edit. Count a modification round only when a completed evaluation is followed
 by a substantive YAML change. Repeated runs, validation-only formatting edits,
 and the last verification without edits are not modification rounds.
-Remaining failures and missing tests stay human-review blockers. Runtime
-completion alone is not proof of physical correctness or generalization.
+Disclose remaining failures and missing tests for human review without treating
+every recording coverage gap as a defective requirement. Flag consequential
+unresolved requirements and unsupported verification as approval blockers;
+the author records their impact and confirmation questions in `.review.md`.
+Runtime completion alone is not proof of task fidelity, physical correctness,
+or generalization. Keep the guide draft for human approval.
