@@ -59,6 +59,37 @@ updated NIM profile. For later model changes behind an unchanged profile, set
 an explicit model revision in `cache_key` and restart RAG. Do not change models
 while RAG is running; its document vectors must match query embeddings.
 
+(embedding-service-identity-migration)=
+### Embedding SDK identity and RAG cache contract
+
+`EmbeddingService` now requires `async model_identity() -> str | None`.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or `None` only when a successful lookup finds no identity metadata. Do
+not use an alias that can silently switch weights. Existing implementations
+without this method no longer satisfy the protocol.
+
+The built-in OpenAI-compatible client reads the matching model's `root` from
+`/v1/models`. HTTP failures, timeouts, invalid JSON, and malformed or ambiguous
+metadata raise `ModelServiceError`, exported by `xr_ai_models`, with the original
+transport or JSON error retained as the cause. Custom adapters must likewise
+raise this error for lookup failures instead of returning `None`.
+
+RAG permits retrieval without persistent cache reads or writes when a successful
+lookup returns `None`. It propagates lookup failures and fails startup: fix the
+endpoint, credentials, or metadata response before restarting. Cancellation
+continues to propagate. `cache_key` does not override missing identity or a
+failed lookup.
+
+The cache format now combines backing-model identity, model-profile hash,
+manual `cache_key`, indexing settings, and document content. Existing caches
+are rebuilt once and can be deleted afterward. `cache_key` now supplements
+the profile hash instead of replacing it. Bump it when weights change under
+the same reported identity, and restart RAG whenever the embedding model
+changes. Keep the endpoint stable throughout indexing and serving. A changed
+or lost identity after document embedding rejects the build before saving or
+serving the vectors; a failed post-build lookup also aborts startup.
+
 ### Shared accepted-query display
 
 Every `VoiceAgent` now returns accepted query text to its originating participant

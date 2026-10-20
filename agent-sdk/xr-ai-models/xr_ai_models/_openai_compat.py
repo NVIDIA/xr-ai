@@ -40,6 +40,10 @@ from ._protocols import (
 )
 
 
+class ModelServiceError(RuntimeError):
+    """Base exception for reported model-service operation failures."""
+
+
 # Hosts where plaintext http is acceptable for a bearer token (never leaves
 # the machine). Anything else over http:// with a key set is cleartext
 # credential transmission (CWE-319).
@@ -1053,6 +1057,7 @@ class OpenAICompatEmbedding:
     ) -> None:
         base = base_url.rstrip("/")
         self._url = base + "/v1/embeddings"
+        self._models_url = base + "/v1/models"
         self.health_url = base + health_path
         self._model = model_name
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
@@ -1060,6 +1065,56 @@ class OpenAICompatEmbedding:
         self._health_check = health_check
         self._client = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
+
+    async def model_identity(self) -> str | None:
+        """Read the configured model's backing ``root`` from ``/v1/models``.
+
+        Return ``None`` only when a successful response has no matching model
+        or no backing identity. A served alias alone does not identify weights.
+        Uses the HTTP client's configured timeout; callers own fallback policy.
+
+        Raises:
+            ModelServiceError: The request failed or the response contains
+                invalid or ambiguous metadata. The original transport or JSON
+                exception is retained as the cause when available.
+        """
+        try:
+            response = await self._client.get(
+                self._models_url, headers=_auth_headers(self._api_key),
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise ModelServiceError(
+                f"embedding model identity lookup returned HTTP {exc.response.status_code}; "
+                "check endpoint access and credentials"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ModelServiceError(
+                f"embedding model identity lookup failed ({type(exc).__name__}); "
+                "check endpoint availability and timeout settings"
+            ) from exc
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ModelServiceError(
+                "embedding model identity response is not valid JSON; check the metadata endpoint"
+            ) from exc
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ModelServiceError(
+                "embedding model identity response requires a list of model objects in data"
+            )
+        matches = [row for row in rows if row.get("id") == self._model]
+        if not matches:
+            return None
+        if len(matches) != 1:
+            raise ModelServiceError("embedding model identity response has duplicate matching model IDs")
+        root = matches[0].get("root")
+        if root is None:
+            return None
+        if not isinstance(root, str):
+            raise ModelServiceError("embedding model identity root must be a string when present")
+        return root.strip() or None
 
     async def embed(
         self,

@@ -31,6 +31,7 @@ from ._protocols import (
     VLMService,
 )
 from ._openai_compat import (
+    ModelServiceError,
     OpenAICompatLLM,
     OpenAICompatEmbedding,
     OpenAICompatSTT,
@@ -60,6 +61,7 @@ from ._factory import make_decision, make_embedding, make_llm, make_stt, make_tt
 from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
+    "ModelServiceError",
     "Capabilities",
     "ChatMessage",
     "ChatResponse",

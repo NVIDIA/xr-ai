@@ -40,10 +40,8 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
             batch_size=int(config.get("batch_size", 32)),
             passage_prefix=str(config.get("passage_prefix", "passage: ")),
             query_prefix=str(config.get("query_prefix", "query: ")),
-            cache_key=str(
-                config.get("cache_key")
-                or hashlib.sha256(models_path.read_bytes()).hexdigest()
-            ),
+            cache_key=str(config.get("cache_key") or ""),
+            profile_key=hashlib.sha256(models_path.read_bytes()).hexdigest(),
             min_score=float(config.get("min_score", 0.3)),
         )
         address = str(config.get("endpoint", "tcp://0.0.0.0:8340"))

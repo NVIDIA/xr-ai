@@ -12,5 +12,7 @@ overlap: 120
 embedding_dim: 2048
 batch_size: 32
 min_score: 0.3
-# Set this when an endpoint changes its backing model without a profile edit.
+# Bump this if weights change without changing the server-reported model identity.
+# This supplements (never replaces) the model identity and profile hash.
+# Missing identity metadata disables persistence; lookup failures abort startup.
 # cache_key: embedding-model-revision

@@ -22,6 +22,7 @@ from _helpers_vlm_stream import require_complete_vlm_stream
 
 from xr_ai_models import (
     Capabilities,
+    ModelServiceError,
     ChatMessage,
     ChatStreamEvent,
     OpenAICompatEmbedding,
@@ -114,6 +115,90 @@ async def test_embedding_batches_inputs_and_preserves_response_order() -> None:
         "model": "embed",
         "input": ["query: alpha", "passage: beta"],
     }
+
+
+@pytest.mark.parametrize("payload, expected", [
+    ({"data": [{"id": "other", "root": "wrong"}, {"id": "embed", "root": "weights-v2"}]}, "weights-v2"),
+    ({"data": [{"id": "embed"}]}, None),
+    ({"data": []}, None),
+    ({"data": [{"id": "other", "root": "wrong"}]}, None),
+    ({"data": [{"id": "embed", "root": " "}]}, None),
+])
+async def test_embedding_identity_uses_matching_server_root(monkeypatch, payload, expected):
+    monkeypatch.setenv("EMBED_TEST_KEY", "test-token")
+
+    def handle(request):
+        assert request.method == "GET"
+        assert str(request.url) == "https://stub/v1/models"
+        assert request.headers["Authorization"] == "Bearer test-token"
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding(
+            "https://stub/", "embed", api_key_env="EMBED_TEST_KEY", client=client,
+        ) as embedding:
+            assert await embedding.model_identity() == expected
+        assert not client.is_closed
+
+
+@pytest.mark.parametrize("failure", ["timeout", "connection", "401", "404", "503", "json", "cancelled"])
+async def test_embedding_identity_lookup_failure_and_cancellation(failure):
+    def handle(request):
+        if failure == "timeout":
+            raise httpx.ReadTimeout("metadata unavailable", request=request)
+        if failure == "connection":
+            raise httpx.ConnectError("connection refused", request=request)
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        if failure.isdigit():
+            return httpx.Response(int(failure), text="secret-response-body")
+        return httpx.Response(200, text="secret-response-body")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding("http://stub", "embed", client=client) as embedding:
+            if failure == "cancelled":
+                with pytest.raises(asyncio.CancelledError):
+                    await embedding.model_identity()
+            else:
+                with pytest.raises(ModelServiceError) as raised:
+                    await embedding.model_identity()
+                expected_cause = ValueError if failure == "json" else httpx.HTTPError
+                assert isinstance(raised.value.__cause__, expected_cause)
+                assert "secret-response-body" not in str(raised.value)
+                if failure.isdigit():
+                    assert f"HTTP {failure}" in str(raised.value)
+
+
+async def test_embedding_identity_respects_configured_client_timeout(monkeypatch):
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        assert request.extensions["timeout"] == dict.fromkeys(("connect", "read", "write", "pool"), 0.25)
+        return httpx.Response(200, json={"data": [{"id": "embed", "root": "weights"}]})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    async with OpenAICompatEmbedding("http://stub", "embed", timeout=0.25) as embedding:
+        assert await embedding.model_identity() == "weights"
+
+
+@pytest.mark.parametrize("payload, reason", [
+    ({}, "list of model objects"),
+    ({"data": {}}, "list of model objects"),
+    ({"data": [None]}, "list of model objects"),
+    ([], "list of model objects"),
+    ({"data": [{"id": "embed"}, {"id": "embed"}]}, "duplicate matching model IDs"),
+    ({"data": [{"id": "embed", "root": 42}]}, "root must be a string"),
+])
+async def test_embedding_identity_invalid_metadata_is_an_error(payload, reason):
+    def handle(_request):
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        async with OpenAICompatEmbedding("http://stub", "embed", client=client) as embedding:
+            with pytest.raises(ModelServiceError, match=reason):
+                await embedding.model_identity()
 
 
 # ── LLM: chat ─────────────────────────────────────────────────────────────

@@ -666,9 +666,16 @@ cleanup.
   with an `embedding` role. It chunks and embeds supported documents at
   startup, caches its index, and returns matches above `min_score`. Start the
   embedding service first, RAG second, and the consuming worker last. The cache
-  includes document content, indexing settings, and the model profile; change
-  `cache_key` when a remote endpoint changes its backing model without changing
-  that profile.
+  includes document content, indexing settings, the model-profile hash, the
+  server-reported backing model (`root` from the matching `/v1/models` entry),
+  and optional `cache_key`. A served alias such as `embed` does not identify
+  weights. A successful lookup without backing-model metadata disables
+  persistent caching and embeds documents on each startup. Failed metadata
+  requests or invalid responses abort startup; they are not treated as absence.
+  Change `cache_key` if weights change under
+  the same reported identity; this key supplements, not replaces, the profile
+  hash. Restart RAG whenever the embedding model changes. Refer to
+  {doc}`/reference/migrations` for upgrading existing indexes and servers.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack over ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
