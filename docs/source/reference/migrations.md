@@ -94,9 +94,10 @@ reconciliation machinery.
 
 ### Single LLM entry in model profiles
 
-XR Render and its eval commands use `llm` instead of `agent_llm`. Move custom
-XR Render, NIM consumer, or shared profile settings from `agent_llm` into `llm`,
-then remove the old entry. The NIM smoke check rejects the old entry.
+XR Render and its eval commands now use `llm` instead of `agent_llm`.
+For custom XR Render, NIM consumer, or shared model profiles, move any settings
+from `agent_llm` you need into `llm`, then remove the old entry. The NIM smoke
+check rejects the old entry.
 
 (selected-model-server-cleanup)=
 (local-model-server-cli)=
@@ -159,20 +160,24 @@ inference separately from Riva readiness, which checks channel connectivity.
 
 ### LiveKit sample credentials
 
-Shipped DeviceIOHub YAML files leave `api_key` and `api_secret` blank. The YAML
-loader generates a fresh random pair when both are missing or blank. Retain
-private configurations or environment overrides when a fixed pair is required;
-partial pairs still fail startup. Refer to {doc}`/getting_started/credentials`.
+Shipped DeviceIOHub YAML files now leave `api_key` and `api_secret` blank.
+The YAML loader generates a fresh random pair when both values are missing or
+blank, so samples require no credential setup. Existing private configurations
+and environment overrides remain supported; partial pairs still fail startup.
+Refer to {doc}`/getting_started/credentials` for fixed-pair configuration.
 
 ### Launcher failure exit statuses
 
-Update scripts and supervisors that interpret sample launcher exit statuses.
-An unexpected monitored exit now fails the stack; it previously returned
-success. Positive child codes are preserved, signals map to
-`128 + signal number`, and an unexpected zero exit maps to 1.
-Startup failures report their failure status; they previously returned 130.
-User cancellation during startup returns 130. Refer to
-{doc}`/components/launcher-and-process-model` for diagnostics.
+Update shell scripts and supervisors that interpret sample launcher exit
+statuses. An unexpected monitored process exit now fails the stack; it
+previously returned success. A process that exits during startup now reports
+its failure status; startup failures previously returned 130.
+
+The launcher preserves positive child exit codes, maps signal termination to
+`128 + signal number`, and maps an unexpected zero exit to 1. User cancellation
+during startup returns 130. Refer to
+{doc}`../components/launcher-and-process-model` for failure diagnostics and
+shutdown behavior.
 
 ### Operator-visible runtime changes
 
