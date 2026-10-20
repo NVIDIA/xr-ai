@@ -49,6 +49,7 @@ class _SpeakerClient:
             names = [f.name for f in fields(_ConversationConfig)] + [
                 "activity_threshold", "silence_duration", "max_utterance_s",
                 "mode", "magic_phrases", "followup_grace_s", "stop_commands_enabled",
+                "diagnostics",
             ]
             await stream._open({name: getattr(self._cfg, name) for name in names}, pts_us)
         return await stream._feed(audio)

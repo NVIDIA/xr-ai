@@ -25,6 +25,7 @@ from xr_ai_voicegate._speaker import _SpeakerConfig
 from .._frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
+    _SpeakerDiagnosticFrame,
     _SpeakerEnrollmentFrame,
     _SpeakerTranscriptionFrame,
     _SpeakerTurnFrame,
@@ -205,6 +206,20 @@ class _SpeakerSttProcessor(FrameProcessor):
             if text and self._on_final is not None:
                 await self._on_final(pid, text, pts)
             await self.push_frame(_SpeakerTurnFrame(pid, speaker, text, pts, fresh))
+            return
+        if kind == "diagnostic":
+            if self._cfg.diagnostics:
+                speaker, pts = event.get("speaker_id"), event.get("pts_us")
+                status, text = event.get("status"), event.get("text")
+                if (
+                    type(speaker) is not int or speaker < 0 or type(pts) is not int or pts < 0
+                    or not isinstance(status, str) or not status.strip() or not isinstance(text, str)
+                ):
+                    logger.warning("malformed speaker diagnostic discarded pid={!r}", pid)
+                    return
+                await self.push_frame(_SpeakerDiagnosticFrame(
+                    participant_id=pid, speaker_id=speaker, status=status, text=text, pts_us=pts,
+                ))
             return
         if kind in {"enrolled", "released", "reset"}:
             if kind == "enrolled":

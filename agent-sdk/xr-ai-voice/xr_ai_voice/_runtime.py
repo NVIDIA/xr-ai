@@ -219,6 +219,12 @@ class VoiceAgent(Agent):
     :meth:`from_models` resolves that dependency from an already-loaded model
     profile and the same voice-gate configuration, without application-side
     backend inspection. The normal constructor accepts explicitly owned clients.
+
+    Accepted queries also return participant-routed UTF-8 display text on
+    ``voice.user-query``. Speaker ASR includes its session-local speaker label;
+    ordinary STT and typed input use ``User``. This display does not change
+    :class:`UserQuery` or require an application subscriber. Delivery uses the
+    existing hub transport and retains its backpressure and best-effort semantics.
     """
 
     def __init__(

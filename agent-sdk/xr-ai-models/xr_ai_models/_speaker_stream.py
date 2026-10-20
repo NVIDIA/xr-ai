@@ -15,7 +15,7 @@ from websockets.asyncio.client import ClientConnection, connect
 
 
 def _check_identity(status: dict[str, Any]) -> None:
-    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 4:
+    if status.get("service") != "xr-ai-speaker-stt" or status.get("protocol") != 5:
         raise RuntimeError("speaker endpoint belongs to an incompatible service")
 
 
