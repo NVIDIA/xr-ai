@@ -100,6 +100,7 @@ source_pkgs = [
     "speaker_stt",
     "stt_server",
     "video_memory_service",
+    "xr_ai_conversation",
     "xr_ai_hub",
     "xr_ai_launcher",
     "xr_ai_gpu",
