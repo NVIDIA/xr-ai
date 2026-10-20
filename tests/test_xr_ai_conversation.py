@@ -179,10 +179,15 @@ async def test_conversation_reconciles_recent_front_end_window_after_another_des
         def __init__(self):
             self.choices = iter(("conversation", "scene", "conversation", "conversation", "scene", "conversation"))
 
-        async def decide(self, _state, _questions, **_kwargs):
+        async def decide(self, _state, questions, **_kwargs):
             choice = next(self.choices)
+            assert choice in questions["destination"].criteria
             return DecisionResponse(
-                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                answers={
+                    "destination": DecisionAnswer(
+                        choice, 1.0, {label: float(label == choice) for label in questions["destination"].criteria}
+                    )
+                },
                 model="fake",
                 usage={},
                 raw={},
@@ -242,10 +247,15 @@ async def test_unknown_seed_does_not_mask_a_later_identical_routed_exchange():
         def __init__(self):
             self.choices = iter(("conversation", "scene", "conversation"))
 
-        async def decide(self, _state, _questions, **_kwargs):
+        async def decide(self, _state, questions, **_kwargs):
             choice = next(self.choices)
+            assert choice in questions["destination"].criteria
             return DecisionResponse(
-                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                answers={
+                    "destination": DecisionAnswer(
+                        choice, 1.0, {label: float(label == choice) for label in questions["destination"].criteria}
+                    )
+                },
                 model="fake",
                 usage={},
                 raw={},
@@ -294,10 +304,15 @@ async def test_admission_release_text_and_rerouted_answer_keep_separate_history_
         def __init__(self):
             self.choices = iter(("scene", "conversation", "conversation"))
 
-        async def decide(self, _state, _questions, **_kwargs):
+        async def decide(self, _state, questions, **_kwargs):
             choice = next(self.choices)
+            assert choice in questions["destination"].criteria
             return DecisionResponse(
-                answers={"destination": DecisionAnswer(choice, 1.0, {choice: 1.0})},
+                answers={
+                    "destination": DecisionAnswer(
+                        choice, 1.0, {label: float(label == choice) for label in questions["destination"].criteria}
+                    )
+                },
                 model="fake",
                 usage={},
                 raw={},
