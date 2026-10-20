@@ -603,13 +603,20 @@ def test_sample_selects_deployment_hub_config(sample_name, extra, relative, tmp_
     ("procedure-capture-guide", []),
     ("procedure-capture-guide", ["--output-root", "evidence"]),
     ("procedure-capture-guide", ["--mode", "guide", "Tea Making"]),
+    ("procedure-capture-guide", ["--session-recording"]),
+    ("procedure-capture-guide", ["--output-root", "evidence", "--session-recording"]),
+    ("procedure-capture-guide", ["--mode", "guide", "Tea Making", "--session-recording"]),
 ])
 @pytest.mark.parametrize("port", [None, 8093])
 def test_sample_passes_explicit_health_port(sample_name, extra, port, monkeypatch):
     sample = _load_module(f"health_selection_{sample_name.replace('-', '_')}", f"agent-samples/{sample_name}/main.py")
     launches = []
     monkeypatch.setattr(sample, "setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sample, "run_stack", lambda processes, base, **kwargs: launches.append(kwargs))
+    def launch(processes, base, **kwargs):
+        assert ("capture" in [process.name for process in processes]) == ("--session-recording" in extra)
+        launches.append(kwargs)
+
+    monkeypatch.setattr(sample, "run_stack", launch)
     if sample_name == "xr-render-demo":
         monkeypatch.setattr(sample, "read_device_profile", lambda path: "webrtc")
         monkeypatch.setattr(sample, "_ensure_web_vendor", lambda: None)
