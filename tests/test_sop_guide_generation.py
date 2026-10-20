@@ -14,12 +14,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-replay"
+_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 _REFERENCES = _SAMPLE / "skills/recording-to-guide/references"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from procedure_capture_replay_worker._validate_guide import main  # noqa: E402
-from procedure_capture_replay_worker.replay._workflow_spec import load_workflow, parse_workflow  # noqa: E402
+from procedure_capture_guide_worker._validate_guide import main  # noqa: E402
+from procedure_capture_guide_worker.guide._workflow_spec import load_workflow, parse_workflow  # noqa: E402
 
 
 def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
@@ -41,7 +41,7 @@ def test_installed_skill_pair_resolves_shared_contract_and_references(tmp_path):
 
 
 def test_validator_accepts_examples_and_shipped_guides_without_a_schema_fork(capsys):
-    from procedure_capture_replay_worker import _validate_guide
+    from procedure_capture_guide_worker import _validate_guide
 
     assert _validate_guide.load_workflow is load_workflow
     paths = (sorted(_REFERENCES.glob("*.guide.yaml"))
@@ -344,7 +344,7 @@ def test_module_cli_exit_code_and_read_only_behavior(tmp_path, visual):
     path.write_text(yaml.safe_dump(visual))
     before = path.read_bytes()
     env = {**os.environ, "PYTHONPATH": str(_SAMPLE / "worker")}
-    command = [sys.executable, "-m", "procedure_capture_replay_worker._validate_guide", str(path)]
+    command = [sys.executable, "-m", "procedure_capture_guide_worker._validate_guide", str(path)]
     success = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert success.returncode == 0, success.stderr
     assert "draft, 2 steps" in success.stdout

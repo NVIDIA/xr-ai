@@ -4,7 +4,7 @@
 # Schema example, not a recording: replace every task-specific value.
 # Before handoff, use ../../evaluate-guide/SKILL.md: "Are clips attached?"
 # question can pass one clip or inward tabs. Test the full question below on
-# available incomplete and completed views through the actual replay VLM/tool,
+# available incomplete and completed views through the actual guide VLM/tool,
 # then refine and rerun the draft. The author observes actual responses, never
 # supplies ready itself. Preserve both false positives and missed completions.
 # Identify the voice-bounded SOP packet in review notes, not in guide YAML.

@@ -11,7 +11,7 @@ Guide mode provides spoken guidance and evidence checks for an approved local gu
 
 To draft a guide from a captured packet, use the bundled `recording-to-guide`
 and `evaluate-guide` skills. Refer to the
-[guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-replay.html#generate-a-draft-guide)
+[guide-generation reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#generate-a-draft-guide)
 for the authoring request, validation, and human review workflow.
 
 ## Run

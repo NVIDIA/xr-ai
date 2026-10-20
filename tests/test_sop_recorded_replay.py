@@ -21,7 +21,7 @@ import pytest
 import yaml
 from PIL import Image
 
-_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-replay"
+_SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture-guide"
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
             return ChatResponse("Acknowledged.", None, None, "stop", {})
         query = json.loads(messages[1].content)["request"]
         tool, arguments = {
-            "Start replay": ("workflow__restart", {}),
+            "Start guide": ("workflow__restart", {}),
             "Next": ("workflow__advance", {"skip": False}),
         }[query]
         return ChatResponse("", None, [ToolCall(id="packet", name=tool, arguments=json.dumps(arguments))],
@@ -113,10 +113,10 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     monkeypatch.setattr(xr_ai_models, "make_llm", lambda *_: llm)
     monkeypatch.setattr(xr_ai_models, "make_vlm", lambda *_: vlm)
     output = tmp_path / "result"
-    monkeypatch.setattr(sys, "argv", ["replay.py", "--packet", str(packet), "--guide", str(path),
+    monkeypatch.setattr(sys, "argv", ["guide.py", "--packet", str(packet), "--guide", str(path),
                                     "--output", str(output), "--tail-s", "2"])
     with pytest.raises(SystemExit) as exit_status:
-        runpy.run_path(str(_SAMPLE / "eval/replay.py"), run_name="__main__")
+        runpy.run_path(str(_SAMPLE / "eval/guide.py"), run_name="__main__")
     assert exit_status.value.code == (0 if expected else 1)
     result = json.loads((output / "result.json").read_text())
     assert result["passed"] is expected
@@ -132,7 +132,7 @@ def test_packet_cli_uses_runtime_controls_and_unique_source_evidence(
     assert published == list(range(len(published)))
     assert len(published) <= count
     turns = [e["text"] for e in events if e["kind"] == "user"]
-    assert turns == (["Start replay", "Next"] + ([] if automatic else ["Next"]) if expected else ["Start replay"])
+    assert turns == (["Start guide", "Next"] + ([] if automatic else ["Next"]) if expected else ["Start guide"])
     snapshots = [e for e in events if e["kind"] == "guidance_snapshot"]
     if expected:
         assert snapshots[-1]["context"]["active"] is False

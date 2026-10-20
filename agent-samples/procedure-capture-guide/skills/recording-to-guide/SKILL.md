@@ -32,7 +32,7 @@ a question they do not answer.
 
 Keep the repository root as the working directory. Use the requested packet,
 otherwise the most recently ended
-`agent-samples/procedure-capture-replay/artifacts/sessions/*/packet.json` with `status: complete`.
+`agent-samples/procedure-capture-guide/artifacts/sessions/*/packet.json` with `status: complete`.
 If none is complete, report the capture problem. Read its referenced narration,
 captions, frame index, summary, and errors if present. Match narration
 `timestamp_us` to caption `frame_timestamp_us`, not `generated_at_us`.
@@ -81,7 +81,7 @@ report that limitation rather than inventing a guide.
 
 ## Choose the check
 
-Decide from the **required replay result**, not whether the original recording
+Decide from the **required guided result**, not whether the original recording
 proves success:
 
 | Requirement | Guide check |
@@ -92,7 +92,7 @@ proves success:
 
 Ordinary ordered placement instructions can use visible end states. A current
 view cannot prove a required past motion sequence. Comparing authoring images
-does not give replay a sequence tool. A plainly narrated orientation is a known
+does not give the guide runtime a sequence tool. A plainly narrated orientation is a known
 requirement, not an unknown one merely because its saved image is unavailable.
 
 For each normal visual check, put every required object, count, attachment,
@@ -103,7 +103,7 @@ commits. Prefer direct `evidence.commit`; uncertainty and failure never complete
 
 ## Write, validate, and review
 
-Write `agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml` and the matching
+Write `agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml` and the matching
 `<slug>.review.md`, or use the user's specified directory. Do not overwrite
 without permission. Put the exact packet session ID in review notes, not in
 the strict guide YAML. Keep `task.status: draft`, a 1–5 word punctuation-free name, and a
@@ -118,7 +118,7 @@ Preserve the linked step chain and user-controlled advancement.
 Validate from the repository root and repair YAML yourself until it passes:
 
 ```bash
-uv run --project agent-samples/procedure-capture-replay/worker python -m procedure_capture_replay_worker._validate_guide agent-samples/procedure-capture-replay/guides/<slug>.guide.yaml
+uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml
 ```
 
 Then compare each review-table row to the actual trigger and gate: no omitted
@@ -133,12 +133,12 @@ the shared contract and source evidence, not your self-review or expected test
 answers. If evaluation uses the authoring context, disclose that limitation.
 The evaluator writes `<slug>.evaluation.md` without changing the guide.
 
-Evaluation must execute the recorded-camera runner with the real XR-AI replay
-engine, configured local models, prompts, tools, and clock. You are only the
+Evaluation must execute the recorded-camera runner with the real XR-AI guide
+runtime, configured local models, prompts, tools, and clock. You are only the
 observer and guide author: do not act as the runtime VLM, supply imagined tool
 answers, modify the runner, or mark a walkthrough as a runtime pass. Read actual
 frame selections, model responses, tool calls, guidance state, and agent output before
-editing. Report unavailable local models or replay dependencies as blocked tests.
+editing. Report unavailable local models or guide runtime dependencies as blocked tests.
 
 Use its findings to revise the draft's questions, instructions, steps, or state
 logic. Preserve the source-action inventory and required conditions across

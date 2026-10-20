@@ -16,7 +16,7 @@ task:
   version: 1
   status: draft
   start_step: fit_adapter
-  foreground_prompt: "The intended adapter must be clarified before replay approval."
+  foreground_prompt: "The intended adapter must be clarified before guide approval."
   complete_message: "The adapter placement is complete."
 state:
   adapter_fitted:

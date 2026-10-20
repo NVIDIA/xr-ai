@@ -52,7 +52,7 @@ unquoted flow mappings (`{...}`) can silently create unintended fields.
 `task` requires `id`, `name`, `version`, `status`, `start_step`,
 `foreground_prompt`, `complete_message`. Use a stable lowercase identifier
 matching `^[a-z][a-z0-9_-]*$`, a 1–5 word punctuation-free name, a positive integer
-version, and `status: draft`. Only human-reviewed `approved` guides may replay.
+version, and `status: draft`. Only human-reviewed `approved` guides may run in guide mode.
 Name, ID, and filename are separate. Use the same intended task in all prompts
 and completion messages; do not copy the worked example's wording.
 
@@ -88,7 +88,7 @@ Next; its message must not request another advance. A skip is not verified succe
 
 Give each step its own completion boolean, initially false. Do not reuse a
 previous step's completion field: that would make the later step complete on
-entry without its own observation. Capture success never initializes replay
+entry without its own observation. Capture success never initializes guide
 completion to true. The visual example links two independent checks; it does
 not prescribe two steps for every recording.
 
@@ -132,7 +132,7 @@ claim the runtime measured from the event or silently change that requirement.
 
 Use normal live checks for clearly specified observable results, even when a
 saved image is missing or a caption is stale. Record that authoring gap in the
-review notes; it does not make the replay tool incapable of checking the result.
+review notes; it does not make the guide tool incapable of checking the result.
 This includes an explicitly instructed count or orientation: absent visual
 corroboration is not an unresolved instruction. Decide from the required result.
 For example, an explicit placement instruction with an unavailable saved image
@@ -170,10 +170,10 @@ Keep authoring changes in those notes. The
 [evaluation skill](../../evaluate-guide/SKILL.md) writes its observed outcomes,
 untested checks, and revision findings separately in `<slug>.evaluation.md`.
 Do not add test results to YAML.
-Runtime evaluation uses the replay engine and configured local models with
+Runtime evaluation uses the guide runtime and configured local models with
 recorded camera input. The authoring model observes actual traces and revises
 the guide; it does not replace visual inference, tool results, or state commits.
 Test artifacts and recording timestamps stay outside the executable guide.
-Write these outputs under `agent-samples/procedure-capture-replay/guides/` from the repository
+Write these outputs under `agent-samples/procedure-capture-guide/guides/` from the repository
 root, unless a different output directory was requested. Links between these
 references resolve relative to their containing files, not the working directory.

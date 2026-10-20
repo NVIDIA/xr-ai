@@ -1257,6 +1257,8 @@ def test_tea_temperature_accepts_formatting_not_different_measurements(text, acc
 
 @pytest.mark.parametrize("timer", [False, True])
 def test_guide_eval_cli_runs_public_runtime_scenario(tmp_path, monkeypatch, timer):
+    monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
+
     import io
     import runpy
 

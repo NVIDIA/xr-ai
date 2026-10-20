@@ -1,6 +1,6 @@
 ---
 name: evaluate-guide
-description: Test a draft SOP against recorded camera input using the XR-AI replay engine and local models, then report observed failures for guide revision and human review.
+description: Test a draft SOP against recorded camera input using the XR-AI guide runtime and local models, then report observed failures for guide revision and human review.
 ---
 
 <!--
@@ -31,7 +31,7 @@ expected actions and assess a false positive, but its own answer to a completion
 question is never a measured tool result. Captions and narration establish
 requirements; neither is proof that the runtime observed success.
 
-Use the actual replay checkout, its configured local models, runtime prompts,
+Use the actual guide checkout, its configured local models, runtime prompts,
 tool implementations, evidence thresholds, state transitions, and clock.
 If these are unavailable, report runtime evaluation blocked. Do not substitute
 Luna, fabricated tool responses, mock commits, or a mental walkthrough.
@@ -39,11 +39,11 @@ Luna, fabricated tool responses, mock commits, or a mental walkthrough.
 ## Run the recorded-camera test
 
 Refer to [the runner contract](references/runtime-replay.md) for prerequisites,
-the exact command, artifacts, and limits. The sample's `eval/replay.py --packet`
+the exact command, artifacts, and limits. The sample's `eval/guide.py --packet`
 mode supplies recorded pixels at the camera endpoint boundary to the real
 current-frame tool at original relative timing. It runs the real
 guide agent and voice aggregation without a browser or physical microphone.
-Its synthetic user says "start replay", then Next after observed completion through the configured
+Its synthetic user says "start guide", then Next after observed completion through the configured
 local conversation model; it never directly advances or commits a step.
 Real clock tools measure elapsed wall time. Old source timestamps are not timer
 starts. The source guide stays draft; test eligibility exists only in memory.

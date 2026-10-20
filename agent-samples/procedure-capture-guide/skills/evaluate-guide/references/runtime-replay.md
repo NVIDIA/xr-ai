@@ -13,7 +13,7 @@ starts, stops, or substitutes model servers.
 From the repository root, using a new output directory:
 
 ```bash
-PYTHONPATH=agent-samples/procedure-capture-replay/worker uv run --project agent-samples/procedure-capture-replay/worker python agent-samples/procedure-capture-replay/eval/replay.py --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
 ```
 
 The runner imports the runtime's YAML parser and uses the worker's model,
@@ -31,7 +31,7 @@ recording duration plus five real seconds (`--tail-s` changes this).
 A longer timer needs an explicit sufficiently long tail; recorded timestamps
 never initialize the runtime timer.
 
-The simulated user says "Start replay", waits for completion, then says "Next"
+The simulated user says "Start guide", waits for completion, then says "Next"
 when required, through the configured conversation model. Terminal
 `finish_on_complete` steps end automatically. Checks compare delivered
 announcements with detached runtime guidance state and require the final run
@@ -76,7 +76,7 @@ controls, visual evidence deduplication, elapsed timers, automatic and explicit
 completion, draft preservation and artifacts. They test plumbing, not local
 model perception. Live-model failures must be reported separately.
 
-`agent-samples/procedure-capture-replay/eval/guide_generation_cases.yaml` holds
+`agent-samples/procedure-capture-guide/eval/guide_generation_cases.yaml` holds
 seven text-only authoring probes. Give the author only each case's `input` and
 the documented authoring prompt, skills and examples. Keep `checks` in an
 independent reviewer context. Save package hashes, prompt, raw model/tool trace,

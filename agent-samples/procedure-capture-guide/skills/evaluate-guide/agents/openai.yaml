@@ -4,4 +4,4 @@
 interface:
   display_name: "Evaluate Guide"
   short_description: "Check a draft SOP against its recorded evidence"
-  default_prompt: "Use $evaluate-guide to run my draft through XR-AI replay with local models and recorded camera input, then report observed failures without modifying the guide."
+  default_prompt: "Use $evaluate-guide to run my draft through the XR-AI guide runtime with local models and recorded camera input, then report observed failures without modifying the guide."

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Schema example only. Ten seconds must not be copied unless instructed.
-# Evaluation follows ../../evaluate-guide/SKILL.md using the real replay engine
+# Evaluation follows ../../evaluate-guide/SKILL.md using the real guide runtime
 # and local models. Inspect timer triggers and accepted commits: unexpired
 # before ten elapsed seconds in the wait step and expired afterward.
 # A calculated answer or author-provided ready is not a runtime test. Missing
