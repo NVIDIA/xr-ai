@@ -819,6 +819,19 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
+<section id="config-procedure-capture-guide-yaml-media-capture-yaml">
+<h3>yaml/media_capture.yaml<a class="headerlink" href="#config-procedure-capture-guide-yaml-media-capture-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Session recording covers the whole participant connection, independently of</span>
+<span class="c1"># spoken capture or guide commands in either mode. Other settings use shared defaults.</span>
+<span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.local/share/xr-ai/captures/procedure-capture-guide</span>
+<span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">demo</span>
+<span class="nt">session_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">participant</span>
+</pre></div>
+</div>
+</section>
 <section id="config-procedure-capture-guide-yaml-models-json">
 <h3>yaml/models.json<a class="headerlink" href="#config-procedure-capture-guide-yaml-models-json" title="Link to this heading">#</a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -2128,6 +2141,7 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-capture-agent-config-yaml">yaml/capture-agent-config.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-device-io-hub-yaml">yaml/device_io_hub.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-guide-agent-config-yaml">yaml/guide-agent-config.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-media-capture-yaml">yaml/media_capture.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-models-json">yaml/models.json</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-guide-yaml">yaml/voice_gate.guide.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-procedure-capture-guide-yaml-voice-gate-yaml">yaml/voice_gate.yaml</a></li>
