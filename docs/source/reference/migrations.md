@@ -9,10 +9,8 @@
 
 The development version on `main` is unreleased. These instructions cover
 changes from `v0.3.0-beta` to that version. If upgrading from an older release,
-first apply the
-[v0.3.0-beta migration guide](https://nvidia.github.io/xr-ai/v0.3.0-beta/reference/migrations.html),
-then apply the changes below. Tagged documentation preserves earlier upgrade
-instructions.
+first apply {doc}`migration-history/through-v0.3.0-beta`, then apply the changes
+below. Refer to {doc}`migration-history` for completed migration guides.
 
 Stop running model services with the old checkout's commands and configuration
 before updating the checkout. Start the updated services before restarting
@@ -185,18 +183,33 @@ Recorded-video perception is enabled when `video_history_enabled` is omitted
 from the XR Render worker YAML. Set it to `false` to opt out, or configure
 {ref}`xr-render-recording-prerequisites` before using recorded-video tools.
 
-(swift-microphone-cleanup-errors)=
-(streamkit-image-capture-dependencies)=
-(deviceiohub-rename)=
-(shared-model-server-sample-location)=
-(local-speech-service)=
-(removed-sdk-compatibility-surfaces)=
 ## Earlier releases
 
-For Swift microphone cleanup, client SDK upgrades, DeviceIOHub and SDK renames,
-the former shared model-server location, Pocket TTS, and earlier runtime
-changes, refer to the
-[v0.3.0-beta migration guide](https://nvidia.github.io/xr-ai/v0.3.0-beta/reference/migrations.html).
+Refer to {doc}`migration-history` for completed guides.
+
+(swift-microphone-cleanup-errors)=
+Refer to [Swift microphone cleanup errors](
+migration-history/through-v0.3.0-beta.md#swift-microphone-cleanup-errors).
+
+(streamkit-image-capture-dependencies)=
+Refer to [StreamKit image-capture dependencies](
+migration-history/through-v0.3.0-beta.md#streamkit-image-capture-dependencies).
+
+(deviceiohub-rename)=
+Refer to [DeviceIOHub rename](
+migration-history/through-v0.3.0-beta.md#deviceiohub-rename).
+
+(shared-model-server-sample-location)=
+Refer to [Shared model-server sample location](
+migration-history/through-v0.3.0-beta.md#shared-model-server-sample-location).
+
+(local-speech-service)=
+Refer to [Local speech service](
+migration-history/through-v0.3.0-beta.md#local-speech-service).
+
+(removed-sdk-compatibility-surfaces)=
+Refer to [Removed SDK compatibility surfaces](
+migration-history/through-v0.3.0-beta.md#removed-sdk-compatibility-surfaces).
 
 <a id="consumer-model-readiness"></a>
 For current worker startup and model availability requirements, refer to

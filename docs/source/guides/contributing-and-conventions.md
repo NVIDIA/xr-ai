@@ -100,8 +100,9 @@ Commit the generated manifest changes alongside the dependency declarations.
 {doc}`/reference/migrations` covers changes from the latest published release
 to the checked-out version. Use a `Changes since <baseline tag>` heading and
 state that `main` is unreleased. Add entries as third-level headings under
-that heading, before `Earlier releases`. Link to the baseline release's tagged
-guide; users skipping releases apply earlier guides in release order.
+that heading, before `Earlier releases`. Link to the baseline release's
+archived guide and {doc}`/reference/migration-history`; users skipping releases
+apply earlier guides in release order.
 
 For each breaking change, name who is affected, state the required action, and
 include a before-and-after example when useful. Update the entry when another
@@ -115,21 +116,30 @@ Use this checklist for every release:
    changes shipped by this release. State the release version in the opening
    paragraph. Release branches can contain a different set of changes from
    `main`.
-2. Publish the release tag and its versioned documentation. Verify that
+2. Preserve the completed guide under
+   `docs/source/reference/migration-history/<from-tag>-to-<to-tag>.md`, with a
+   title and introduction naming both releases. Copy from the branch being
+   released and retain the upgrade instructions. Scope explicit labels to the
+   archive and pin historical cross-references to the release's tagged
+   documentation so current topics cannot change their meaning. Add the guide
+   to the toctree in `docs/source/reference/migration-history.md`.
+3. Publish the release tag and its versioned documentation. Verify that the
+   archived guide is published, its historical links resolve, and
    `https://nvidia.github.io/xr-ai/<tag>/reference/migrations.html` contains the
-   completed guide and that its link to the previous release resolves. Use a
-   concrete tag in history links; `latest` and `main` change over time.
-3. After verifying publication, reconcile the entries on `main` with the tag.
-   Use `git merge-base <tag> main` to establish shared history and
+   completed guide. Use a concrete tag in historical links; `latest` and `main`
+   change over time.
+4. After verifying publication, bring the completed archive and its index entry
+   into `main`, then reconcile the current entries with the tag. Use
+   `git merge-base <tag> main` to establish shared history and
    `git diff <tag> main -- docs/source/reference/migrations.md` to compare
    guides, then verify the corresponding code changes, including equivalent
    cherry-picks. Retire an entry only when the published tag covers its change
-   and retains its upgrade instructions. Keep main-only entries. Carry a
-   release-branch entry into `main` only when its code is also present there.
-   Update the baseline and pinned history link to the new tag, state that
-   `main` is unreleased, and mark the guide empty only if no entries remain.
-   Tagged documentation retains completed entries.
-4. Preserve published URL fragments with compact forwarding links to the
-   appropriate tagged guide or canonical topic. Keep ongoing explanations in
+   and the archive retains its upgrade instructions. Keep main-only entries.
+   Carry a release-branch entry into the current guide only when its code is
+   also present on `main`. Update the baseline and archive link to the new
+   release, state that `main` is unreleased, and mark the current guide empty
+   only if no entries remain. Keep completed archives unchanged.
+5. Preserve published URL fragments with compact forwarding links to the
+   appropriate archived guide or canonical topic. Keep ongoing explanations in
    canonical documentation and update their incoming references before retiring
    the entry.
