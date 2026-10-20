@@ -24,7 +24,6 @@ Fixtures
 from __future__ import annotations
 
 import asyncio
-import os
 import tempfile
 import uuid
 from typing import AsyncIterator, Callable
@@ -34,6 +33,7 @@ import pytest
 from _helpers_docker_cleanup import (
     scoped_gpu_test_containers,
 )
+from xr_ai_vllm._docker import TEST_SESSION_ENV
 from xr_ai_hub          import ProcessorEndpoint
 from device_io_hub.ipc     import ConnectorEndpoint, HubEndpoint
 
@@ -47,28 +47,36 @@ def pytest_configure(config):
 
 # ── between-test container cleanup ──────────────────────────────────────────
 
-# Exported so model-server launchers started by tests (which inherit
-# os.environ) label their containers with this session; see
-# _helpers_docker_cleanup. setdefault keeps xdist workers on one shared id.
-_TEST_SESSION_ID = os.environ.setdefault("XR_AI_TEST_SESSION", uuid.uuid4().hex)
+# A nested pytest invocation must not inherit its parent's ownership.
+_TEST_SESSION_ID = uuid.uuid4().hex
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    if (
+        config.getoption("numprocesses", default=0)
+        or hasattr(config, "workerinput")
+    ) and any(item.get_closest_marker("gpu") is not None for item in items):
+        raise pytest.UsageError("GPU tests require serial execution; do not use pytest -n")
 
 
 @pytest.fixture(autouse=True)
-def _scoped_container_cleanup_for_gpu_tests(request):
+def _scoped_container_cleanup_for_gpu_tests(request, monkeypatch):
     """For `gpu` tests: remove only containers *this session* launched, before
     and after each test, so a flaky test's leftover container can't OOM the
     next one on a persistent GPU runner.
 
-    Test-level `finally` blocks already call `stop_persistent_servers`, but
-    they don't run if pytest itself is killed or a fixture errors out — this
-    fixture closes that gap. Containers the session did not create (for
-    example persist-mode servers in live use) are never touched; if any are
-    running, the test is skipped because it would contend for their GPU
-    memory and fixed container names. No-op for non-GPU tests.
+    Test-level `finally` blocks already call `stop_persistent_servers`. This
+    fixture also handles test and fixture failures, but cannot run after SIGKILL.
+    A later session leaves those leaked containers alone and skips until an
+    operator removes them. All GPU tests skip for foreign running or stopped
+    model containers, even GPU tests that do not launch a server. No-op for
+    non-GPU tests.
     """
     if request.node.get_closest_marker("gpu") is None:
         yield
         return
+    monkeypatch.setenv(TEST_SESSION_ENV, _TEST_SESSION_ID)
     with scoped_gpu_test_containers(_TEST_SESSION_ID):
         yield
 

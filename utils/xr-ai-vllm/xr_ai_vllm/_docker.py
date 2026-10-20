@@ -301,8 +301,12 @@ def _docker_available() -> bool:
 def container_exists(name: str) -> bool:
     """True if a container named *name* is currently listed by docker (any state)."""
     try:
+        identity_filter = (
+            f"id={name}" if os.environ.get(TEST_SESSION_ENV) and re.fullmatch(r"[0-9a-f]{64}", name)
+            else f"name=^{re.escape(name)}$"
+        )
         out = subprocess.check_output(
-            ["docker", "ps", "-aq", "-f", f"name=^{re.escape(name)}$"],
+            ["docker", "ps", "-aq", "-f", identity_filter],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -314,8 +318,12 @@ def container_exists(name: str) -> bool:
 def container_running(name: str) -> bool:
     """True if container *name* is in the running state."""
     try:
+        identity_filter = (
+            f"id={name}" if os.environ.get(TEST_SESSION_ENV) and re.fullmatch(r"[0-9a-f]{64}", name)
+            else f"name=^{re.escape(name)}$"
+        )
         out = subprocess.check_output(
-            ["docker", "ps", "-q", "-f", f"name=^{re.escape(name)}$"],
+            ["docker", "ps", "-q", "-f", identity_filter],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -354,6 +362,27 @@ def container_started_at(name: str) -> str | None:
     return raw if raw and not raw.startswith("0001-01-01") else None
 
 
+def _test_container_target(name: str) -> str | None:
+    """Under GPU tests, bind a mutation to an owned immutable container ID."""
+    session = os.environ.get(TEST_SESSION_ENV)
+    if not session:
+        return name
+    try:
+        raw = subprocess.check_output(
+            ["docker", "inspect", "--format",
+             '{{.Id}}\t{{index .Config.Labels "' + TEST_SESSION_LABEL + '"}}', name],
+            text=True, stderr=subprocess.PIPE, timeout=10,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        log.error("cannot verify test ownership of container %s; leaving it alone", name)
+        return None
+    container_id, _, owner = raw.partition("\t")
+    if not re.fullmatch(r"[0-9a-f]{64}", container_id) or owner != session:
+        log.error("container %s is not owned by this test session; leaving it alone", name)
+        return None
+    return container_id
+
+
 def remove_container(name: str) -> bool:
     """``docker rm`` *name* if it exists; return True if the container was removed.
 
@@ -364,9 +393,12 @@ def remove_container(name: str) -> bool:
     """
     if not container_exists(name):
         return False
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "rm", name],
+            ["docker", "rm", target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -406,9 +438,12 @@ def _requested_fingerprint(argv: list[str]) -> str | None:
 
 def start_container(name: str) -> bool:
     """Start one stopped container without attaching its output."""
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "start", name],
+            ["docker", "start", target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -467,9 +502,12 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
     """Stop container *name* if it exists; return True if a container was stopped."""
     if not container_exists(name):
         return False
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "stop", "-t", str(timeout_s), name],
+            ["docker", "stop", "-t", str(timeout_s), target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -484,7 +522,7 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
         )
         try:
             subprocess.run(
-                ["docker", "kill", name],
+                ["docker", "kill", target],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -836,6 +874,7 @@ def run_container(
     """
     if not _docker_available():
         sys.exit(2)
+    requested_container_name = container_name
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
     # no_kill=set() and SIGTERMs every wrapper's process group. Without a
@@ -891,6 +930,12 @@ def run_container(
     # versa). Evict it by label before any reuse probe: a foreign server can
     # answer the health probe and be silently mistaken for ours.
     holder, checked = container_on_port_checked(port)
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session and (
+        not checked or (holder and _test_container_target(holder) is None)
+    ):
+        log.error("cannot establish test ownership of port %d; refusing launch", port)
+        sys.exit(1)
     if checked and holder and holder != container_name:
         print(
             f"[{log_prefix}] port {port} is held by container {holder}; "
@@ -903,7 +948,7 @@ def run_container(
             # identity via the health probe.
             log.error("could not evict container %s from port %d", holder, port)
             sys.exit(1)
-    if checked and not holder:
+    if checked and not holder and not test_session:
         # The same profile switch can leave a pip-mode server on this port;
         # it too can answer the health probe and be mistaken for ours.
         evict_local_listener(port, log_prefix)
@@ -914,6 +959,13 @@ def run_container(
     # replaced, because a container's creation-time config is immutable.
     fingerprint = _requested_fingerprint(argv)
     existing = container_exists(container_name)
+    if existing and test_session:
+        target = _test_container_target(container_name)
+        if target is None:
+            sys.exit(1)
+        # Names can be reused after inspection; adoption and later mutations
+        # must retain the identity whose ownership we actually established.
+        container_name = target
     running = existing and container_running(container_name)
     matching = existing and (
         container_label(container_name, _CONFIG_LABEL) == fingerprint
@@ -989,6 +1041,9 @@ def run_container(
                 log.error("could not remove outdated container %s", container_name)
                 sys.exit(1)
 
+        # A replacement has a new identity; argv still creates the requested
+        # name, not the removed container's pinned ID.
+        container_name = requested_container_name
         _maybe_ngc_login(image)
         print(f"[{log_prefix}] {launch_banner}", flush=True)
         _state["cleanup_mode"] = "remove"

@@ -22,47 +22,44 @@ from xr_ai_vllm._docker import TEST_SESSION_LABEL
 _MODEL_SERVER_NAME_FILTERS = ("name=^xr-ai-vllm-", "name=^xr-ai-nim-")
 
 
-def _docker(*args: str, timeout: float) -> str | None:
-    """Run a docker command; ``None`` when docker is missing, hung or failing."""
+class _DockerInventoryError(RuntimeError):
+    """Docker could not establish the ownership needed for safe testing."""
+
+
+def _docker(*args: str, timeout: float) -> str:
     try:
         proc = subprocess.run(
             ["docker", *args], capture_output=True, text=True, timeout=timeout,
+            check=True,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    return proc.stdout if proc.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+        raise _DockerInventoryError(
+            "Docker ownership inventory/cleanup unavailable; not running GPU tests"
+        ) from exc
+    return proc.stdout
 
 
 def purge_session_containers(session_id: str) -> None:
-    """Force-remove containers labelled with *session_id* (best-effort).
-
-    Silently no-ops without a usable docker so non-GPU boxes don't break.
-    """
+    """Force-remove only immutable IDs labelled with this nonempty session."""
+    if not session_id:
+        raise ValueError("container cleanup requires a nonempty session ID")
     out = _docker(
-        "ps", "-aq", "--filter", f"label={TEST_SESSION_LABEL}={session_id}",
+        "ps", "-aq", "--no-trunc", "--filter", f"label={TEST_SESSION_LABEL}={session_id}",
         timeout=10,
     )
-    ids = (out or "").split()
+    ids = out.split()
     if not ids:
         return
-    try:
-        subprocess.run(
-            ["docker", "rm", "-f", *ids],
-            timeout=20, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    _docker("rm", "-f", *ids, timeout=20)
 
 
-def running_foreign_model_servers(session_id: str) -> list[str]:
-    """Names of running ``xr-ai-vllm-*`` / ``xr-ai-nim-*`` containers not
-    created by this session (e.g. persist-mode servers in live use)."""
+def foreign_model_servers(session_id: str) -> list[str]:
+    """Foreign model containers, including stopped ones the launcher could reuse."""
     fmt = '{{.Names}}\t{{.Label "' + TEST_SESSION_LABEL + '"}}'
     names: list[str] = []
     for name_filter in _MODEL_SERVER_NAME_FILTERS:
-        out = _docker("ps", "--filter", name_filter, "--format", fmt, timeout=10)
-        for line in (out or "").splitlines():
+        out = _docker("ps", "-a", "--filter", name_filter, "--format", fmt, timeout=10)
+        for line in out.splitlines():
             name, _, label = line.partition("\t")
             if name and label.strip() != session_id and name not in names:
                 names.append(name)
@@ -72,13 +69,19 @@ def running_foreign_model_servers(session_id: str) -> list[str]:
 @contextmanager
 def scoped_gpu_test_containers(session_id: str) -> Iterator[None]:
     """Around one ``gpu`` test: purge this session's containers before and
-    after; skip (never kill) if a foreign model server is running."""
-    purge_session_containers(session_id)
-    foreign = running_foreign_model_servers(session_id)
+    after; skip (never kill) if ownership is unknown or a foreign server exists."""
+    try:
+        foreign = foreign_model_servers(session_id)
+        purge_session_containers(session_id)
+    except _DockerInventoryError as exc:
+        pytest.skip(str(exc))
     if foreign:
         pytest.skip(
-            "pre-existing model-server container(s) running, not removing: "
+            "foreign model-server container(s), not removing: "
             + ", ".join(foreign)
+            + ". Inspect `docker ps -a --filter label=xr-ai-test-session` and "
+            "confirm a labelled container belongs to a dead test run before "
+            "manually removing its exact ID with `docker rm -f <container-id>`."
         )
     try:
         yield
