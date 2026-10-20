@@ -68,13 +68,16 @@ def query_gpu_processes(*, timeout: float | None = None) -> dict[str, list[GPUPr
     """Return compute processes grouped by physical GPU UUID.
 
     CUDA_VISIBLE_DEVICES does not filter this query. Unknown memory is None.
+
     Args:
         timeout: Positive, finite driver-command deadline in seconds; None
             permits cold-driver initialization without a deadline.
 
     Raises:
         GPUInventoryError: The command fails, times out, or contains malformed fields.
+
         TypeError: timeout is not a float, integer, or None, or is a boolean.
+
         ValueError: timeout is not positive and finite.
     """
     raw = _query("compute-apps", "gpu_uuid,pid,process_name,used_gpu_memory", timeout=timeout)
@@ -115,7 +118,9 @@ def query_gpu_inventory(*, timeout: float | None = None) -> tuple[GPUDevice, ...
     Raises:
         GPUInventoryError: The query fails, times out, returns no devices,
             or contains malformed fields.
+
         TypeError: timeout is not a float, integer, or None, or is a boolean.
+
         ValueError: timeout is not positive and finite.
     """
     raw = _query(
@@ -160,7 +165,9 @@ def query_gpu_pci_bus_ids(*, timeout: float | None = None) -> dict[int, str]:
 
     Raises:
         GPUInventoryError: The command cannot run, fails, or times out.
+
         TypeError: timeout is not a float, integer, or None, or is a boolean.
+
         ValueError: timeout is not positive and finite.
     """
     raw = _query("gpu", "index,pci.bus_id", timeout=timeout)
