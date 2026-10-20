@@ -23,6 +23,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_hub import DataMessage
+from zmq import ZMQError
 
 from .._frames import (
     AssistantResponseEndFrame,
@@ -54,7 +55,6 @@ class _VoiceIOProcessor(FrameProcessor):
         input_sink: VoiceInputSink,
         *,
         transport: HubVoiceTransport | None = None,
-        query_topic: str = "",
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
@@ -63,7 +63,6 @@ class _VoiceIOProcessor(FrameProcessor):
         super().__init__()
         self._input_sink = input_sink
         self._transport = transport
-        self._query_topic = query_topic
         self._on_participant_joined = on_participant_joined
         self._on_participant_left = on_participant_left
         self._on_interrupted = on_interrupted
@@ -199,34 +198,31 @@ class _VoiceIOProcessor(FrameProcessor):
                 timestamp_us=frame.pts_us,
                 interrupted_output=interrupted_response is not None,
             )
-            if not self._query_topic:
-                await self._input_sink(query)
-                return
             speaker = f"Speaker {frame.speaker_id}" if isinstance(frame, _SpeakerGatedQueryFrame) else "User"
-            # Display and application delivery share the owned input task, but
-            # neither waits for the other to start. Transport backpressure is
-            # retained without detached sends or an additional buffering policy.
+            # Both deliveries belong to this input task, so shutdown drains them.
             results = await asyncio.gather(
                 self._input_sink(query),
                 self._display(DataMessage(
-                    participant_id=pid, topic=self._query_topic,
+                    participant_id=pid, topic="voice.user-query",
                     pts_us=frame.pts_us, data=f"{speaker}: {frame.text}".encode("utf-8"),
                 )),
                 return_exceptions=True,
             )
-            if isinstance(results[0], BaseException):
-                raise results[0]
+            failures = [result for result in results if isinstance(result, BaseException)]
+            if failures:
+                raise BaseExceptionGroup("voice input delivery failed", failures)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("voice input sink raised pid={!r}", pid)
+            # isolation boundary: this task supervises both input deliveries.
+            logger.exception("voice input delivery failed pid={!r}", pid)
 
     async def _display(self, message: DataMessage) -> None:
         if self._transport is None:
             return
         try:
             await self._transport.send_return_data(message)
-        except Exception:
+        except (OSError, ZMQError):
             logger.exception("voice input display failed pid={!r}", message.participant_id)
 
     async def _spawn_response(self, item: _QueuedResponse) -> None:

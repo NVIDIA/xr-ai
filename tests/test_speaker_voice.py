@@ -763,7 +763,7 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         accepted.append(query)
     transport = HubVoiceTransport()
     output = _VoiceIOProcessor(
-        accept, transport=SimpleNamespace(send_return_data=display), query_topic="custom.accepted-query",
+        accept, transport=SimpleNamespace(send_return_data=display),
     )
     # This harness delivers frames directly instead of running Pipecat queues.
     output._enable_direct_mode = True
@@ -832,7 +832,7 @@ async def test_same_conversation_workflow_through_both_asr_paths(tmp_path, monke
         assert len(messages) == len(accepted)
         label = "Speaker 7" if use_speaker else "User"
         assert [message.data.decode() for message in messages] == [f"{label}: {query.text}" for query in accepted]
-        assert all(message.topic == "custom.accepted-query" and message.participant_id == "a" for message in messages)
+        assert all(message.topic == "voice.user-query" and message.participant_id == "a" for message in messages)
         assert [message.pts_us for message in messages] == [query.timestamp_us for query in accepted]
         if use_speaker:
             stt.transcribe.assert_not_awaited()
@@ -912,15 +912,18 @@ def test_conversation_can_use_ordinary_stt_or_preserve_legacy_wake_mode(tmp_path
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("diagnostics", [False, True])
-@pytest.mark.parametrize("send_fails", [False, True])
+@pytest.mark.parametrize("send_fails", [None, OSError, "zmq"])
 async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries(tmp_path, diagnostics, send_fails):
+    from zmq import ZMQError
+
     cfg = _SpeakerConfig(diagnostics=diagnostics)
     partial, final, accepted = AsyncMock(), AsyncMock(), AsyncMock()
-    sender = AsyncMock(side_effect=RuntimeError("display unavailable") if send_fails else None)
+    error_type = ZMQError if send_fails == "zmq" else send_fails
+    sender = AsyncMock(side_effect=error_type("display unavailable") if error_type else None)
     processor = _SpeakerSttProcessor(cfg=cfg, on_partial_transcript=partial, on_final_transcript=final)
     gate = VoiceGateProcessor(cfg=_voice_cfg(tmp_path, diagnostics=diagnostics), tts=SimpleNamespace())
     output = _VoiceIOProcessor(
-        accepted, transport=SimpleNamespace(send_return_data=sender), query_topic="custom.accepted-query",
+        accepted, transport=SimpleNamespace(send_return_data=sender),
     )
     output.push_frame = AsyncMock()
 
@@ -961,7 +964,7 @@ async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries
         assert not hasattr(query, "speaker_id")
         assert query.text == "look around" and query.timestamp_us == 123
         message = sender.call_args.args[0]
-        assert message.topic == "custom.accepted-query" and message.participant_id == "wearer"
+        assert message.topic == "voice.user-query" and message.participant_id == "wearer"
         assert message.pts_us == 123 and message.data.decode() == "Speaker 0: look around"
         assert gate._feeding_speaker_id is None
     finally:
@@ -974,3 +977,44 @@ async def test_diagnostics_only_reach_display_and_send_failure_preserves_queries
 def test_diagnostic_setting_requires_boolean(value):
     with pytest.raises(ValueError, match="diagnostics"):
         _SpeakerConfig._from_yaml({"enabled": True, "diagnostics": value})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [
+    {}, {"speaker_id": -1}, {"speaker_id": True}, {"pts_us": "123"},
+    {"status": None}, {"status": ""}, {"text": None},
+])
+async def test_malformed_diagnostic_cannot_reset_worker_enrollment(invalid):
+    from xr_ai_voice._frames import _SpeakerEnrollmentFrame, _SpeakerTranscriptionFrame
+
+    processor = _SpeakerSttProcessor(cfg=_SpeakerConfig(diagnostics=True))
+    complete = {"kind": "diagnostic", "speaker_id": 1, "pts_us": 123, "status": "ignored", "text": "noise"}
+    malformed = {"kind": "diagnostic"} if not invalid else {**complete, **invalid}
+    processor._client = SimpleNamespace(
+        _feed=AsyncMock(return_value=[
+            {"kind": "enrolled"}, malformed,
+            {"kind": "transcript", "speaker_id": 7, "pts_us": 321, "text": "owner query"},
+        ]),
+        _forget=AsyncMock(), _close=AsyncMock(),
+    )
+    frames, delivered = [], asyncio.Event()
+
+    async def push(frame, *_args):
+        frames.append(frame)
+        if isinstance(frame, _SpeakerTranscriptionFrame):
+            delivered.set()
+
+    processor.push_frame = push
+    try:
+        await processor.process_frame(ParticipantJoinedFrame("wearer"), FrameDirection.DOWNSTREAM)
+        audio = InputAudioRawFrame(audio=bytes(320), sample_rate=16000, num_channels=1)
+        audio.transport_source, audio.pts = "wearer", 123000
+        await processor.process_frame(audio, FrameDirection.DOWNSTREAM)
+        await asyncio.wait_for(delivered.wait(), 1)
+        assert "wearer" in processor._enrolled and "wearer" in processor._tasks
+        assert [frame.state for frame in frames if isinstance(frame, _SpeakerEnrollmentFrame)] == ["enrolled"]
+        assert [frame.text for frame in frames if isinstance(frame, _SpeakerTranscriptionFrame)] == ["owner query"]
+        processor._client._forget.assert_not_awaited()
+    finally:
+        await processor.cleanup()
+    assert not processor._tasks and not processor._queues

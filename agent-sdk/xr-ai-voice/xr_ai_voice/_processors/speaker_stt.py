@@ -209,9 +209,16 @@ class _SpeakerSttProcessor(FrameProcessor):
             return
         if kind == "diagnostic":
             if self._cfg.diagnostics:
+                speaker, pts = event.get("speaker_id"), event.get("pts_us")
+                status, text = event.get("status"), event.get("text")
+                if (
+                    type(speaker) is not int or speaker < 0 or type(pts) is not int or pts < 0
+                    or not isinstance(status, str) or not status.strip() or not isinstance(text, str)
+                ):
+                    logger.warning("malformed speaker diagnostic discarded pid={!r}", pid)
+                    return
                 await self.push_frame(_SpeakerDiagnosticFrame(
-                    participant_id=pid, speaker_id=event["speaker_id"], status=event["status"],
-                    text=event["text"], pts_us=event["pts_us"],
+                    participant_id=pid, speaker_id=speaker, status=status, text=text, pts_us=pts,
                 ))
             return
         if kind in {"enrolled", "released", "reset"}:

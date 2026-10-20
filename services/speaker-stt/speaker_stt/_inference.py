@@ -154,19 +154,22 @@ class _Session:
         return _AsrState(self.models.asr.encoder.get_initial_cache_state(batch_size=1))
 
     def _reset_asr(self) -> None:
-        self._asr = self._new_asr() if self.selection.owner is not None and not self.selection.cfg.diagnostics else None
+        self._asr = self._new_asr() if self.selection.owner is not None else None
         self.last_partial = ""
 
     def _decode_streams(
         self, features, lengths, predictions, drop: int, active: set[int], pts_us: int,
-        streams: dict[int, _DecodedStream], *, required: set[int],
+        streams: dict[int, _DecodedStream], *, required: set[int], encoded_features=None,
     ) -> tuple[dict[int, str], list[tuple[int, _DecodedStream]]]:
         """Share encoding while retaining independent attributed decoder state."""
         speakers = active | streams.keys()
         if not speakers:
             return {}, []
         try:
-            encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
+            encoded, encoded_lengths = (
+                self.adapter.forward_pre_encoded(features, lengths, drop)
+                if encoded_features is None else encoded_features
+            )
         except Exception:
             if required:
                 raise
@@ -354,7 +357,8 @@ class _Session:
                     candidate_events = self._candidate_step(features, lengths, preds, drop, active, chunk_pts)
                     events.extend(candidate_events)
                     if self.selection.cfg.diagnostics:
-                        accepted = {event["speaker_id"] for event in candidate_events if event["kind"] == "one_shot"}
+                        accepted = {event["speaker_id"] for event in candidate_events
+                                    if event["kind"] in {"one_shot", "wake_ready"}}
                         completed = [(speaker, stream) for speaker, stream in self._candidate_completed
                                      if speaker not in accepted]
                         events.extend(self._diagnostic_events(active, completed, None, chunk_pts))
@@ -366,30 +370,25 @@ class _Session:
                     chunk_pts,
                 )
                 events.extend(edges)
-                if started or (not self.selection.cfg.diagnostics and self._asr is None):
+                if started or self._asr is None:
                     self._reset_asr()
-                    if self.selection.cfg.diagnostics and selected is not None:
-                        # A new owner utterance starts fresh decoder history.
-                        self._diagnostic_streams.pop(selected, None)
                 owner_before = self.selection.owner
                 completed = []
-                if self.selection.cfg.diagnostics:
-                    texts, completed = self._decode_streams(
-                        features, lengths, preds, drop, active, chunk_pts, self._diagnostic_streams,
-                        required={selected} if selected is not None else set(),
-                    )
-                    if selected is not None:
-                        self.selection.text = texts.get(selected, "")
+                encoded_features = None
                 if selected is not None:
-                    if not self.selection.cfg.diagnostics:
-                        encoded, encoded_lengths = self.adapter.forward_pre_encoded(features, lengths, drop)
-                        self.selection.text = self._decode(
-                            encoded, encoded_lengths, preds, selected, drop, self._asr, self.selection._finished,
-                        )
+                    encoded_features = self.adapter.forward_pre_encoded(features, lengths, drop)
+                    self.selection.text = self._decode(
+                        *encoded_features, preds, selected, drop, self._asr, self.selection._finished,
+                    )
                     text = self.selection.text
                     if self.selection.owner is not None and text and text != self.last_partial:
                         events.append({"kind": "partial", "text": text})
                         self.last_partial = text
+                if self.selection.cfg.diagnostics:
+                    _, completed = self._decode_streams(
+                        features, lengths, preds, drop, active - {owner_before}, chunk_pts,
+                        self._diagnostic_streams, required=set(), encoded_features=encoded_features,
+                    )
                 if self.selection._finished:
                     # Forced truncation cannot enroll a voice from a prefix or
                     # release enrollment before the complete phrase is known.
@@ -400,8 +399,8 @@ class _Session:
                     self._reset_asr()
                 if self.selection.cfg.diagnostics:
                     events.extend(self._diagnostic_events(active, completed, owner_before, chunk_pts))
-                    if self.selection.owner is None:
-                        # Display-only history cannot seed the next enrollment.
-                        self._diagnostic_streams.clear()
+                if self.selection.owner is None:
+                    # Display-only history cannot seed the next enrollment.
+                    self._diagnostic_streams.clear()
                 self.step += 1
         return events

@@ -150,7 +150,8 @@ def test_all_eight_diagnostic_caches_are_released_at_utterance_boundary(_streami
     from speaker_stt._inference import _Session
 
     models, activity, calls, _masks, _allocations, text = _streaming_models
-    cfg = _SpeakerConfig(diagnostics=True, silence_duration=0.16, max_utterance_s=0.32)
+    cfg = _SpeakerConfig(diagnostics=True, silence_duration=0.16,
+                         max_utterance_s=0.32 if finish == "truncation" else 0.64)
     session = _Session(models, cfg, audio_origin_us=0)
     activity[:] = range(8)
     text[0] = cfg.start_phrase
@@ -167,6 +168,9 @@ def test_all_eight_diagnostic_caches_are_released_at_utterance_boundary(_streami
     assert session.selection.owner is None
     assert not any(e["kind"] in {"enrolled", "transcript"} for e in events)
     assert len([e for e in events if e["kind"] == "diagnostic" and e["text"]]) == 8
+    assert {e["status"] for e in events if e["kind"] == "diagnostic" and e["text"]} == {
+        "ignored; waiting for enrollment" + ("; truncated" if finish == "truncation" else ""),
+    }
 
 
 @pytest.mark.parametrize("failure", ["decode", "allocation"])
@@ -192,7 +196,7 @@ def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_mod
         def allocate():
             nonlocal allocations
             allocations += 1
-            if allocations > 1:
+            if allocations == 2:
                 raise RuntimeError("background cache allocation failed")
             return original()
 
@@ -200,7 +204,8 @@ def test_ignored_diagnostic_failure_preserves_owner_transcription(_streaming_mod
     activity[:] = [1, 7]
     text[0] = "look around"
     session._feed(bytes(5120))
-    assert session.selection.owner == 7 and 7 in session._diagnostic_streams
+    assert session.selection.owner == 7 and session._asr is not None
+    assert 7 not in session._diagnostic_streams
     assert 1 not in session._diagnostic_streams
     activity[:] = []
     session._feed(bytes(5120))
@@ -448,6 +453,63 @@ def test_selected_speaker_allocates_and_decodes_before_optional_caches(_streamin
     trace.clear()
     session._feed(bytes(5120))
     assert trace == [("decode", 7), ("decode", 1)]
+
+
+@pytest.mark.parametrize("finish", ["silence", "truncation"])
+def test_owner_decoder_history_and_finalization_are_independent_of_diagnostics(
+    _streaming_models, monkeypatch, finish,
+):
+    from types import SimpleNamespace
+
+    from speaker_stt._inference import _Session
+
+    models, activity, calls, _masks, _allocations, _text = _streaming_models
+
+    def trace(diagnostics):
+        cfg = _SpeakerConfig(diagnostics=diagnostics, silence_duration=0.32,
+                             max_utterance_s=0.64 if finish == "truncation" else 30.0)
+        session = _Session(models, cfg, audio_origin_us=0)
+        session.selection.owner = 7
+        owner_calls, events = [], []
+        selected = None
+        original = session._decode
+
+        def decode(*args):
+            nonlocal selected
+            selected = args[3]
+            return original(*args)
+
+        def model_decode(**kwargs):
+            previous = kwargs["previous_hypotheses"]
+            history = [] if previous is None else list(previous[0].history)
+            cache_step = int(kwargs["cache_last_channel_len"][0])
+            assert cache_step == len(history)
+            assert kwargs["previous_pred_out"] is (None if not history else previous[0])
+            history.append(f"speaker-{selected}")
+            state = SimpleNamespace(history=history)
+            final = kwargs["keep_all_outputs"]
+            if selected == 7:
+                owner_calls.append((tuple(history), final))
+            channel, time, length = models.asr.encoder.get_initial_cache_state(batch_size=1)
+            length[0] = len(history)
+            text = " ".join(history) + (" final" if final else " partial")
+            return state, [text], channel, time, length, [state]
+
+        monkeypatch.setattr(session, "_decode", decode)
+        monkeypatch.setattr(models.asr, "conformer_stream_step", model_decode)
+        for _utterance in range(2):
+            for speakers in ([1, 7], [1, 7], [1, 7], [1, 7]) if finish == "truncation" else (
+                [1, 7], [1, 7], [1], [1],
+            ):
+                activity[:] = speakers
+                events.extend(session._feed(bytes(5120)))
+            assert session.selection.owner == 7
+        assert all("speaker-1" not in event["text"] for event in events if event["kind"] == "transcript")
+        assert [call[0] for call in owner_calls if call[1]] == [("speaker-7",) * 4] * 2
+        assert owner_calls[4][0] == ("speaker-7",)
+        return owner_calls, [event for event in events if event["kind"] != "diagnostic"]
+
+    assert trace(False) == trace(True)
 
 
 

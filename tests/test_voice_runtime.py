@@ -353,7 +353,7 @@ async def test_voice_agent_publishes_to_configured_query_topic() -> None:
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
-        assert session.run_options["query_topic"] == QUERY_TOPIC.name
+        assert "query_topic" not in session.run_options
         assert session.handler is not None
         assert await session.handler(
             VoiceQuery(
@@ -1289,24 +1289,32 @@ def test_query_schema_has_no_display_only_speaker_metadata():
 
 
 @pytest.mark.parametrize("speaker_id", [None, 0, 7])
-@pytest.mark.parametrize("display_state", ["ok", "fails", "blocked"])
+@pytest.mark.parametrize("display_state", ["ok", "fails", "zmq_fails", "unexpected", "blocked"])
 async def test_voice_owns_query_display_without_sample_adapter(speaker_id, display_state):
+    from loguru import logger
     from pipecat.frames.frames import CancelFrame
     from pipecat.processors.frame_processor import FrameDirection
     from xr_ai_voice._frames import GatedQueryFrame, _SpeakerGatedQueryFrame
     from xr_ai_voice._processors.io import _VoiceIOProcessor
+    from zmq import ZMQError
 
     session, recorder, runtime = _Session(), _InputRecorder(), AgentRuntime()
     runtime.register("recorder", recorder)
     voice = _voice_agent(session, text_input=False)
     runtime.register("voice", voice)
     messages = []
+    errors = []
+    log_id = logger.add(errors.append, level="ERROR")
     blocked, cancelled = asyncio.Event(), asyncio.Event()
 
     async def send(message):
         messages.append(message)
         if display_state == "fails":
-            raise RuntimeError("display unavailable")
+            raise OSError("display unavailable")
+        if display_state == "zmq_fails":
+            raise ZMQError("display unavailable")
+        if display_state == "unexpected":
+            raise RuntimeError("display implementation bug")
         if display_state == "blocked":
             blocked.set()
             try:
@@ -1317,7 +1325,7 @@ async def test_voice_owns_query_display_without_sample_adapter(speaker_id, displ
     session.transport.send_return_data = send
     async with _running_voice(runtime, voice, session):
         output = _VoiceIOProcessor(
-            session.handler, transport=session.transport, query_topic=session.run_options["query_topic"],
+            session.handler, transport=session.transport,
         )
         # Drive the actual I/O boundary and runtime publication directly; the
         # gate-to-I/O normalization and authorization paths have separate coverage.
@@ -1337,9 +1345,12 @@ async def test_voice_owns_query_display_without_sample_adapter(speaker_id, displ
                 assert output._input_tasks  # Pending display retains backpressure, not query authorization.
             else:
                 await asyncio.gather(*output._input_tasks)
+            if display_state == "unexpected":
+                assert len(errors) == 2
+                assert all("display implementation bug" in str(error) for error in errors)
             label = "User" if speaker_id is None else f"Speaker {speaker_id}"
             assert [(m.participant_id, m.topic, m.pts_us, m.data.decode()) for m in messages] == [
-                (pid, QUERY_TOPIC.name, 123, f"{label}: normalized query") for pid in ("alice", "bob")
+                (pid, "voice.user-query", 123, f"{label}: normalized query") for pid in ("alice", "bob")
             ]
             await output.process_frame(CancelFrame(), FrameDirection.DOWNSTREAM)
             assert not output._input_tasks
@@ -1348,6 +1359,7 @@ async def test_voice_owns_query_display_without_sample_adapter(speaker_id, displ
         finally:
             await output._shutdown()
             await output.cleanup()
+            logger.remove(log_id)
 
 
 async def _discard_frame(*_args):

@@ -109,7 +109,6 @@ class _VoiceSession:
         self,
         input_sink: VoiceInputSink,
         *,
-        query_topic: str = "",
         on_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
@@ -128,7 +127,6 @@ class _VoiceSession:
         io_processor = _VoiceIOProcessor(
             input_sink,
             transport=self.transport,
-            query_topic=query_topic,
             on_participant_joined=on_participant_joined,
             on_participant_left=on_participant_left,
             on_interrupted=on_interrupted,

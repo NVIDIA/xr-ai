@@ -221,7 +221,7 @@ class VoiceAgent(Agent):
     backend inspection. The normal constructor accepts explicitly owned clients.
 
     Accepted queries also return participant-routed UTF-8 display text on
-    ``query_topic.name``. Speaker ASR includes its session-local speaker label;
+    ``voice.user-query``. Speaker ASR includes its session-local speaker label;
     ordinary STT and typed input use ``User``. This display does not change
     :class:`UserQuery` or require an application subscriber. Delivery uses the
     existing hub transport and retains its backpressure and best-effort semantics.
@@ -373,7 +373,6 @@ class VoiceAgent(Agent):
                     unsubscribe_data = self._session.endpoint.on_data(self._on_data)
                 await self._session.run(
                     self._publish_input,
-                    query_topic=self.query_topic.name,
                     on_transcript=self._publish_transcript,
                     on_participant_joined=self._participant_joined,
                     on_participant_left=self._participant_left,

@@ -374,22 +374,28 @@ candidate transcripts before
 enrollment and additionally transcribes non-owner voices after enrollment. It
 returns activity and ignored text on `voice.speaker-diagnostic` through the
 existing participant-routed data channel. These messages cannot invoke or
-interrupt an agent or change enrollment. Before enrollment, display reuses the
-required candidate decoding without additional caches or decoding. After
-enrollment, diagnostics share model weights and encoded features but add decoding
-work and separate temporary ASR caches for non-owner speakers. The
+interrupt an agent or change enrollment. See
+{doc}`../components/ai-services` for decoder ownership and diagnostic resource cost. The
 simple VLM sample enables diagnostics for live inspection. They have no effect
 when ordinary STT is selected.
 
 The shared voice I/O layer also returns accepted, gate-normalized query text
-on the configured query topic's existing name. Speaker ASR uses `Speaker N`;
+on the stable `voice.user-query` client data topic. Speaker ASR uses `Speaker N`;
 ordinary STT and typed queries use `User`. The application receives the same
 typed query as before, without speaker-display metadata or a sample-specific
 echo subscriber. Disabling speaker diagnostics does not disable accepted-query
-display. The existing hub return path is best effort, not an end-to-end receipt
-acknowledgment. Display errors do not reject accepted queries; local transport
-backpressure remains unchanged. No additional display queue or dropping policy
-is introduced.
+display. Application `query_topic` names remain internal runtime routing, not
+client display topics. This is accepted text after wake-prefix/control handling,
+not every raw STT word. The separate runtime `voice.transcript` event retains its
+existing mode/backend transcript-publication policy. Typed input is echoed too.
+Applications may handle or ignore the new
+topic in their data callback; the sample clients' catch-all message lists display it.
+Participant targeting, not topic selection, provides routing isolation. The
+existing hub return path is best effort, not an end-to-end receipt acknowledgment.
+Display errors do not reject accepted queries. Accepted display and application
+delivery start concurrently within one owned input task and both are awaited;
+ignored diagnostic sends are awaited inline. A saturated local hub can therefore
+delay input completion or later frames. No display-dropping policy is introduced.
 
 Start the inference process separately from the repository root:
 

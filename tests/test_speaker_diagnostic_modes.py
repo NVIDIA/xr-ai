@@ -131,6 +131,7 @@ def test_diagnostics_preserve_primary_mode_decisions(_streaming_models, monkeypa
             if mode != "conversation":
                 assert not any(event["speaker_id"] == 7 and event["text"] == "hey agent first question"
                                for event in display)
+                assert not any(event["speaker_id"] == 7 and event["text"] == "hey agent" for event in display)
         else:
             assert not display
         return primary, states
@@ -193,7 +194,7 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
     transport = HubVoiceTransport()
     monkeypatch.setattr(transport, "send_return_data", display)
     output = _VoiceIOProcessor(
-        voice._publish_input, transport=transport, query_topic=_QUERIES.name,
+        voice._publish_input, transport=transport,
     )
     output._enable_direct_mode = True
     output.push_frame = AsyncMock()
@@ -263,7 +264,8 @@ async def test_actual_speaker_wire_modes_reach_shared_display_and_runtime(
                 await utter(cfg._conversation.stop_phrase)
                 assert allocated[0].selection.owner is None and not gate._conversation_active
             messages = [call.args[0] for call in display.await_args_list]
-            accepted_messages = [message for message in messages if message.topic == _QUERIES.name]
+            accepted_messages = [message for message in messages if message.topic == "voice.user-query"]
+            assert not any(message.topic == _QUERIES.name for message in messages)
             assert [(message.participant_id, message.pts_us) for message in accepted_messages] == [
                 (q[0], q[2]) for q in recorder.queries
             ]

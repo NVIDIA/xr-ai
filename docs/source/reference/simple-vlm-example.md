@@ -43,7 +43,7 @@ frames and tasks. This is the reference composition for a single foreground
 streaming image query.
 
 The shared voice layer returns accepted queries as UTF-8 text on
-`simple-vlm.user-query`; the sample has no display adapter. The web
+`voice.user-query`; the sample has no display adapter. The web
 client's **RECEIVED** list displays it using the existing text-message handling,
 for example `Speaker 0: What is in front of me?`. The number is the diarization
 model's label within this participant's voice connection. Typed input and
@@ -55,11 +55,9 @@ The sample enables `speaker.diagnostics: true` in `yaml/voice_gate.yaml`.
 `Speaker 1 [ignored]: What time is it?`. Before enrollment, detections are
 marked `waiting for enrollment`. These display-only messages cannot invoke or
 interrupt the agent. Set `speaker.diagnostics: false` to stop displaying
-diagnostics and stop transcribing non-owner voices after enrollment. Required
-candidate decoding before enrollment is unchanged and its results are reused
-for display without extra decoding or caches. After enrollment, diagnostics
-share model weights and encoded features but add decoding work and an ASR cache
-for each non-owner speaker. Ordinary STT, including the NIM path, returns
+diagnostics and stop transcribing non-owner voices after enrollment. See
+{doc}`../components/ai-services` for decoding and resource cost. Ordinary STT,
+including the NIM path, returns
 accepted queries without speaker diagnostics.
 
 ## Source map

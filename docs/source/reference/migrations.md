@@ -5,6 +5,25 @@
 
 # Release migration
 
+## Shared accepted-query display
+
+Every `VoiceAgent` now returns accepted query text to its originating participant
+on the new `voice.user-query` client data topic. This generic display supports
+checking what the voice layer understood without a sample-specific echo agent.
+Payloads are UTF-8 `Speaker N: <text>` for speaker ASR or `User: <text>` for batch
+STT and typed input. Text is gate-normalized accepted input, not all raw STT;
+control phrases do not become queries. The separate internal `voice.transcript`
+event retains its existing mode/backend publication policy. Optional ignored-speaker display remains
+on `voice.speaker-diagnostic`, controlled by `speaker.diagnostics`.
+
+Internal application query topics, including `tea-making.user-query`,
+`lab-instrument-monitoring.user-query`, `xr-render.user-query`, `task.capture.input`
+and `simple-vlm.user-query`, are unchanged and are not used for client display.
+Clients with topic-specific handlers can handle or ignore `voice.user-query`;
+catch-all message lists will show the additional messages, including typed echoes.
+There is no new constructor switch. Routing remains participant-targeted;
+topic filtering is not an authorization boundary.
+
 ## Session recording flag
 
 Replace `--capture` with `--session-recording` in saved launch commands for
