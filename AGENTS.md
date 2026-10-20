@@ -5,12 +5,18 @@
 
 # xr-ai working contract
 
-This file contains the repository-wide constraints for humans and agents. Read
-the nearest package or sample README for its entry point and canonical-doc
-links. User-facing docs live only under `docs/source/`.
+This file describes the XR AI implementation, shared engineering guidance, and
+upstream contribution policies. Read the nearest package or sample README for
+its entry point and canonical-doc links. XR AI's user-facing docs live under
+`docs/source/`.
 
 Building an application? Read
 [`docs/source/guides/building-your-app.md`](docs/source/guides/building-your-app.md).
+
+<a id="change-contract"></a>
+
+Before opening an XR AI pull request, read
+[`docs/source/guides/contributing-and-conventions.md`](docs/source/guides/contributing-and-conventions.md).
 
 Refer to [Skills](docs/source/getting_started/skills.md) for available
 coding-agent skills and installation.
@@ -89,9 +95,9 @@ agent-samples/<kebab-name>/
       __main__.py
 ```
 
-Applications that are not repository samples use the same internal layout
-under `apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog,
-and test discovery exclude that top-level directory.
+The reference application workflow uses the sample layout under
+`apps/<kebab-name>/`. Repository dependency, lint, SPDX, sample catalog, and
+test discovery exclude that top-level directory.
 
 - Model-server convenience stacks start from each service's own YAML under
   `services/` and apply sample-owned overrides under `model-servers/yaml/`. Stop the current stack before changing its settings,
@@ -118,90 +124,58 @@ When preparing a repository sample, refer to
 [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 [`conversation-example`](agent-samples/conversation-example/README.md) reference.
 
-## Change contract
+## Engineering guidance
 
-- Public Python API names, signatures, types, defaults, and field behavior live
-  in `__all__`, declarations, and co-located docstrings; Sphinx generates their
-  reference pages. Update narrative README or `docs/source/` content only when
-  concepts, workflows, operations, or architecture change. Breaking changes to
-  released behavior also require an entry in the current release transition of
-  `docs/source/reference/migrations.md`. Refer to
-  [Migration entries and release rollover](docs/source/guides/contributing-and-conventions.md#migration-entries-and-release-rollover)
-  for entry scope and the release checklist.
-- Top-level sample commands and options live in their `[project.scripts]` and
-  `argparse` declarations; Sphinx generates the user-facing CLI reference.
-- Sample configuration values and field guidance live in checked-in YAML/JSON
-  and adjacent YAML comments. Files under a top-level sample's `yaml/` tree or
-  beside a direct capability subproject are generated into the config reference.
-- When changing setup, sample startup, or the application-building flow, update
-  the `docs/source/` page that documents it and any `skills/*/SKILL.md` that
-  references the changed path, command, or step in the same PR.
-- After changing a `pyproject.toml` outside `apps/`, run
-  `uv run --script .github/scripts/generate_dependency_map.py`; the pre-commit hook
-  normally regenerates the Python inventory automatically and CI rejects drift.
-  Do not hand-edit the generated section in `DEPENDENCIES.md`. Regenerate the
-  affected project's gitignored `uv.lock` locally to verify resolution.
-- The root `uv.toml` limits registry artifacts to the last dependency
-  qualification timestamp. Advance it only in a dedicated dependency refresh,
-  resolve every project's gitignored `uv.lock` with
-  `uv --config-file uv.toml lock --upgrade --project <directory>` from the
-  repository root, and run the full test suite. uv stops upward config discovery
-  at a nearer `[tool.uv]` table; most nested projects define one through
-  `[tool.uv.sources]`, so pass the root config explicitly. Do not commit
-  per-project lockfiles; the locks under `dependency-manifest/` are the
-  exception, and `uv.lock` there is produced by
-  `uv run --script .github/scripts/generate_dependency_manifest.py`
-  (pre-commit runs it when `uv.toml` is staged). Regenerate
-  `dependency-manifest/` for a `uv.toml` qualification refresh or a targeted
-  dependency security refresh, and commit the generated project and lock in
-  the same change. Do not regenerate it for ordinary dependency or project
-  changes, even when a new project is missing from it. The generator explicitly
-  excludes incompatible projects; validate their local locks separately.
+Apply these practices to repository and downstream work. Work under `apps/`
+uses this engineering guidance. For changes elsewhere in this checkout, also
+follow [Contributing and conventions](docs/source/guides/contributing-and-conventions.md)
+unless the user identifies the work as downstream-only.
+
+- Reuse an existing mechanism before adding one, and follow the nearest
+  sibling's lifecycle, configuration, and ownership patterns. Fix behavior at
+  its owning boundary; avoid duplicating checks already owned by a dependency.
+  Do not add an abstraction until two concrete use cases need it.
+- After changing names or behavior, update affected callers, configuration,
+  tests, and documentation within the project. Check equivalent sibling paths
+  for the same defect.
+- Tests must prove the changed production behavior. Follow
+  [Test design](docs/source/guides/testing.md#test-design).
+- Verify that declared dependency minimums provide the APIs the code uses.
+  Refer to [Dependency API compatibility](docs/source/guides/contributing-and-conventions.md#dependency-api-compatibility).
+- Validate configuration and requests at their owning boundary. Reject unknown
+  keys unless the schema explicitly permits extensions. Reject conflicting
+  settings, malformed payloads, and explicitly configured missing files with
+  actionable errors. Defaults apply to omitted optional input, not invalid
+  explicit input.
+- Remote control handlers validate the sender's authority as well as the topic
+  and payload; a topic name alone grants no authority. Keep camera, microphone,
+  and similar sensitive capabilities off until the user explicitly enables
+  them. Bound path and URL inputs to the intended resource access policy.
+- HTTP and WebSocket clients connecting to repository-launched services on
+  loopback must opt out of ambient proxy routing with `trust_env=False`,
+  `proxy=None`, or the equivalent for their client library.
+- Resource owners release only resources they still own, including after
+  cancellation or replacement. Apply the
+  [lifecycle rules](docs/source/guides/contributing-and-conventions.md#resource-lifecycle).
 - Never put API keys or tokens in source files. Use environment variables or
-  the credential store documented in `docs/source/getting_started/credentials.md`.
-- Do not add an abstraction until two concrete use cases need it.
-- When a sample's behavior is driven by an LLM prompt, changing a rule in its
-  `system.txt` requires a corresponding eval case. Do not reuse worked-example
-  specifics in the eval fixture.
-- New source files outside `apps/` need the repository SPDX header. File-type
-  rules and exceptions are in
-  [SPDX headers](docs/source/guides/spdx-headers.md).
+  the project's credential store. XR AI's supported sources are documented in
+  `docs/source/getting_started/credentials.md`.
+- When behavior is driven by an LLM prompt, changing a rule requires a
+  corresponding eval case. Do not reuse worked-example specifics in the eval
+  fixture.
 - Preserve unrelated work in a dirty tree. Never use destructive Git commands
   to discard user changes.
+- Check factual claims in docs, comments, and docstrings against the code.
+  Refer to [Factual accuracy](docs/source/guides/documentation-style.md#factual-accuracy)
+  for conditions and failure paths to cover.
 
 ## Comments and documentation
 
 Comments explain a non-obvious invariant or failure mode. Do not narrate the
 code, debugging history, rejected alternatives, or plans. Keep architectural
 docs about the current system; issue trackers and Git history hold proposals
-and past decisions.
-
-Follow the authoritative [documentation style](docs/source/guides/documentation-style.md)
-for customer-facing Markdown and reStructuredText. Match the surrounding
-document and keep edits scoped.
-
-`docs/source/` is the canonical home for user-facing concepts, architecture,
-workflows, operations, troubleshooting, and reference material. Do not duplicate
-that content in a README. A README is a concise repository entry point: state
-what the directory contains, link to the canonical documentation, and keep only
-the minimum local information needed before following that link. A top-level
-sample README under `agent-samples/` additionally keeps
-the exact commands needed to start that sample. State the sample directory as
-the working directory and write every command relative to it, including commands
-that invoke a nested project such as `model-servers` from an agent sample. It also includes a compact configuration entry point:
-name the sample-owned YAML or JSON files, describe
-the common settings they own, and show one representative edit. Put exhaustive
-field descriptions, precedence, path resolution, architecture, behavior,
-artifact contracts, extension instructions, and eval methodology in the
-sample's `docs/source/` guide. Nested READMEs may contain only artifact-local
-instructions that are not useful in the published documentation.
-
-When documentation exists in both locations, consolidate it into
-`docs/source/` and replace the README copy with a link. When moving README
-content, preserve any still-valid operational detail in the destination page;
-do not delete unique guidance merely to shorten the README. Package API details
-remain in declarations and co-located docstrings and are rendered into the
-generated Python reference rather than repeated in either narrative location.
+and past decisions. Document state and ownership invariants where the state is
+declared.
 
 Use these canonical references when working in their area:
 
