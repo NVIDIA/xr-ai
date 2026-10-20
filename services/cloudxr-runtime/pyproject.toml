@@ -13,6 +13,7 @@ dependencies = [
     "isaacteleop[cloudxr]>=1.3.131",
     "pyyaml",
     "xr-ai-launcher",
+    "xr-ai-gpu",
     "xr-ai-logging",
 ]
 
@@ -20,6 +21,7 @@ dependencies = [
 cloudxr_runtime = "cloudxr_runtime.__main__:run"
 
 [tool.uv.sources]
+xr-ai-gpu = { path = "../../utils/xr-ai-gpu", editable = true }
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 

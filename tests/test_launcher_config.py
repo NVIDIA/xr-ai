@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for stdlib-only launcher model deployment reads."""
+"""Tests for launcher model deployment reads using standard-library parsing."""
 
 import json
 from pathlib import Path
