@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-embedding_server — vLLM launcher for nvidia/llama-nemotron-embed-1b-v2.
+embedding_server — vLLM launcher for nvidia/Nemotron-3-Embed-1B-BF16.
 
 Reads config and dispatches through ``xr_ai_vllm.serve`` to either the
 pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker container
@@ -24,6 +24,8 @@ Config keys
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.20).
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
+    attention_backend:       str    Optional vLLM --attention-backend; omitted
+                                    by default so vLLM selects the backend.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.09-py3).
@@ -43,7 +45,7 @@ from xr_ai_vllm import (
 )
 from xr_ai_vllm._config import parse_config_bool
 
-_DEFAULT_MODEL       = "nvidia/llama-nemotron-embed-1b-v2"
+_DEFAULT_MODEL       = "nvidia/Nemotron-3-Embed-1B-BF16"
 _DEFAULT_PORT        = 8109
 _DEFAULT_HOST        = "0.0.0.0"
 _DEFAULT_SERVED_NAME = "embed"
@@ -75,6 +77,7 @@ def run() -> None:
     enforce_eager = parse_config_bool(
         cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager"
     )
+    attention_backend = cfg.get("attention_backend")
     backend      = cfg.get("vllm_backend",         "pip")
     image        = cfg.get("vllm_image",           DEFAULT_IMAGE)
     spark_uma    = parse_config_bool(cfg.get("spark_uma", False), "spark_uma")
@@ -92,6 +95,8 @@ def run() -> None:
     ]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
+    if attention_backend is not None:
+        extra_serve_args += ["--attention-backend", attention_backend]
 
     serve(
         backend=backend,

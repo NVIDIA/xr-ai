@@ -5,9 +5,11 @@
 
 import asyncio
 import uuid
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
 from rag_service.index import _chunk_text
@@ -88,6 +90,11 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
     reused = _Embedding()
     await DenseIndex.build(documents, reused, cache_dir=cache, embedding_dim=3)
     assert reused.calls == []
+
+    changed_dimension = _Embedding()
+    await DenseIndex.build(documents, changed_dimension, cache_dir=cache, embedding_dim=2)
+    assert changed_dimension.calls
+    assert len(list(cache.glob("*.npz"))) == 2
 
     document.write_text("Count objects carefully from left to right.")
     changed_document = _Embedding()
@@ -205,3 +212,18 @@ async def test_native_rag_tools_use_typed_contracts(tmp_path) -> None:
 def test_retrieve_request_rejects_blank_query() -> None:
     with pytest.raises(ValidationError, match="query must not be blank"):
         RetrieveRequest(query="  ")
+
+
+async def test_default_dimension_is_native_in_index_and_standalone_yaml(tmp_path) -> None:
+    class NativeEmbedding(_Embedding):
+        async def embed(self, texts, *, timeout=None):
+            return [[0.1] * 2048 for _ in texts]
+
+    config = yaml.safe_load((Path(__file__).resolve().parents[1] /
+                             "services/rag-service/rag_service.yaml").read_text())
+    assert config["embedding_dim"] == 2048
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task.")
+    index = await DenseIndex.build(documents, NativeEmbedding(), cache_dir=tmp_path / "cache")
+    assert index.vectors.shape == (1, 2048)

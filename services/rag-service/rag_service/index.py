@@ -103,7 +103,7 @@ class DenseIndex:
         cache_dir: Path,
         chunk_size: int = 900,
         overlap: int = 120,
-        embedding_dim: int = 768,
+        embedding_dim: int = 2048,
         batch_size: int = 32,
         passage_prefix: str = "passage: ",
         query_prefix: str = "query: ",

@@ -6,7 +6,7 @@
 # embedding-server
 
 OpenAI-compatible vLLM wrapper for
-`nvidia/llama-nemotron-embed-1b-v2` on port 8109.
+`nvidia/Nemotron-3-Embed-1B-BF16` on port 8109.
 
 Run this command from the repository root:
 
