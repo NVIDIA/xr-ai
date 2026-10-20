@@ -99,10 +99,21 @@ active turns. Output already delivered to the callback cannot be retracted.
 destination used by that participant to release its state. A destination may
 provide `participant_left()` for stronger departure cleanup; otherwise its
 `release()` method is used. Failed releases remain tracked for a later retry.
-`stop()` interrupts all active turns and attempts departure cleanup for every
-tracked participant.
-It also clears history-only participants and rejects new turns while shutdown
-runs. A later turn after successful shutdown starts fresh participant state.
+`participant_left()` and `stop()` each own the whole cleanup operation, not only
+the caller's wait. Concurrent callers join the same operation. Canceling a caller
+does not cancel cleanup; the caller's cancellation propagates after cleanup
+finishes. If cleanup also fails, that failure remains the cancellation's cause.
+Failed departure keeps only that participant closed until a successful
+`participant_left()` retry. Other participants can continue.
+
+`stop()` closes global admission, interrupts responses and joins departure
+cleanup for every tracked participant, including history-only participants.
+Failed shutdown keeps admission closed until a successful `stop()` retry. A
+successful shutdown clears participant state and permits a fresh later turn.
+The application owns these calls. Destination and output callbacks, including
+their child tasks, must not await this router's turn or lifecycle operations:
+doing so would wait for their own owned work or create a cleanup wait cycle.
+Such recursive calls raise `RuntimeError`.
 
 ## Optional progress acknowledgment
 

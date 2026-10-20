@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import math
@@ -44,6 +45,9 @@ _ACKNOWLEDGMENT_PREFIX = "Let me think through "
 _ACKNOWLEDGMENT_FALLBACK = "Let me think that through."
 _logger = logging.getLogger(__name__)
 _Emit = Callable[[str, str], Awaitable[None]]
+_active_routers: contextvars.ContextVar[frozenset[object]] = contextvars.ContextVar(
+    "xr_ai_routing_active_routers", default=frozenset(),
+)
 
 
 class AgentRouter:
@@ -109,13 +113,13 @@ class AgentRouter:
         self._acknowledgment_llm = acknowledgment_llm
         self._acknowledgment_delay_secs = acknowledgment_delay_secs
         self._default_destination = default_destination
+        self._owner_identity = object()
         self._focus: dict[str, str] = {}
         self._tasks: dict[str, asyncio.Task[DestinationResult]] = {}
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._departing: set[str] = set()
-        self._departure_calls: dict[str, int] = {}
-        self._stop_calls = 0
+        self._departure_tasks: dict[str, asyncio.Task[None]] = {}
+        self._stop_task: asyncio.Task[None] | None = None
         self._history: dict[str, list[AgentExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
         self._history_exchange_ids: dict[str, list[object | None]] = {}
@@ -140,31 +144,38 @@ class AgentRouter:
         future chunks from the interrupted turn but cannot retract chunks
         already delivered to ``emit``.
 
-        Raises ``RuntimeError`` while ``participant_left()`` is pending or
-        after it fails or is canceled. A successful departure cleanup reopens
-        the participant for later turns.
+        The application drives turns and lifecycle operations. Destination and
+        output callbacks, including their child tasks, must not recursively
+        await this router's operations, which would wait for their own response
+        or cleanup to finish.
+
+        Raises ``RuntimeError`` while departure or shutdown is pending, or
+        after cleanup fails until the caller retries it successfully.
+        Canceling a cleanup waiter does not abandon the owned operation;
+        cancellation propagates after that operation completes.
 
         :param turn: Current request and optional initial completed history.
         :param emit: Callback that receives destination-attributed text chunks.
         :return: The final answer, focus, release, or clarification disposition.
         """
 
+        self._check_lifecycle_caller()
         participant_id = turn.participant_id
-        if self._stop_calls:
+        if self._stop_task is not None:
             raise RuntimeError("router is stopping")
         # Departure owns the participant until destination cleanup finishes.
-        if participant_id in self._departing:
+        if participant_id in self._departure_tasks:
             raise RuntimeError("participant is leaving")
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
-            if self._stop_calls:
+            if self._stop_task is not None:
                 raise RuntimeError("router is stopping")
-            if participant_id in self._departing:
+            if participant_id in self._departure_tasks:
                 raise RuntimeError("participant is leaving")
-            await self.interrupt(participant_id)
-            if self._stop_calls:
+            await self._interrupt_responses(participant_id)
+            if self._stop_task is not None:
                 raise RuntimeError("router is stopping")
-            if participant_id in self._departing:
+            if participant_id in self._departure_tasks:
                 raise RuntimeError("participant is leaving")
             owned_history = self._history.get(participant_id)
             if participant_id not in self._history:
@@ -208,7 +219,7 @@ class AgentRouter:
             task = asyncio.create_task(
                 run_handle(),
                 name=f"conversation-front-end:{participant_id}",
-                context=nemo_relay.fork_asyncio_context(),
+                context=self._owned_context(),
             )
             self._tasks[participant_id] = task
         try:
@@ -234,6 +245,10 @@ class AgentRouter:
         delivered to a callback cannot be retracted.
         """
 
+        self._check_lifecycle_caller()
+        await self._interrupt_responses(participant_id)
+
+    async def _interrupt_responses(self, participant_id: str | None = None) -> None:
         if participant_id is None:
             tasks = tuple(self._tasks.values())
             self._generation.clear()
@@ -260,80 +275,110 @@ class AgentRouter:
         Failed releases remain tracked for a caller-triggered retry and are
         raised together in an ``ExceptionGroup``. Until this method completes
         successfully, ``handle()`` raises ``RuntimeError`` for that participant.
-        Retry after a failure or cancellation; successful cleanup reopens
-        admission for later turns.
+        Concurrent callers join the same owned departure. Canceling a waiter
+        waits for that operation to finish before propagating cancellation.
+        Retry after a cleanup failure; success reopens participant admission.
         """
 
-        # Keep new turns out until all overlapping departure callers finish.
-        self._departure_calls[participant_id] = self._departure_calls.get(participant_id, 0) + 1
-        self._departing.add(participant_id)
-        lock = self._locks.setdefault(participant_id, asyncio.Lock())
-        succeeded = False
-        try:
-            async with lock:
-                await self.interrupt(participant_id)
-                used = set(self._destinations_used.get(participant_id, ()))
-                focused = self._focus.pop(participant_id, None)
-                if focused is not None:
-                    used.add(focused)
-                if used:
-                    self._destinations_used.setdefault(participant_id, set()).update(used)
-                self._history.pop(participant_id, None)
-                self._history_times.pop(participant_id, None)
-                self._history_exchange_ids.pop(participant_id, None)
-                self._first_answer_samples.pop(participant_id, None)
-                errors = []
-                for destination_name in used:
-                    try:
-                        destination = self._destinations[destination_name]
-                        on_departure = getattr(destination, "participant_left", destination.release)
-                        await on_departure(participant_id)
-                    except Exception as error:  # noqa: BLE001
-                        # Failure-only aggregation ensures every used destination is attempted before re-raising.
-                        errors.append(error)
-                    else:
-                        self._forget_destination(participant_id, destination_name)
-                if errors:
-                    raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
-                succeeded = True
-        finally:
-            remaining_calls = self._departure_calls[participant_id] - 1
-            if remaining_calls:
-                self._departure_calls[participant_id] = remaining_calls
-            else:
-                self._departure_calls.pop(participant_id, None)
-                if succeeded:
-                    self._departing.discard(participant_id)
-                    self._locks.pop(participant_id, None)
+        self._check_lifecycle_caller()
+        task = self._departure_operation(participant_id)
+        await _drain_tasks((task,))
+        task.result()
 
     async def stop(self) -> None:
-        """Cancel active work and attempt every owned destination release.
+        """Drain responses and release all participant state in one owned operation.
 
-        Raises an ``ExceptionGroup`` after all participants are attempted.
-        Destinations whose release failed remain tracked for a later retry.
-        New turns are rejected while shutdown runs. Successful shutdown clears
-        participant history, including when no destination was eligible; later
-        turns can begin a fresh lifecycle.
+        Concurrent callers join the same shutdown. Canceling a waiter does not
+        cancel shutdown: cancellation propagates only after cleanup completes.
+        Release failures are raised together in an ``ExceptionGroup`` after
+        every participant is attempted; admission stays closed until a later
+        ``stop()`` retries successfully. Successful shutdown clears history-only
+        participants too, and permits later turns to begin a fresh lifecycle.
         """
 
-        self._stop_calls += 1
-        try:
-            await self.interrupt()
-            participants = (
-                self._destinations_used.keys() | self._focus.keys() | self._history.keys()
-                | self._locks.keys() | self._departing | self._first_answer_samples.keys()
+        self._check_lifecycle_caller()
+        task = self._stop_task
+        if task is None or task.done():
+            task = asyncio.create_task(
+                self._run_stop(),
+                name="routing-stop",
+                context=self._owned_context(),
             )
+            self._stop_task = task
+        await _drain_tasks((task,))
+        task.result()
+
+    def _check_lifecycle_caller(self) -> None:
+        if self._owner_identity in _active_routers.get():
+            raise RuntimeError("router-owned work cannot await lifecycle operations; the application owns cleanup")
+
+    def _owned_context(self) -> contextvars.Context:
+        """Carry router authority into callbacks and children without mutating the caller's context."""
+
+        context = nemo_relay.fork_asyncio_context()
+        context.run(_active_routers.set, _active_routers.get() | {self._owner_identity})
+        return context
+
+    def _departure_operation(self, participant_id: str) -> asyncio.Task[None]:
+        task = self._departure_tasks.get(participant_id)
+        if task is None or task.done():
+            task = asyncio.create_task(
+                self._run_departure(participant_id),
+                name=f"routing-departure:{participant_id}",
+                context=self._owned_context(),
+            )
+            # Publishing the operation closes admission before its first await.
+            self._departure_tasks[participant_id] = task
+        return task
+
+    async def _run_departure(self, participant_id: str) -> None:
+        lock = self._locks.setdefault(participant_id, asyncio.Lock())
+        async with lock:
+            await self._interrupt_responses(participant_id)
+            used = set(self._destinations_used.get(participant_id, ()))
+            focused = self._focus.pop(participant_id, None)
+            if focused is not None:
+                used.add(focused)
+            if used:
+                self._destinations_used.setdefault(participant_id, set()).update(used)
+            self._history.pop(participant_id, None)
+            self._history_times.pop(participant_id, None)
+            self._history_exchange_ids.pop(participant_id, None)
+            self._first_answer_samples.pop(participant_id, None)
             errors = []
-            for participant_id in tuple(participants):
+            for destination_name in used:
                 try:
-                    await self.participant_left(participant_id)
+                    destination = self._destinations[destination_name]
+                    on_departure = getattr(destination, "participant_left", destination.release)
+                    await on_departure(participant_id)
                 except Exception as error:  # noqa: BLE001
-                    # Failure-only aggregation attempts every participant before re-raising.
+                    # Failure-only aggregation attempts every destination before re-raising.
                     errors.append(error)
+                else:
+                    self._forget_destination(participant_id, destination_name)
             if errors:
-                raise ExceptionGroup("failed to release conversation destinations", errors)
-        finally:
-            self._stop_calls -= 1
+                raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+            self._departure_tasks.pop(participant_id)
+            self._locks.pop(participant_id, None)
+
+    async def _run_stop(self) -> None:
+        await self._interrupt_responses()
+        participants = (
+            self._destinations_used.keys() | self._focus.keys() | self._history.keys()
+            | self._locks.keys() | self._departure_tasks.keys() | self._first_answer_samples.keys()
+        )
+        errors = []
+        for participant_id in tuple(participants):
+            try:
+                task = self._departure_operation(participant_id)
+                await _drain_tasks((task,))
+                task.result()
+            except Exception as error:  # noqa: BLE001
+                # Failure-only aggregation attempts every participant before re-raising.
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("failed to release conversation destinations", errors)
+        self._stop_task = None
 
     async def _handle(self, turn: AgentTurn, *, emit: _Emit, generation: object) -> DestinationResult:
         # Route selection, admission, and answer commit are separate phases.
@@ -922,6 +967,13 @@ async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:
         except asyncio.CancelledError:
             cancelled = True
     if cancelled:
+        failure = next(
+            (item for item in drain.result() if isinstance(item, BaseException)
+             and not isinstance(item, asyncio.CancelledError)),
+            None,
+        )
+        if failure is not None:
+            raise asyncio.CancelledError from failure
         raise asyncio.CancelledError
 
 

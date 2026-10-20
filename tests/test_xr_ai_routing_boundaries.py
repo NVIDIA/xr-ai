@@ -6,7 +6,7 @@
 import asyncio
 
 import pytest
-from xr_ai_models import DecisionAnswer, DecisionResponse
+from xr_ai_models import ChatResponse, DecisionAnswer, DecisionResponse
 from xr_ai_routing import Admission, AgentExchange, AgentRouter, AgentTurn, DestinationResult, RoutingAid
 
 
@@ -326,3 +326,209 @@ async def test_closed_admission_is_rechecked_after_replacement_drains_old_respon
     assert isinstance(outcomes[1], RuntimeError)
     assert destination.answers == []
     assert not router._tasks
+
+
+@pytest.mark.parametrize("operation", ["departure", "stop"])
+async def test_canceled_cleanup_waiter_owns_the_complete_transition(operation):
+    entered = asyncio.Event()
+    response_cleaning = asyncio.Event()
+    finish_response = asyncio.Event()
+    destination_cleaning = asyncio.Event()
+    finish_destination = asyncio.Event()
+
+    class Destination(_Destination):
+        async def answer(self, turn, *, emit):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                response_cleaning.set()
+                await finish_response.wait()
+
+        async def release(self, participant):
+            destination_cleaning.set()
+            await finish_destination.wait()
+            await super().release(participant)
+
+    destination = Destination()
+    router = AgentRouter({"conversation": destination}, None)
+    response = asyncio.create_task(router.handle(AgentTurn("alice", "old", "old"), emit=_emit))
+    await entered.wait()
+    cleanup = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
+    await response_cleaning.wait()
+    try:
+        cleanup.cancel()
+        await _schedule_checkpoint()
+        cleanup.cancel()
+        await _schedule_checkpoint()
+        finish_response.set()
+        await asyncio.wait_for(destination_cleaning.wait(), timeout=1)
+        assert not cleanup.done()
+        with pytest.raises(RuntimeError):
+            await router.handle(AgentTurn("alice", "new", "new"), emit=_emit)
+    finally:
+        finish_response.set()
+        finish_destination.set()
+        outcomes = await asyncio.gather(response, cleanup, return_exceptions=True)
+    assert isinstance(outcomes[1], asyncio.CancelledError)
+    assert destination.releases == ["alice"]
+    assert not router._history
+    assert not router._tasks
+    assert not router._locks
+
+
+@pytest.mark.parametrize("operation", ["departure", "stop"])
+async def test_concurrent_cleanup_waiters_join_one_destination_release(operation):
+    cleaning = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Destination(_Destination):
+        async def release(self, participant):
+            self.releases.append(participant)
+            cleaning.set()
+            await finish.wait()
+
+    destination = Destination()
+    router = AgentRouter({"conversation": destination}, None)
+    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
+    first = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
+    await cleaning.wait()
+    second = asyncio.create_task(router.stop() if operation == "stop" else router.participant_left("alice"))
+    try:
+        await _schedule_checkpoint()
+        first.cancel()
+        await _schedule_checkpoint()
+        assert not first.done() and not second.done()
+    finally:
+        finish.set()
+        outcomes = await asyncio.gather(first, second, return_exceptions=True)
+    assert isinstance(outcomes[0], asyncio.CancelledError)
+    assert outcomes[1] is None
+    assert destination.releases == ["alice"]
+
+
+@pytest.mark.parametrize("operation", ["departure", "stop"])
+async def test_failed_cleanup_retains_admission_and_retries_only_owned_failures(operation):
+    class Destination(_Destination):
+        fail = True
+
+        async def release(self, participant):
+            self.releases.append(participant)
+            if participant == "alice" and self.fail:
+                raise RuntimeError("cleanup failed")
+
+    destination = Destination()
+    router = AgentRouter({"conversation": destination}, None)
+    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
+    await router.handle(AgentTurn("bob", "old", "old"), emit=_emit)
+    with pytest.raises(ExceptionGroup, match="failed to release"):
+        await (router.stop() if operation == "stop" else router.participant_left("alice"))
+    with pytest.raises(RuntimeError):
+        await router.handle(AgentTurn("alice", "blocked", "blocked"), emit=_emit)
+    if operation == "departure":
+        assert (await router.handle(AgentTurn("bob", "new", "new"), emit=_emit)).disposition == "answer"
+    else:
+        with pytest.raises(RuntimeError, match="router is stopping"):
+            await router.handle(AgentTurn("bob", "blocked", "blocked"), emit=_emit)
+    destination.fail = False
+    await (router.stop() if operation == "stop" else router.participant_left("alice"))
+    assert destination.releases.count("alice") == 2
+    if operation == "stop":
+        assert destination.releases.count("bob") == 1
+    assert (await router.handle(AgentTurn("alice", "reopened", "reopened"), emit=_emit)).disposition == "answer"
+
+
+async def test_canceled_shutdown_preserves_a_cleanup_failure_as_its_cause():
+    cleaning = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Destination(_Destination):
+        async def release(self, participant):
+            cleaning.set()
+            await finish.wait()
+            raise RuntimeError("cleanup failed")
+
+    router = AgentRouter({"conversation": Destination()}, None)
+    await router.handle(AgentTurn("alice", "old", "old"), emit=_emit)
+    shutdown = asyncio.create_task(router.stop())
+    await cleaning.wait()
+    shutdown.cancel()
+    await _schedule_checkpoint()
+    finish.set()
+    with pytest.raises(asyncio.CancelledError) as cancellation:
+        await shutdown
+    assert isinstance(cancellation.value.__cause__, ExceptionGroup)
+    with pytest.raises(RuntimeError, match="router is stopping"):
+        await router.handle(AgentTurn("alice", "blocked", "blocked"), emit=_emit)
+
+
+@pytest.mark.parametrize("operation", ["interrupt", "departure", "stop", "handle"])
+@pytest.mark.parametrize("target", ["alice", "bob"])
+async def test_destination_cannot_deadlock_by_awaiting_router_operations(operation, target):
+    class Destination(_Destination):
+        async def answer(self, turn, *, emit):
+            if operation == "interrupt":
+                await router.interrupt(target)
+            elif operation == "departure":
+                await router.participant_left(target)
+            elif operation == "stop":
+                await router.stop()
+            else:
+                await router.handle(AgentTurn(target, "nested", "nested"), emit=emit)
+
+    router = AgentRouter({"conversation": Destination()}, None)
+    with pytest.raises(RuntimeError, match="cannot await"):
+        await asyncio.wait_for(router.handle(AgentTurn("alice", "turn", "query"), emit=_emit), timeout=1)
+
+
+@pytest.mark.parametrize("child_callback", [False, True])
+async def test_acknowledgment_callback_inherits_router_ownership(child_callback, caplog):
+    finish_answer = asyncio.Event()
+    callback_done = asyncio.Event()
+
+    class Destination(_Destination):
+        async def answer(self, turn, *, emit):
+            await finish_answer.wait()
+            return await super().answer(turn, emit=emit)
+
+    class Decisions:
+        async def decide(self, _state, _questions):
+            return DecisionResponse(
+                {"first_answer_timing": DecisionAnswer(
+                    "slow", 1.0, {"slow": 1.0, "within_delay": 0.0, "uncertain": 0.0},
+                )},
+                "fake", {}, {},
+            )
+
+    class Acknowledgment:
+        async def chat(self, _messages, **_kwargs):
+            return ChatResponse("Let me think through your question.", None, None, "stop", {})
+
+    async def emit(_source, text):
+        if text.startswith("Let me think"):
+            try:
+                if child_callback:
+                    await asyncio.create_task(router.stop())
+                else:
+                    await router.stop()
+            finally:
+                callback_done.set()
+
+    destination = Destination()
+    router = AgentRouter(
+        {"conversation": destination}, Decisions(),
+        acknowledgment_llm=Acknowledgment(), acknowledgment_delay_secs=10,
+    )
+    response = asyncio.create_task(router.handle(AgentTurn("alice", "turn", "query"), emit=emit))
+    try:
+        await asyncio.wait_for(callback_done.wait(), timeout=1)
+    finally:
+        finish_answer.set()
+    assert (await asyncio.wait_for(response, timeout=1)).disposition == "answer"
+    failures = [record for record in caplog.records if "optional acknowledgment task failed" in record.message]
+    assert len(failures) == 1
+    assert isinstance(failures[0].exc_info[1], RuntimeError)
+    assert "router-owned work cannot await" in str(failures[0].exc_info[1])
+    assert destination.releases == []
+    await router.stop()
+    assert destination.releases == ["alice"]
