@@ -29,6 +29,7 @@ recorded video, and document retrieval.
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
+| `services/ocr-server/` | `ocr_server` | 8112 | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
@@ -38,6 +39,78 @@ NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
+
+(ocr-serving)=
+
+## OCR serving
+
+The local `model-servers` sample provides multilingual Nemotron OCR v2 on
+port `8112`. The launcher builds an isolated Python 3.12, PyTorch 2.9.1,
+CUDA 13 container, downloads NVIDIA's pinned Hugging Face source and
+`v2_multilingual` weights, and keeps the model loaded across requests.
+Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
+are required; a host CUDA toolkit is not. The first build takes several minutes.
+Refer to the
+[upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
+
+For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
+consumer profile. The operator selects the multilingual variant and owns GPU
+placement, model downloads, caches, and container lifecycle. XR AI does not
+start an OCR NIM container or require a local HTTP proxy. Refer to
+{doc}`/guides/deploying-with-nim` for the endpoint example and validation.
+
+Both backends expose `POST /v1/ocr` and readiness at
+`GET /v1/health/ready`. Use the `nemotron_ocr` preset and typed SDK factory:
+
+```python
+from pathlib import Path
+from xr_ai_models import load_models_config, make_ocr
+
+config = load_models_config("yaml/models.json")
+async with make_ocr(config, "ocr") as ocr:
+    spans = await ocr.read_text(Path("image.png"))
+    for span in spans:
+        print(span.text, span.confidence, span.polygon)
+```
+
+Applications reuse the endpoint; an OCR tool does not load its own GPU model.
+The client sends one inline PNG or JPEG and returns text, confidence, and
+normalized polygons. Remote image URLs are intentionally unsupported.
+Word, sentence, and paragraph grouping are available; recognition results
+need not be identical across backends.
+
+The Hugging Face server accepts one image per request, at most 10 MiB encoded
+image bytes and 20 million pixels after full-resolution square padding:
+`max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
+This check runs before RGB conversion or inference because upstream pads the
+image on CUDA before resizing; lowering `infer_length` does not reduce that
+allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
+this is not a bound on total inference memory. Oversized inputs receive HTTP
+413; callers must downsample or tile them first.
+The server serializes inference and rejects overlapping requests with HTTP 503.
+Its detector length is configured server-wide in `ocr_server.yaml` (640 or
+1024). NIM request limits and engine settings belong to the deployed version,
+not this local server configuration. Neither integration adds experimental
+text-dense cropping or sharpening; preprocessing remains caller-owned.
+
+The local stack loads OCR last, after embeddings, on GPU 0 for all three
+profiles. Existing model allocations are unchanged. The profiles are not a
+complete-stack hardware qualification: test concurrent GPU memory use and
+application latency on the target machine. Externally deployed NIMs have no
+repository-prescribed GPU layout.
+
+Local weights and the torchvision backbone are cached beneath the OCR YAML's
+`model_cache`; the compiled CUDA extension stays in the Docker image.
+Changes to the local YAML or service source invalidate container reuse as
+needed. Stop and restart the local server through the sample's normal
+lifecycle. Closing a client never stops an externally deployed NIM.
+
+To test transcription against a running endpoint, run from the repository root:
+
+```bash
+XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project tests \
+  pytest tests/test_ocr_server.py -m gpu
+```
 
 ## Speaker-conditioned STT
 
