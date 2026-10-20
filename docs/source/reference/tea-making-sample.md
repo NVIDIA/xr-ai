@@ -225,6 +225,11 @@ the worker and RAG service but not the persistent servers. Refer to
 {doc}`/guides/customizing-model-servers` for a server-side model, GPU, port, or
 memory change, then restart the sample's model stack.
 
+The local embedding server uses `nvidia/Nemotron-3-Embed-1B-BF16`, served as
+`embed` on port 8109. RAG retains its native 2048-dimensional vectors. The
+external NIM profile uses `nvidia/nemotron-3-embed-1b` with the same dimension;
+refer to {doc}`/guides/deploying-with-nim` for endpoint configuration.
+
 Refer to the generated {doc}`configuration <configuration>` reference for exact
 fields, checked-in values, and adjacent YAML comments.
 

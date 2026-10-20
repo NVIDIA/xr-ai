@@ -36,7 +36,7 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
             cache_dir=_resolve(str(config.get("cache_dir", ".rag-cache")), config_path),
             chunk_size=int(config.get("chunk_size", 900)),
             overlap=int(config.get("overlap", 120)),
-            embedding_dim=int(config.get("embedding_dim", 768)),
+            embedding_dim=int(config.get("embedding_dim", 2048)),
             batch_size=int(config.get("batch_size", 32)),
             passage_prefix=str(config.get("passage_prefix", "passage: ")),
             query_prefix=str(config.get("query_prefix", "query: ")),

@@ -17,6 +17,42 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Nemotron 3 embedding model
+
+The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
+consumer profile selects `nvidia/nemotron-3-embed-1b`. Both the tea sample and
+standalone RAG now default to 2048 dimensions. The local endpoint remains on
+port 8109 with the served name `embed`.
+
+1. Stop the agent and its persistent embedding server **before updating**.
+   For the tea sample, run from the repository root:
+
+   ```bash
+   uv run --project agent-samples/tea-making-sample/model-servers tea_making_sample_model_servers --stop
+   ```
+
+   For a standalone deployment, stop the embedding process or container through
+   the supervisor that started it. Check that its listener on port 8109 has
+   stopped. Stopping only RAG or the embedding launcher does not stop persistent
+   weights; the pip launcher reuses a healthy listener without comparing models.
+2. Update the checkout and change `embedding_dim: 768` to `embedding_dim: 2048`
+   in copied tea **and standalone** `rag_service.yaml` files. Restart the
+   embedding server before RAG. Verify the `embed` entry's `root` in
+   `/v1/models` identifies Nemotron 3 Embed, not the previous model.
+3. Restart the agent. Changing the default dimension from 768 to 2048 changes
+   the existing cache digest, so RAG rebuilds the index automatically. If a
+   copied configuration already used
+   2048 dimensions, set a new `cache_key` or delete its generated cache before
+   restarting RAG; a local served alias such as `embed` does not identify weights.
+
+Old 768-dimensional `.npz` caches are no longer used by the default
+configuration and can be deleted to reclaim space without losing documents.
+
+Independently deployed NIM endpoints must serve the new model before using the
+updated NIM profile. For later model changes behind an unchanged profile, set
+an explicit model revision in `cache_key` and restart RAG. Do not change models
+while RAG is running; its document vectors must match query embeddings.
+
 ### Shared accepted-query display
 
 Every `VoiceAgent` now returns accepted query text to its originating participant
