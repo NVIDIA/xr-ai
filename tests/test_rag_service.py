@@ -91,6 +91,11 @@ async def test_cache_reuse_and_invalidation(tmp_path) -> None:
     await DenseIndex.build(documents, reused, cache_dir=cache, embedding_dim=3)
     assert reused.calls == []
 
+    changed_dimension = _Embedding()
+    await DenseIndex.build(documents, changed_dimension, cache_dir=cache, embedding_dim=2)
+    assert changed_dimension.calls
+    assert len(list(cache.glob("*.npz"))) == 2
+
     document.write_text("Count objects carefully from left to right.")
     changed_document = _Embedding()
     await DenseIndex.build(
@@ -222,4 +227,3 @@ async def test_default_dimension_is_native_in_index_and_standalone_yaml(tmp_path
     (documents / "guide.md").write_text("Reset the task.")
     index = await DenseIndex.build(documents, NativeEmbedding(), cache_dir=tmp_path / "cache")
     assert index.vectors.shape == (1, 2048)
-

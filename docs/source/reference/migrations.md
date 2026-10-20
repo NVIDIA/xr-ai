@@ -41,9 +41,15 @@ port 8109 with the served name `embed`.
    `/v1/models` identifies Nemotron 3 Embed, not the previous model.
 3. Restart the agent. Changing the default dimension from 768 to 2048 changes
    the existing cache digest, so RAG rebuilds the index automatically. If a
-   copied configuration already used
-   2048 dimensions, set a new `cache_key` or delete its generated cache before
+   copied configuration already used 2048 dimensions, set a new `cache_key` or
+   delete its generated cache before
    restarting RAG; a local served alias such as `embed` does not identify weights.
+   If RAG started while the previous pip server was still listening, stop RAG,
+   verify the new model is serving, and delete the generated cache
+   (`models/tea-making-rag-cache` for tea, or the configured `.rag-cache` for
+   standalone RAG) or set a new `cache_key` before restarting RAG. Otherwise,
+   old-model vectors saved at 2048 dimensions remain reusable after the server
+   switches models. The Docker launcher recreates its container on model changes.
 
 Old 768-dimensional `.npz` caches are no longer used by the default
 configuration and can be deleted to reclaim space without losing documents.
