@@ -83,6 +83,28 @@ def run() -> None:
 - `run_stack` is fail-fast while monitoring: if any spawned process exits, the
   rest are terminated.
 
+(consumer-model-readiness)=
+## Consumer model readiness
+
+Worker readiness reports local initialization, not general model availability.
+Batch STT, TTS, LLM, and VLM health are not polled automatically. Start the
+sample's model-server stack and wait for its launcher to return before starting
+the sample, or provision and validate external endpoints first. Server wrappers
+perform their own startup and reuse checks.
+
+`VoiceAgent` waits for explicitly supplied `probes`. It also selects the
+configured speaker ASR backend; `speaker.backend: required` waits for that
+service before worker readiness. Endpoint `readiness` and `health_path` settings
+control explicit `health()` calls and do not enable automatic worker polling.
+Applications that need batch STT and TTS health checks can pass
+`probes={"stt": stt.health, "tts": tts.health}` to `VoiceAgent`.
+
+{doc}`Simple VLM </reference/simple-vlm-example>` performs a streaming image
+warmup, and {doc}`XR Render </reference/xr-render-demo>` performs an LLM warmup,
+including for hosted LLMs. Tea making checks its RAG capability and
+{ref}`embedding health <rag-embedding-health>`. These application-specific
+checks can delay readiness independently of the voice runtime.
+
 ## Serial and parallel items
 
 The stack is declared as a sequence of `Process` or `Parallel` items:

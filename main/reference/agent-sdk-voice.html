@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -497,8 +501,8 @@ typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
 <p>For the startup probe contract, refer to <a class="reference internal" href="python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.
-For deployment order and migration of existing applications, refer to
-<a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
+For deployment order and model availability requirements, refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 <p>Each non-empty final STT result during an active conversation is queued for
 publication on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before optional wake-phrase filtering.
 In conversation mode, control phrases and speech while closed are withheld.
@@ -755,8 +759,7 @@ silently switches to batch after reset.</p>
 <p>The speaker service and client use protocol <strong>5</strong> for diagnostics configuration
 and explicit attributed one-turn authorization. Update/restart both together;
 earlier peers are rejected rather than silently changing transcript display or
-authorization. Refer to
-<a class="reference internal" href="migrations.html"><span class="doc">Release migration</span></a> for configuration migration.</p>
+authorization.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>

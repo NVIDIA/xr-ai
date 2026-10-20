@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -513,6 +517,19 @@ length, and maximum request-body size. The checked-in values use <code class="do
 BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
 limit receive HTTP 422; increase <code class="docutils literal notranslate"><span class="pre">max_length</span></code> only when GPU memory allows it.</p>
 </section>
+<section id="updating-a-running-service">
+<span id="clef-service-updates"></span><h2>Updating a running service<a class="headerlink" href="#updating-a-running-service" title="Link to this heading">#</a></h2>
+<p>Before updating the checkout or changing server configuration, stop the service
+from the old checkout in <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">UV_CONFIG_FILE</span><span class="o">=</span>../../uv.toml
+uv<span class="w"> </span>run<span class="w"> </span>clef_flash_model<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Update the checkout or configuration, then start the service with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">clef_flash_model</span></code>. Model and configuration identity do not identify the
+running application code version. Restarting ensures that requests reach the
+updated implementation, including support for image decisions.</p>
+</section>
 <section id="http-contract">
 <h2>HTTP contract<a class="headerlink" href="#http-contract" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/systemone</span></code> accepts the SystemOne request fields <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">state</span></code>,
@@ -550,9 +567,8 @@ an existing configured <code class="docutils literal notranslate"><span class="p
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Before updating a running text-only service, stop it using the old checkout,
-then start the updated service before sending images. Refer to
-<a class="reference internal" href="migrations.html#clef-image-input-migration"><span class="std std-ref">Clef image decision inputs</span></a> for the upgrade procedure.</p>
+<p>Before sending images to a service started by an older checkout, follow
+<a class="reference internal" href="#clef-service-updates"><span class="std std-ref">Updating a running service</span></a>.</p>
 <p>The client embeds local inputs into data URLs and rejects remote URLs. It omits
 <code class="docutils literal notranslate"><span class="pre">images</span></code> for text-only calls, preserving compatibility with older servers. Image
 requests require an upgraded endpoint; errors are surfaced without a text-only
@@ -632,6 +648,7 @@ processing and does not itself guarantee better decisions.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launching">Launching</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#updating-a-running-service">Updating a running service</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#http-contract">HTTP contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-decisions">Image decisions</a></li>
 </ul>
