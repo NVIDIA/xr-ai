@@ -53,6 +53,33 @@ bash tests/run_local_gpu_tests.sh
 
 Pass extra pytest arguments after the script name to select a file or test.
 
+Run GPU tests serially, without pytest-xdist (`-n`). Each invocation generates
+a fresh session ID and exports `XR_AI_TEST_SESSION` only while a GPU test runs.
+`xr_ai_vllm` labels newly created containers `xr-ai-test-session=<id>` without
+changing their launch fingerprint. Before and after each GPU test, the fixture
+removes only containers with that exact session label, using immutable IDs.
+Test-mode launcher operations also check ownership before reusing, restarting,
+stopping, or removing a container. Ordinary sample launches are unchanged.
+
+If Docker ownership inventory fails or times out, the test is skipped rather
+than assuming the host is empty. Any foreign `xr-ai-vllm-*` or `xr-ai-nim-*`
+container, running or stopped, causes **all** GPU tests to skip, including
+NVENC and LiveKit tests that launch no model server. This conservative guard
+avoids GPU contention and accidental reuse or replacement of stopped servers.
+
+Fixture teardown handles test and fixture failures, but cannot run after
+pytest is forcibly killed. A later session does not adopt the dead session's
+label or automatically reclaim its containers. To recover, inspect
+`docker ps -a --filter label=xr-ai-test-session` and confirm the owner of each
+leftover container is no longer running. Remove only that confirmed container
+with `docker rm -f <container-id>`, then rerun the tests. Never purge by label
+presence alone: another worktree may still be using a different session.
+
+The two Docker cleanup integration tests are marked `gpu` and additionally
+require a local `busybox` image. They use uniquely named, labelled throwaway
+containers; CPU runs do not contact Docker during their collection. The nightly
+workflow retains its separate dedicated-runner cleanup policy.
+
 ## Apple microphone transaction tests
 
 With Xcode 26.3 or newer selected, run the real StreamKit package tests on an

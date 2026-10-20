@@ -24,14 +24,16 @@ Fixtures
 from __future__ import annotations
 
 import asyncio
-import os
-import subprocess
 import tempfile
 import uuid
 from typing import AsyncIterator, Callable
 
 import pytest
 
+from _helpers_docker_cleanup import (
+    scoped_gpu_test_containers,
+)
+from xr_ai_vllm._docker import TEST_SESSION_ENV
 from xr_ai_hub          import ProcessorEndpoint
 from device_io_hub.ipc     import ConnectorEndpoint, HubEndpoint
 
@@ -45,56 +47,38 @@ def pytest_configure(config):
 
 # ── between-test container cleanup ──────────────────────────────────────────
 
+# A nested pytest invocation must not inherit its parent's ownership.
+_TEST_SESSION_ID = uuid.uuid4().hex
 
-def _purge_xr_ai_vllm_containers() -> None:
-    """Force-remove every container named `xr-ai-vllm-*` or `xr-ai-nim-*`.
 
-    Best-effort: silently no-ops when docker is missing or not running, so
-    non-GPU developer boxes don't break. Failures inside docker (hung
-    daemon, container in weird state) print but never raise — the goal
-    is hygiene, not assertion.
-    """
-    ids: list[str] = []
-    for name_filter in ("name=^xr-ai-vllm-", "name=^xr-ai-nim-"):
-        try:
-            ps = subprocess.run(
-                ["docker", "ps", "-aq", "--filter", name_filter],
-                capture_output=True, text=True, timeout=10,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return
-        ids += ps.stdout.split()
-    if not ids:
-        return
-    try:
-        subprocess.run(
-            ["docker", "rm", "-f", *ids],
-            timeout=20, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired:
-        pass
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    if (
+        config.getoption("numprocesses", default=0)
+        or hasattr(config, "workerinput")
+    ) and any(item.get_closest_marker("gpu") is not None for item in items):
+        raise pytest.UsageError("GPU tests require serial execution; do not use pytest -n")
 
 
 @pytest.fixture(autouse=True)
-def _purge_xr_ai_vllm_between_gpu_tests(request):
-    """Belt-and-suspenders for `gpu` tests: scrub xr-ai-vllm containers
-    around each one so a flaky test's leftover container can't OOM the
-    next test on the same persistent GPU runner.
+def _scoped_container_cleanup_for_gpu_tests(request, monkeypatch):
+    """For `gpu` tests: remove only containers *this session* launched, before
+    and after each test, so a flaky test's leftover container can't OOM the
+    next one on a persistent GPU runner.
 
-    Test-level `finally` blocks already call `stop_persistent_servers`,
-    but they don't run if pytest itself is killed or a fixture errors
-    out — this fixture closes that gap. No-op for non-GPU tests so the
-    laptop-friendly IPC suite doesn't pay the docker round-trip.
+    Test-level `finally` blocks already call `stop_persistent_servers`. This
+    fixture also handles test and fixture failures, but cannot run after SIGKILL.
+    A later session leaves those leaked containers alone and skips until an
+    operator removes them. All GPU tests skip for foreign running or stopped
+    model containers, even GPU tests that do not launch a server. No-op for
+    non-GPU tests.
     """
     if request.node.get_closest_marker("gpu") is None:
         yield
         return
-    _purge_xr_ai_vllm_containers()
-    try:
+    monkeypatch.setenv(TEST_SESSION_ENV, _TEST_SESSION_ID)
+    with scoped_gpu_test_containers(_TEST_SESSION_ID):
         yield
-    finally:
-        _purge_xr_ai_vllm_containers()
 
 
 # ── address fixtures ────────────────────────────────────────────────────────

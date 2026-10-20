@@ -38,6 +38,11 @@ log = logging.getLogger(__name__)
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[tuple[Path, str]] = set()
 _CONFIG_LABEL = "xr-ai-vllm.config"
+# When this env var is set, containers this module creates also carry
+# ``xr-ai-test-session=<value>`` so a test harness can find and remove exactly
+# the containers it launched — never ones a live launcher owns.
+TEST_SESSION_ENV = "XR_AI_TEST_SESSION"
+TEST_SESSION_LABEL = "xr-ai-test-session"
 _LAUNCH_CONTRACT_VERSION = 4
 _HF_DOWNLOAD_ENV_KEYS = (
     "HF_XET_HIGH_PERFORMANCE",
@@ -135,6 +140,11 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
+    # Deliberately outside the launch fingerprint: it identifies who created
+    # the container, not how it is configured, so it must not force replacement.
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session:
+        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
     payload: dict[str, Any] = {
         "image": image,
         "port": port,
@@ -288,11 +298,22 @@ def _docker_available() -> bool:
     return False
 
 
+_CONTAINER_ID_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _identity_filter(name: str) -> str:
+    """``docker ps`` filter for *name*; an exact ID under GPU tests."""
+    if os.environ.get(TEST_SESSION_ENV) and _CONTAINER_ID_RE.fullmatch(name):
+        return f"id={name}"
+    return f"name=^{re.escape(name)}$"
+
+
 def container_exists(name: str) -> bool:
     """True if a container named *name* is currently listed by docker (any state)."""
     try:
+        identity_filter = _identity_filter(name)
         out = subprocess.check_output(
-            ["docker", "ps", "-aq", "-f", f"name=^{re.escape(name)}$"],
+            ["docker", "ps", "-aq", "-f", identity_filter],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -304,8 +325,9 @@ def container_exists(name: str) -> bool:
 def container_running(name: str) -> bool:
     """True if container *name* is in the running state."""
     try:
+        identity_filter = _identity_filter(name)
         out = subprocess.check_output(
-            ["docker", "ps", "-q", "-f", f"name=^{re.escape(name)}$"],
+            ["docker", "ps", "-q", "-f", identity_filter],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -344,6 +366,27 @@ def container_started_at(name: str) -> str | None:
     return raw if raw and not raw.startswith("0001-01-01") else None
 
 
+def _test_container_target(name: str) -> str | None:
+    """Under GPU tests, bind a mutation to an owned immutable container ID."""
+    session = os.environ.get(TEST_SESSION_ENV)
+    if not session:
+        return name
+    try:
+        raw = subprocess.check_output(
+            ["docker", "inspect", "--format",
+             '{{.Id}}\t{{index .Config.Labels "' + TEST_SESSION_LABEL + '"}}', name],
+            text=True, stderr=subprocess.PIPE, timeout=10,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        log.error("cannot verify test ownership of container %s; leaving it alone", name)
+        return None
+    container_id, _, owner = raw.partition("\t")
+    if not _CONTAINER_ID_RE.fullmatch(container_id) or owner != session:
+        log.error("container %s is not owned by this test session; leaving it alone", name)
+        return None
+    return container_id
+
+
 def remove_container(name: str) -> bool:
     """``docker rm`` *name* if it exists; return True if the container was removed.
 
@@ -354,9 +397,12 @@ def remove_container(name: str) -> bool:
     """
     if not container_exists(name):
         return False
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "rm", name],
+            ["docker", "rm", target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -396,9 +442,12 @@ def _requested_fingerprint(argv: list[str]) -> str | None:
 
 def start_container(name: str) -> bool:
     """Start one stopped container without attaching its output."""
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "start", name],
+            ["docker", "start", target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -457,9 +506,12 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
     """Stop container *name* if it exists; return True if a container was stopped."""
     if not container_exists(name):
         return False
+    target = _test_container_target(name)
+    if target is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "stop", "-t", str(timeout_s), name],
+            ["docker", "stop", "-t", str(timeout_s), target],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -474,7 +526,7 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
         )
         try:
             subprocess.run(
-                ["docker", "kill", name],
+                ["docker", "kill", target],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -618,9 +670,12 @@ class _LogStreamer:
     i.e. until :meth:`stop`.
     """
 
-    def __init__(self, container_name: str, *, since: str | None = None) -> None:
+    def __init__(
+        self, container_name: str, *, since: str | None = None,
+        log_name: str | None = None,
+    ) -> None:
         self._name    = container_name
-        self.log_path = _container_log_path(container_name)
+        self.log_path = _container_log_path(log_name or container_name)
         self._stop_evt  = threading.Event()
         self._proc: subprocess.Popen | None = None
         self._announced = False
@@ -826,6 +881,10 @@ def run_container(
     """
     if not _docker_available():
         sys.exit(2)
+    requested_container_name = container_name
+    # Mutations target ``container_ref`` (an owned immutable ID under GPU tests);
+    # ``container_name`` stays the requested name for logs and messages.
+    container_ref = container_name
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
     # no_kill=set() and SIGTERMs every wrapper's process group. Without a
@@ -865,9 +924,9 @@ def run_container(
         # (20s) window before it escalates to SIGKILL. Both helpers work by
         # name and are idempotent regardless of container health.
         if cleanup_mode in {"remove", "stop"}:
-            stop_container(container_name, timeout_s=10)
+            stop_container(container_ref, timeout_s=10)
         if cleanup_mode == "remove":
-            remove_container(container_name)
+            remove_container(container_ref)
         sp = _state["streamer"]
         if isinstance(sp, _LogStreamer):
             sp.stop()
@@ -881,6 +940,12 @@ def run_container(
     # versa). Evict it by label before any reuse probe: a foreign server can
     # answer the health probe and be silently mistaken for ours.
     holder, checked = container_on_port_checked(port)
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session and (
+        not checked or (holder and _test_container_target(holder) is None)
+    ):
+        log.error("cannot establish test ownership of port %d; refusing launch", port)
+        sys.exit(1)
     if checked and holder and holder != container_name:
         print(
             f"[{log_prefix}] port {port} is held by container {holder}; "
@@ -893,7 +958,7 @@ def run_container(
             # identity via the health probe.
             log.error("could not evict container %s from port %d", holder, port)
             sys.exit(1)
-    if checked and not holder:
+    if checked and not holder and not test_session:
         # The same profile switch can leave a pip-mode server on this port;
         # it too can answer the health probe and be mistaken for ours.
         evict_local_listener(port, log_prefix)
@@ -904,9 +969,16 @@ def run_container(
     # replaced, because a container's creation-time config is immutable.
     fingerprint = _requested_fingerprint(argv)
     existing = container_exists(container_name)
-    running = existing and container_running(container_name)
+    if existing and test_session:
+        target = _test_container_target(container_name)
+        if target is None:
+            sys.exit(1)
+        # Names can be reused after inspection; adoption and later mutations
+        # must retain the identity whose ownership we actually established.
+        container_ref = target
+    running = existing and container_running(container_ref)
     matching = existing and (
-        container_label(container_name, _CONFIG_LABEL) == fingerprint
+        container_label(container_ref, _CONFIG_LABEL) == fingerprint
     )
 
     if _lifecycle.health_ok(health_url):
@@ -931,7 +1003,7 @@ def run_container(
             f"different configuration; recreating",
             flush=True,
         )
-        if not stop_container(container_name) or not remove_container(container_name):
+        if not stop_container(container_ref) or not remove_container(container_ref):
             log.error("could not replace outdated container %s", container_name)
             sys.exit(1)
         existing = running = False
@@ -948,7 +1020,7 @@ def run_container(
             flush=True,
         )
         attempt_started_at = (
-            container_started_at(container_name) or attempt_started_at
+            container_started_at(container_ref) or attempt_started_at
         )
         proc = None
     elif existing and matching:
@@ -960,7 +1032,7 @@ def run_container(
             flush=True,
         )
         _state["cleanup_mode"] = "stop"
-        if not start_container(container_name):
+        if not start_container(container_ref):
             log.error("could not restart container %s", container_name)
             sys.exit(1)
         owns_attempt = True
@@ -972,13 +1044,16 @@ def run_container(
                 f"recreating {container_name}",
                 flush=True,
             )
-            if running and not stop_container(container_name):
+            if running and not stop_container(container_ref):
                 log.error("could not stop outdated container %s", container_name)
                 sys.exit(1)
-            if not remove_container(container_name):
+            if not remove_container(container_ref):
                 log.error("could not remove outdated container %s", container_name)
                 sys.exit(1)
 
+        # A replacement has a new identity; argv still creates the requested
+        # name, not the removed container's pinned ID.
+        container_ref = requested_container_name
         _maybe_ngc_login(image)
         print(f"[{log_prefix}] {launch_banner}", flush=True)
         _state["cleanup_mode"] = "remove"
@@ -1002,7 +1077,9 @@ def run_container(
         attempt_log_offset = log_path.stat().st_size
     except FileNotFoundError:
         attempt_log_offset = 0
-    streamer = _LogStreamer(container_name, since=attempt_started_at)
+    streamer = _LogStreamer(
+        container_ref, since=attempt_started_at, log_name=container_name,
+    )
     _state["streamer"] = streamer
     retry_remaining = 1 if spark_uma else 0
     retry_started = False
@@ -1012,7 +1089,7 @@ def run_container(
                 health_url,
                 is_alive=lambda: (
                     proc.poll() is None if proc is not None
-                    else container_running(container_name)
+                    else container_running(container_ref)
                 ),
             )
             break
@@ -1028,14 +1105,14 @@ def run_container(
             time.sleep(0.5)
             streamer.stop()
             _append_post_mortem(
-                container_name,
+                container_ref,
                 streamer.log_path,
                 since=attempt_started_at,
             )
             retryable = (
                 owns_attempt
                 and retry_remaining > 0
-                and container_oom_killed(container_name) is False
+                and container_oom_killed(container_ref) is False
                 and _diagnostics.is_cuda_memory_allocation_failure(
                     streamer.log_path,
                     start_offset=attempt_log_offset,
@@ -1051,11 +1128,11 @@ def run_container(
                 )
                 deadline = time.monotonic() + _SPARK_UMA_RETRY_DELAY_S
                 while (
-                    container_running(container_name)
+                    container_running(container_ref)
                     and time.monotonic() < deadline
                 ):
                     time.sleep(0.25)
-                if not container_running(container_name):
+                if not container_running(container_ref):
                     # The failed CUDA process has exited. A bounded quiet
                     # period lets its driver context and pending filesystem
                     # writeback drain before restarting the same warm snapshot.
@@ -1065,15 +1142,16 @@ def run_container(
                         retry_log_offset = streamer.log_path.stat().st_size
                     except OSError:
                         retry_log_offset = attempt_log_offset
-                    if start_container(container_name):
+                    if start_container(container_ref):
                         retry_started = True
                         proc = None
                         _state["proc"] = None
                         attempt_started_at = retry_started_at
                         attempt_log_offset = retry_log_offset
                         streamer = _LogStreamer(
-                            container_name,
+                            container_ref,
                             since=attempt_started_at,
+                            log_name=container_name,
                         )
                         _state["streamer"] = streamer
                         continue

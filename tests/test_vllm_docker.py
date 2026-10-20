@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -154,6 +155,16 @@ class TestBuildRunArgv:
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert argv[0] == "docker"
         assert argv[1] == "run"
+
+    def test_labels_new_container_only_under_test_session(self, monkeypatch, tmp_path):
+        monkeypatch.delenv(_docker.TEST_SESSION_ENV, raising=False)
+        plain = build_run_argv(**self._base_kwargs(tmp_path))
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        tagged = build_run_argv(**self._base_kwargs(tmp_path))
+        label = f"{_docker.TEST_SESSION_LABEL}=mine"
+        assert label not in plain
+        assert tagged[tagged.index(label) - 1] == "--label"
+        assert _fingerprint_from_argv(plain) == _fingerprint_from_argv(tagged)
 
     def test_container_name_present(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
@@ -582,6 +593,68 @@ def test_post_mortem_is_scoped_to_current_attempt(tmp_path):
 
 
 class TestContainerHelpers:
+    @pytest.mark.parametrize("operation", ["start_container", "stop_container", "remove_container"])
+    @pytest.mark.parametrize("failure", [
+        FileNotFoundError("docker"),
+        subprocess.CalledProcessError(1, ["docker", "inspect"]),
+        subprocess.TimeoutExpired(["docker", "inspect"], 10),
+    ])
+    def test_test_session_unknown_ownership_never_mutates(self, monkeypatch, operation, failure):
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        with (
+            patch.object(_docker.subprocess, "check_output", side_effect=failure),
+            patch.object(_docker.subprocess, "run") as command,
+        ):
+            assert not getattr(_docker, operation)("foreign-name")
+        command.assert_not_called()
+
+    @pytest.mark.parametrize("operation", ["start_container", "stop_container", "remove_container"])
+    @pytest.mark.parametrize("owner", ["", "other", "mine"])
+    def test_test_session_mutations_use_only_owned_exact_id(
+        self, monkeypatch, operation, owner,
+    ):
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        container_id = "a" * 64
+        monkeypatch.setattr(
+            _docker.subprocess, "check_output", lambda *a, **kw: f"{container_id}\t{owner}",
+        )
+        with patch.object(_docker.subprocess, "run") as command:
+            result = getattr(_docker, operation)("reusable-name")
+        assert result is (owner == "mine")
+        if owner == "mine":
+            assert command.call_args.args[0][-1] == container_id
+        else:
+            command.assert_not_called()
+
+    def test_test_session_stop_escalation_retains_inspected_id(self, monkeypatch):
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(
+            _docker.subprocess, "check_output", lambda *a, **kw: "a" * 64 + "\tmine",
+        )
+        with patch.object(_docker.subprocess, "run") as command:
+            command.side_effect = [
+                subprocess.CalledProcessError(1, "docker stop"), None,
+            ]
+            assert _docker.stop_container("name-reassigned-after-inspection")
+        assert [call.args[0][-1] for call in command.call_args_list] == ["a" * 64] * 2
+
+    def test_name_replacement_between_stop_and_remove_is_not_removed(self, monkeypatch):
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        with (
+            patch.object(_docker.subprocess, "check_output", side_effect=[
+                "a" * 64 + "\tmine", "b" * 64 + "\tother",
+            ]),
+            patch.object(_docker.subprocess, "run") as command,
+        ):
+            assert _docker.stop_container("reusable-name")
+            assert not _docker.remove_container("reusable-name")
+        command.assert_called_once()
+        assert command.call_args.args[0][-1] == "a" * 64
+
     def test_docker_availability_reports_daemon_error_from_single_probe(
         self, monkeypatch, caplog,
     ):
@@ -1066,6 +1139,147 @@ class TestRunContainer:
 
         monkeypatch.setattr(d._lifecycle, "wait_until_healthy", _wait)
         return captured
+
+    @pytest.mark.parametrize("running", [False, True])
+    @pytest.mark.parametrize("matching", [False, True])
+    def test_test_session_refuses_foreign_same_name_before_reuse_or_replacement(
+        self, monkeypatch, tmp_path, running, matching,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: running)
+        monkeypatch.setattr(
+            _docker, "container_label", lambda name, label: None if matching else "different",
+        )
+        with (
+            patch.object(_docker.subprocess, "check_output", return_value="a" * 64 + "\tother"),
+            patch.object(_docker.subprocess, "Popen") as launch,
+            patch.object(_docker, "stop_container") as stop,
+            patch.object(_docker, "remove_container") as remove,
+            patch.object(_docker, "start_container") as restart,
+            patch.object(_docker._lifecycle, "health_ok") as health,
+        ):
+            with pytest.raises(SystemExit, match="1"):
+                _docker.run_container(**self._kwargs(tmp_path))
+        for command in (launch, stop, remove, restart, health):
+            command.assert_not_called()
+
+    @pytest.mark.parametrize("checked", [False, True])
+    def test_test_session_refuses_unknown_or_foreign_port_before_eviction(
+        self, monkeypatch, tmp_path, checked,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(
+            _docker, "container_on_port_checked", lambda port: ("foreign-holder", checked),
+        )
+        with (
+            patch.object(_docker.subprocess, "check_output", return_value="a" * 64 + "\tother"),
+            patch.object(_docker, "stop_container") as stop,
+            patch.object(_docker, "remove_container") as remove,
+            patch.object(_docker, "evict_local_listener") as evict,
+        ):
+            with pytest.raises(SystemExit, match="1"):
+                _docker.run_container(**self._kwargs(tmp_path))
+        for command in (stop, remove, evict):
+            command.assert_not_called()
+
+    def test_test_session_reuse_pins_owned_id_not_reassignable_name(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        owned_id = "a" * 64
+        with (
+            patch.object(_docker.subprocess, "check_output", return_value=owned_id + "\tmine"),
+            patch.object(_docker, "container_running", return_value=True) as running,
+            patch.object(_docker._lifecycle, "health_ok", return_value=True),
+            patch.object(_docker, "evict_local_listener") as evict,
+        ):
+            _docker.run_container(**self._kwargs(tmp_path))
+        running.assert_called_once_with(owned_id)
+        evict.assert_not_called()
+
+    @pytest.mark.parametrize("running,healthy", [(False, False), (True, False), (True, True)])
+    def test_test_session_replacement_abort_cleans_new_identity(
+        self, monkeypatch, tmp_path, running, healthy,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: running)
+        monkeypatch.setattr(_docker, "container_label", lambda name, label: "different-config")
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *a, **kw: healthy)
+        handlers = {}
+        monkeypatch.setattr(_docker.signal, "getsignal", lambda sig: None)
+        monkeypatch.setattr(_docker.signal, "signal", lambda sig, cb: handlers.__setitem__(sig, cb))
+        old_id, new_id = "a" * 64, "b" * 64
+        created = False
+        launched = []
+        mutations = []
+
+        def inspect(argv, **kwargs):
+            target = argv[-1]
+            identity = old_id if target == old_id or not created else new_id
+            return identity + "\tmine"
+
+        class Process:
+            def __init__(self, argv, **kwargs):
+                nonlocal created
+                launched.append(argv)
+                created = True
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        def interrupt(*args, **kwargs):
+            handlers[_docker.signal.SIGTERM](_docker.signal.SIGTERM, None)
+
+        monkeypatch.setattr(_docker.subprocess, "check_output", inspect)
+        monkeypatch.setattr(_docker.subprocess, "Popen", Process)
+        monkeypatch.setattr(_docker.subprocess, "run", lambda argv, **kw: mutations.append(argv))
+        monkeypatch.setattr(_docker._lifecycle, "wait_until_healthy", interrupt)
+        kwargs = self._kwargs(tmp_path)
+        kwargs["argv"] = ["docker", "run", "--name", kwargs["container_name"], "some-image"]
+        with pytest.raises(SystemExit, match="130"):
+            _docker.run_container(**kwargs)
+        assert launched == [kwargs["argv"]]
+        assert mutations[-2:] == [
+            ["docker", "stop", "-t", "10", new_id], ["docker", "rm", new_id],
+        ]
+        assert any(command[-1] == old_id for command in mutations[:-2])
+
+    def test_test_session_pins_id_for_docker_but_logs_under_requested_name(
+        self, monkeypatch, tmp_path,
+    ):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setenv(_docker.TEST_SESSION_ENV, "mine")
+        kwargs = self._kwargs(tmp_path)
+        owned_id = "c" * 64
+        seen: dict = {}
+
+        class Streamer(self._FakeStreamer):
+            def __init__(self, name, **kw):
+                seen["name"], seen["kw"] = name, kw
+
+        monkeypatch.setattr(_docker, "_LogStreamer", Streamer)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: True)
+        monkeypatch.setattr(
+            _docker, "container_label",
+            lambda name, label: _docker._requested_fingerprint(kwargs["argv"]),
+        )
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda *a, **kw: False)
+        monkeypatch.setattr(
+            _docker.subprocess, "check_output",
+            lambda argv, **kw: owned_id + "\tmine",
+        )
+        _docker.run_container(**kwargs)
+        assert seen["name"] == owned_id
+        assert seen["kw"]["log_name"] == "xr-ai-test-ctr"
 
     def test_reuse_healthy_touches_ready_file_without_popen(self, monkeypatch, tmp_path):
         self._common_stubs(monkeypatch, _docker)

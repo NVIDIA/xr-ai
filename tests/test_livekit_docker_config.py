@@ -31,6 +31,7 @@ def _render_config(cfg: LiveKitConnectorConfig) -> dict:
 def test_udp_port_selection_uses_udp_and_all_ipv4_interfaces(monkeypatch):
     real_socket = socket.socket
     bindings = []
+    selected_addresses = []
 
     class Probe:
         def __init__(self, family, kind):
@@ -49,19 +50,19 @@ def test_udp_port_selection_uses_udp_and_all_ipv4_interfaces(monkeypatch):
             self.socket.bind(address)
 
         def getsockname(self):
-            return self.socket.getsockname()
+            address = self.socket.getsockname()
+            selected_addresses.append(address)
+            return address
 
-    # TCP and UDP have independent bind namespaces: the previous TCP probe
-    # accepts the same number even while a UDP listener owns it.
+    # Keep the UDP reservation alive during selection. TCP availability is
+    # independent and says nothing about the UDP port this test owns.
     with real_socket(socket.AF_INET, socket.SOCK_DGRAM) as occupied:
         occupied.bind(("127.0.0.1", 0))
         occupied_port = occupied.getsockname()[1]
-        assert _helpers_subprocess.pick_free_port(occupied_port) == occupied_port
         monkeypatch.setattr(_helpers_subprocess.socket, "socket", Probe)
         selected = _helpers_subprocess.pick_free_udp_port()
         assert selected != occupied_port
-        with real_socket(socket.AF_INET, socket.SOCK_DGRAM) as available:
-            available.bind(("0.0.0.0", selected))
+        assert selected_addresses == [("0.0.0.0", selected)]
         cfg = LiveKitConnectorConfig(api_key="test", api_secret="test", lk_port_udp=selected)
         assert _render_config(cfg)["rtc"]["udp_port"] == selected
     assert bindings == [("0.0.0.0", 0)]
