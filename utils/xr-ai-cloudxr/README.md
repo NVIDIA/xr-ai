@@ -7,5 +7,5 @@
 
 Standard-library CloudXR environment and device-profile helpers shared by services and sample composition.
 
-See [process and utility ownership](../../docs/source/components/launcher-and-process-model.md)
+Refer to [process and utility ownership](https://nvidia.github.io/xr-ai/latest/components/launcher-and-process-model.html)
 for the public API documentation entry point.
