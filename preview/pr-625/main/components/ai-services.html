@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -565,10 +569,13 @@ the exact layout per launch style is below.</p>
 <p><code class="docutils literal notranslate"><span class="pre">services/speaker-stt</span></code> is a private local inference process. It shares
 Nemotron 3 Diarization and Multitalker Parakeet model weights across sessions,
 while keeping each session’s diarization history, enrollment and ASR caches
-separate. In conversation and hybrid modes, a session enrolls one speaker with the configured start phrase and
-releases that identity with the stop phrase. Background voices do not reach
-the transcript as separate speakers after enrollment: the decoder receives the
-mixed audio with owner and interference masks and is conditioned on the owner.
+separate. In conversation and hybrid modes, a session enrolls one speaker with
+the configured start phrase and
+releases that identity with the stop phrase. With diagnostics disabled,
+background voices do not reach the transcript as separate speakers after
+enrollment: the decoder receives the mixed audio with owner and interference
+masks and is conditioned on the owner. Optional diagnostics expose ignored
+transcripts for display only; they cannot query the agent or change enrollment.
 Before enrollment, each detected speaker has independent conditioned decoding
 and phrase-matching state. Someone already talking does not reserve ownership:
 another speaker can say the start phrase over that conversation and enroll when
@@ -616,9 +623,10 @@ complete signed 16-bit samples, or 32,000 bytes). Invalid message types, JSON,
 or incomplete PCM samples are protocol errors. The server’s standard transport
 message-size and heartbeat defaults are retained; JSON controls do not inherit
 an unrelated audio-duration limit.</p>
-<p>The private identity is protocol 4. Worker and speaker service must be restarted
-together after updating: protocol-3 endpoints fail admission rather than
-silently selecting batch STT or accepting incompatible interaction settings.</p>
+<p>The private identity is protocol 5, adding the explicit diagnostics setting to
+protocol 4’s interaction policy. Worker and speaker service must be restarted
+together after updating: earlier endpoints fail admission rather than silently
+selecting batch STT or accepting incompatible interaction settings.</p>
 <p>Configure model IDs, device, precision, host, port and session capacity
 in <code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code>. The default HTTP base URL is
 <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8102</span></code>. Keep the unauthenticated private streaming endpoint on
@@ -641,8 +649,8 @@ model weights are shared. Always-on and wake-only keep candidate decoding as the
 steady state; hybrid uses it whenever no owner conversation is open. Every
 candidate remains required, so a decoder failure resets that session rather
 than silently ignoring a competing speaker. After enrollment only the owner’s
-ASR cache is needed, unless the dependent diagnostics layer requests other
-transcripts. With the
+ASR cache is needed with diagnostics disabled. Enabled diagnostics share encoded features but add
+decoding work and separate temporary ASR caches for non-owner speakers. With the
 default <code class="docutils literal notranslate"><span class="pre">max_sessions:</span> <span class="pre">16</span></code>, up to 128 enrollment decoder caches can coexist;
 GPU memory and latency at that bound have not been qualified. Candidate-decoding
 failure revokes the session because dropping a candidate could conceal a phrase
@@ -791,7 +799,7 @@ individually or independently operated endpoints. Refer to
 <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and the stop/start flow.</p>
 <p>Declare only application processes in the sample orchestrator. Application
 capability services such as RAG remain sample-owned. For startup ordering and
-readiness, refer to <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
+readiness, refer to <a class="reference internal" href="launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>

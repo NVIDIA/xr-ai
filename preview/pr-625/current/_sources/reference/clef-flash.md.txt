@@ -67,6 +67,22 @@ length, and maximum request-body size. The checked-in values use `cuda:0`,
 BF16, 4096 tokens, and a 1 MiB body limit. Requests that exceed the context
 limit receive HTTP 422; increase `max_length` only when GPU memory allows it.
 
+(clef-service-updates)=
+## Updating a running service
+
+Before updating the checkout or changing server configuration, stop the service
+from the old checkout in `model-server-samples/clef-flash/`:
+
+```bash
+export UV_CONFIG_FILE=../../uv.toml
+uv run clef_flash_model --stop
+```
+
+Update the checkout or configuration, then start the service with
+`uv run clef_flash_model`. Model and configuration identity do not identify the
+running application code version. Restarting ensures that requests reach the
+updated implementation, including support for image decisions.
+
 ## HTTP contract
 
 `POST /v1/systemone` accepts the SystemOne request fields `model`, `state`,
@@ -108,9 +124,8 @@ result = await decision.decide(
 )
 ```
 
-Before updating a running text-only service, stop it using the old checkout,
-then start the updated service before sending images. Refer to
-{ref}`clef-image-input-migration` for the upgrade procedure.
+Before sending images to a service started by an older checkout, follow
+{ref}`clef-service-updates`.
 
 The client embeds local inputs into data URLs and rejects remote URLs. It omits
 `images` for text-only calls, preserving compatibility with older servers. Image

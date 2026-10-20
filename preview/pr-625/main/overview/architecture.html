@@ -353,6 +353,10 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../reference/migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -656,7 +660,7 @@ model launch plan. Speaker-ASR selection and its endpoint live in the worker’s
 voice-gate YAML. Independently deployed endpoints, including native NIM,
 remain consumer configuration choices; skip the local model launcher when all
 model services are external. For model availability and worker startup
-behavior, refer to <a class="reference internal" href="../reference/migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>. Detailed local startup,
+behavior, refer to <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>. Detailed local startup,
 shutdown, and persistence belongs in <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a>.</p>
 </section>
 <section id="architectural-invariants">

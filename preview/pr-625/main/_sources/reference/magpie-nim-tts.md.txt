@@ -10,4 +10,4 @@ the existing `riva_grpc` adapter to reach the native speech endpoint directly.
 The SDK normalizes streamed PCM and buffered WAV for the voice worker.
 
 Refer to {doc}`/guides/deploying-with-nim` for endpoint configuration and voice
-behavior, and {doc}`migrations` for the removed service.
+behavior.

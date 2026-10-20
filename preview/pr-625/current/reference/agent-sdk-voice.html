@@ -328,6 +328,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -472,8 +476,8 @@ typed text ingress, TTS, signals, pipeline cancellation, and cleanup. Its media
 session remains private. Applications that need a shared public
 <code class="docutils literal notranslate"><span class="pre">HubVoiceTransport</span></code> construct and inject one explicitly.</p>
 <p>For the startup probe contract, refer to <a class="reference internal" href="python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a>.
-For deployment order and migration of existing applications, refer to
-<a class="reference internal" href="migrations.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
+For deployment order and model availability requirements, refer to
+<a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.</p>
 <p>Each non-empty final STT result during an active conversation is queued for
 publication on <code class="docutils literal notranslate"><span class="pre">VOICE_TRANSCRIPT_TOPIC</span></code> before optional wake-phrase filtering.
 In conversation mode, control phrases and speech while closed are withheld.
@@ -617,6 +621,10 @@ once against the packaged baseline.</p>
 <span class="w">  </span><span class="c1"># required fails closed instead; choose required for a speaker-only stack.</span>
 <span class="w">  </span><span class="c1"># VoiceAgent.from_models needs a batch STT role unless required is enabled.</span>
 <span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span>
+<span class="w">  </span><span class="c1"># Extra candidate/ignored-speaker display; never authorizes agent queries.</span>
+<span class="w">  </span><span class="c1"># After enrollment this adds decoding work and temporary non-owner ASR caches.</span>
+<span class="w">  </span><span class="c1"># Accepted-query display does not depend on diagnostics being enabled.</span>
+<span class="w">  </span><span class="nt">diagnostics</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span><span class="w">                 </span><span class="c1"># Positive finite HTTP timeout, in seconds.</span>
 <span class="w">  </span><span class="nt">activity_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span><span class="w">          </span><span class="c1"># Speaker activity threshold, strictly (0, 1).</span>
 <span class="w">  </span><span class="nt">silence_duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span><span class="w">            </span><span class="c1"># Per-speaker silence before finalization (s).</span>
@@ -723,10 +731,10 @@ ungated/passive input. <code class="docutils literal notranslate"><span class="p
 independently. <code class="docutils literal notranslate"><span class="pre">auto</span></code> may select batch STT at startup if the speaker endpoint is
 absent; protocol mismatch is an error, not a fallback. Required speaker ASR never
 silently switches to batch after reset.</p>
-<p>The speaker service and client use protocol <strong>4</strong> for explicit attributed
-one-turn authorization. Update/restart both together; protocol 3 peers are
-rejected rather than treating their transcripts as permissions. Refer to
-<a class="reference internal" href="migrations.html"><span class="doc">Release migration</span></a> for configuration migration.</p>
+<p>The speaker service and client use protocol <strong>5</strong> for diagnostics configuration
+and explicit attributed one-turn authorization. Update/restart both together;
+earlier peers are rejected rather than silently changing transcript display or
+authorization.</p>
 </section>
 <section id="voice-gating-and-early-probes">
 <h2>Voice gating and early probes<a class="headerlink" href="#voice-gating-and-early-probes" title="Link to this heading">#</a></h2>
@@ -815,7 +823,7 @@ each event response before sending the next frame. The service derives timestamp
 from accepted sample counts; reconnecting starts a fresh timeline and clears
 temporary turn permissions and any enrollment. Conversation mode requires
 enrollment again. Other voices contribute to
-diarization and interference conditioning, but are not transcribed after
+diarization and interference conditioning, but by default are not transcribed after
 enrollment. Before enrollment, the service independently decodes each detected
 speaker and enrolls the one whose conditioned transcript completes the start
 phrase, including during overlapping speech. If multiple speakers complete the
@@ -828,6 +836,33 @@ Microphone stop and republish therefore cannot join old phrase fragments across
 tracks. Gaps on the same track retain accepted-sample timing: receipt timestamps
 do not establish capture continuity, and delivery jitter does not trigger guessed
 resets. Explicit same-track capture epochs are outside this integration.</p>
+<p>The annotated voice-gate configuration reference above documents
+<code class="docutils literal notranslate"><span class="pre">speaker.diagnostics</span></code>, which defaults to <code class="docutils literal notranslate"><span class="pre">false</span></code>. Setting it to <code class="docutils literal notranslate"><span class="pre">true</span></code> displays
+candidate transcripts before
+enrollment and additionally transcribes non-owner voices after enrollment. It
+returns activity and ignored text on <code class="docutils literal notranslate"><span class="pre">voice.speaker-diagnostic</span></code> through the
+existing participant-routed data channel. These messages cannot invoke or
+interrupt an agent or change enrollment. See
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for decoder ownership and diagnostic resource cost. The
+simple VLM sample enables diagnostics for live inspection. They have no effect
+when ordinary STT is selected.</p>
+<p>The shared voice I/O layer also returns accepted, gate-normalized query text
+on the stable <code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code> client data topic. Speaker ASR uses <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">N</span></code>;
+ordinary STT and typed queries use <code class="docutils literal notranslate"><span class="pre">User</span></code>. The application receives the same
+typed query as before, without speaker-display metadata or a sample-specific
+echo subscriber. Disabling speaker diagnostics does not disable accepted-query
+display. Application <code class="docutils literal notranslate"><span class="pre">query_topic</span></code> names remain internal runtime routing, not
+client display topics. This is accepted text after wake-prefix/control handling,
+not every raw STT word. The separate runtime <code class="docutils literal notranslate"><span class="pre">voice.transcript</span></code> event retains its
+existing mode/backend transcript-publication policy. Typed input is echoed too.
+Applications may handle or ignore the new
+topic in their data callback; the sample clients’ catch-all message lists display it.
+Participant targeting, not topic selection, provides routing isolation. The
+existing hub return path is best effort, not an end-to-end receipt acknowledgment.
+Display errors do not reject accepted queries. Accepted display and application
+delivery start concurrently within one owned input task and both are awaited;
+ignored diagnostic sends are awaited inline. A saturated local hub can therefore
+delay input completion or later frames. No display-dropping policy is introduced.</p>
 <p>Start the inference process separately from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/speaker-stt<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>speaker_stt<span class="w"> </span>--config<span class="w"> </span>services/speaker-stt/speaker_stt.yaml

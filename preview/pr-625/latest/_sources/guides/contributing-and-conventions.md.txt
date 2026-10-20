@@ -30,7 +30,8 @@ Public Python references are generated from each enrolled module's literal
 change therefore updates the code, its co-located documentation, and tests; the
 strict documentation build rejects unresolved or undocumented exports. Update
 a narrative page when concepts, workflows, operations, or architecture change,
-and add a migration entry for a breaking change.
+and add a migration entry for a breaking change. Refer to
+{ref}`migration-release-rollover` for the migration guide's release scope.
 
 The repository-wide README and documentation ownership rules live in the
 [`Comments and documentation`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md#comments-and-documentation)
@@ -92,3 +93,53 @@ global cutoff. Resolve each affected project with the root config explicitly
 supplied, validate the affected behavior, and regenerate the dependency
 manifest with `uv run --script .github/scripts/generate_dependency_manifest.py`.
 Commit the generated manifest changes alongside the dependency declarations.
+
+(migration-release-rollover)=
+## Migration entries and release rollover
+
+{doc}`/reference/migrations` covers changes from the latest published release
+to the checked-out version. Use a `Changes since <baseline tag>` heading and
+state that `main` is unreleased. Add entries as third-level headings under
+that heading, before `Earlier releases`. Link to the baseline release's
+archived guide and {doc}`/reference/migration-history`; users skipping releases
+apply earlier guides in release order.
+
+For each breaking change, name who is affected, state the required action, and
+include a before-and-after example when useful. Update the entry when another
+change in the same development cycle supersedes it, so the instructions lead
+directly from the baseline release to the final behavior.
+
+Use this checklist for every release:
+
+1. Prepare the guide on the branch being released. Compare its code with the
+   previous release, consolidate superseded instructions, and include only
+   changes shipped by this release. State the release version in the opening
+   paragraph. Release branches can contain a different set of changes from
+   `main`.
+2. Preserve the completed guide under
+   `docs/source/reference/migration-history/<from-tag>-to-<to-tag>.md`, with a
+   title and introduction naming both releases. Copy from the branch being
+   released and retain the upgrade instructions. Scope explicit labels to the
+   archive and pin historical cross-references to the release's tagged
+   documentation so current topics cannot change their meaning. Add the guide
+   to the toctree in `docs/source/reference/migration-history.md`.
+3. Publish the release tag and its versioned documentation. Verify that the
+   archived guide is published, its historical links resolve, and
+   `https://nvidia.github.io/xr-ai/<tag>/reference/migrations.html` contains the
+   completed guide. Use a concrete tag in historical links; `latest` and `main`
+   change over time.
+4. After verifying publication, bring the completed archive and its index entry
+   into `main`, then reconcile the current entries with the tag. Use
+   `git merge-base <tag> main` to establish shared history and
+   `git diff <tag> main -- docs/source/reference/migrations.md` to compare
+   guides, then verify the corresponding code changes, including equivalent
+   cherry-picks. Retire an entry only when the published tag covers its change
+   and the archive retains its upgrade instructions. Keep main-only entries.
+   Carry a release-branch entry into the current guide only when its code is
+   also present on `main`. Update the baseline and archive link to the new
+   release, state that `main` is unreleased, and mark the current guide empty
+   only if no entries remain. Keep completed archives unchanged.
+5. Preserve published URL fragments with compact forwarding links to the
+   appropriate archived guide or canonical topic. Keep ongoing explanations in
+   canonical documentation and update their incoming references before retiring
+   the entry.

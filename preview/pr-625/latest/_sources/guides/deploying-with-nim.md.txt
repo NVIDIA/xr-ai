@@ -269,5 +269,6 @@ The former `model_servers_nim` command, hardware profiles, engine export cache,
 and HTTP compatibility services are removed. They duplicated infrastructure
 lifecycle and model adapter behavior. Deploy the native NIM services with the
 operator's tooling, then replace local aliases such as `llm`, `vlm`, and `embed`
-with native model IDs in a consumer profile. Refer to
-{doc}`/reference/migrations` for the removed commands and services.
+with native model IDs in a consumer profile. The removed compatibility surfaces
+include `nim_model_adapter`, `nim_riva_server`, `nim_server`, `magpie_nim_tts`,
+and `xr_ai_vllm.serve_nim`.

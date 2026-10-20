@@ -328,6 +328,10 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html">Sample configuration reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
 <li class="toctree-l2"><a class="reference internal" href="magpie-nim-tts.html">Magpie NIM speech</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="migration-history.html">Migration history</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="migration-history/through-v0.3.0-beta.html">Migration notes through v0.3.0-beta</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2"><a class="reference internal" href="migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="model-servers-nim.html">NIM model endpoints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="procedure-capture-guide.html">Procedure capture and guidance</a></li>
@@ -464,6 +468,22 @@ already streaming do not receive a redundant capture request.</p>
 its voice response. Participant departure releases the sample agent’s cached
 frames and tasks. This is the reference composition for a single foreground
 streaming image query.</p>
+<p>The shared voice layer returns accepted queries as UTF-8 text on
+<code class="docutils literal notranslate"><span class="pre">voice.user-query</span></code>; the sample has no display adapter. The web
+client’s <strong>RECEIVED</strong> list displays it using the existing text-message handling,
+for example <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">0:</span> <span class="pre">What</span> <span class="pre">is</span> <span class="pre">in</span> <span class="pre">front</span> <span class="pre">of</span> <span class="pre">me?</span></code>. The number is the diarization
+model’s label within this participant’s voice connection. Typed input and
+ordinary STT use <code class="docutils literal notranslate"><span class="pre">User:</span> <span class="pre">...</span></code>. Conversation controls do not produce query messages.</p>
+<p>The sample enables <code class="docutils literal notranslate"><span class="pre">speaker.diagnostics:</span> <span class="pre">true</span></code> in <code class="docutils literal notranslate"><span class="pre">yaml/voice_gate.yaml</span></code>.
+<strong>RECEIVED</strong> also shows detections and ignored transcripts on
+<code class="docutils literal notranslate"><span class="pre">voice.speaker-diagnostic</span></code>, for example <code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">1</span> <span class="pre">[ignored]</span> <span class="pre">detected</span></code> and
+<code class="docutils literal notranslate"><span class="pre">Speaker</span> <span class="pre">1</span> <span class="pre">[ignored]:</span> <span class="pre">What</span> <span class="pre">time</span> <span class="pre">is</span> <span class="pre">it?</span></code>. Before enrollment, detections are
+marked <code class="docutils literal notranslate"><span class="pre">waiting</span> <span class="pre">for</span> <span class="pre">enrollment</span></code>. These display-only messages cannot invoke or
+interrupt the agent. Set <code class="docutils literal notranslate"><span class="pre">speaker.diagnostics:</span> <span class="pre">false</span></code> to stop displaying
+diagnostics and stop transcribing non-owner voices after enrollment. See
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for decoding and resource cost. Ordinary STT,
+including the NIM path, returns
+accepted queries without speaker diagnostics.</p>
 </section>
 <section id="source-map">
 <h2>Source map<a class="headerlink" href="#source-map" title="Link to this heading">#</a></h2>

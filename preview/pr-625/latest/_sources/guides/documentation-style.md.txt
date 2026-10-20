@@ -20,6 +20,10 @@ rather than through a thin redirect page. Treat published URL fragments as
 stable. When rewording a heading, preserve its previous fragment with an
 explicit compatibility anchor.
 
+## Migration guides
+
+Refer to {ref}`migration-release-rollover` for entry scope and release rollover.
+
 ## Slashes in prose
 
 Do not use `/` to mean "or" or "and." Rewrite with the conjunction or a list.
