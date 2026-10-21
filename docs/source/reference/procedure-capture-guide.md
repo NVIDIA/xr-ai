@@ -11,6 +11,91 @@ spoken commands. It saves snapshots, visual captions, and transcribed narration 
 processing. Guide mode guides participants through a locally approved procedure
 and verifies progress with visual observations and elapsed-time checks.
 
+## Automatic procedure routing
+
+Running without `--mode` uses `xr_ai_routing.AgentRouter` to choose capture or
+a specific approved guide from the spoken request. From
+`agent-samples/procedure-capture-guide/`, start the shared services and worker:
+
+```bash
+uv run --project model-servers procedure_capture_guide_model_servers
+uv run --project ../../model-server-samples/clef-flash clef_flash_model
+uv run main.py
+```
+
+Clef is a separately managed decision service on port 8120; the sample's
+four-model launcher does not start or stop it. Its pinned weights require
+additional GPU memory. Refer to {doc}`clef-flash` for deployment and configuration.
+The router uses `make_decision(models, "router")`, not Omni chat inference.
+Only routed mode requires the decision endpoint to pass readiness. Explicit
+`--mode capture` and `--mode guide "Guide Name"` keep their existing behavior
+and do not construct or call the decision client.
+
+On startup, the sample validates and pins `*.guide.yaml` and `*.guide.yml`
+files under the configured `guides_dir`. It registers `capture`, one
+`guide:<task.id>` destination per approved guide, and a non-mutating `help`
+destination. Each guide destination describes its name and task using the
+guide's foreground prompt. They share the existing guide implementation and
+model clients; there is no second guide-selection model call. Invalid files or
+duplicate approved task IDs fail startup. Drafts are not registered. Restart
+the worker to apply guide edits, approvals, additions, or removals; running
+workers keep the validated guide bytes and hash they loaded.
+
+- Say **I want to start capture for my task**. Selecting capture starts the
+  packet and acknowledges **Capture started.** No second start command is needed.
+  Subsequent speech is saved silently as narration without another routing
+  decision. Say the standalone **stop capture** command to finish. Capture
+  acknowledges **Capture stopped.** and finalizes its packet independently of
+  response cancellation. A subsequent request waits for finalization to drain.
+- Say **Start a guide for brewing chamomile tea**. The router can select the
+  included `Tea Making` guide without a literal name match. The guide starts
+  immediately and announces its name and first instruction. During execution,
+  only that guide is eligible; its existing conversation tools handle questions,
+  **next**, **skip**, and **stop guide**. Step evidence and timers do not change.
+- Stop the current capture or guide before switching activities. Automatic
+  guide completion also makes all destinations eligible again. Guide activity
+  comes from its execution backend, not stale conversation focus.
+- Ask **What guides are available?** for the approved names. Missing,
+  ambiguous, explanatory, and unsupported requests are described to the model
+  as help requests, not permission to start a procedure. The help response lists
+  available guides; a follow-up name is routed with that conversation history.
+  Natural-language matching is model policy, not an exact-match guarantee.
+  Explicit guide mode remains available when deterministic selection is needed.
+
+No activity starts merely on connection. Different participants have independent
+capture ownership and guide progress. Disconnect finalizes capture, cancels
+response work, and drains guide observers. `--output-root` also applies to
+capture packets in routed mode. `--session-recording` remains independent and
+can record the entire connection across both activities:
+
+```bash
+uv run main.py --session-recording
+```
+
+To stop the separately managed decision server after stopping the sample:
+
+```bash
+uv run --project ../../model-server-samples/clef-flash clef_flash_model --stop
+```
+
+### Routing checks
+
+From the repository root, run the deterministic integration checks:
+
+```bash
+uv --config-file uv.toml run --project tests pytest tests/test_procedure_routing.py -m "not gpu"
+```
+
+These exercise the real router and guide execution with controlled decision
+replies, simulated storage, and simulated voice and camera boundaries. They
+check ownership, silent narration, finalization, guide controls, clarification
+history, and participant isolation; they do not measure language-model accuracy.
+The same module includes opt-in `gpu` cases using the configured Clef endpoint
+for paraphrases, nonliteral guide names, unsupported procedures, and negated or
+hypothetical start requests. Only Clef needs to be running for those cases;
+the repository GPU-test ownership safeguards still apply. They do not start or
+stop model services. Refer to {doc}`/guides/testing` for the GPU-test runner.
+
 ## Run a demonstration
 
 Run commands from `agent-samples/procedure-capture-guide/`:

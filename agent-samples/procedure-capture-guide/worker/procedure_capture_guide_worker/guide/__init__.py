@@ -9,3 +9,8 @@ selects the approved guide, _workflow_spec.py validates its structure, and
 config.py loads guide settings. Shared voice and image services come from
 the worker's app.py.
 """
+
+from .agent import GuideAgent
+from .guides import SelectedGuide, approved_guides
+
+__all__ = ["GuideAgent", "SelectedGuide", "approved_guides"]

@@ -341,7 +341,14 @@ def test_sample_launch_and_stop_use_only_required_servers(monkeypatch, tmp_path,
     for spec in models.entries.values():
         endpoint = urlsplit(spec.endpoint.base_url)
         assert endpoint.hostname in {"localhost", "127.0.0.1"}
-        assert endpoint.port in ports
+        if spec.kind == "systemone":
+            # Clef has its own persistent launcher; explicit capability modes
+            # do not need it. Validate its endpoint against that launch config.
+            clef = yaml.safe_load((_REPO_ROOT / "model-server-samples/clef-flash/yaml/clef_server.yaml").read_text())
+            assert spec.model_name == clef["model_name"]
+            assert endpoint.port == clef["port"]
+        else:
+            assert endpoint.port in ports
     for process in processes:
         assert (Path(process.project) / "pyproject.toml").is_file()
         assert process.launch_mode == "persist"

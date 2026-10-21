@@ -22,6 +22,7 @@ from xr_ai_runtime import Agent, AgentRuntime, RuntimeClosedError, RuntimeContex
 from xr_ai_tools import ToolSet
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.tool_calling import run_tool_loop
+from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.vision import ImageQueryTool
 from xr_ai_voice import (
     VOICE_CONTRIBUTION_TOPIC,
@@ -76,6 +77,40 @@ class GuideAgent(Agent):
         if self._runtime is not None and self._runtime is not runtime:
             raise RuntimeError("SOP engine is already bound to another runtime")
         self._runtime = runtime
+
+    def is_active(self, participant_id: str) -> bool:
+        return self._backend.is_active(participant_id)
+
+    def disconnect(self, participant_id: str) -> None:
+        """Invalidate controls before waiting for foreground and observer cleanup."""
+        self._connected.discard(participant_id)
+
+    async def start_selected(self, participant_id: str) -> str:
+        """Start a router-selected guide through the same revision-scoped control as voice."""
+        if participant_id not in self._connected:
+            self._connected.add(participant_id)
+            self._backend.join(participant_id)
+        guidance = await self._backend.guidance(participant_id)
+        if guidance is None:
+            return ""
+        try:
+            tool = dict(guidance.tools.items())["workflow__restart"]
+            result = await tool.execute(EmptyRequest())
+            return await guidance.finish(result.message)
+        except asyncio.CancelledError:
+            await guidance.cancel()
+            raise
+
+    async def respond(self, participant_id: str, text: str) -> str:
+        """Await foreground work so a router can own its cancellation and delivery."""
+        return await self._route(text, participant_id)
+
+    async def release(self, participant_id: str) -> None:
+        self.disconnect(participant_id)
+        async with self._controls.setdefault(participant_id, asyncio.Lock()):
+            await _cancel(self._turns, participant_id)
+            await self._backend.leave(participant_id)
+            await self._aggregation.release(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(self, _event: VoiceInterrupted, ctx: RuntimeContext) -> None:

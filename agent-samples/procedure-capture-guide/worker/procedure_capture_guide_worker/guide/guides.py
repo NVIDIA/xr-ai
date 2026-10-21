@@ -3,10 +3,9 @@
 
 """Select an approved local procedure guide for the guide worker.
 
-Find the guide named on the command line, validate it through _workflow_spec.py,
-and require an unambiguous match with approved status. Retain the loaded guide
-and its content hash so editing the source file does not change a running
-worker's instructions.
+Resolve an exact command-line selection or load an approved routing catalog.
+Validate through _workflow_spec.py and retain each guide's content hash so
+editing a source file does not change a running worker's instructions.
 """
 
 from __future__ import annotations
@@ -32,8 +31,36 @@ def select_guide(directory: Path, name: str) -> SelectedGuide:
     selector = name.strip().casefold()
     if not selector:
         raise ValueError("guide name must not be empty")
+    guides, invalid = _read_guides(directory)
+    matches = [guide for guide in guides if selector in {guide.workflow.name.casefold(), guide.workflow.id.casefold()}]
+    if not matches:
+        detail = f" Invalid guides: {'; '.join(invalid)}" if invalid else ""
+        raise ValueError(f"No guide named {name!r} in {directory}.{detail}")
+    if len(matches) != 1:
+        raise ValueError(f"Ambiguous guide name {name!r}: {[str(item.path) for item in matches]}")
+    guide = matches[0]
+    if not guide.workflow.runnable:
+        raise ValueError(
+            f"Guide {name!r} is a draft; review it and set task.status to approved before using guide mode."
+        )
+    return guide
+
+
+def approved_guides(directory: Path) -> tuple[SelectedGuide, ...]:
+    """Pin the startup routing catalog; reject ambiguous IDs rather than overwrite routes."""
+    guides, invalid = _read_guides(directory)
+    if invalid:
+        raise ValueError(f"Invalid guides: {'; '.join(invalid)}")
+    approved = tuple(guide for guide in guides if guide.workflow.runnable)
+    ids = [guide.workflow.id.casefold() for guide in approved]
+    if len(set(ids)) != len(ids):
+        raise ValueError("Approved guides must have unique task IDs for routing")
+    return approved
+
+
+def _read_guides(directory: Path) -> tuple[list[SelectedGuide], list[str]]:
     directory = directory.resolve()
-    matches: list[SelectedGuide] = []
+    guides: list[SelectedGuide] = []
     invalid: list[str] = []
     for path in sorted(directory.rglob("*")):
         if not path.name.endswith((".guide.yaml", ".guide.yml")):
@@ -49,16 +76,5 @@ def select_guide(directory: Path, name: str) -> SelectedGuide:
         except (OSError, ValueError, yaml.YAMLError) as exc:
             invalid.append(f"{path.name}: {exc}")
             continue
-        if selector in {workflow.name.casefold(), workflow.id.casefold()}:
-            matches.append(SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow))
-    if not matches:
-        detail = f" Invalid guides: {'; '.join(invalid)}" if invalid else ""
-        raise ValueError(f"No guide named {name!r} in {directory}.{detail}")
-    if len(matches) != 1:
-        raise ValueError(f"Ambiguous guide name {name!r}: {[str(item.path) for item in matches]}")
-    guide = matches[0]
-    if not guide.workflow.runnable:
-        raise ValueError(
-            f"Guide {name!r} is a draft; review it and set task.status to approved before using guide mode."
-        )
-    return guide
+        guides.append(SelectedGuide(path, hashlib.sha256(content).hexdigest(), workflow))
+    return guides, invalid
