@@ -22,7 +22,12 @@ from urllib.parse import urlparse
 import httpx
 from loguru import logger
 
-from ._thinking import ThinkingSpec, apply_thinking, lift_legacy_default
+from ._thinking import (
+    ThinkingSpec,
+    apply_thinking,
+    check_legacy_conflict,
+    lift_legacy_default,
+)
 from ._protocols import (
     Capabilities,
     ChatMessage,
@@ -294,8 +299,10 @@ class OpenAICompatLLM:
         """Features declared for this model endpoint."""
 
         self._reasoning_field = reasoning_field
+        thinking = thinking or ThinkingSpec()
+        check_legacy_conflict(thinking, default_extras or {})
         self._thinking, self._default_extras = lift_legacy_default(
-            thinking or ThinkingSpec(), default_extras or {},
+            thinking, default_extras or {},
         )
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
         _warn_if_cleartext_key(base_url, self._api_key)

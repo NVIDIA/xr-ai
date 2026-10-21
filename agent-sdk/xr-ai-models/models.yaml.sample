@@ -23,7 +23,7 @@ models:
       # model_name: llm
       # reasoning_field: reasoning_content
       # capabilities: {streaming: true, tool_calls: true}
-      # default_extras: {chat_template_kwargs: {enable_thinking: false}}
+      # thinking: {default: true}    # Reasoning when a call does not choose.
     endpoint:
       base_url: http://127.0.0.1:8108 # HTTP origin, without /v1 routes.
       timeout: 60.0                  # Positive seconds; speech defaults to 30.

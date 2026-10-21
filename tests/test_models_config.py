@@ -86,6 +86,65 @@ def test_profile_thinking_overrides_merge_onto_preset() -> None:
     )
 
 
+def test_profile_legacy_thinking_key_overrides_preset_default() -> None:
+    # Pre-existing profiles override a preset with the raw request field.
+    cfg = load_models_config_from_dict({"llm": {
+        "adapter": {
+            "preset": "nemotron3_nano",
+            "default_extras": {"chat_template_kwargs": {
+                "enable_thinking": True, "thinking_budget": 256,
+            }},
+        },
+        "endpoint": {"base_url": "http://localhost:8107"},
+    }})
+
+    spec = cfg.llm("llm")
+    assert spec.adapter.thinking == ThinkingSpec(control="chat_template", default=True)
+    assert spec.default_extras == {"chat_template_kwargs": {"thinking_budget": 256}}
+
+
+@pytest.mark.parametrize("preset", ["cosmos3_nano_reasoner", "llama_nemotron"])
+def test_profile_legacy_thinking_key_passes_through_other_controls(preset) -> None:
+    # A copy of the earlier NIM profile keeps sending its raw field.
+    extras = {"chat_template_kwargs": {"enable_thinking": False}}
+    cfg = load_models_config_from_dict({"m": {
+        "adapter": {"preset": preset, "default_extras": extras},
+        "endpoint": {"base_url": "http://localhost:8100"},
+    }})
+
+    entry = cfg.entries["m"]
+    assert entry.default_extras == extras
+    assert entry.adapter.thinking == _preset_thinking(preset)
+
+
+def _preset_thinking(name: str) -> ThinkingSpec:
+    return ThinkingSpec.from_mapping(get_preset(name)["thinking"])
+
+
+@pytest.mark.parametrize("adapter, match", [
+    (
+        {"thinking": {"default": True},
+         "default_extras": {"chat_template_kwargs": {"enable_thinking": False}}},
+        "conflicts",
+    ),
+    ({"default_extras": {"chat_template_kwargs": {"enable_thinking": "false"}}}, "boolean"),
+])
+def test_invalid_legacy_thinking_profile_raises(adapter, match) -> None:
+    with pytest.raises(ValueError, match=match):
+        load_models_config_from_dict({"llm": {
+            "category": "llm",
+            "adapter": {"model_name": "llm", **adapter},
+            "endpoint": {"base_url": "http://localhost:8102"},
+        }})
+
+
+def test_flat_specs_accept_thinking_keyword() -> None:
+    thinking = ThinkingSpec(control="system_prompt", default=True)
+
+    assert LLMSpec(base_url="http://x", thinking=thinking).adapter.thinking == thinking
+    assert VLMSpec(base_url="http://x", thinking=thinking).adapter.thinking == thinking
+
+
 @pytest.mark.parametrize("thinking, match", [
     ({"control": "reasoning_effort"}, "thinking control"),
     ({"default": "off"}, "thinking default"),

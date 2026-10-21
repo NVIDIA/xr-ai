@@ -146,13 +146,16 @@ the adapter's `thinking` setting decides how the switch reaches the model:
 
 | `control` | Wire behavior | Used by |
 |---|---|---|
-| `chat_template` (default) | `chat_template_kwargs.enable_thinking`, plus `thinking_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
-| `system_prompt` | `detailed thinking on` or `off` at the start of the system message | `llama_nemotron` |
+| `chat_template` | `chat_template_kwargs.enable_thinking`, plus `thinking_budget` | `nemotron3_nano`, `nemotron_omni`, `cosmos_vlm` |
+| `system_prompt` | A `detailed thinking on` or `off` line at the start of the system message | `llama_nemotron` |
 | `none` | Nothing is sent; the model has no switch or rejects template arguments | `cosmos3_nano_reasoner` |
+| unset | `chat_template` when `default` is set; otherwise only `enable_thinking=True` is sent | Profiles without a preset |
 
 `default` is the endpoint's reasoning state when a call does not choose one;
-`null` sends no switch and leaves the model's own default. A profile overrides
-either key on top of its preset:
+`null` sends no switch and leaves the model's own default. With `system_prompt`,
+a complete `detailed thinking on` or `off` line already in the system message
+stands for the default, and an explicit `enable_thinking` replaces it. A profile
+overrides either key on top of its preset:
 
 ```yaml
 adapter:
@@ -161,11 +164,14 @@ adapter:
     default: true
 ```
 
-Set `control: none` for a hosted endpoint that rejects unknown request fields.
-Callers that need reasoning can check `capabilities.reasoning`; a model with
-`control: none` ignores `enable_thinking`. The legacy
-`default_extras.chat_template_kwargs.enable_thinking` key is still accepted
-and sets `thinking.default`.
+Set `control: none` for a hosted endpoint that rejects unknown request fields;
+such a model ignores `enable_thinking`. `capabilities.reasoning` reports only
+whether responses carry a separate reasoning field, not whether the switch is
+honored. A legacy `default_extras.chat_template_kwargs.enable_thinking`
+boolean is still accepted: with `control: chat_template` or unset it becomes
+`thinking.default`, overriding the preset's, and a call can override it. With
+another control it is sent unchanged. A profile that sets both keys to
+different values is rejected.
 
 <a id="protocols"></a>
 (agent-sdk-models-protocols)=

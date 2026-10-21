@@ -88,7 +88,7 @@ async def test_vlm_stream_request_shape() -> None:
     stub = StubOpenAI()
     stub.set_stream_tokens(["Hello", " world"])
 
-    # cosmos_vlm preset sets enable_thinking=False via default_extras.
+    # Legacy profiles set enable_thinking=False via default_extras.
     vlm = OpenAICompatVLM(
         "http://stub",
         "vlm",
