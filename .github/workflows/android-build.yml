@@ -49,5 +49,5 @@ jobs:
       - name: Camera publication boundary tests
         run: ./gradlew testDebugUnitTest
 
-      - name: Verify Netty pin
-        run: ./gradlew verifyNettyPin
+      - name: Verify security versions and loaded plugin classpath
+        run: ./gradlew verifyNettyPin verifyBuildscriptSecurityVersions
