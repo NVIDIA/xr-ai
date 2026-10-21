@@ -316,6 +316,30 @@ def _drain_output_readers(
 
 # ── readiness wait ─────────────────────────────────────────────────────────────
 
+class _Cancellation:
+    def __init__(self) -> None:
+        self.signum: int | None = None
+
+    def _request(self, signum, _frame) -> None:
+        # Do not interrupt Popen before its handle is registered for cleanup.
+        if self.signum is None:
+            self.signum = signum
+
+    def check(self) -> None:
+        if self.signum is not None:
+            raise SystemExit(128 + self.signum)
+
+    def __enter__(self):
+        self._original = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+        for sig in self._original:
+            signal.signal(sig, self._request)
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        for sig, handler in self._original.items():
+            signal.signal(sig, handler)
+
+
 class _ReadinessFailure(SystemExit):
     def __init__(self, name: str, returncode: int) -> None:
         super().__init__(failure_exit_status(returncode))
@@ -327,12 +351,15 @@ def _wait_ready(
     name: str,
     ready_file: Path,
     proc: subprocess.Popen,
+    cancellation: _Cancellation | None = None,
 ) -> None:
     """Block until *ready_file* exists. Print a progress line every 5 s."""
     t0          = time.monotonic()
     last_report = -_READY_INTERVAL  # force first line immediately
 
     while True:
+        if cancellation is not None:
+            cancellation.check()
         elapsed = time.monotonic() - t0
 
         if ready_file.exists():
@@ -357,6 +384,7 @@ _ReadyEntry = tuple[str, Path, subprocess.Popen]
 def _wait_ready_parallel(
     group: list[_ReadyEntry],
     ready_processes_may_exit: set[str] | None = None,
+    cancellation: _Cancellation | None = None,
 ) -> None:
     """Wait for the whole group while monitoring members that are already ready."""
     allowed_exits = ready_processes_may_exit or set()
@@ -365,6 +393,8 @@ def _wait_ready_parallel(
     last_report = {name: -_READY_INTERVAL for name, _, _ in group}
 
     while len(ready) < len(group):
+        if cancellation is not None:
+            cancellation.check()
         elapsed = time.monotonic() - t0
         for name, ready_file, proc in group:
             if name not in ready and ready_file.exists():
@@ -397,31 +427,17 @@ def _wait_ready_parallel(
 
 def _monitor(
     procs: dict[str, subprocess.Popen],
+    cancellation: _Cancellation,
 ) -> tuple[str, subprocess.Popen] | None:
     """Return the first exited process, or ``None`` after SIGINT / SIGTERM."""
-    stop = threading.Event()
-
-    orig_int  = signal.getsignal(signal.SIGINT)
-    orig_term = signal.getsignal(signal.SIGTERM)
-
-    def _on_signal(sig, _frame):
-        stop.set()
-
-    signal.signal(signal.SIGINT,  _on_signal)
-    signal.signal(signal.SIGTERM, _on_signal)
-
-    try:
-        while not stop.is_set():
-            for name, p in procs.items():
-                if p.poll() is not None:
-                    if stop.is_set():
-                        return None
-                    log.warning("[%s] exited (rc=%s)", name, p.returncode)
-                    return name, p
-            time.sleep(1.0)
-    finally:
-        signal.signal(signal.SIGINT,  orig_int)
-        signal.signal(signal.SIGTERM, orig_term)
+    while cancellation.signum is None:
+        for name, p in procs.items():
+            if p.poll() is not None:
+                if cancellation.signum is not None:
+                    return None
+                log.warning("[%s] exited (rc=%s)", name, p.returncode)
+                return name, p
+        time.sleep(1.0)
 
 
 def _killpg(p: subprocess.Popen, sig: int) -> None:
@@ -543,6 +559,9 @@ def run_stack(
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
     unexpected zero exit to 1.
+    SIGINT or SIGTERM during startup stops all newly launched processes,
+    including persistent processes, and exits with ``128 + signal``. Reused
+    services are untouched. After readiness, signals follow normal shutdown.
     Spawn errors, readiness failures, and unexpected monitored exits print a
     concise summary with the constructed command and an existing configured
     run-log directory when available. Pass
@@ -592,16 +611,18 @@ def run_stack(
     aborted = False
     failure_status: int | None = None
 
-    with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
+    with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir, _Cancellation() as cancellation:
         tmpdir = Path(_tmpdir)
         try:
             for item in processes:
+                cancellation.check()
                 if isinstance(item, Parallel):
                     to_spawn = [p for p in item.processes if p.launch_mode != "reuse"]
                     if not to_spawn:
                         continue
                     group: list[_ReadyEntry] = []
                     for proc in to_spawn:
+                        cancellation.check()
                         ready_file = tmpdir / f"{proc.name}.ready"
                         launched[proc.name] = _spawn(
                             proc,
@@ -614,6 +635,7 @@ def run_stack(
                             output_readers=output_readers,
                         )
                         group.append((proc.name, ready_file, launched[proc.name]))
+                        cancellation.check()
                     print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
                           flush=True)
                     _wait_ready_parallel(
@@ -623,6 +645,7 @@ def run_stack(
                             for proc in to_spawn
                             if exit_after_ready and proc.launch_mode == "persist"
                         },
+                        cancellation,
                     )
                 else:
                     if item.launch_mode == "reuse":
@@ -638,13 +661,15 @@ def run_stack(
                         failure_contexts=failure_contexts,
                         output_readers=output_readers,
                     )
-                    _wait_ready(item.name, ready_file, launched[item.name])
+                    _wait_ready(item.name, ready_file, launched[item.name], cancellation)
 
+            cancellation.check()
             log.info("All processes ready.")
             _print_ready_banner(list(launched.keys()))
+            cancellation.check()
             if exit_after_ready:
                 return
-            exited = _monitor(launched)
+            exited = _monitor(launched, cancellation)
             if exited is not None:
                 name, proc = exited
                 failure_status = failure_exit_status(proc.returncode)

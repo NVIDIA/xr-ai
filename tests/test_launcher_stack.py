@@ -132,6 +132,10 @@ class TestRunStackShutdownContract:
 
     @pytest.fixture()
     def stub_stack(self, monkeypatch, tmp_path):
+        original_handlers = {
+            sig: _stack.signal.getsignal(sig)
+            for sig in (_stack.signal.SIGINT, _stack.signal.SIGTERM)
+        }
         # load_credentials reads real ~/.config/~/.cache — neutralize it.
         monkeypatch.setattr(_stack, "load_credentials", lambda: None)
         calls: dict[str, object] = {}
@@ -162,13 +166,16 @@ class TestRunStackShutdownContract:
             calls["no_kill"] = no_kill
 
         monkeypatch.setattr(_stack, "_shutdown", _spy_shutdown)
-        return calls
+        yield calls
+        assert {
+            sig: _stack.signal.getsignal(sig) for sig in original_handlers
+        } == original_handlers
 
     def test_abort_during_startup_kills_everything_including_persist(
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Simulate Ctrl-C while waiting for the (persist) server to come up.
-        def _boom(name, ready_file, proc):
+        def _boom(name, ready_file, proc, cancellation):
             raise KeyboardInterrupt
 
         monkeypatch.setattr(_stack, "_wait_ready", _boom)
@@ -190,7 +197,7 @@ class TestRunStackShutdownContract:
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Ready file appears immediately; no interruption.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
 
         processes = [
             _stack.Process(
@@ -216,7 +223,7 @@ class TestRunStackShutdownContract:
     ):
         # Stacks that own no model must not probe the Hub or change the
         # Hugging Face environment their children inherit.
-        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
         connect = Mock(side_effect=AssertionError("run_stack opened a socket"))
         monkeypatch.setattr(socket, "create_connection", connect)
         monkeypatch.setattr(socket.socket, "connect", connect)
@@ -243,7 +250,7 @@ class TestRunStackShutdownContract:
     ):
         allowed_exits = []
 
-        def _wait(group, ready_processes_may_exit):
+        def _wait(group, ready_processes_may_exit, cancellation):
             allowed_exits.append(ready_processes_may_exit)
 
         monkeypatch.setattr(_stack, "_wait_ready_parallel", _wait)
@@ -272,9 +279,9 @@ class TestRunStackShutdownContract:
     def test_runtime_summary_interrupt_preserves_exit_and_persist_ownership(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
 
-        def _monitor(procs):
+        def _monitor(procs, cancellation):
             proc = procs["vlm"]
             proc.returncode = 7
             return "vlm", proc
@@ -305,9 +312,9 @@ class TestRunStackShutdownContract:
     def test_unexpected_zero_runtime_exit_is_failure(
         self, stub_stack, tmp_path, monkeypatch,
     ):
-        monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
+        monkeypatch.setattr(_stack, "_wait_ready", lambda *args: None)
 
-        def _monitor(procs):
+        def _monitor(procs, cancellation):
             proc = procs["worker"]
             proc.returncode = 0
             return "worker", proc
@@ -338,7 +345,7 @@ class TestRunStackShutdownContract:
         monkeypatch.setattr(
             _stack,
             "_wait_ready",
-            lambda name, rf, proc: (_ for _ in ()).throw(
+            lambda name, rf, proc, cancellation: (_ for _ in ()).throw(
                 _stack._ReadinessFailure(name, -15)
             ),
         )
@@ -381,7 +388,8 @@ def test_monitor_prefers_cancellation_over_same_tick_child_exit(monkeypatch):
             handlers[_stack.signal.SIGINT](_stack.signal.SIGINT, None)
             return self.returncode
 
-    assert _stack._monitor({"worker": _ExitedDuringSignal()}) is None
+    with _stack._Cancellation() as cancellation:
+        assert _stack._monitor({"worker": _ExitedDuringSignal()}, cancellation) is None
 
 
 class TestStripConflictingCudnn:

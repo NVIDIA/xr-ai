@@ -193,10 +193,12 @@ its IPC receive loop is active.
   kill it on shutdown.
 
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
-abort during startup (Ctrl-C, a process exiting before it signals ready, or an
-unexpected exit while other members of its parallel group start), the launcher
-tears down **everything**, including `persist` processes, so no half-started
-service is left behind.
+abort during startup (SIGINT, SIGTERM, a process exiting before it signals ready,
+or an unexpected exit while other members of its parallel group start), the launcher
+tears down all processes it launched, including `persist` processes. Externally
+started `reuse` services remain untouched. Signal handling stays active through
+cleanup; repeated cancellation does not interrupt that cleanup. SIGKILL and
+launcher crashes cannot run this cleanup.
 
 ## Process failures
 
@@ -213,8 +215,9 @@ pipe open cannot hold up this wait indefinitely.
 An unexpected monitored exit is a stack failure even when the child exits
 with code 0; the launcher returns 1 in that case. Other child exit codes are
 preserved, and signal termination maps to `128 + signal number`. Startup
-cancellation returns 130; cancellation after readiness follows normal
-shutdown. Summary errors do not replace the original failure. Members of a
+cancellation returns `128 + signal number` (130 for SIGINT, 143 for SIGTERM);
+cancellation after readiness follows normal shutdown. Summary errors do not
+replace the original failure. Members of a
 parallel startup group remain monitored until the entire group is ready. An
 unexpected exit during that wait triggers startup cleanup, including when the
 process had already signaled ready. With `exit_after_ready=True`, a `persist`
