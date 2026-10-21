@@ -29,6 +29,7 @@ from xr_ai_models import (
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
+    ThinkingSpec,
     ToolDef,
 )
 from xr_ai_models._openai_compat import _PocketTTS
@@ -184,6 +185,78 @@ async def test_llm_chat_default_extras_merged_with_per_call() -> None:
         "enable_thinking": False,
         "thinking_budget": 256,
     }
+
+
+async def test_llm_chat_per_call_thinking_overrides_default_extras() -> None:
+    # A YAML default of thinking-on must not win over an explicit per-call off.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        default_extras={"chat_template_kwargs": {"enable_thinking": True}},
+        client=stub.client(),
+    ) as llm:
+        await llm.chat([ChatMessage(role="user", content="x")], enable_thinking=False)
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": False}
+        await llm.chat([ChatMessage(role="user", content="x")])
+        assert stub.last_json()["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+async def test_llm_chat_thinking_control_none_sends_no_switch() -> None:
+    # Strict or switchless endpoints opt out of template arguments entirely.
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="none", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            enable_thinking=True, thinking_budget=64,
+        )
+    assert "chat_template_kwargs" not in stub.last_json()
+
+
+@pytest.mark.parametrize("enable_thinking, line", [
+    (None, "detailed thinking off"),
+    (True, "detailed thinking on"),
+])
+async def test_llm_chat_system_prompt_thinking_inserts_switch(enable_thinking, line) -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="system_prompt", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            enable_thinking=enable_thinking,
+        )
+    body = stub.last_json()
+    assert body["messages"][0] == {"role": "system", "content": line}
+    assert "chat_template_kwargs" not in body
+
+
+async def test_llm_chat_system_prompt_thinking_prefixes_existing_system() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm",
+        thinking=ThinkingSpec(control="system_prompt", default=False),
+        client=stub.client(),
+    ) as llm:
+        await llm.chat([
+            ChatMessage(role="system", content="Be brief."),
+            ChatMessage(role="user", content="x"),
+        ])
+        assert stub.last_json()["messages"][0]["content"] == (
+            "detailed thinking off\n\nBe brief."
+        )
+        # A caller that already chose the mode in the prompt keeps it.
+        await llm.chat([
+            ChatMessage(role="system", content="detailed thinking on"),
+            ChatMessage(role="user", content="x"),
+        ])
+        assert stub.last_json()["messages"][0]["content"] == "detailed thinking on"
+        assert len(stub.last_json()["messages"]) == 2
 
 
 async def test_llm_chat_reasoning_field_aliasing() -> None:

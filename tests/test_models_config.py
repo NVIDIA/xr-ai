@@ -22,6 +22,7 @@ from xr_ai_models import (
     STTSpec,
     Spec,
     TTSSpec,
+    ThinkingSpec,
     VLMSpec,
     load_models_config,
     load_models_config_from_dict,
@@ -70,9 +71,33 @@ def test_get_preset_returns_deep_copy() -> None:
 def test_nemotron_omni_disables_thinking_by_default() -> None:
     preset = get_preset("nemotron_omni")
 
-    assert preset["default_extras"] == {
-        "chat_template_kwargs": {"enable_thinking": False},
-    }
+    assert preset["thinking"] == {"control": "chat_template", "default": False}
+    assert "default_extras" not in preset
+
+
+def test_profile_thinking_overrides_merge_onto_preset() -> None:
+    cfg = load_models_config_from_dict({"llm": {
+        "adapter": {"preset": "llama_nemotron", "thinking": {"default": True}},
+        "endpoint": {"base_url": "http://localhost:8102"},
+    }})
+
+    assert cfg.llm("llm").adapter.thinking == ThinkingSpec(
+        control="system_prompt", default=True,
+    )
+
+
+@pytest.mark.parametrize("thinking, match", [
+    ({"control": "reasoning_effort"}, "thinking control"),
+    ({"default": "off"}, "thinking default"),
+    ({"budget": 128}, "unknown thinking keys"),
+])
+def test_invalid_thinking_config_raises(thinking, match) -> None:
+    with pytest.raises(ValueError, match=match):
+        load_models_config_from_dict({"llm": {
+            "category": "llm",
+            "adapter": {"model_name": "llm", "thinking": thinking},
+            "endpoint": {"base_url": "http://localhost:8102"},
+        }})
 
 
 def test_unknown_preset_raises() -> None:
@@ -371,9 +396,8 @@ vlm:
     spec = cfg.vlm("vlm")
     assert isinstance(spec, VLMSpec)
     assert spec.model_name == "vlm"
-    assert spec.default_extras == {
-        "chat_template_kwargs": {"enable_thinking": False},
-    }
+    assert spec.default_extras == {}
+    assert spec.adapter.thinking == ThinkingSpec(control="chat_template", default=False)
     assert spec.capabilities.get("vision") is True
     assert spec.capabilities.get("video")  is True
 
@@ -388,6 +412,7 @@ vlm:
     assert isinstance(spec, VLMSpec)
     assert spec.model_name == "vlm"
     assert spec.default_extras == {}
+    assert spec.adapter.thinking == ThinkingSpec(control="none")
     assert spec.capabilities.get("vision") is True
     assert spec.capabilities.get("video") is True
 
@@ -589,9 +614,7 @@ def test_nested_profile_separates_adapter_endpoint_and_deployment() -> None:
             "tool_calls": True,
             "reasoning": True,
         },
-        default_extras={
-            "chat_template_kwargs": {"enable_thinking": False},
-        },
+        thinking=ThinkingSpec(control="chat_template", default=False),
     )
     assert spec.endpoint == EndpointSpec(
         base_url="https://models.example.test",

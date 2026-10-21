@@ -12,6 +12,7 @@ from typing import Any, Literal, TypeVar
 import yaml
 
 from . import presets as _presets
+from ._thinking import ThinkingSpec
 from ._utils import merge_dicts
 
 
@@ -55,6 +56,9 @@ class AdapterSpec:
 
     default_extras: dict[str, Any] = field(default_factory=dict)
     """Model-specific fields merged into every request payload."""
+
+    thinking: ThinkingSpec = field(default_factory=ThinkingSpec)
+    """How the model switches reasoning, and its default state."""
 
     function_id: str | None = None
     """NVCF function id for hosted Riva speech endpoints."""
@@ -767,6 +771,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         reasoning_field=_optional_str(body, "reasoning_field"),
         capabilities=_mapping(body, "capabilities"),
         default_extras=_mapping(body, "default_extras"),
+        thinking=ThinkingSpec.from_mapping(_mapping(body, "thinking")),
         function_id=_optional_str(body, "function_id"),
         use_ssl=_riva_bool(body, "use_ssl", False),
         language=_riva_str(body, "language", "en-US", allow_empty=False),

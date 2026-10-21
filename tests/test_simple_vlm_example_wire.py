@@ -181,7 +181,7 @@ def test_make_stt_from_config_resolves_preset(tmp_path) -> None:
 
 
 def test_make_vlm_from_config_cosmos_preset_has_enable_thinking_false(tmp_path) -> None:
-    """cosmos_vlm preset resolves with enable_thinking=False in default_extras."""
+    """cosmos_vlm preset resolves with reasoning off by default."""
     models_yaml = tmp_path / "models.yaml"
     models_yaml.write_text(
         "vlm:\n"
@@ -190,7 +190,7 @@ def test_make_vlm_from_config_cosmos_preset_has_enable_thinking_false(tmp_path) 
     )
     cfg  = load_models_config(models_yaml)
     spec = cfg.vlm("vlm")
-    assert spec.default_extras.get("chat_template_kwargs", {}).get("enable_thinking") is False
+    assert spec.adapter.thinking.default is False
 
 
 def test_make_tts_from_config_resolves_preset(tmp_path) -> None:
