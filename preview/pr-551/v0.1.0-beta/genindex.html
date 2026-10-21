@@ -364,6 +364,7 @@
 <li class="toctree-l3"><a class="reference internal" href="reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
@@ -456,6 +457,10 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.AddTranscriptResult">AddTranscriptResult (class in xr_ai_tools.text_memory)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.Admission">Admission (class in xr_ai_routing)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutableAgent.admit">admit() (xr_ai_routing.RoutableAgent method)</a>
+</li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.Agent">Agent (class in xr_ai_runtime)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AgentPresence.agent_id">agent_id (xr_ai_hub.AgentPresence attribute)</a>
@@ -470,18 +475,26 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AGENT_STATUS_TOPIC">AGENT_STATUS_TOPIC (in module xr_ai_hub)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentExchange">AgentExchange (class in xr_ai_routing)</a>
+</li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.AgentPresence">AgentPresence (class in xr_ai_hub)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentRouter">AgentRouter (class in xr_ai_routing)</a>
+</li>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime">AgentRuntime (class in xr_ai_runtime)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn">AgentTurn (class in xr_ai_routing)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.ALL">ALL (xr_ai_hub.Subscribe attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.anchor_relative">anchor_relative() (in module xr_ai_tools.spatial)</a>
 </li>
-      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionResponse.answers">answers (xr_ai_models.DecisionResponse attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutableAgent.answer">answer() (xr_ai_routing.RoutableAgent method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionResponse.answers">answers (xr_ai_models.DecisionResponse attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EndpointSpec.api_key_env">api_key_env (xr_ai_models.EndpointSpec attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall.arguments">arguments (xr_ai_models.ToolCall attribute)</a>
@@ -506,6 +519,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.VLMService.ask_video">(xr_ai_models.VLMService method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentExchange.assistant">assistant (xr_ai_routing.AgentExchange attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.AsyncTool">AsyncTool (class in xr_ai_tools)</a>
 
       <ul>
@@ -708,6 +723,8 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionQuestion.criteria">criteria (xr_ai_models.DecisionQuestion attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.current_turn_context">current_turn_context() (in module xr_ai_routing)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/current_frame/index.html#xr_ai_tools.current_frame.CurrentFrameRequest">CurrentFrameRequest (class in xr_ai_tools.current_frame)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/current_frame/index.html#xr_ai_tools.current_frame.CurrentFrameTool">CurrentFrameTool (class in xr_ai_tools.current_frame)</a>
@@ -752,12 +769,12 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionSpec">DecisionSpec (class in xr_ai_models)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.decode">decode() (in module xr_ai_hub)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.DEFAULT">DEFAULT (xr_ai_hub.Subscribe attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.default_extras">default_extras (xr_ai_models.AdapterSpec attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.DEFAULT_IMAGE">DEFAULT_IMAGE (in module xr_ai_vllm)</a>
@@ -781,9 +798,21 @@
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DeploymentSpec">DeploymentSpec (class in xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef.description">description (xr_ai_models.ToolDef attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid.description">(xr_ai_routing.RoutingAid attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.DestinationResult">DestinationResult (class in xr_ai_routing)</a>
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.detect_gpu_config">detect_gpu_config() (in module xr_ai_launcher)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.Admission.disposition">disposition (xr_ai_routing.Admission attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.DestinationResult.disposition">(xr_ai_routing.DestinationResult attribute)</a>
+</li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RAGHealthResult.document_count">document_count (xr_ai_tools.rag.RAGHealthResult attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.ListDocumentsResult.documents">documents (xr_ai_tools.rag.ListDocumentsResult attribute)</a>
@@ -802,6 +831,10 @@
         <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.VideoStatsResult.earliest_us">(xr_ai_tools.video_memory.VideoStatsResult attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid.eligibility">eligibility (xr_ai_routing.RoutingAid attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid.eligible">eligible (xr_ai_routing.RoutingAid attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EmbeddingService.embed">embed() (xr_ai_models.EmbeddingService method)</a>
 
       <ul>
@@ -828,6 +861,8 @@
         <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.SampleFramesResult.end_us">(xr_ai_tools.video_memory.SampleFramesResult attribute)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionSpec.endpoint">endpoint (xr_ai_models.DecisionSpec attribute)</a>
 
       <ul>
@@ -846,8 +881,6 @@
         <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.HubVoiceTransport.endpoint">(xr_ai_voice.HubVoiceTransport property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EndpointSpec">EndpointSpec (class in xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.ensure_credentials">ensure_credentials() (in module xr_ai_launcher)</a>
@@ -859,6 +892,8 @@
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.error">error (xr_ai_tools.tracking.HeadPose attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingTurnContext.exchange_id">exchange_id (xr_ai_routing.RoutingTurnContext attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.Tool.execute">execute() (xr_ai_tools.Tool method)</a>
 
@@ -990,6 +1025,8 @@
 <h2 id="H">H</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentRouter.handle">handle() (xr_ai_routing.AgentRouter method)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/tool_calling/index.html#xr_ai_tools.tool_calling.handle_tool_call">handle_tool_call() (in module xr_ai_tools.tool_calling)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose">HeadPose (class in xr_ai_tools.tracking)</a>
@@ -1062,6 +1099,12 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.HistoricalVideoRequest">HistoricalVideoRequest (class in xr_ai_tools.video_memory)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn.history">history (xr_ai_routing.AgentTurn attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingTurnContext.history_exchange_ids">history_exchange_ids (xr_ai_routing.RoutingTurnContext attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingTurnContext.history_timestamps">history_timestamps (xr_ai_routing.RoutingTurnContext attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.HubVoiceTransport">HubVoiceTransport (class in xr_ai_voice)</a>
 </li>
   </ul></td>
@@ -1127,6 +1170,8 @@
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionQuestion.instructions">instructions (xr_ai_models.DecisionQuestion attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceOutput.interrupt">interrupt (xr_ai_voice.VoiceOutput attribute)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentRouter.interrupt">interrupt() (xr_ai_routing.AgentRouter method)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/index.html#xr_ai_tools.Tool.invoke">invoke() (xr_ai_tools.Tool method)</a>
 
@@ -1334,6 +1379,8 @@
 </li>
         <li><a href="reference/python/xr_ai_models/presets/index.html#module-xr_ai_models.presets">xr_ai_models.presets</a>
 </li>
+        <li><a href="reference/python/xr_ai_routing/index.html#module-xr_ai_routing">xr_ai_routing</a>
+</li>
         <li><a href="reference/python/xr_ai_runtime/index.html#module-xr_ai_runtime">xr_ai_runtime</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/index.html#module-xr_ai_tools">xr_ai_tools</a>
@@ -1405,6 +1452,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolCall.name">(xr_ai_models.ToolCall attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ToolDef.name">(xr_ai_models.ToolDef attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid.name">(xr_ai_routing.RoutingAid attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.Topic.name">(xr_ai_runtime.Topic attribute)</a>
 </li>
@@ -1522,6 +1571,8 @@
 </li>
         <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ReturnAudioFlush.participant_id">(xr_ai_hub.ReturnAudioFlush attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn.participant_id">(xr_ai_routing.AgentTurn attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.MessageMetadata.participant_id">(xr_ai_runtime.MessageMetadata attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/current_frame/index.html#xr_ai_tools.current_frame.CurrentFrameRequest.participant_id">(xr_ai_tools.current_frame.CurrentFrameRequest attribute)</a>
@@ -1538,6 +1589,8 @@
 </li>
       </ul></li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.participant_joined">participant_joined() (xr_ai_voicegate.VoiceGate method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentRouter.participant_left">participant_left() (xr_ai_routing.AgentRouter method)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.FileMessage.participant_session_id">participant_session_id (xr_ai_hub.FileMessage attribute)</a>
 
@@ -1581,7 +1634,11 @@
 </li>
       <li><a href="reference/python/xr_ai_tools/tracking/index.html#xr_ai_tools.tracking.HeadPose.position">position (xr_ai_tools.tracking.HeadPose attribute)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.Admission.preamble">preamble (xr_ai_routing.Admission attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_logging/index.html#xr_ai_logging.print_task_done_banner">print_task_done_banner() (in module xr_ai_logging)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid.priority">priority (xr_ai_routing.RoutingAid attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionAnswer.probabilities">probabilities (xr_ai_models.DecisionAnswer attribute)</a>
 </li>
@@ -1627,9 +1684,11 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/marker_tracking/index.html#xr_ai_tools.marker_tracking.MarkerType.QR_CODE">QR_CODE (xr_ai_tools.marker_tracking.MarkerType attribute)</a>
 </li>
-      <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrieveRequest.query">query (xr_ai_tools.rag.RetrieveRequest attribute)</a>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn.query">query (xr_ai_routing.AgentTurn attribute)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrieveRequest.query">(xr_ai_tools.rag.RetrieveRequest attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.ImageQueryRequest.query">(xr_ai_tools.vision.ImageQueryRequest attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.MultiImageQueryRequest.query">(xr_ai_tools.vision.MultiImageQueryRequest attribute)</a>
@@ -1637,10 +1696,10 @@
         <li><a href="reference/python/xr_ai_tools/vision/index.html#xr_ai_tools.vision.VideoQueryRequest.query">(xr_ai_tools.vision.VideoQueryRequest attribute)</a>
 </li>
       </ul></li>
-      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_inventory">query_gpu_inventory() (in module xr_ai_gpu)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_inventory">query_gpu_inventory() (in module xr_ai_gpu)</a>
+</li>
       <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_pci_bus_ids">query_gpu_pci_bus_ids() (in module xr_ai_gpu)</a>
 </li>
       <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.query_gpu_processes">query_gpu_processes() (in module xr_ai_gpu)</a>
@@ -1716,6 +1775,8 @@
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.release">release() (xr_ai_hub.LiveFrameSource method)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutableAgent.release">(xr_ai_routing.RoutableAgent method)</a>
+</li>
         <li><a href="reference/python/xr_ai_tools/current_frame/index.html#xr_ai_tools.current_frame.CurrentFrameTool.release">(xr_ai_tools.current_frame.CurrentFrameTool method)</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/marker_tracking/index.html#xr_ai_tools.marker_tracking.MarkerTrackingTool.release">(xr_ai_tools.marker_tracking.MarkerTrackingTool method)</a>
@@ -1743,12 +1804,12 @@
       </ul></li>
       <li><a href="reference/python/xr_ai_vad/index.html#xr_ai_vad.VadDetector.reset">reset() (xr_ai_vad.VadDetector method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/image/index.html#xr_ai_tools.image.ImageRegistry.resolve">resolve() (xr_ai_tools.image.ImageRegistry method)</a>
 </li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.resolve_model_cache">resolve_model_cache() (in module xr_ai_vllm)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceOutput.response_id">response_id (xr_ai_voice.VoiceOutput attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrieveResult.results">results (xr_ai_tools.rag.RetrieveResult attribute)</a>
@@ -1802,6 +1863,14 @@
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.MsgType.ROSTER_REQUEST">ROSTER_REQUEST (xr_ai_hub.MsgType attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.RosterRequest">RosterRequest (class in xr_ai_hub)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutableAgent">RoutableAgent (class in xr_ai_routing)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutableAgent.routing_aid">routing_aid() (xr_ai_routing.RoutableAgent method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingAid">RoutingAid (class in xr_ai_routing)</a>
+</li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.RoutingTurnContext">RoutingTurnContext (class in xr_ai_routing)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/rpc/index.html#xr_ai_tools.rpc.RPCClient">RPCClient (class in xr_ai_tools.rpc)</a>
 </li>
@@ -1933,14 +2002,14 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.Spec">Spec (in module xr_ai_models)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.start">start() (xr_ai_runtime.AgentRuntime method)</a>
 
       <ul>
         <li><a href="reference/python/xr_ai_web_events/index.html#xr_ai_web_events.WebEventsAgent.start">(xr_ai_web_events.WebEventsAgent method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.QueryTranscriptsRequest.start_us">start_us (xr_ai_tools.text_memory.QueryTranscriptsRequest attribute)</a>
 
       <ul>
@@ -1962,6 +2031,8 @@
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.stop">stop() (xr_ai_hub.ProcessorEndpoint method)</a>
 
       <ul>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentRouter.stop">(xr_ai_routing.AgentRouter method)</a>
+</li>
         <li><a href="reference/python/xr_ai_runtime/index.html#xr_ai_runtime.AgentRuntime.stop">(xr_ai_runtime.AgentRuntime method)</a>
 </li>
         <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAggregationAgent.stop">(xr_ai_voice.VoiceAggregationAgent method)</a>
@@ -2053,6 +2124,10 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRSpan.text">(xr_ai_models.OCRSpan attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TextPart.text">(xr_ai_models.TextPart attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.Admission.text">(xr_ai_routing.Admission attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.DestinationResult.text">(xr_ai_routing.DestinationResult attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_tools/rag/index.html#xr_ai_tools.rag.RetrievedChunk.text">(xr_ai_tools.rag.RetrievedChunk attribute)</a>
 </li>
@@ -2239,6 +2314,8 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TTSSpec">TTSSpec (class in xr_ai_models)</a>
 </li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentTurn.turn_id">turn_id (xr_ai_routing.AgentTurn attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ImagePart.type">type (xr_ai_models.ImagePart attribute)</a>
 
       <ul>
@@ -2285,6 +2362,8 @@
         <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUProcess.used_memory_gib">(xr_ai_gpu.GPUProcess attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/python/xr_ai_routing/index.html#xr_ai_routing.AgentExchange.user">user (xr_ai_routing.AgentExchange attribute)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.user_relative">user_relative() (in module xr_ai_tools.spatial)</a>
 </li>
       <li><a href="reference/python/xr_ai_voice/index.html#xr_ai_voice.UserQuery">UserQuery (class in xr_ai_voice)</a>
@@ -2471,6 +2550,13 @@
 </li>
       </ul></li>
       <li>
+    xr_ai_routing
+
+      <ul>
+        <li><a href="reference/python/xr_ai_routing/index.html#module-xr_ai_routing">module</a>
+</li>
+      </ul></li>
+      <li>
     xr_ai_runtime
 
       <ul>
@@ -2519,6 +2605,8 @@
         <li><a href="reference/python/xr_ai_tools/image_polygon/index.html#module-xr_ai_tools.image_polygon">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     xr_ai_tools.marker_tracking
 
@@ -2526,8 +2614,6 @@
         <li><a href="reference/python/xr_ai_tools/marker_tracking/index.html#module-xr_ai_tools.marker_tracking">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     xr_ai_tools.rag
 
