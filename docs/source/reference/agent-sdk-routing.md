@@ -29,8 +29,11 @@ these steps:
 4. A declined route is excluded from one reroute. After selected destinations
    decline, an eligible configured default gets one answer attempt without a
    second admission check, provided it did not already decline this turn.
-   An explicit `clarify` decision or no eligible candidate produces clarification;
-   nonzero destination probabilities do not override a clarification decision.
+   If the routing model chooses `clarify`, the router tries the highest-scoring
+   eligible destination through normal admission when usable scores are
+   available. Equal scores preserve candidate registration order. No eligible
+   candidate or usable scores produces clarification. A destination can still
+   explicitly request clarification during admission; that ends routing.
 5. An accepted destination streams chunks through the callback, tagged with its
    registered route name. It returns an answer, keeps focus, or releases focus
    after the answer. A post-answer release consumes the current query; it does

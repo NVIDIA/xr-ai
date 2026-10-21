@@ -153,8 +153,10 @@ class RoutableAgent(Protocol):
         Destination exceptions and task cancellation propagate to the caller.
         The router suppresses later chunks after interruption but cannot
         retract output already delivered to ``emit``.
-        A routing ``clarify`` decision ends selection without calling a
-        destination. After exhausted declines, the default is not retried if
+        A routing ``clarify`` choice with usable scores selects the
+        highest-scoring eligible destination through normal admission. Without
+        eligible scores the router asks for clarification. After exhausted
+        declines, the default is not retried if
         it already declined this turn, and
         clarification is also used when the configured default is unavailable.
         """

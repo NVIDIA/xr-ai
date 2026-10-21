@@ -59,7 +59,8 @@ class AgentRouter:
     from one bounded reroute. If selected destinations decline through those
     attempts, the configured eligible default gets one final answer attempt
     without another admission check unless it already declined this turn.
-    An explicit clarification decision is not overridden by probability scores.
+    An uncertain routing choice uses the highest-scoring eligible destination
+    when usable scores are available.
     If routing cannot select an eligible
     destination, the router asks for clarification. Destinations own their
     model and application state.
@@ -935,10 +936,17 @@ class AgentRouter:
                 selected = answer.choice
                 selection_reason = "router_choice"
                 selected_probability = answer.probabilities[selected]
+            elif answer.choice == "clarify" and any(
+                answer.probabilities.get(name, 0.0) > 0 for name in current_eligible
+            ):
+                # Equal scores retain candidate registration order.
+                selected = max(current_eligible, key=lambda name: answer.probabilities.get(name, 0.0))
+                selected_probability = answer.probabilities[selected]
+                selection_reason = "highest_scored_eligible_after_clarify"
             else:
                 selected = None
                 selection_reason = (
-                    "router_clarify" if answer.choice == "clarify" else "invalid_or_ineligible_choice"
+                    "clarify_without_eligible_scores" if answer.choice == "clarify" else "invalid_or_ineligible_choice"
                 )
             nemo_relay.scope.event(
                 "conversation.destination-route-choice",

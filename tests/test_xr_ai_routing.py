@@ -652,9 +652,12 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
 
     result, output = await _run(front_end, query="How can I move the objects behind me?")
 
-    assert result == DestinationResult("clarify", "Which part would you like help with?")
-    assert output == [("conversation", "Which part would you like help with?")]
-    assert conversation.calls == []
+    assert result == DestinationResult("answer", "General answer.")
+    assert output == [("conversation", "General answer.")]
+    assert conversation.calls == [
+        ("admit", "How can I move the objects behind me?", False),
+        ("answer", "How can I move the objects behind me?"),
+    ]
     assert observation.calls == []
     assert events == [
         (
@@ -663,9 +666,9 @@ async def test_route_scope_records_choice_probabilities_and_eligible_candidates(
                 "router_choice": "clarify",
                 "router_confidence": 0.61,
                 "router_probabilities": {"clarify": 0.61, "conversation": 0.27, "observation": 0.12},
-                "selected_destination": None,
-                "selected_destination_probability": None,
-                "selection_reason": "router_clarify",
+                "selected_destination": "conversation",
+                "selected_destination_probability": 0.27,
+                "selection_reason": "highest_scored_eligible_after_clarify",
                 "eligible_destinations": ["conversation", "observation"],
             },
         )
@@ -732,11 +735,11 @@ async def test_router_uses_explicit_observation_for_current_camera_question():
 
 
 @pytest.mark.asyncio
-async def test_router_respects_explicit_choice_with_tied_destination_probabilities():
+async def test_uncertain_router_tie_uses_destination_registration_order():
     decisions = _Decisions(
         DecisionAnswer(
-            "conversation",
-            0.45,
+            "clarify",
+            0.1,
             {"observation": 0.45, "clarify": 0.1, "conversation": 0.45},
         )
     )
@@ -753,6 +756,25 @@ async def test_router_respects_explicit_choice_with_tied_destination_probabiliti
         ("answer", "What is in front of me?"),
     ]
     assert observation.calls == []
+
+
+@pytest.mark.parametrize("choice", ["clarify", "conversation"])
+async def test_uncertain_fallback_uses_only_eligible_routes_without_overriding_explicit_choice(choice):
+    probabilities = {"unavailable": 0.5, "observation": 0.3, "conversation": 0.15, "clarify": 0.05}
+    decisions = _Decisions(DecisionAnswer(choice, probabilities[choice], probabilities))
+    conversation = _Destination("conversation", results=(DestinationResult("answer", "General."),))
+    observation = _Destination("observation", results=(DestinationResult("answer", "Observed."),))
+    unavailable = _Destination("unavailable", eligible=False)
+    router = AgentRouter(
+        {"conversation": conversation, "observation": observation, "unavailable": unavailable}, decisions,
+    )
+
+    result, output = await _run(router, query="What is in the current view?")
+
+    expected = "observation" if choice == "clarify" else "conversation"
+    assert result == DestinationResult("answer", "Observed." if choice == "clarify" else "General.")
+    assert output == [(expected, result.text)]
+    assert unavailable.calls == []
 
 
 @pytest.mark.asyncio
