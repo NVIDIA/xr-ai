@@ -1035,8 +1035,10 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
     pull = f"ipc://{tmp_path}/{suffix}-a"
     pub = f"ipc://{tmp_path}/{suffix}-b"
     file_pull = f"ipc://{tmp_path}/{suffix}-c"
-    # In-process fan-out makes the slow pipe's capacity depend on ZMQ's HWMs,
-    # not additional OS socket buffering. The connector still uses real IPC.
+    # Keep fan-out inproc: production IPC adds OS buffering, so HWMs alone do
+    # not bound the slow pipe's capacity. Connector-to-hub input remains IPC.
+    # No subscription sleep is needed with inproc because slow is constructed
+    # (and sends SUBSCRIBE) before hub.run() is scheduled; preserve that order.
     file_pub = f"inproc://slow-file-subscriber-{suffix}"
     hub = HubEndpoint(
         pull,
@@ -1057,8 +1059,9 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
         pub,
         pull,
         file_sub_addr=file_pub,
-        # Leave room for every test message and subscription probes. Receiving
-        # a callback does not mean ZMQ has replenished the publisher's credit.
+        # Leave room for every test message and subscription probes. Publisher
+        # credit means available message slots, restored when receiver progress
+        # reaches the publisher; a callback can run before that update arrives.
         file_hwm=16,
         filter=Subscribe.FILE,
     )
@@ -1112,13 +1115,18 @@ async def test_slow_file_subscriber_does_not_block_healthy_subscriber(tmp_path) 
                     await asyncio.sleep(0.001)
 
         assert received == ["stream-0", "stream-1", "stream-2"]
-        # The stopped receiver fills its send+receive capacity (1 + 1), so
-        # stream-2 must be dropped there while reaching the healthy receiver.
+        # libzmq's inproc capacity is SNDHWM + RCVHWM = 1 + 1 = 2 messages.
+        # The index-0 poll only caches stream-0's topic frame, not its final
+        # multipart frame, so it returns no message credit before stream-1 and
+        # stream-2 are published. Thus only stream-2 is dropped on the slow pipe.
+        # Keep the exact queue assertion: one retained message would also mean
+        # lost credit or stray traffic; changed libzmq semantics need review.
         queued = []
         while await slow._file_sub.poll(timeout=0) & zmq.POLLIN:
             _, payload = await slow._file_sub.recv_multipart()
-            _, message = decode(payload)
-            queued.append(message.transfer_id)
+            type_id, queued_message = decode(payload)
+            assert type_id == MsgType.FILE_MESSAGE
+            queued.append(queued_message.transfer_id)
         assert queued == ["stream-0", "stream-1"]
     finally:
         healthy.stop()
