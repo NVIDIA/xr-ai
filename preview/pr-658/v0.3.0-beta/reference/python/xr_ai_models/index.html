@@ -1805,12 +1805,6 @@ and the TTS-only <code class="docutils literal notranslate"><span class="pre">vo
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.thinking">
-<span class="sig-name descname"><span class="pre">thinking</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><span class="pre">xr_ai_models.ThinkingSpec</span></a></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.thinking" title="Link to this definition">#</a></dt>
-<dd><p>How the model switches reasoning, and its default state.</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.function_id">
 <span class="sig-name descname"><span class="pre">function_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.function_id" title="Link to this definition">#</a></dt>
 <dd><p>NVCF function id for hosted Riva speech endpoints.</p>
@@ -1838,6 +1832,12 @@ and the TTS-only <code class="docutils literal notranslate"><span class="pre">vo
 <dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.sample_rate">
 <span class="sig-name descname"><span class="pre">sample_rate</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">44100</span></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.sample_rate" title="Link to this definition">#</a></dt>
 <dd><p>Riva TTS output sample rate in Hz.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.AdapterSpec.thinking">
+<span class="sig-name descname"><span class="pre">thinking</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><span class="pre">xr_ai_models.ThinkingSpec</span></a></em><a class="headerlink" href="#xr_ai_models.AdapterSpec.thinking" title="Link to this definition">#</a></dt>
+<dd><p>How the model switches reasoning, and its default state.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2014,6 +2014,7 @@ even when the endpoint takes no API key.</p>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">adapter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.AdapterSpec" title="xr_ai_models.AdapterSpec"><span class="pre">AdapterSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">endpoint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.EndpointSpec" title="xr_ai_models.EndpointSpec"><span class="pre">EndpointSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">thinking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><span class="pre">xr_ai_models.ThinkingSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.LLMSpec" title="Link to this definition">#</a></dt>
@@ -2197,6 +2198,7 @@ even when the endpoint takes no API key.</p>
 <dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">adapter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.AdapterSpec" title="xr_ai_models.AdapterSpec"><span class="pre">AdapterSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">endpoint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.EndpointSpec" title="xr_ai_models.EndpointSpec"><span class="pre">EndpointSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">thinking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><span class="pre">xr_ai_models.ThinkingSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
 </dl>
 
 <span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.VLMSpec" title="Link to this definition">#</a></dt>
@@ -2258,13 +2260,16 @@ originate from a file.</p>
 <dd><p>How a model endpoint switches reasoning, and its default state.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="xr_ai_models.ThinkingSpec.control">
-<span class="sig-name descname"><span class="pre">control</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ThinkingControl</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'chat_template'</span></em><a class="headerlink" href="#xr_ai_models.ThinkingSpec.control" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">control</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ThinkingControl</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_models.ThinkingSpec.control" title="Link to this definition">#</a></dt>
 <dd><p>The model’s switch dialect.</p>
 <p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> sends <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs.enable_thinking</span></code> (and
 <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code>), as vLLM and NIM Nemotron/Qwen-style templates expect.
-<code class="docutils literal notranslate"><span class="pre">system_prompt</span></code> prepends <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on|off</span></code> to the system
-message, as Llama-Nemotron expects.  <code class="docutils literal notranslate"><span class="pre">none</span></code> leaves requests unchanged
-for models without a switch or endpoints that reject template arguments.</p>
+<code class="docutils literal notranslate"><span class="pre">system_prompt</span></code> puts a <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on|off</span></code> line at the start of
+the system message, as Llama-Nemotron expects.  <code class="docutils literal notranslate"><span class="pre">none</span></code> leaves requests
+unchanged for models without a switch or endpoints that reject template
+arguments.  <code class="docutils literal notranslate"><span class="pre">None</span></code> (unset) uses <code class="docutils literal notranslate"><span class="pre">chat_template</span></code> when <code class="docutils literal notranslate"><span class="pre">default</span></code> is
+set; otherwise only a call that enables thinking sends the switch, and an
+explicit off adds nothing to the request.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2709,12 +2714,12 @@ before returning, so a caller can safely release recognition resources.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.reasoning_field"><code class="docutils literal notranslate"><span class="pre">reasoning_field</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.capabilities"><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.default_extras"><code class="docutils literal notranslate"><span class="pre">default_extras</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.thinking"><code class="docutils literal notranslate"><span class="pre">thinking</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.function_id"><code class="docutils literal notranslate"><span class="pre">function_id</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.use_ssl"><code class="docutils literal notranslate"><span class="pre">use_ssl</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.language"><code class="docutils literal notranslate"><span class="pre">language</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.voice"><code class="docutils literal notranslate"><span class="pre">voice</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.sample_rate"><code class="docutils literal notranslate"><span class="pre">sample_rate</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.AdapterSpec.thinking"><code class="docutils literal notranslate"><span class="pre">thinking</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.Category"><code class="docutils literal notranslate"><span class="pre">Category</span></code></a></li>

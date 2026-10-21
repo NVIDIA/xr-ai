@@ -624,6 +624,33 @@ during startup returns 130. Refer to
 <a class="reference internal" href="../components/launcher-and-process-model.html"><span class="doc">Launcher and process model</span></a> for failure diagnostics and
 shutdown behavior.</p>
 </section>
+<section id="model-reasoning-control">
+<h3>Model reasoning control<a class="headerlink" href="#model-reasoning-control" title="Link to this heading">#</a></h3>
+<p>Model profiles now declare reasoning with a typed <code class="docutils literal notranslate"><span class="pre">adapter.thinking</span></code> setting.
+A per-call <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code> always applies to that call. A
+legacy <code class="docutils literal notranslate"><span class="pre">default_extras.chat_template_kwargs.enable_thinking:</span> <span class="pre">true</span></code> default could
+previously not be turned off per call. Refer to <a class="reference internal" href="agent-sdk-models.html#agent-sdk-models-thinking"><span class="std std-ref">Reasoning control</span></a>.</p>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">llama_nemotron</span></code> profiles:</strong> requests now start the system message with
+<code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">off</span></code> unless a call passes <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code>; the model
+previously reasoned by default and its preamble appeared in the response. To
+keep reasoning on by default, set it in the profile:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">adapter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llama_nemotron</span>
+<span class="w">  </span><span class="nt">thinking</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Custom <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> implementations:</strong> <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code> now defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code> instead of <code class="docutils literal notranslate"><span class="pre">False</span></code>. Treat <code class="docutils literal notranslate"><span class="pre">None</span></code> as the endpoint’s configured default.</p></li>
+<li><p><strong>Profiles with the legacy key:</strong> no change is required. With a template-driven
+or presetless adapter, the value becomes <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code>, so a call can
+override it. It must now be a boolean, and a profile that also sets a
+different <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> is rejected. Prefer <code class="docutils literal notranslate"><span class="pre">thinking.default</span></code> in new
+profiles.</p></li>
+</ul>
+</section>
 <section id="operator-visible-runtime-changes">
 <h3>Operator-visible runtime changes<a class="headerlink" href="#operator-visible-runtime-changes" title="Link to this heading">#</a></h3>
 <p>Recorded-video perception is enabled when <code class="docutils literal notranslate"><span class="pre">video_history_enabled</span></code> is omitted
@@ -709,6 +736,7 @@ refer to <a class="reference internal" href="clef-flash.html"><span class="doc">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#native-nim-endpoint-profiles">Native NIM endpoint profiles</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#livekit-sample-credentials">LiveKit sample credentials</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launcher-failure-exit-statuses">Launcher failure exit statuses</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-reasoning-control">Model reasoning control</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#operator-visible-runtime-changes">Operator-visible runtime changes</a></li>
 </ul>
 </li>
