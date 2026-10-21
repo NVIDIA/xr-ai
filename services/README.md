@@ -18,7 +18,6 @@ dependency paths, operational ownership, and standalone commands predictable.
 | `stt-server/` | Parakeet speech recognition | 8103 |
 | `magpie-tts/` | Magpie speech synthesis | 8104 |
 | `pocket-tts/` | Pocket TTS speech synthesis | 8105 |
-| `llama-nemotron-llm/` | Llama Nemotron text generation | 8106 |
 | `nemotron3-nano-llm/` | Nemotron 3 Nano text generation | 8107 |
 | `nemotron-omni-llm/` | Nemotron Omni multimodal generation | 8108 |
 | `clef-server/` | Clef-Flash SystemOne choice decisions | 8120 |

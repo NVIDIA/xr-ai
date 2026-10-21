@@ -18,7 +18,6 @@ _ROOT = Path(__file__).resolve().parents[1]
 _REQUIRED_SERVICES = {
     "cloudxr-runtime",
     "embedding-server",
-    "llama-nemotron-llm",
     "magpie-tts",
     "nemotron-omni-llm",
     "nemotron3-nano-llm",
@@ -34,11 +33,6 @@ _REQUIRED_SERVICES = {
 _MODEL_SERVICES = {
     "clef-server": ("clef-server", "clef_server", 8120),
     "embedding-server": ("embedding-server", "embedding_server", 8109),
-    "llama-nemotron-llm": (
-        "llama-nemotron-llm-server",
-        "llama_nemotron_llm_server",
-        8106,
-    ),
     "magpie-tts": ("magpie-tts-server", "magpie_tts_server", 8104),
     "nemotron-omni-llm": (
         "nemotron-omni-llm-server",

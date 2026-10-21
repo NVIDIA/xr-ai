@@ -524,11 +524,6 @@ def test_consolidated_readme_headings_keep_github_compatibility_anchors() -> Non
             quickstart endpoints config-keys-embedding_serveryaml matryoshka-dimensions
             example-request choosing-the-vllm-runtime-pip-vs-docker
         """,
-        "services/llama-nemotron-llm/README.md": """
-            quickstart endpoints config-keys-llama_nemotron_llm_serveryaml
-            tool-calling-native-llama-31-format reasoning-toggle--per-turn-via-system-prompt
-            choosing-the-vllm-runtime-pip-vs-docker swap-models license
-        """,
         "services/nemotron3-nano-llm/README.md": """
             quickstart endpoints config-keys-nemotron3_nano_llm_serveryaml
             tool-calling-native-qwen3-coder-format reasoning-mode-thinking

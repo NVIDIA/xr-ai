@@ -269,8 +269,7 @@ def _pcm_to_wav(pcm: bytes, sample_rate: int, channels: int) -> bytes:
 class OpenAICompatLLM:
     """OpenAI-compatible ``/v1/chat/completions`` client.
 
-    Used directly for plain LLMs (Llama-Nemotron, Nemotron3-Nano,
-    Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
+    Used directly for plain LLMs (Nemotron3-Nano, Nemotron-Omni) and indirectly via :class:`OpenAICompatVLM` for VLMs.
     The API key is read once from ``api_key_env`` during construction. An
     injected HTTP client remains owned by the caller and is not closed here.
     """

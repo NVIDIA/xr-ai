@@ -1,14 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GPU smoke tests for the three vLLM-backed LLM servers.
+"""GPU smoke tests for the two vLLM-backed LLM servers.
 
-Three tests, run serially by pytest:
-
-* ``test_llama_nemotron_tool_call`` — spawns ``llama_nemotron_llm_server``
-  (docker backend), POSTs a chat-completions request with a tool spec, and
-  asserts the response includes ``tool_calls`` whose ``arguments`` is
-  parseable JSON.
+Two tests, run serially by pytest:
 
 * ``test_nemotron3_nano_persistent`` — spawns
   ``nemotron3_nano_llm_server`` (persistent mode), makes one tiny request,
@@ -51,7 +46,6 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_LLAMA_DIR = _REPO_ROOT / "services" / "llama-nemotron-llm"
 _N3_DIR    = _REPO_ROOT / "services" / "nemotron3-nano-llm"
 _OMNI_DIR  = _REPO_ROOT / "services" / "nemotron-omni-llm"
 
@@ -61,7 +55,7 @@ _HF_HUB_DIRS = [
 ]
 
 # 30B model cold-start (weight load + FlashInfer JIT) is multi-minute on
-# pre-Blackwell; 8B is faster but vLLM startup itself eats ~60s.
+# pre-Blackwell; vLLM startup itself eats ~60s.
 # Cold-start budget covers a first-time weights download (~15–30 GB)
 # + vLLM compile + FlashInfer JIT. Cached runs complete in ~60–180 s.
 _COLD_STARTUP_TIMEOUT_S = 1800.0
@@ -157,92 +151,7 @@ def _post_json(url: str, payload: dict, timeout: float = 120.0) -> tuple[int, di
             return e.code, {}
 
 
-# ── test 1: llama_nemotron tool-call ─────────────────────────────────────────
-
-
-_LLAMA_MODEL = "nvidia/Llama-3.1-Nemotron-Nano-8B-v1"
-
-
-async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
-    if shutil.which("uv") is None:
-        pytest.skip("uv not on PATH")
-    if not _LLAMA_DIR.exists():
-        pytest.skip(f"llama_nemotron source tree missing: {_LLAMA_DIR}")
-
-    port = pick_free_port()
-    cfg = {
-        "model":                  _LLAMA_MODEL,
-        "host":                   "127.0.0.1",
-        "port":                   port,
-        "served_model_name":      "llm",
-        "model_cache":            str(Path("~/.cache/huggingface").expanduser()),
-        "max_num_seqs":           1,
-        "tensor_parallel_size":   1,
-        "max_model_len":          4096,
-        "gpu_memory_utilization": 0.60,
-        "enforce_eager":          True,
-        "tool_call_parser":       "llama3_json",
-        "enable_tool_choice":     True,
-        # docker backend: nvcc + flashinfer are pre-built in the NGC image.
-        "vllm_backend":           "docker",
-    }
-    cfg_yaml = tmp_path / "llama_nemotron_llm_server.yaml"
-    cfg_yaml.write_text(yaml.safe_dump(cfg))
-
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.Popen(
-        ["uv", "run", "--directory", str(_LLAMA_DIR),
-         "llama_nemotron_llm_server", "--config", str(cfg_yaml)],
-        env=env,
-    )
-
-    try:
-        await _wait_for_health(port, _COLD_STARTUP_TIMEOUT_S, proc)
-
-        tools = [{
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get the current weather in a city.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "City name, e.g. 'Paris'.",
-                        },
-                    },
-                    "required": ["location"],
-                },
-            },
-        }]
-        payload = {
-            "model":       "llm",
-            "messages":    [{"role": "user",
-                             "content": "What's the weather in Paris right now?"}],
-            "tools":       tools,
-            "tool_choice": "auto",
-            "max_tokens":  64,
-            "temperature": 0,
-        }
-        loop = asyncio.get_running_loop()
-        status, data = await loop.run_in_executor(
-            None, _post_json, f"http://127.0.0.1:{port}/v1/chat/completions", payload,
-        )
-        assert status == 200, f"HTTP {status}: {data!r}"
-        msg = data["choices"][0]["message"]
-        tool_calls = msg.get("tool_calls") or []
-        assert tool_calls, f"no tool_calls in response: {msg!r}"
-        args_str = tool_calls[0]["function"]["arguments"]
-        args = json.loads(args_str)
-        assert isinstance(args, dict), f"tool args not a dict: {args_str!r}"
-    finally:
-        _terminate(proc)
-        # Wrapper SIGTERM doesn't reach the persistent vLLM child.
-        stop_persistent_servers([("llama_nemotron", port)])
-
-
-# ── test 2: nemotron3_nano persistence ──────────────────────────────────────
+# ── test 1: nemotron3_nano persistence ──────────────────────────────────────
 
 
 async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
@@ -326,7 +235,7 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
         stop_persistent_servers([("nemotron3_nano", port)])
 
 
-# ── test 3: nemotron_omni multimodal ────────────────────────────────────────
+# ── test 2: nemotron_omni multimodal ────────────────────────────────────────
 
 
 async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
