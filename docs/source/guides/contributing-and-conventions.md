@@ -160,17 +160,14 @@ newer resolved version does not prove the declared floor.
 Keep one concern per NVIDIA/xr-ai pull request, ideally under 300 changed lines,
 across all languages and docs. For a larger change, justify its size in the PR
 description. Leave unrelated pre-existing defects to follow-ups. Confirm the
-intended behavior with the user before implementing review requests that expand
-scope, and state it in the PR description.
+intended behavior with the user before expanding scope, and state it in the PR
+description.
 
 State the problem, resulting behavior, and whether the change is a refactor.
 For validation, give reproducible commands, local or CI execution, results, and
 relevant hardware or toolchain versions. State what was not run. A native build
 or mocked test does not establish physical-device or GPU behavior. Keep these
 claims current when scope changes; link CI runs when citing CI results.
-
-Keep review replies brief: state the disposition, correction, and new evidence.
-Explain disagreements using the intended contract before changing behavior.
 
 (resource-lifecycle)=
 ## Resource lifecycle
