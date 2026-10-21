@@ -61,7 +61,11 @@ async def test_tea_embedding_startup_and_retrieval(tmp_path):
     port = pick_free_port()
     # Docker ownership is discoverable even before inference binds its port.
     # A persistent pip child can outlive the wrapper and evade port-based cleanup.
-    config.update(host="127.0.0.1", port=port, vllm_backend="docker")
+    config.update(
+        host="127.0.0.1", port=port, vllm_backend="docker",
+        # Docker-created cache files must stay outside checkout's cleanup path.
+        model_cache=str(Path("~/.cache/huggingface").expanduser()),
+    )
     config_path = tmp_path / "embedding.yaml"
     config_path.write_text(yaml.safe_dump(config))
     ready_file = tmp_path / "ready"
