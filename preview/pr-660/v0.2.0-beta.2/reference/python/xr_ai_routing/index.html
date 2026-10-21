@@ -1,0 +1,1068 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>xr_ai_routing &#8212; XR AI</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=da1a55c7" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+
+
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/python/xr_ai_routing/index';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+
+    <link rel="icon" href="../../../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="xr_ai_runtime" href="../xr_ai_runtime/index.html" />
+    <link rel="prev" title="xr_ai_models.presets" href="../xr_ai_models/presets/index.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../../../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="XR AI - Home"/>
+    <img src="../../../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="XR AI - Home"/>
+  
+  
+    <p class="title logo__title">XR AI</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.3.0-beta</option>
+    <option value="1" selected>v0.2.0-beta.2</option>
+    <option value="2" >v0.1.0-beta</option>
+    <option value="3" >main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../../../v0.3.0-beta/index.html", "index.html", "../../../../v0.1.0-beta/index.html", "../../../../main/index.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../overview/architecture.html">Architecture</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/quickstart.html">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/skills.html">Skills</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/requirements.html">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/clients.html">Connecting clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/networking.html">Networking and firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/credentials.html">Credentials</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../components/index.html">Components</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/agent-sdk.html">Agent SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/ai-services.html">AI inference servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/launcher-and-process-model.html">Launcher and process model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../components/server-runtime.html">Server runtime</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../guides/index.html">Guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-a-sample.html">Adding a new sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/customizing-model-servers.html">Customizing model servers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/documentation-style.html">Documentation style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/spdx-headers.html">SPDX license headers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/testing.html">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../guides/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-web-events.html">xr-ai-web-events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../command-line.html">Command-line reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../configuration.html">Sample configuration reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../lab-instrument-monitoring.html">Lab instrument monitoring — building marker-associated visual agents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../migrations.html">Release migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../simple-vlm-example.html">Simple VLM example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../tea-making-sample.html">Tea-making guidance — building deterministic visual workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../xr-render-demo.html">xr-render-demo — architecture</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_gpu/index.html">xr_ai_gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_hub/index.html">xr_ai_hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vad/index.html">xr_ai_vad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_vllm/index.html">xr_ai_vllm</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_tools/index.html">xr_ai_tools</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/async_tools/index.html">xr_ai_tools.async_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/capture/index.html">xr_ai_tools.capture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/current_frame/index.html">xr_ai_tools.current_frame</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image/index.html">xr_ai_tools.image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/image_polygon/index.html">xr_ai_tools.image_polygon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/marker_tracking/index.html">xr_ai_tools.marker_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/rag/index.html">xr_ai_tools.rag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/rpc/index.html">xr_ai_tools.rpc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/spatial/index.html">xr_ai_tools.spatial</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/text_memory/index.html">xr_ai_tools.text_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tool_calling/index.html">xr_ai_tools.tool_calling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tools/index.html">xr_ai_tools.tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/tracking/index.html">xr_ai_tools.tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/types/index.html">xr_ai_tools.types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/video_memory/index.html">xr_ai_tools.video_memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_tools/vision/index.html">xr_ai_tools.vision</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_voice/index.html">xr_ai_voice</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../xr_ai_models/index.html">xr_ai_models</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_runtime/index.html">xr_ai_runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_logging/index.html">xr_ai_logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr_ai_routing</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="module-xr_ai_routing">
+<span id="xr-ai-routing"></span><h1>xr_ai_routing<a class="headerlink" href="#module-xr_ai_routing" title="Link to this heading">#</a></h1>
+<p>Public contracts and router for participant-scoped agent routing.</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.Admission" title="xr_ai_routing.Admission"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Admission</span></code></a></p></td>
+<td><p>Destination decision made before it speaks or starts work.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.AgentExchange" title="xr_ai_routing.AgentExchange"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentExchange</span></code></a></p></td>
+<td><p>One completed user and assistant exchange.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentTurn</span></code></a></p></td>
+<td><p>The current user turn and complete exchanges selected for this destination.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DestinationResult</span></code></a></p></td>
+<td><p>Completed answer plus the router's post-answer focus transition.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.RoutableAgent" title="xr_ai_routing.RoutableAgent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoutableAgent</span></code></a></p></td>
+<td><p>An agent that owns its state and handles admitted or fallback turns.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.RoutingAid" title="xr_ai_routing.RoutingAid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoutingAid</span></code></a></p></td>
+<td><p>Brief routing metadata, separate from the destination's full instructions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.RoutingTurnContext" title="xr_ai_routing.RoutingTurnContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoutingTurnContext</span></code></a></p></td>
+<td><p>Read-only routing metadata captured from the current asynchronous context.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_routing.AgentRouter" title="xr_ai_routing.AgentRouter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AgentRouter</span></code></a></p></td>
+<td><p>Route a turn, check admission before speech, and retain explicit focus.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_routing.current_turn_context" title="xr_ai_routing.current_turn_context"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_turn_context</span></code></a>(→ xr_ai_routing.RoutingTurnContext)</p></td>
+<td><p>Return a stable snapshot of metadata for the active routed turn.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="package-contents">
+<h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.Admission">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">Admission</span></span><a class="headerlink" href="#xr_ai_routing.Admission" title="Link to this definition">#</a></dt>
+<dd><p>Destination decision made before it speaks or starts work.</p>
+<p><code class="docutils literal notranslate"><span class="pre">accept</span></code> permits work, <code class="docutils literal notranslate"><span class="pre">decline</span></code> returns control for another route,
+<code class="docutils literal notranslate"><span class="pre">clarify</span></code> ends routing with a question, and <code class="docutils literal notranslate"><span class="pre">release</span></code> clears focus and
+returns the same query to ordinary routing.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.Admission.disposition">
+<span class="sig-name descname"><span class="pre">disposition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'accept'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'decline'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clarify'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'release'</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_routing.Admission.disposition" title="Link to this definition">#</a></dt>
+<dd><p>Whether the destination may begin work or should return control.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.Admission.preamble">
+<span class="sig-name descname"><span class="pre">preamble</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_routing.Admission.preamble" title="Link to this definition">#</a></dt>
+<dd><p>Optional short acknowledgment emitted only after acceptance.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.Admission.text">
+<span class="sig-name descname"><span class="pre">text</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_routing.Admission.text" title="Link to this definition">#</a></dt>
+<dd><p>Optional text for clarification or release; release text precedes rerouting.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentExchange">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">AgentExchange</span></span><a class="headerlink" href="#xr_ai_routing.AgentExchange" title="Link to this definition">#</a></dt>
+<dd><p>One completed user and assistant exchange.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentExchange.user">
+<span class="sig-name descname"><span class="pre">user</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentExchange.user" title="Link to this definition">#</a></dt>
+<dd><p>User request in the completed exchange.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentExchange.assistant">
+<span class="sig-name descname"><span class="pre">assistant</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentExchange.assistant" title="Link to this definition">#</a></dt>
+<dd><p>Completed user-visible reply, excluding progress acknowledgments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">AgentTurn</span></span><a class="headerlink" href="#xr_ai_routing.AgentTurn" title="Link to this definition">#</a></dt>
+<dd><p>The current user turn and complete exchanges selected for this destination.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn.participant_id">
+<span class="sig-name descname"><span class="pre">participant_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentTurn.participant_id" title="Link to this definition">#</a></dt>
+<dd><p>Participant whose state and focus apply to this turn.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn.turn_id">
+<span class="sig-name descname"><span class="pre">turn_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentTurn.turn_id" title="Link to this definition">#</a></dt>
+<dd><p>Stable identity used to correlate streamed output and cancellation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn.query">
+<span class="sig-name descname"><span class="pre">query</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.AgentTurn.query" title="Link to this definition">#</a></dt>
+<dd><p>Unmodified current user request.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentTurn.history">
+<span class="sig-name descname"><span class="pre">history</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_routing.AgentExchange" title="xr_ai_routing.AgentExchange"><span class="pre">AgentExchange</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">()</span></em><a class="headerlink" href="#xr_ai_routing.AgentTurn.history" title="Link to this definition">#</a></dt>
+<dd><p>Newest whole completed exchanges that fit the router’s byte budget.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.DestinationResult">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">DestinationResult</span></span><a class="headerlink" href="#xr_ai_routing.DestinationResult" title="Link to this definition">#</a></dt>
+<dd><p>Completed answer plus the router’s post-answer focus transition.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.DestinationResult.disposition">
+<span class="sig-name descname"><span class="pre">disposition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'answer'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'focus'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'release'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clarify'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'answer'</span></em><a class="headerlink" href="#xr_ai_routing.DestinationResult.disposition" title="Link to this definition">#</a></dt>
+<dd><p>Destinations return answer, focus, or release; the router returns clarify before answer work.</p>
+<p>A post-answer <code class="docutils literal notranslate"><span class="pre">release</span></code> consumes this turn and clears focus. It does not
+reroute the request; use <code class="docutils literal notranslate"><span class="pre">Admission(&quot;release&quot;)</span></code> for that behavior.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.DestinationResult.text">
+<span class="sig-name descname"><span class="pre">text</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#xr_ai_routing.DestinationResult.text" title="Link to this definition">#</a></dt>
+<dd><p>Completed answer to retain in history; progress acknowledgements are excluded.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">RoutableAgent</span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent" title="Link to this definition">#</a></dt>
+<dd><p>An agent that owns its state and handles admitted or fallback turns.</p>
+<p>The router calls <code class="docutils literal notranslate"><span class="pre">release()</span></code> when it releases a destination during
+rerouting or clears its focus. On participant departure it calls an optional
+<code class="docutils literal notranslate"><span class="pre">participant_left(participant_id)</span></code> method when present, otherwise it calls
+<code class="docutils literal notranslate"><span class="pre">release()</span></code>. Implement that optional hook when departure should clear
+durable participant state that route release retains; it is not required by
+this protocol.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent.routing_aid">
+<span class="sig-name descname"><span class="pre">routing_aid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.RoutingAid" title="xr_ai_routing.RoutingAid"><span class="pre">RoutingAid</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.routing_aid" title="Link to this definition">#</a></dt>
+<dd><p>Describe this participant’s current eligibility and route scope.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent.admit">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">admit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">AgentTurn</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">focused</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.Admission" title="xr_ai_routing.Admission"><span class="pre">Admission</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.admit" title="Link to this definition">#</a></dt>
+<dd><p>Accept, decline, clarify, or release before producing spoken output.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent.answer">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">answer</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">AgentTurn</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.answer" title="Link to this definition">#</a></dt>
+<dd><p>Answer a turn after admission or as the configured default fallback.</p>
+<p>Stream chunks and return answer, focus, or release. After selected
+destinations decline through the bounded routing attempts, the front
+end may call an eligible configured default once without <code class="docutils literal notranslate"><span class="pre">admit()</span></code>,
+unless that default already declined the current turn;
+destinations must support that standalone answer path.</p>
+<p>Destinations decline or clarify in <code class="docutils literal notranslate"><span class="pre">admit()</span></code>, before output or work begins.
+Returning <code class="docutils literal notranslate"><span class="pre">DestinationResult(&quot;release&quot;)</span></code> consumes the current request
+after the answer and clears focus; it does not reroute that request.
+Destination exceptions and task cancellation propagate to the caller.
+The router suppresses later chunks after interruption but cannot
+retract output already delivered to <code class="docutils literal notranslate"><span class="pre">emit</span></code>.
+A routing <code class="docutils literal notranslate"><span class="pre">clarify</span></code> choice with usable scores selects the
+highest-scoring eligible destination through normal admission. Without
+eligible scores the router asks for clarification. After exhausted
+declines, the default is not retried if
+it already declined this turn, and
+clarification is also used when the configured default is unavailable.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutableAgent.release">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_routing.RoutableAgent.release" title="Link to this definition">#</a></dt>
+<dd><p>Handle route release; the router also uses it for departure fallback.</p>
+<p>This method runs when the router releases a destination during
+rerouting or clears its focus. It is also the departure fallback when
+no <code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> hook is present. A destination can clear
+active resources here while retaining completed participant data; use
+the optional departure hook for stronger cleanup.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">RoutingAid</span></span><a class="headerlink" href="#xr_ai_routing.RoutingAid" title="Link to this definition">#</a></dt>
+<dd><p>Brief routing metadata, separate from the destination’s full instructions.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.RoutingAid.name" title="Link to this definition">#</a></dt>
+<dd><p>Stable route name used for attribution and decision labels.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid.description">
+<span class="sig-name descname"><span class="pre">description</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_routing.RoutingAid.description" title="Link to this definition">#</a></dt>
+<dd><p>Concise description used as a route-selection hint, not an authorization rule.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid.priority">
+<span class="sig-name descname"><span class="pre">priority</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#xr_ai_routing.RoutingAid.priority" title="Link to this definition">#</a></dt>
+<dd><p>Tie-breaking preference after request relevance.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid.eligible">
+<span class="sig-name descname"><span class="pre">eligible</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#xr_ai_routing.RoutingAid.eligible" title="Link to this definition">#</a></dt>
+<dd><p>Whether this destination may be selected for this participant now.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingAid.eligibility">
+<span class="sig-name descname"><span class="pre">eligibility</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'available'</span></em><a class="headerlink" href="#xr_ai_routing.RoutingAid.eligibility" title="Link to this definition">#</a></dt>
+<dd><p>Current participant-specific eligibility state.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingTurnContext">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">RoutingTurnContext</span></span><a class="headerlink" href="#xr_ai_routing.RoutingTurnContext" title="Link to this definition">#</a></dt>
+<dd><p>Read-only routing metadata captured from the current asynchronous context.</p>
+<p>The snapshot is stable after it is returned, including when the router
+later updates its private context for another completed exchange.
+Outside an active routed turn, the identifiers are <code class="docutils literal notranslate"><span class="pre">None</span></code> and the
+history metadata tuples are empty.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingTurnContext.exchange_id">
+<span class="sig-name descname"><span class="pre">exchange_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#xr_ai_routing.RoutingTurnContext.exchange_id" title="Link to this definition">#</a></dt>
+<dd><p>Identity of the current completed exchange, when one is active.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingTurnContext.history_exchange_ids">
+<span class="sig-name descname"><span class="pre">history_exchange_ids</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">object</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_routing.RoutingTurnContext.history_exchange_ids" title="Link to this definition">#</a></dt>
+<dd><p>Exchange identities aligned with the active bounded history.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_routing.RoutingTurnContext.history_timestamps">
+<span class="sig-name descname"><span class="pre">history_timestamps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_routing.RoutingTurnContext.history_timestamps" title="Link to this definition">#</a></dt>
+<dd><p>History timestamps aligned with the active history, in Unix microseconds.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_routing.current_turn_context">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">current_turn_context</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.RoutingTurnContext" title="xr_ai_routing.RoutingTurnContext"><span class="pre">xr_ai_routing.RoutingTurnContext</span></a></span></span><a class="headerlink" href="#xr_ai_routing.current_turn_context" title="Link to this definition">#</a></dt>
+<dd><p>Return a stable snapshot of metadata for the active routed turn.</p>
+<p>Agent code called within a routed turn can use this accessor to associate
+work with the current exchange and its bounded history. The returned
+snapshot does not change when routing advances to another exchange. Outside
+an active routed turn, it contains <code class="docutils literal notranslate"><span class="pre">None</span></code> and empty history tuples.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentRouter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_routing.</span></span><span class="sig-name descname"><span class="pre">AgentRouter</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">destinations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_routing.RoutableAgent" title="xr_ai_routing.RoutableAgent"><span class="pre">xr_ai_routing.RoutableAgent</span></a><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">decisions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.DecisionService" title="xr_ai_models.DecisionService"><span class="pre">xr_ai_models.DecisionService</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">default_destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'conversation'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">context_budget_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_DEFAULT_CONTEXT_BUDGET_BYTES</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">acknowledgment_llm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../xr_ai_models/index.html#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><span class="pre">xr_ai_models.LLMService</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">acknowledgment_delay_secs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_routing.AgentRouter" title="Link to this definition">#</a></dt>
+<dd><p>Route a turn, check admission before speech, and retain explicit focus.</p>
+<p>A focused destination receives the participant’s next turn first. It can
+answer, release focus, or decline and return control to ordinary routing.
+Route choices use the typed decision service; a declined route is excluded
+from one bounded reroute. If selected destinations decline through those
+attempts, the configured eligible default gets one final answer attempt
+without another admission check unless it already declined this turn.
+An uncertain routing choice uses the highest-scoring eligible destination
+when usable scores are available.
+If routing cannot select an eligible
+destination, the router asks for clarification. Destinations own their
+model and application state.</p>
+<p><code class="docutils literal notranslate"><span class="pre">acknowledgment_llm</span></code> and <code class="docutils literal notranslate"><span class="pre">acknowledgment_delay_secs</span></code> opt into a brief,
+route-aware intention acknowledgment. Both must be supplied together. A
+configured acknowledgment client must default to non-reasoning generation;
+the per-call setting cannot override every provider’s model-level extras.
+Acknowledgments use a bounded output-token budget. A positive delay sets
+the fallback silence threshold; a confident prediction
+of a slower first answer can start the acknowledgment earlier. The
+destination still starts immediately, and its first nonblank answer chunk
+cancels any acknowledgment that has not yet been emitted. This suppresses
+pending output, not audio already queued or played by downstream transports.
+The delay and timing examples start after admission and measure when the
+destination produces its first nonblank text, excluding routing, admission,
+acknowledgment-output serialization, and audio playback.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destinations</strong> – Registered destinations keyed by their stable route names.</p></li>
+<li><p><strong>decisions</strong> – Typed Clef decision service used to select routes.</p></li>
+<li><p><strong>default_destination</strong> – Registered route used for exhausted-decline fallback.</p></li>
+<li><p><strong>context_budget_bytes</strong> – UTF-8 byte budget for retained completed history and routing history input.</p></li>
+<li><p><strong>acknowledgment_llm</strong> – Optional non-reasoning client for intention acknowledgments and duration prediction.</p></li>
+<li><p><strong>acknowledgment_delay_secs</strong> – Finite positive delay before fallback
+acknowledgment; requires <code class="docutils literal notranslate"><span class="pre">acknowledgment_llm</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentRouter.handle">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">handle</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">turn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_routing.AgentTurn" title="xr_ai_routing.AgentTurn"><span class="pre">xr_ai_routing.AgentTurn</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Awaitable</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_routing.DestinationResult" title="xr_ai_routing.DestinationResult"><span class="pre">xr_ai_routing.DestinationResult</span></a></span></span><a class="headerlink" href="#xr_ai_routing.AgentRouter.handle" title="Link to this definition">#</a></dt>
+<dd><p>Route and answer one turn, emitting source-tagged text chunks.</p>
+<p>The supplied <code class="docutils literal notranslate"><span class="pre">turn.history</span></code> seeds this participant when the router
+has no completed history of its own. Later turns use the router’s
+completed history rather than merging a new caller-supplied history.
+The participant’s current turn is kept separate from that history.</p>
+<p>Destination failures propagate to the caller, which owns any turn-level
+recovery after already-emitted progress text. Cancellation suppresses
+future chunks from the interrupted turn but cannot retract chunks
+already delivered to <code class="docutils literal notranslate"><span class="pre">emit</span></code>.</p>
+<p>The application drives turns and lifecycle operations. Destination and
+output callbacks, including their child tasks, must not recursively
+await this router’s operations, which would wait for their own response
+or cleanup to finish.</p>
+<p>Raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> while departure or shutdown is pending, or
+after cleanup fails until the caller retries it successfully.
+Canceling a cleanup waiter does not abandon the owned operation;
+cancellation propagates after that operation completes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>turn</strong> – Current request and optional initial completed history.</p></li>
+<li><p><strong>emit</strong> – Callback that receives destination-attributed text chunks.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The final answer, focus, release, or clarification disposition.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentRouter.interrupt">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">interrupt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_routing.AgentRouter.interrupt" title="Link to this definition">#</a></dt>
+<dd><p>Cancel active response work while retaining completed history and focus.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">participant_id</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, cancel work for all participants.
+Awaiting this method drains the canceled response tasks. Output already
+delivered to a callback cannot be retracted.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentRouter.participant_left">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">participant_left</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">participant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_routing.AgentRouter.participant_left" title="Link to this definition">#</a></dt>
+<dd><p>Release one participant’s state and history.</p>
+<p>Attempts every destination used by the participant, calling its
+<code class="docutils literal notranslate"><span class="pre">participant_left()</span></code> hook when present and otherwise <code class="docutils literal notranslate"><span class="pre">release()</span></code>.
+Failed releases remain tracked for a caller-triggered retry and are
+raised together in an <code class="docutils literal notranslate"><span class="pre">ExceptionGroup</span></code>. Until this method completes
+successfully, <code class="docutils literal notranslate"><span class="pre">handle()</span></code> raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for that participant.
+Concurrent callers join the same owned departure. Canceling a waiter
+waits for that operation to finish before propagating cancellation.
+Retry after a cleanup failure; success reopens participant admission.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_routing.AgentRouter.stop">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_routing.AgentRouter.stop" title="Link to this definition">#</a></dt>
+<dd><p>Drain responses and release all participant state in one owned operation.</p>
+<p>Concurrent callers join the same shutdown. Canceling a waiter does not
+cancel shutdown: cancellation propagates only after cleanup completes.
+Release failures are raised together in an <code class="docutils literal notranslate"><span class="pre">ExceptionGroup</span></code> after
+every participant is attempted; admission stays closed until a later
+<code class="docutils literal notranslate"><span class="pre">stop()</span></code> retries successfully. Successful shutdown clears history-only
+participants too, and permits later turns to begin a fresh lifecycle.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../xr_ai_models/presets/index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">xr_ai_models.presets</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../xr_ai_runtime/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">xr_ai_runtime</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.Admission"><code class="docutils literal notranslate"><span class="pre">Admission</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.Admission.disposition"><code class="docutils literal notranslate"><span class="pre">disposition</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.Admission.preamble"><code class="docutils literal notranslate"><span class="pre">preamble</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.Admission.text"><code class="docutils literal notranslate"><span class="pre">text</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentExchange"><code class="docutils literal notranslate"><span class="pre">AgentExchange</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentExchange.user"><code class="docutils literal notranslate"><span class="pre">user</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentExchange.assistant"><code class="docutils literal notranslate"><span class="pre">assistant</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn"><code class="docutils literal notranslate"><span class="pre">AgentTurn</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.participant_id"><code class="docutils literal notranslate"><span class="pre">participant_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.turn_id"><code class="docutils literal notranslate"><span class="pre">turn_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.query"><code class="docutils literal notranslate"><span class="pre">query</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentTurn.history"><code class="docutils literal notranslate"><span class="pre">history</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.DestinationResult"><code class="docutils literal notranslate"><span class="pre">DestinationResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.DestinationResult.disposition"><code class="docutils literal notranslate"><span class="pre">disposition</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.DestinationResult.text"><code class="docutils literal notranslate"><span class="pre">text</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutableAgent"><code class="docutils literal notranslate"><span class="pre">RoutableAgent</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutableAgent.routing_aid"><code class="docutils literal notranslate"><span class="pre">routing_aid()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutableAgent.admit"><code class="docutils literal notranslate"><span class="pre">admit()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutableAgent.answer"><code class="docutils literal notranslate"><span class="pre">answer()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutableAgent.release"><code class="docutils literal notranslate"><span class="pre">release()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid"><code class="docutils literal notranslate"><span class="pre">RoutingAid</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid.name"><code class="docutils literal notranslate"><span class="pre">name</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid.description"><code class="docutils literal notranslate"><span class="pre">description</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid.priority"><code class="docutils literal notranslate"><span class="pre">priority</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid.eligible"><code class="docutils literal notranslate"><span class="pre">eligible</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingAid.eligibility"><code class="docutils literal notranslate"><span class="pre">eligibility</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingTurnContext"><code class="docutils literal notranslate"><span class="pre">RoutingTurnContext</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingTurnContext.exchange_id"><code class="docutils literal notranslate"><span class="pre">exchange_id</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingTurnContext.history_exchange_ids"><code class="docutils literal notranslate"><span class="pre">history_exchange_ids</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.RoutingTurnContext.history_timestamps"><code class="docutils literal notranslate"><span class="pre">history_timestamps</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.current_turn_context"><code class="docutils literal notranslate"><span class="pre">current_turn_context()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentRouter"><code class="docutils literal notranslate"><span class="pre">AgentRouter</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentRouter.handle"><code class="docutils literal notranslate"><span class="pre">handle()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentRouter.interrupt"><code class="docutils literal notranslate"><span class="pre">interrupt()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentRouter.participant_left"><code class="docutils literal notranslate"><span class="pre">participant_left()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_routing.AgentRouter.stop"><code class="docutils literal notranslate"><span class="pre">stop()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../../../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../../../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+<div class="footer-links">
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/">Privacy Policy</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/privacy-center/">Your Privacy Choices</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/terms-of-service/">Terms of Service</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/accessibility/">Accessibility</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/about-nvidia/company-policies/">Corporate Policies</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/product-security/">Product Security</a>
+   | 
+  
+  
+  
+  <a class="external" href="https://www.nvidia.com/en-us/contact/">Contact</a>
+  
+  
+  
+</div>
+</div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2026, NVIDIA CORPORATION &amp; AFFILIATES.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
