@@ -407,6 +407,38 @@ async def test_current_view_rejects_invalid_tool_arguments_and_reports_frame_una
 
 
 @pytest.mark.asyncio
+async def test_current_view_rejects_an_empty_query_before_capturing_a_frame():
+    llm = _CurrentViewLLM(arguments='{"query":""}')
+    frames = _CurrentFrame()
+    conversation = Conversation(llm, frames=frames, vision=_StreamingVision())  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="invalid current_view arguments"):
+        _ = [chunk async for chunk in conversation.stream("Look here.", "alice")]
+    assert frames.requests == []
+
+
+@pytest.mark.asyncio
+async def test_camera_unavailable_reply_is_recorded_for_follow_ups_only_when_delivered():
+    frames = _CurrentFrame(error=FrameUnavailable("No camera frame is available."))
+    conversation = Conversation(_CurrentViewLLM(), frames=frames, vision=_StreamingVision())  # type: ignore[arg-type]
+
+    # A consumer that stops before the reply is fully delivered records nothing.
+    stream = conversation.stream("What color is the sign?", "alice")
+    await stream.aclose()
+    assert conversation._context.dialogue_snapshot("alice")[1] == ()
+
+    assert [chunk async for chunk in conversation.stream("What color is the sign?", "alice")] == [
+        "No camera frame is available."
+    ]
+    llm = _LLM()
+    conversation._llm = llm
+    _ = [chunk async for chunk in conversation.stream("Why?", "alice")]
+    prompt = llm.messages[-1][-2].content
+    assert "User: What color is the sign?\nAssistant: “No camera frame is available.”" in prompt
+    await conversation.close()
+
+
+@pytest.mark.asyncio
 async def test_current_view_rejects_tool_calls_when_visual_tools_are_not_configured():
     llm = _CurrentViewLLM()
     conversation = Conversation(llm)

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import Field
 from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, LLMService, ToolDef
 from xr_ai_routing import (
@@ -71,7 +72,7 @@ _CURRENT_VIEW_TOOL = ToolDef(
 
 
 class _CurrentViewRequest(StrictRequest):
-    query: str
+    query: str = Field(min_length=1)
 
 
 class Conversation(RoutableAgent):
@@ -367,7 +368,11 @@ class Conversation(RoutableAgent):
             unavailable = _frame_unavailable_message(error)
             if unavailable is None:
                 raise
+            response_fragments.append(unavailable)
             yield unavailable
+            # A fully delivered unavailable reply is a completed exchange, so a
+            # follow-up such as "Why?" can refer to it.
+            self._record_completed_exchange(participant_id, request, "".join(response_fragments))
             return
 
         stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=visual_query))
