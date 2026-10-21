@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Oracles describe the drawing, not a model's prior responses. Only pixels and
-# the test guide's question reach the configured VLM; these expectations never do.
-guides_dir: fixtures
-guide: Chamomile Evaluation
+# the shipped guide's question reach the configured VLM; these expectations never do.
+guides_dir: ../guides
+guide: Tea Making
 scenes_file: tea_scenes.yaml
 cases:
   - {scene: breakfast, step: identify, answer: 'NO', accept: false}

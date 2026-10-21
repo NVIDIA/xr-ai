@@ -31,6 +31,7 @@ def evaluator(monkeypatch):
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     cases, guide = evaluator.prepare(_SAMPLE / "eval/tea_visual_cases.yaml", tmp_path / "images")
     assert len(cases) == 25
+    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
     scenes = yaml.safe_load((_SAMPLE / "eval/tea_scenes.yaml").read_text())
     for scene in scenes.values():
@@ -123,7 +124,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
         assert summary["recognition_correct"] == 50
         assert all(step["passed"] for step in summary["by_step"].values())
     rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-    guide = evaluator.select_guide(_SAMPLE / "eval/fixtures", "Chamomile Evaluation")
+    guide = evaluator.select_guide(_SAMPLE / "guides", "Tea Making")
     for row, request in zip(rows, requests, strict=True):
         assert request.query == guide.workflow.steps[row["step"]].trigger.arguments["question"]
     fake_vlm.close.assert_awaited_once()
@@ -151,11 +152,11 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("filename", ["tea_guide.yaml", "tea_guide_complete.yaml"])
-def test_flow_uses_brand_neutral_guide_and_control_contract(evaluator, filename):
+def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
     path = _SAMPLE / "eval" / filename
     manifest = yaml.safe_load(path.read_text())
     guide = evaluator.select_guide(path.parent / manifest["guides_dir"], manifest["guide"])
-    assert guide.path == _SAMPLE / "eval/fixtures/chamomile.guide.yaml"
+    assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]
@@ -204,20 +205,11 @@ async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value
         await module.evaluate(manifest, tmp_path / "results")
 
 
-def test_fixture_tracks_shipped_guide_contract():
-    shipped = yaml.safe_load((_SAMPLE / "guides/tea-making.guide.yaml").read_text())
-    fixture = yaml.safe_load((_SAMPLE / "eval/fixtures/chamomile.guide.yaml").read_text())
-    assert fixture["steps"] == shipped["steps"]
-    assert fixture["state"] == shipped["state"]
-    for field in ("foreground_prompt", "complete_message", "start_step"):
-        assert fixture["task"][field] == shipped["task"][field]
-
-
 def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     manifest = yaml.safe_load((_SAMPLE / "eval/tea_visual_cases.yaml").read_text())
     manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "eval/tea_visual_cases.yaml", manifest)
     del manifest["scenes_file"]
-    manifest["guides_dir"] = str(_SAMPLE / "eval/fixtures")
+    manifest["guides_dir"] = str(_SAMPLE / "guides")
     path = tmp_path / "inline.yaml"
     path.write_text(yaml.safe_dump(manifest))
     cases, _guide = evaluator.prepare(path, tmp_path / "output")
@@ -241,7 +233,7 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
 def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
     manifest = yaml.safe_load((_SAMPLE / "eval/tea_visual_cases.yaml").read_text())
     case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.select_guide(_SAMPLE / "eval/fixtures", manifest["guide"])
+    guide = evaluator.select_guide(_SAMPLE / "eval" / manifest["guides_dir"], manifest["guide"])
     pattern = guide.workflow.steps[case["step"]].evidence.pattern
     row = evaluator.score(case, pattern, text, True)
     assert row["recognition"] is recognition

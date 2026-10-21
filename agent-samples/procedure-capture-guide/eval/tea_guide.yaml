@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Negative observations precede each success so premature completion fails the run.
-guides_dir: fixtures
-guide: Chamomile Evaluation
+guides_dir: ../guides
+guide: Tea Making
 fail_fast: true
 scenes_file: tea_scenes.yaml
 visual_cases_file: tea_visual_cases.yaml

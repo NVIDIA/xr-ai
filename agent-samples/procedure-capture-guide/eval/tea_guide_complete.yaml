@@ -3,8 +3,8 @@
 
 # Independent positive path so a failed negative-case scenario cannot hide
 # timer and lifecycle coverage.
-guides_dir: fixtures
-guide: Chamomile Evaluation
+guides_dir: ../guides
+guide: Tea Making
 fail_fast: true
 scenes_file: tea_scenes.yaml
 actions:
