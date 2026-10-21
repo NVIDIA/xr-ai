@@ -64,15 +64,17 @@ Rendered background context is bounded by `context_budget_bytes`; compaction
 input is separately bounded by `compaction_input_budget_bytes`. An oversized
 summary clears its source, an oversized incremental record is dropped whole,
 and an oversized compacted summary removes only the affected source. Completed
-conversation history uses its own byte budget and remains separate from
-background context.
+conversation history remains separate from background context. These budgets
+bound rendered context and compaction inputs, not total transcript storage:
+the exact dialogue transcript is retained until participant release, departure,
+or conversation close.
 
 ## Package contents
 
 | Module | Responsibility |
 |---|---|
-| `conversation.py` | Implements the conversation engine and optional current-view tools |
-| `context.py` | Defines the text-only context update payload |
+| `_conversation.py` | Implements the conversation engine and optional current-view tools |
+| `_context_update.py` | Defines the text-only context update payload |
 | `_context.py` | Stores participant dialogue and source context; performs bounded compaction |
 | `_topics.py` | Adapts configured runtime topics to participant-scoped context updates |
 | `prompts/core.txt` | Supplies the default conversation instructions |
