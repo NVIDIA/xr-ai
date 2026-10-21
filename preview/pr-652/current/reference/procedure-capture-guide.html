@@ -677,6 +677,115 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.</p>
 </section>
+<section id="generate-a-draft-guide">
+<h2>Generate a draft guide<a class="headerlink" href="#generate-a-draft-guide" title="Link to this heading">#</a></h2>
+<p>Use a coding agent with local file and image access to follow the bundled
+<code class="docutils literal notranslate"><span class="pre">recording-to-guide</span></code> and <code class="docutils literal notranslate"><span class="pre">evaluate-guide</span></code> skills. The first writes YAML directly;
+the second runs a fixed draft against captured images with the configured XR-AI
+models and tools, then returns findings for revision. Both skills, their
+references, the validator and packet-playback support belong to this generation
+workflow. No separate sample regression suite is needed.</p>
+<p>The authoring model observes runtime results and edits the
+guide. It does not replace the runtime VLM, invent tool answers, compile a plan
+into YAML, or approve the result. The capture worker does not invoke the skills.</p>
+<p>From the repository root, give the agent this request:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Read agent-samples/procedure-capture-guide/skills/recording-to-guide/SKILL.md,
+its schema reference, and applicable examples.
+Use agent-samples/procedure-capture-guide/artifacts/sessions/&lt;session-id&gt;/packet.json.
+Write the demonstrated procedure directly as draft guide YAML and matching
+evidence review notes under agent-samples/procedure-capture-guide/guides/.
+Reuse narration and captions; inspect original images where evidence is unclear.
+Interpret all capture sources together as complementary, fallible evidence of
+the intended task, not observations to translate literally into steps. Use
+judgment for ordinary organization and wording. Document consequential assumptions,
+their effects and questions needing human confirmation in .review.md, while
+continuing to draft sufficiently understood parts.
+Preserve distinct actions, counts, orientation, order, and required durations.
+Validate with the runtime parser, then follow
+agent-samples/procedure-capture-guide/skills/evaluate-guide/SKILL.md to test the
+draft with the captured images and configured local XR-AI models and tools.
+Assess fidelity to the intended task and clarity for someone performing it
+afresh, not just whether the recording passes. Distinguish recording coverage
+gaps, uncertain requirements and actual runtime verification limitations.
+Observe the actual outputs and revise only the guide when findings justify it.
+Revalidate and rerun revised guides without weakening requirements to fit the
+demonstration. Follow the skill's iteration and final-verification rules.
+Report paths, actual results, revision rounds, coverage gaps and approval
+blockers. Leave task.status draft. Do not edit source recordings, substitute
+your own visual answers, or invent successful tests when models are unavailable.
+</pre></div>
+</div>
+<p>No installation is required for this explicit-file request. To install the
+skills, copy the entire <code class="docutils literal notranslate"><span class="pre">recording-to-guide/</span></code> and <code class="docutils literal notranslate"><span class="pre">evaluate-guide/</span></code> directories
+as siblings, including references and metadata. Keep the target checkout and
+packet paths explicit; the evaluator runs that checkout’s implementation.</p>
+<p>The outputs are local and Git-ignored:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">guides/&lt;slug&gt;.guide.yaml</span></code>: model-authored draft.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">guides/&lt;slug&gt;.review.md</span></code>: action-to-evidence mapping, capture ID, source
+frame references, corrections, revisions, consequential assumptions and
+questions needing human confirmation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">guides/&lt;slug&gt;.evaluation.md</span></code>: task fidelity and clarity assessment, runtime
+observations, evaluated hash, untested checks and findings for the next revision.</p></li>
+</ul>
+<p>Source session IDs and recording timestamps belong in review notes, not
+executable YAML. Update the request, both skills, schema reference and examples
+together when changing this workflow.</p>
+<section id="validate-and-refine">
+<h3>Validate and refine<a class="headerlink" href="#validate-and-refine" title="Link to this heading">#</a></h3>
+<p>Run the read-only validator from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/procedure-capture-guide/worker<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>procedure_capture_guide_worker._validate_guide<span class="w"> </span>agent-samples/procedure-capture-guide/guides/&lt;slug&gt;.guide.yaml
+</pre></div>
+</div>
+<p>It imports the runtime parser directly; there is no authoring-specific schema.
+It checks state and completion rules, step links, trigger arguments, permitted
+tools, strings and duplicate keys. It neither rewrites nor approves a guide.
+A schema-valid guide can still omit an action or accept an incorrect result.</p>
+<p>With this sample’s configured model servers running, evaluate a fixed draft:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">PYTHONPATH</span><span class="o">=</span>agent-samples/procedure-capture-guide/worker<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/procedure-capture-guide/worker<span class="w"> </span>python<span class="w"> </span>agent-samples/procedure-capture-guide/eval/guide.py<span class="w"> </span>--packet<span class="w"> </span>/path/to/packet.json<span class="w"> </span>--guide<span class="w"> </span>/path/to/draft.guide.yaml<span class="w"> </span>--output<span class="w"> </span>/path/to/evaluation/run-001
+</pre></div>
+</div>
+<p>The existing runtime evaluator supplies each captured frame once at its original
+relative time and sends start and Next utterances through the conversation
+model. It records exact guide bytes, source hashes, frame selections, actual
+model and tool outputs, guidance state, speech and failures. Draft eligibility
+is temporary and in memory. It does not write YAML or change approval status.
+The camera endpoint and user text are simulated; hub IPC, browser, STT and TTS
+audio are not tested. Refer to <code class="docutils literal notranslate"><span class="pre">evaluate-guide/references/runtime-replay.md</span></code>
+for artifact details and timing limits.</p>
+<p>Use the findings to refine instructions and checks, then rerun from fresh state.
+Default to at most three evaluation-and-update rounds and always verify the
+final revision. Report actual rounds, not retries or formatting-only edits.
+Missing models or evidence are blocked tests, never a pass. A fixed recording
+cannot react to guidance, so distinguish timing gaps from guide defects.
+Missing visual evidence in the recording does not by itself invalidate an
+appropriate completion check for a future worker. Preserve that requirement
+and disclose the coverage gap rather than weakening the SOP to make the test pass.</p>
+<p>The timer example verifies a visual setup, then starts the timer on entry to
+the wait step. It accepts <code class="docutils literal notranslate"><span class="pre">duration_s</span></code> only; no model-written start timestamp.
+Each step has its own initially false completion field. A current image cannot
+prove a past action sequence, and elapsed time does not prove continuous contact.
+Retain unsupported requirements as review blockers rather than weakening them.</p>
+<p>Review the YAML and evidence notes before manually setting <code class="docutils literal notranslate"><span class="pre">task.status</span></code> to
+<code class="docutils literal notranslate"><span class="pre">approved</span></code>. Resolve every blocker, including any never-matching draft gate.
+Run an approved guide with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">main.py</span> <span class="pre">--mode</span> <span class="pre">guide</span> <span class="pre">&quot;Guide</span> <span class="pre">Name&quot;</span></code>, then
+say “start guide”.</p>
+</section>
+<section id="check-generation-changes">
+<h3>Check generation changes<a class="headerlink" href="#check-generation-changes" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">eval/guide_generation_cases.yaml</span></code> contains text-only authoring probes with
+separate inputs and withheld review criteria. They are not image-based runtime
+tests. Refer to the evaluation skill for the authoring comparison procedure.
+The offline checks validate the fixture structure, all examples and shipped
+guides, and the complete packet-runner invocation:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_sop_guide_generation.py<span class="w"> </span>tests/test_sop_recorded_replay.py<span class="w"> </span>-q
+</pre></div>
+</div>
+<p>Deterministic model doubles test runtime integration, not runtime-model
+perception or authoring-model guide quality. Keep guide-specific refinement
+results distinct from sample-level end-to-end regression results.</p>
+</section>
+</section>
 <section id="follow-an-approved-guide">
 <h2>Follow an approved guide<a class="headerlink" href="#follow-an-approved-guide" title="Link to this heading">#</a></h2>
 <p>Place a reviewed <code class="docutils literal notranslate"><span class="pre">*.guide.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">*.guide.yml</span></code> file under <code class="docutils literal notranslate"><span class="pre">guides/</span></code> in the
@@ -778,7 +887,7 @@ five-minute timer expires. Say <strong>start guide</strong> to repeat.</p>
 <p>Use a tea packet or box labeled <strong>chamomile</strong>, a stable heat-safe vessel,
 and a kettle or thermometer with a readable <strong>current</strong> water-temperature
 display. The example uses the chamomile settings in the tea sample’s
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0ae03a046f432abaaca01df7edb0b707b4d746dc/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2a006c5852e0cc9f1ebefe8248a2e9563de8e12d/agent-samples/tea-making-sample/rag-documents/tea-brewing.md">brewing reference</a>:
 100°C (212°F) water and a 5–7 minute steep. It selects five minutes and verifies
 a displayed 100°C (212°F) current reading. If the packet requires a different
 recipe or local boiling temperature cannot reach that target, stop and adapt a
@@ -831,6 +940,12 @@ tools. It uses the sample’s configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.</p>
+<p>Both manifest and packet modes use the production frame freshness and request
+timeouts from <code class="docutils literal notranslate"><span class="pre">yaml/worker.yaml</span></code>, and the visual verification timeout from
+<code class="docutils literal notranslate"><span class="pre">yaml/guide-agent-config.yaml</span></code> (15 seconds by default).
+Manifest mode continues scoring later probes after an answer or tool-call
+mismatch; a runtime exception or timeout still ends the run. Packet mode stops
+after a failed check because later steps depend on that progress.</p>
 <p>The checked-in <code class="docutils literal notranslate"><span class="pre">eval/guide_cases.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">eval/fixtures/indicator.guide.yaml</span></code>
 provide a synthetic visual-and-timer scenario. <code class="docutils literal notranslate"><span class="pre">eval/guide_routing.yaml</span></code>
 exercises the composed foreground prompt with controls, polite requests,
@@ -1112,6 +1227,11 @@ tool routing and visual judgments; the runner never manages their lifecycle.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#caption-evaluation">Caption evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-draft-guide">Generate a draft guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#validate-and-refine">Validate and refine</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#check-generation-changes">Check generation changes</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#follow-an-approved-guide">Follow an approved guide</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#included-tea-making-guide">Included tea-making guide</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#local-model-guide-evaluation">Local-model guide evaluation</a></li>

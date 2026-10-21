@@ -255,6 +255,130 @@ not visual accuracy: compare every output with its images and expected
 observations. Synthetic controls supplement, rather than replace, evaluations on
 recorded demonstrations.
 
+## Generate a draft guide
+
+Use a coding agent with local file and image access to follow the bundled
+`recording-to-guide` and `evaluate-guide` skills. The first writes YAML directly;
+the second runs a fixed draft against captured images with the configured XR-AI
+models and tools, then returns findings for revision. Both skills, their
+references, the validator and packet-playback support belong to this generation
+workflow. No separate sample regression suite is needed.
+
+The authoring model observes runtime results and edits the
+guide. It does not replace the runtime VLM, invent tool answers, compile a plan
+into YAML, or approve the result. The capture worker does not invoke the skills.
+
+From the repository root, give the agent this request:
+
+```text
+Read agent-samples/procedure-capture-guide/skills/recording-to-guide/SKILL.md,
+its schema reference, and applicable examples.
+Use agent-samples/procedure-capture-guide/artifacts/sessions/<session-id>/packet.json.
+Write the demonstrated procedure directly as draft guide YAML and matching
+evidence review notes under agent-samples/procedure-capture-guide/guides/.
+Reuse narration and captions; inspect original images where evidence is unclear.
+Interpret all capture sources together as complementary, fallible evidence of
+the intended task, not observations to translate literally into steps. Use
+judgment for ordinary organization and wording. Document consequential assumptions,
+their effects and questions needing human confirmation in .review.md, while
+continuing to draft sufficiently understood parts.
+Preserve distinct actions, counts, orientation, order, and required durations.
+Validate with the runtime parser, then follow
+agent-samples/procedure-capture-guide/skills/evaluate-guide/SKILL.md to test the
+draft with the captured images and configured local XR-AI models and tools.
+Assess fidelity to the intended task and clarity for someone performing it
+afresh, not just whether the recording passes. Distinguish recording coverage
+gaps, uncertain requirements and actual runtime verification limitations.
+Observe the actual outputs and revise only the guide when findings justify it.
+Revalidate and rerun revised guides without weakening requirements to fit the
+demonstration. Follow the skill's iteration and final-verification rules.
+Report paths, actual results, revision rounds, coverage gaps and approval
+blockers. Leave task.status draft. Do not edit source recordings, substitute
+your own visual answers, or invent successful tests when models are unavailable.
+```
+
+No installation is required for this explicit-file request. To install the
+skills, copy the entire `recording-to-guide/` and `evaluate-guide/` directories
+as siblings, including references and metadata. Keep the target checkout and
+packet paths explicit; the evaluator runs that checkout's implementation.
+
+The outputs are local and Git-ignored:
+
+- `guides/<slug>.guide.yaml`: model-authored draft.
+- `guides/<slug>.review.md`: action-to-evidence mapping, capture ID, source
+  frame references, corrections, revisions, consequential assumptions and
+  questions needing human confirmation.
+- `guides/<slug>.evaluation.md`: task fidelity and clarity assessment, runtime
+  observations, evaluated hash, untested checks and findings for the next revision.
+
+Source session IDs and recording timestamps belong in review notes, not
+executable YAML. Update the request, both skills, schema reference and examples
+together when changing this workflow.
+
+### Validate and refine
+
+Run the read-only validator from the repository root:
+
+```bash
+uv run --project agent-samples/procedure-capture-guide/worker python -m procedure_capture_guide_worker._validate_guide agent-samples/procedure-capture-guide/guides/<slug>.guide.yaml
+```
+
+It imports the runtime parser directly; there is no authoring-specific schema.
+It checks state and completion rules, step links, trigger arguments, permitted
+tools, strings and duplicate keys. It neither rewrites nor approves a guide.
+A schema-valid guide can still omit an action or accept an incorrect result.
+
+With this sample's configured model servers running, evaluate a fixed draft:
+
+```bash
+PYTHONPATH=agent-samples/procedure-capture-guide/worker uv run --project agent-samples/procedure-capture-guide/worker python agent-samples/procedure-capture-guide/eval/guide.py --packet /path/to/packet.json --guide /path/to/draft.guide.yaml --output /path/to/evaluation/run-001
+```
+
+The existing runtime evaluator supplies each captured frame once at its original
+relative time and sends start and Next utterances through the conversation
+model. It records exact guide bytes, source hashes, frame selections, actual
+model and tool outputs, guidance state, speech and failures. Draft eligibility
+is temporary and in memory. It does not write YAML or change approval status.
+The camera endpoint and user text are simulated; hub IPC, browser, STT and TTS
+audio are not tested. Refer to `evaluate-guide/references/runtime-replay.md`
+for artifact details and timing limits.
+
+Use the findings to refine instructions and checks, then rerun from fresh state.
+Default to at most three evaluation-and-update rounds and always verify the
+final revision. Report actual rounds, not retries or formatting-only edits.
+Missing models or evidence are blocked tests, never a pass. A fixed recording
+cannot react to guidance, so distinguish timing gaps from guide defects.
+Missing visual evidence in the recording does not by itself invalidate an
+appropriate completion check for a future worker. Preserve that requirement
+and disclose the coverage gap rather than weakening the SOP to make the test pass.
+
+The timer example verifies a visual setup, then starts the timer on entry to
+the wait step. It accepts `duration_s` only; no model-written start timestamp.
+Each step has its own initially false completion field. A current image cannot
+prove a past action sequence, and elapsed time does not prove continuous contact.
+Retain unsupported requirements as review blockers rather than weakening them.
+
+Review the YAML and evidence notes before manually setting `task.status` to
+`approved`. Resolve every blocker, including any never-matching draft gate.
+Run an approved guide with `uv run main.py --mode guide "Guide Name"`, then
+say "start guide".
+
+### Check generation changes
+
+`eval/guide_generation_cases.yaml` contains text-only authoring probes with
+separate inputs and withheld review criteria. They are not image-based runtime
+tests. Refer to the evaluation skill for the authoring comparison procedure.
+The offline checks validate the fixture structure, all examples and shipped
+guides, and the complete packet-runner invocation:
+
+```bash
+uv run --project tests python -m pytest tests/test_sop_guide_generation.py tests/test_sop_recorded_replay.py -q
+```
+
+Deterministic model doubles test runtime integration, not runtime-model
+perception or authoring-model guide quality. Keep guide-specific refinement
+results distinct from sample-level end-to-end regression results.
+
 ## Follow an approved guide
 
 Place a reviewed `*.guide.yaml` or `*.guide.yml` file under `guides/` in the
@@ -394,6 +518,13 @@ tools. It uses the sample's configured LLM and VLM. Fixture images replace the
 hub camera endpoint, and typed requests enter the same runtime topic as
 transcribed speech. Microphones, STT, network camera delivery, and audible TTS
 are not covered. The script never manages external model-server processes.
+
+Both manifest and packet modes use the production frame freshness and request
+timeouts from `yaml/worker.yaml`, and the visual verification timeout from
+`yaml/guide-agent-config.yaml` (15 seconds by default).
+Manifest mode continues scoring later probes after an answer or tool-call
+mismatch; a runtime exception or timeout still ends the run. Packet mode stops
+after a failed check because later steps depend on that progress.
 
 The checked-in `eval/guide_cases.yaml` and `eval/fixtures/indicator.guide.yaml`
 provide a synthetic visual-and-timer scenario. `eval/guide_routing.yaml`
