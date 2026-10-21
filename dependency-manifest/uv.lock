@@ -7789,6 +7789,7 @@ repository = [
     { name = "xr-ai-logging" },
     { name = "xr-ai-model-server-stack" },
     { name = "xr-ai-models", extra = ["riva", "speaker"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-routing" },
     { name = "xr-ai-tests" },
     { name = "xr-ai-tools", extra = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
@@ -7846,6 +7847,7 @@ requires-dist = [
     { name = "xr-ai-logging", marker = "extra == 'repository'", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-model-server-stack", marker = "extra == 'repository'", editable = "../utils/xr-ai-model-server-stack" },
     { name = "xr-ai-models", extras = ["riva", "speaker"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-routing", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-routing" },
     { name = "xr-ai-tests", marker = "extra == 'repository'", editable = "../tests" },
     { name = "xr-ai-tools", extras = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-vad", marker = "extra == 'repository'", editable = "../utils/xr-ai-vad" },
@@ -7956,6 +7958,21 @@ requires-dist = [
 provides-extras = ["riva", "speaker"]
 
 [[package]]
+name = "xr-ai-routing"
+version = "0.1.0"
+source = { editable = "../agent-sdk/xr-ai-routing" }
+dependencies = [
+    { name = "nemo-relay" },
+    { name = "xr-ai-models" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nemo-relay", specifier = ">=0.7.2,<0.8" },
+    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+]
+
+[[package]]
 name = "xr-ai-tests"
 version = "0.1.0"
 source = { editable = "../tests" }
@@ -7978,6 +7995,7 @@ dependencies = [
     { name = "xr-ai-logging" },
     { name = "xr-ai-model-server-stack" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-routing" },
     { name = "xr-ai-tools", extra = ["frames", "image-editing", "marker-tracking", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
     { name = "xr-ai-vllm" },
@@ -8010,6 +8028,7 @@ requires-dist = [
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
     { name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-routing", editable = "../agent-sdk/xr-ai-routing" },
     { name = "xr-ai-tools", extras = ["frames", "image-editing", "marker-tracking", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-vad", editable = "../utils/xr-ai-vad" },
     { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },

@@ -35,6 +35,7 @@ repository = [
     "xr-render-demo-worker",
     "xr-ai-hub-client",
     "xr-ai-models[riva,speaker]",
+    "xr-ai-routing",
     "xr-ai-agent-runtime",
     "xr-ai-tools[capture,frames,image-editing,marker-tracking,relay,services,vision]",
     "xr-ai-voice",
@@ -90,6 +91,7 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "xr-render-demo-worker"                   = { path = "../agent-samples/xr-render-demo/worker", editable = true }
 "xr-ai-hub-client"                        = { path = "../agent-sdk/xr-ai-hub", editable = true }
 "xr-ai-models"                            = { path = "../agent-sdk/xr-ai-models", editable = true }
+"xr-ai-routing"                           = { path = "../agent-sdk/xr-ai-routing", editable = true }
 "xr-ai-agent-runtime"                     = { path = "../agent-sdk/xr-ai-runtime", editable = true }
 "xr-ai-tools"                             = { path = "../agent-sdk/xr-ai-tools", editable = true }
 "xr-ai-voice"                             = { path = "../agent-sdk/xr-ai-voice", editable = true }
