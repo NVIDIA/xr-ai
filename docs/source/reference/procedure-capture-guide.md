@@ -567,7 +567,9 @@ directory, or absolute) and lists ordered `actions`:
   Later conversational paraphrases do not move that origin.
 - `quiet`: check for additional speech since the preceding `say` response,
   including intervening image changes, and for a further `duration_s`. Use it
-  after stopping the guide while a matching image remains visible.
+  after stopping the guide while a matching image remains visible. Only `image`
+  actions may appear between that `say` and `quiet`; observation, speech-wait,
+  or other silence checks require a new `say` before another `quiet`.
 
 Timing fields are validated before model calls. `after_speech` and
 `minimum_elapsed_s` must appear together; the minimum must be finite and
@@ -654,7 +656,7 @@ measure response variability on the same images, not additional independent scen
 Evidence-gate scores apply the production regex to the raw stripped answer;
 recognition normalization never changes whether the guide would accept it.
 
-The multi-turn scenario executes the brand-neutral test guide. It tests early
+The multi-turn scenario executes the shipped tea-making guide. It tests early
 advance rejection, completion announcements, explicit advancement, the real
 five-minute steep, return to inactive state, restart, stop, and silence after
 stop. An independent positive-path scenario keeps timer and lifecycle coverage

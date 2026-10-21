@@ -132,7 +132,7 @@ def validate_actions(manifest: dict, cases: dict) -> None:
     actions = manifest.get("actions")
     if not isinstance(actions, list) or not actions:
         raise ValueError("actions must be a nonempty list")
-    has_say = False
+    quiet_allowed = False
     for index, action in enumerate(actions):
         label = f"action {index}"
         if not isinstance(action, dict):
@@ -154,8 +154,8 @@ def validate_actions(manifest: dict, cases: dict) -> None:
             raise ValueError(f"{label}: after_speech and minimum_elapsed_s must appear together")
         if "after_speech" in action and kind != "wait_speech":
             raise ValueError(f"{label}: after_speech requires wait_speech")
-        if kind == "quiet" and ("duration_s" not in action or not has_say):
-            raise ValueError(f"{label}: quiet requires duration_s and a preceding say")
+        if kind == "quiet" and ("duration_s" not in action or not quiet_allowed):
+            raise ValueError(f"{label}: quiet requires duration_s and a preceding say with only image actions between")
         for field in ("duration_s", "minimum_elapsed_s", "timeout_s"):
             if field not in action:
                 continue
@@ -174,7 +174,9 @@ def validate_actions(manifest: dict, cases: dict) -> None:
             elif (not isinstance(action.get("answers"), list) or not action["answers"]
                   or not all(isinstance(item, str) for item in action["answers"])):
                 raise ValueError(f"{label}: observe requires answers or a defined case")
-        has_say |= kind == "say"
+        # Quiet measures from the last answer, not from an intervening check.
+        if kind != "image":
+            quiet_allowed = kind == "say"
 
 
 def announcement_elapsed(events: list[dict], origin: str, completion: str) -> float | None:

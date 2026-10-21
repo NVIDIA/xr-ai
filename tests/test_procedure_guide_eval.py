@@ -317,7 +317,7 @@ async def test_quiet_detects_runtime_announcement(runtime_evaluator, tmp_path, s
     actions = [{"action": "say", "text": "Start guide"}]
     if stopped:
         actions.append({"action": "say", "text": "Stop guide"})
-    actions.append({"action": "quiet", "duration_s": 1.3 if not stopped else 0.05})
+    actions.append({"action": "quiet", "duration_s": 1.3})
     manifest = timer_scenario(tmp_path, actions)
     assert await runtime_evaluator.evaluate(manifest, tmp_path / "output") is expected
 
@@ -356,6 +356,47 @@ async def test_quiet_includes_speech_during_image_switch(runtime_evaluator, tmp_
     events = [json.loads(line) for line in (tmp_path / "output/events.jsonl").read_text().splitlines()]
     assert any(event["kind"] == "speech" and event["text"] == "Obsolete completion" for event in events)
     assert not next(event["passed"] for event in events if event["kind"] == "check" and event["action"] == "quiet")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("intervening", [
+    {"action": "wait_speech", "expect": "done"},
+    {"action": "observe", "answers": ["YES"]},
+    {"action": "quiet", "duration_s": 0.1},
+])
+async def test_quiet_rejects_intervening_checks_before_model_work(runtime_evaluator, tmp_path, intervening):
+    manifest = tmp_path / "invalid.yaml"
+    manifest.write_text(yaml.safe_dump({"actions": [
+        {"action": "say", "text": "Stop guide"},
+        {"action": "image", "scene": "blue"},
+        intervening,
+        {"action": "image", "scene": "blue"},
+        {"action": "quiet", "duration_s": 1.3},
+    ]}))
+    with pytest.raises(ValueError, match="action 4: quiet requires.*only image actions between"):
+        await runtime_evaluator.evaluate(manifest, tmp_path / "output")
+    runtime_evaluator.make_llm.assert_not_called()
+    runtime_evaluator.make_vlm.assert_not_called()
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.parametrize("images", [0, 1, 2])
+def test_quiet_accepts_only_images_after_new_say(runtime_evaluator, images):
+    runtime_evaluator.validate_actions({"actions": [
+        {"action": "say", "text": "Start guide"},
+        {"action": "wait_speech", "expect": "done"},
+        {"action": "say", "text": "Stop guide"},
+        *[{"action": "image", "scene": "blue"} for _ in range(images)],
+        {"action": "quiet", "duration_s": 1.3},
+    ]}, {})
+
+
+def test_quiet_requires_a_say_even_after_images(runtime_evaluator):
+    with pytest.raises(ValueError, match="action 1: quiet requires"):
+        runtime_evaluator.validate_actions({"actions": [
+            {"action": "image", "scene": "blue"},
+            {"action": "quiet", "duration_s": 1.3},
+        ]}, {})
 
 
 @pytest.mark.asyncio
