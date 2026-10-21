@@ -377,6 +377,68 @@ def test_start_materializes_configs_through_readiness_and_does_not_stop(monkeypa
     assert launched and not any(path.exists() for path in launched)
 
 
+@pytest.mark.parametrize("profile,arch", [
+    ("96G_blackwell", "12.0"), ("dual_48G_ada", "8.9"), ("spark", "12.1"),
+])
+@pytest.mark.parametrize("override_cache", [False, True])
+def test_sample_owned_ocr_profile_launches_and_stops(monkeypatch, tmp_path, profile, arch, override_cache):
+    base = tmp_path / "repo/agent-samples/ocr-example/model-servers"
+    (base / "yaml").mkdir(parents=True)
+    override = {"cuda_arch": arch, "cuda_visible_devices": "1", "port": 9212, "infer_length": 640}
+    if override_cache:
+        override["model_cache"] = "../cache"
+    (base / "yaml" / f"{profile}.yaml").write_text(yaml.safe_dump({"embedding": {}, "ocr": override}))
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("explicit profile detected GPU"))
+    credentials = []
+    monkeypatch.setattr(_stack, "require_credentials", lambda name: credentials.append(name))
+    launched = []
+
+    def launch(processes, root, *, exit_after_ready):
+        assert root == base and exit_after_ready is True
+        # Registration order, not the caller's tuple order, controls startup.
+        assert [p.name for p in processes] == ["embedding", "ocr"]
+        ocr = processes[-1]
+        assert Path(ocr.project) == base.parents[2] / "services/ocr-server"
+        assert ocr.command == "ocr_server"
+        assert ocr.launch_mode == "persist" and ocr.port == 9212
+        path = Path(ocr.config)
+        assert path.name == "ocr_server.yaml"
+        config = yaml.safe_load(path.read_text())
+        assert config["cuda_arch"] == arch
+        assert config["cuda_visible_devices"] == "1"
+        assert config["infer_length"] == 640
+        assert config["container_name"] == "xr-ai-ocr"
+        expected_cache = base / "cache" if override_cache else _REPO_ROOT / "models/ocr"
+        assert config["model_cache"] == str(expected_cache)
+        launched.append(path)
+
+    monkeypatch.setattr(_stack, "run_stack", launch)
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    run_model_stack(base, ("ocr", "embedding"), gpu_profile=profile)
+    assert credentials == ["HF_TOKEN"]
+    assert launched and not launched[0].exists()
+    assert stopped == []
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop launched services"))
+    run_model_stack(base, ("ocr", "embedding"), stop=True, gpu_profile=profile)
+    assert stopped == [("ocr", 9212), ("embedding", 8109)]
+
+
+def test_ocr_default_stop_uses_shared_port_without_gpu_or_credentials(monkeypatch, tmp_path):
+    config = _stack._configs(tmp_path, ("ocr",), None)["ocr"]
+    assert config["port"] == 8112
+    assert config["infer_length"] == 1024
+    assert config["model_cache"] == str(_REPO_ROOT / "models/ocr")
+    monkeypatch.setattr(_stack, "detect_gpu_config", lambda: pytest.fail("stop detected GPU"))
+    monkeypatch.setattr(_stack, "require_credentials", lambda *_a: pytest.fail("stop required credentials"))
+    monkeypatch.setattr(_stack, "run_stack", lambda *_a, **_kw: pytest.fail("stop launched services"))
+    stopped = []
+    monkeypatch.setattr(_stack, "stop_persistent_servers", lambda targets: stopped.extend(targets) or True)
+    run_model_stack(tmp_path, ("ocr",), stop=True)
+    assert stopped == [("ocr", 8112)]
+
+
 def test_stop_failure_is_reported(monkeypatch):
     base = _REPO_ROOT / "agent-samples/simple-vlm-example/model-servers"
     monkeypatch.setattr(_stack, "stop_persistent_servers", lambda *_a: False)

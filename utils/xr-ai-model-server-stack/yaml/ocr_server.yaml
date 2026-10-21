@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared defaults for sample convenience stacks. Standalone defaults live in services/.
+port: 8112
+container_name: xr-ai-ocr
+model_cache: ../../../models/ocr
+cuda_visible_devices: "0"
+# Override in the sample GPU profile: Ada = "8.9", Blackwell = "12.0", Spark = "12.1".
+cuda_arch: "12.0"
+# Server-wide detector length: 640 or 1024. No cropping or enhancement.
+infer_length: 1024

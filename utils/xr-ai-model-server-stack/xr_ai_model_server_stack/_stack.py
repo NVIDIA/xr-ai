@@ -23,6 +23,7 @@ _SERVICES = {
     "vlm": ("vlm-server", "vlm_server", "vlm_server"),
     "clef": ("clef-server", "clef_server", "clef_server"),
     "embedding": ("embedding-server", "embedding_server", "embedding_server"),
+    "ocr": ("ocr-server", "ocr_server", "ocr_server"),
 }
 
 
@@ -106,10 +107,10 @@ def run_model_stack(
     resolved under that repository's ``services/`` directory.
 
     ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``,
-    ``clef``, and ``embedding``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
+    ``clef``, ``embedding``, and ``ocr``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
     exactly those server mappings. Each mapping overrides the corresponding
     service's own YAML in ``services/``. Launch order is speaker ASR, batch STT, TTS,
-    Omni, VLM, Clef, then embedding, omitting unselected services.
+    Omni, VLM, Clef, embedding, then OCR, omitting unselected services.
 
     ``gpu_profile`` selects a checked-in profile by filename stem; ``None``
     detects the hardware automatically for startup. ``stop=False`` requires ``HF_TOKEN``,

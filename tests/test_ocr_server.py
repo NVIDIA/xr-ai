@@ -353,6 +353,7 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     assert runs[0]["ready_file"] == tmp_path / "ready"
     assert "OCR_INFER_LENGTH=640" in runs[0]["argv"]
     assert "NVIDIA_VISIBLE_DEVICES=1" in runs[0]["argv"]
+    assert "xr-ai-vllm.port=8112" in runs[0]["argv"]
     assert "HF_TOKEN" in runs[0]["argv"] and "private-test-token" not in str(runs)
     assert f"{tmp_path / 'cache'}:/models" in runs[0]["argv"]
     monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:second")
