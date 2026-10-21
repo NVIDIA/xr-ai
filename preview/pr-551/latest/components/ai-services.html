@@ -549,7 +549,7 @@ control. The model-servers profiles share <code class="docutils literal notransl
 the exact layout per launch style is below.</p>
 <section id="ocr-serving">
 <span id="id1"></span><h2>OCR serving<a class="headerlink" href="#ocr-serving" title="Link to this heading">#</a></h2>
-<p>The standalone <code class="docutils literal notranslate"><span class="pre">services/ocr-server</span></code> provides multilingual Nemotron OCR v2 on
+<p>The reusable <code class="docutils literal notranslate"><span class="pre">services/ocr-server</span></code> provides multilingual Nemotron OCR v2 on
 port <code class="docutils literal notranslate"><span class="pre">8112</span></code>. No supplied sample launches or consumes OCR. The launcher builds
 an isolated Python 3.12, PyTorch 2.9.1,
 CUDA 13 container, downloads NVIDIA’s pinned Hugging Face source and
@@ -565,10 +565,13 @@ Refer to the
 <span class="w">  </span>--config<span class="w"> </span>services/ocr-server/ocr_server.yaml
 </pre></div>
 </div>
-<p>The service has its own configuration and lifecycle; it is not registered with
-sample model-server launchers. Provision GPU capacity before starting it
-alongside other services. This integration does not change sample GPU allocations
-or qualify concurrent workloads on every supported GPU.</p>
+<p>The service is also registered as <code class="docutils literal notranslate"><span class="pre">ocr</span></code> in the shared model-stack launcher,
+like embedding and VLM. Shared defaults live in
+<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/ocr_server.yaml</span></code>; sample-owned GPU profiles
+override them. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html#sample-ocr-service"><span class="std std-ref">Add OCR to a sample</span></a> for opt-in integration entirely
+inside a sample. Provision GPU capacity before starting it alongside other
+services. Registration does not enable OCR in existing samples, change their
+GPU allocations, or qualify concurrent workloads on every supported GPU.</p>
 <p>For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
 consumer profile. The operator selects the multilingual variant and owns GPU
 placement, model downloads, caches, and container lifecycle. XR AI does not
@@ -619,6 +622,9 @@ needed. Stop the standalone container with <code class="docutils literal notrans
 configured <code class="docutils literal notranslate"><span class="pre">container_name</span></code>) before changing its settings, then repeat the launch
 command. Closing a client stops neither the local service nor an externally
 deployed NIM.</p>
+<p>When launched by a sample model stack, use that stack’s normal stop command,
+including the GPU profile when it overrides the port. The shared launcher
+starts and stops OCR only when the sample explicitly selects <code class="docutils literal notranslate"><span class="pre">ocr</span></code>.</p>
 <p>To test transcription against a running endpoint, run from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">XR_AI_OCR_TEST_URL</span><span class="o">=</span>http://localhost:8112<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>pytest<span class="w"> </span>tests/test_ocr_server.py::test_live_ocr_equipment_text

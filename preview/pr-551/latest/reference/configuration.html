@@ -1984,6 +1984,23 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
+<section id="config-shared-model-server-defaults-yaml-ocr-server-yaml">
+<h3>yaml/ocr_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-ocr-server-yaml" title="Link to this heading">#</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="c1"># Shared defaults for sample convenience stacks. Standalone defaults live in services/.</span>
+<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8112</span>
+<span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-ocr</span>
+<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../../models/ocr</span>
+<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
+<span class="c1"># Override in the sample GPU profile: Ada = "8.9", Blackwell = "12.0", Spark = "12.1".</span>
+<span class="nt">cuda_arch</span><span class="p">:</span><span class="w"> </span><span class="s">"12.0"</span>
+<span class="c1"># Server-wide detector length: 640 or 1024. No cropping or enhancement.</span>
+<span class="nt">infer_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
+</pre></div>
+</div>
+</section>
 <section id="config-shared-model-server-defaults-yaml-pocket-tts-server-yaml">
 <h3>yaml/pocket_tts_server.yaml<a class="headerlink" href="#config-shared-model-server-defaults-yaml-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2181,6 +2198,7 @@ workflow.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults">Shared model-server defaults</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-embedding-server-yaml">yaml/embedding_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-nemotron-omni-llm-server-yaml">yaml/nemotron_omni_llm_server.yaml</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-ocr-server-yaml">yaml/ocr_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-pocket-tts-server-yaml">yaml/pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-speaker-stt-yaml">yaml/speaker_stt.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-shared-model-server-defaults-yaml-stt-server-yaml">yaml/stt_server.yaml</a></li>

@@ -45,7 +45,7 @@ the exact layout per launch style is below.
 
 ## OCR serving
 
-The standalone `services/ocr-server` provides multilingual Nemotron OCR v2 on
+The reusable `services/ocr-server` provides multilingual Nemotron OCR v2 on
 port `8112`. No supplied sample launches or consumes OCR. The launcher builds
 an isolated Python 3.12, PyTorch 2.9.1,
 CUDA 13 container, downloads NVIDIA's pinned Hugging Face source and
@@ -64,10 +64,13 @@ uv --config-file uv.toml run --project services/ocr-server ocr_server \
   --config services/ocr-server/ocr_server.yaml
 ```
 
-The service has its own configuration and lifecycle; it is not registered with
-sample model-server launchers. Provision GPU capacity before starting it
-alongside other services. This integration does not change sample GPU allocations
-or qualify concurrent workloads on every supported GPU.
+The service is also registered as `ocr` in the shared model-stack launcher,
+like embedding and VLM. Shared defaults live in
+`utils/xr-ai-model-server-stack/yaml/ocr_server.yaml`; sample-owned GPU profiles
+override them. Refer to {ref}`sample-ocr-service` for opt-in integration entirely
+inside a sample. Provision GPU capacity before starting it alongside other
+services. Registration does not enable OCR in existing samples, change their
+GPU allocations, or qualify concurrent workloads on every supported GPU.
 
 For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
 consumer profile. The operator selects the multilingual variant and owns GPU
@@ -125,6 +128,10 @@ needed. Stop the standalone container with `docker stop xr-ai-ocr` (or the
 configured `container_name`) before changing its settings, then repeat the launch
 command. Closing a client stops neither the local service nor an externally
 deployed NIM.
+
+When launched by a sample model stack, use that stack's normal stop command,
+including the GPU profile when it overrides the port. The shared launcher
+starts and stops OCR only when the sample explicitly selects `ocr`.
 
 To test transcription against a running endpoint, run from the repository root:
 
