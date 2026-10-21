@@ -165,25 +165,39 @@ class Conversation(RoutableAgent):
         return DestinationResult("answer", "".join(fragments).strip())
 
     async def release(self, _participant_id: str) -> None:
-        """Release conversation and source-context state for one participant."""
+        """Release participant context after all owned compaction cleanup finishes.
+
+        Concurrent departure or close joins the same cleanup. Cancellation
+        propagates only after cleanup completes.
+        """
 
         await self._context.clear(_participant_id)
 
     async def close(self) -> None:
-        """Cancel and release every participant-owned context task."""
+        """Close admission and join all context cleanup, including departing sessions.
+
+        Repeated calls join the same shutdown. Cancellation propagates only
+        after all owned compaction jobs have finished their cleanup. The caller
+        remains responsible for draining answer streams before closing clients.
+        """
 
         self._closing = True
         await self._context.close()
 
     def activate_participant(self, participant_id: str) -> None:
-        """Open context updates for a newly active participant session."""
+        """Open context updates after any previous session's cleanup has completed."""
 
         if self._closing:
             raise RuntimeError("conversation is closing")
+        self._context.activate(participant_id)
         self._closed_participants.discard(participant_id)
 
     async def participant_left(self, participant_id: str) -> None:
-        """Close context admission and cancel work for a departed participant."""
+        """Close participant admission and join its owned compaction cleanup.
+
+        Concurrent release or shutdown joins the same cleanup. Cancellation
+        propagates only after cleanup completes; reactivation must wait for it.
+        """
 
         self._closed_participants.add(participant_id)
         await self._context.clear(participant_id)

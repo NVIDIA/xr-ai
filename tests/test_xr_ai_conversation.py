@@ -951,3 +951,157 @@ async def test_incremental_update_during_compaction_keeps_prefix_and_compacts_ne
     second = context._participants["alice"].context_jobs["tea"]
     assert await second is True
     assert context.sections("alice") == (("tea", "summary of both facts"),)
+
+
+@pytest.mark.asyncio
+async def test_close_joins_departing_context_compaction_through_repeated_cancellation():
+    entered = asyncio.Event()
+    cleaning = asyncio.Event()
+    finish = asyncio.Event()
+    settled = asyncio.Event()
+    close_started = asyncio.Event()
+
+    class BlockingLLM(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await finish.wait()
+                settled.set()
+
+    topic = Topic("test.context", ConversationContextUpdate)
+    conversation = Conversation(BlockingLLM(), incremental_context_topics=(topic.name,))  # type: ignore[arg-type]
+    runtime = AgentRuntime()
+    runtime.register("context", conversation.context_subscriber())
+
+    async def close():
+        close_started.set()
+        await conversation.close()
+
+    async with runtime:
+        await runtime.publish(topic, ConversationContextUpdate(text="A note"), participant_id="alice")
+        await entered.wait()
+        departure = asyncio.create_task(conversation.participant_left("alice"))
+        await cleaning.wait()
+        closing = asyncio.create_task(close())
+        joining = asyncio.create_task(conversation.close())
+        try:
+            await close_started.wait()
+            assert not closing.done(), "close must join the already-departing participant's real cleanup"
+            for _ in range(2):
+                departure.cancel()
+                closing.cancel()
+                checkpoint = asyncio.Event()
+                asyncio.get_running_loop().call_soon(checkpoint.set)
+                await checkpoint.wait()
+                assert not departure.done()
+                assert not closing.done()
+                assert not joining.done()
+                assert not settled.is_set()
+            finish.set()
+            results = await asyncio.gather(departure, closing, return_exceptions=True)
+            assert all(isinstance(result, asyncio.CancelledError) for result in results)
+            assert settled.is_set()
+            await joining
+            await conversation.close()
+        finally:
+            finish.set()
+            await asyncio.gather(departure, closing, joining, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_context_cleanup_keeps_participants_independent_and_observes_job_failure(caplog):
+    entered = asyncio.Event()
+    cleaning = asyncio.Event()
+    finish = asyncio.Event()
+    settled = asyncio.Event()
+
+    class BlockingLLM(_LLM):
+        async def chat(self, _messages, **_kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await finish.wait()
+                settled.set()
+                raise RuntimeError("compactor cleanup failed after termination")
+
+    incremental = Topic("test.notes", ConversationContextUpdate)
+    summary = Topic("test.summary", ConversationContextUpdate)
+    conversation = Conversation(
+        BlockingLLM(),  # type: ignore[arg-type]
+        incremental_context_topics=(incremental.name,),
+        summary_context_topics=(summary.name,),
+    )
+    runtime = AgentRuntime()
+    runtime.register("context", conversation.context_subscriber())
+    async with runtime:
+        await runtime.publish(incremental, ConversationContextUpdate(text="A note"), participant_id="alice")
+        await entered.wait()
+        await runtime.publish(incremental, ConversationContextUpdate(text="another note"), participant_id="alice")
+        dropping = asyncio.create_task(conversation.participant_left("alice"))
+        await cleaning.wait()
+        releasing = asyncio.create_task(conversation.release("alice"))
+        try:
+            with pytest.raises(RuntimeError, match="cleanup is still in progress"):
+                conversation.activate_participant("alice")
+            assert [text async for text in conversation.stream("Hello", "bob")] == ["Hello there."]
+            await runtime.publish(summary, ConversationContextUpdate(text="late Alice update"), participant_id="alice")
+            assert not dropping.done()
+            assert not releasing.done()
+            assert not settled.is_set()
+            finish.set()
+            await asyncio.gather(dropping, releasing)
+            assert settled.is_set()
+            assert caplog.text.count("conversation context compaction failed") == 1
+            conversation.activate_participant("alice")
+            await runtime.publish(summary, ConversationContextUpdate(text="new session"), participant_id="alice")
+            assert [text async for text in conversation.stream("Remember?", "alice")] == ["Hello there."]
+            await conversation.close()
+        finally:
+            finish.set()
+            await asyncio.gather(dropping, releasing, return_exceptions=True)
+            await conversation.close()
+
+
+@pytest.mark.asyncio
+async def test_clear_joins_retired_compaction_without_recancelling_its_finally():
+    context = _ConversationContext()
+    entered = asyncio.Event()
+    cleaning = asyncio.Event()
+    finish = asyncio.Event()
+    settled = asyncio.Event()
+
+    async def compact(_source, _previous, _entries):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await finish.wait()
+            settled.set()
+
+    await context.update("alice", "notes", "incremental", "A note", context_budget_bytes=1000)
+    job = context.schedule_context_compaction("alice", "notes", payload_budget_bytes=1000, compact=compact)
+    assert job is not None
+    await entered.wait()
+    await context.update("alice", "notes", "summary", "Authoritative summary", context_budget_bytes=1000)
+    await cleaning.wait()
+    clearing = asyncio.create_task(context.clear("alice"))
+    try:
+        checkpoint = asyncio.Event()
+        asyncio.get_running_loop().call_soon(checkpoint.set)
+        await checkpoint.wait()
+        assert not clearing.done()
+        assert job.cancelling() == 1
+        assert not settled.is_set()
+        finish.set()
+        await clearing
+        assert settled.is_set()
+        assert context.sections("alice") == ()
+    finally:
+        finish.set()
+        await clearing

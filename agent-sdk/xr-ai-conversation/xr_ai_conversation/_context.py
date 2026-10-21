@@ -61,6 +61,8 @@ class _ContextRecord:
 
 @dataclass(slots=True)
 class _ParticipantMemory:
+    clearing: bool = False
+    cleanup: asyncio.Task[None] | None = None
     transcript: list[_TranscriptEntry] = field(default_factory=list)
     context_records: dict[str, list[_ContextRecord]] = field(default_factory=dict)
     backgrounds: dict[str, _BackgroundSection] = field(default_factory=dict)
@@ -109,6 +111,17 @@ class _ConversationContext:
 
     def __init__(self) -> None:
         self._participants: dict[str, _ParticipantMemory] = {}
+        self._closing = False
+        self._close_task: asyncio.Task[None] | None = None
+
+    def activate(self, participant: str) -> None:
+        memory = self._participants.get(participant)
+        if self._closing or (memory is not None and memory.clearing):
+            raise RuntimeError("conversation context cleanup is still in progress")
+
+    def _memory(self, participant: str) -> _ParticipantMemory:
+        self.activate(participant)
+        return self._participants.setdefault(participant, _ParticipantMemory())
 
     def append(
         self,
@@ -119,7 +132,7 @@ class _ConversationContext:
         timestamp_us: int | None = None,
         exchange_id: object | None = None,
     ) -> _TranscriptEntry:
-        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        memory = self._memory(participant)
         entry = _TranscriptEntry(len(memory.transcript), "dialogue", user, assistant, timestamp_us, exchange_id)
         memory.transcript.append(entry)
         return entry
@@ -133,7 +146,7 @@ class _ConversationContext:
     ) -> None:
         """Merge a front-end history window without replaying retained exchanges."""
 
-        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        memory = self._memory(participant)
         existing = tuple(
             (entry.user, entry.assistant, entry.timestamp_us, entry.exchange_id) for entry in memory.transcript
         )
@@ -194,7 +207,7 @@ class _ConversationContext:
         """Compact an old immutable dialogue prefix when unprocessed history is large."""
 
         memory = self._participants.get(participant)
-        if memory is None:
+        if memory is None or memory.clearing:
             return None
         current = memory.dialogue_job
         if current is not None and not current.done():
@@ -269,7 +282,7 @@ class _ConversationContext:
         memory = self._participants.get(participant)
         # Commit only while the prior summary and compacted transcript prefix
         # still match; newer tail turns may remain uncompacted.
-        if memory is None or memory.dialogue_revision != revision:
+        if memory is None or memory.clearing or memory.dialogue_revision != revision:
             return False
         if memory.dialogue_background != previous:
             return False
@@ -340,7 +353,10 @@ class _ConversationContext:
         whole records; raw conversation transcript entries remain untouched.
         """
 
-        memory = self._participants.setdefault(participant, _ParticipantMemory())
+        memory = self._participants.get(participant)
+        if self._closing or (memory is not None and memory.clearing):
+            return False, False
+        memory = self._memory(participant)
         if mode not in {"summary", "incremental"}:
             raise ValueError("context mode must be 'incremental' or 'summary'")
         if mode == "summary" and _rendered_source_size(source, text, timestamp_us) > context_budget_bytes:
@@ -396,7 +412,7 @@ class _ConversationContext:
         """Compact one source's incremental updates without blocking delivery."""
 
         memory = self._participants.get(participant)
-        if memory is None or not memory.context_records.get(source):
+        if memory is None or memory.clearing or not memory.context_records.get(source):
             return None
         current = memory.context_jobs.get(source)
         if current is not None and not current.done():
@@ -467,7 +483,7 @@ class _ConversationContext:
         memory = self._participants.get(participant)
         # Source revisions and record prefixes make this commit conditional on
         # the exact snapshot passed to the compactor.
-        if memory is None or memory.revisions[source] != revision:
+        if memory is None or memory.clearing or memory.revisions[source] != revision:
             return False
         if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:
             return False
@@ -495,21 +511,42 @@ class _ConversationContext:
         return True
 
     async def clear(self, participant: str) -> None:
-        memory = self._participants.pop(participant, None)
+        memory = self._participants.get(participant)
         if memory is None:
             return
+        if memory.cleanup is None:
+            memory.clearing = True
+            memory.cleanup = asyncio.create_task(
+                self._clear(participant, memory),
+                name=f"conversation-clear:{participant}",
+                context=nemo_relay.fork_asyncio_context(),
+            )
+        await _join_cleanup(memory.cleanup)
+
+    async def _clear(self, participant: str, memory: _ParticipantMemory) -> None:
         tasks = (
             (() if memory.dialogue_job is None else (memory.dialogue_job,))
             + tuple(memory.context_jobs.values())
             + tuple(memory.retired_jobs)
         )
         for task in tasks:
-            if not task.done():
+            if not task.done() and not task.cancelling():
                 task.cancel()
         if tasks:
+            # Background-task supervisors report failures; cleanup owns their termination.
             await asyncio.gather(*tasks, return_exceptions=True)
+        if self._participants.get(participant) is memory:
+            del self._participants[participant]
 
     async def close(self) -> None:
+        self._closing = True
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(
+                self._close(), name="conversation-context-close", context=nemo_relay.fork_asyncio_context()
+            )
+        await _join_cleanup(self._close_task)
+
+    async def _close(self) -> None:
         await asyncio.gather(*(self.clear(participant) for participant in tuple(self._participants)))
 
     def _forget_dialogue_job(
@@ -526,7 +563,13 @@ class _ConversationContext:
         if memory is not None and memory.dialogue_job is task:
             memory.dialogue_job = None
         _log_task_error(participant, "dialogue", task)
-        if memory is not None and not task.cancelled() and task.exception() is None and task.result():
+        if (
+            memory is not None
+            and not memory.clearing
+            and not task.cancelled()
+            and task.exception() is None
+            and task.result()
+        ):
             self.schedule_dialogue_compaction(
                 participant,
                 trigger_budget_bytes=trigger_budget_bytes,
@@ -551,6 +594,7 @@ class _ConversationContext:
         _log_task_error(participant, source, task)
         if (
             memory is not None
+            and not memory.clearing
             and not task.cancelled()
             and task.exception() is None
             and memory.context_records.get(source)
@@ -570,6 +614,23 @@ class _ConversationContext:
             memory.retired_jobs.add(task)
             task.add_done_callback(memory.retired_jobs.discard)
             task.cancel()
+
+
+async def _join_cleanup(task: asyncio.Task[None]) -> None:
+    """Keep the cleanup owner alive and join it before propagating waiter cancellation."""
+
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is None or not current.cancelling():
+                raise
+            cancelled = True
+    task.result()
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 def _log_task_error(participant: str, source: str, task: asyncio.Task[bool]) -> None:

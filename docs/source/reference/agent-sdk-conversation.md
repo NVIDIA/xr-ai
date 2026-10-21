@@ -69,6 +69,13 @@ bound rendered context and compaction inputs, not total transcript storage:
 the exact dialogue transcript is retained until participant release, departure,
 or conversation close.
 
+Participant departure, release, and conversation shutdown retain ownership of
+compaction jobs until their cleanup finishes. Concurrent calls join that same
+cleanup; cancelling a waiter does not abandon it or cancel a job's cleanup a
+second time. Callers must wait for cleanup before reactivating that participant;
+other participants remain independent. Close the conversation before closing
+the shared model client, and drain caller-owned answer streams separately.
+
 ## Package contents
 
 | Module | Responsibility |
