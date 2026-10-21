@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run procedure capture or step-by-step guidance with shared speech and vision services.
+"""Run procedure capture and guidance with shared speech and vision services.
 
 Called by __main__.py, this module sets up the model clients and hub connection,
-then brings VoiceAgent and the selected capability agent together in one runtime.
-This module coordinates their startup, readiness, and cleanup without starting
-the other capability's background work.
+then brings VoiceAgent and either a selected capability or the procedure router
+together in one runtime. It coordinates startup, readiness, and cleanup; routed
+capabilities start background work only after a user request selects them.
 
 Refer to capture/agent.py for capture command handling and guide/agent.py for
 guide execution and verification.
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from xr_ai_hub import ProcessorEndpoint
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import load_models_config, make_decision, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
@@ -27,9 +27,11 @@ from xr_ai_tools.vision import ImageQueryTool, MultiImageQueryTool
 from xr_ai_voice import VadConfig, VoiceAgent, VoiceAggregationAgent
 from xr_ai_voicegate import load_voice_gate_config
 
+from ._routing import ROUTED_INTERRUPT_TOPIC, ROUTED_QUERY_TOPIC, ProcedureRouterAgent
 from .capture.agent import CAPTURE_INPUT_TOPIC, CaptureAgent
 from .capture.capturing import _Capture
 from .config import WorkerConfig
+from .guide import approved_guides
 from .guide.agent import GuideAgent
 from .guide.events import INTERRUPTED_TOPIC, PARTICIPANT_JOINED_TOPIC, PARTICIPANT_LEFT_TOPIC, USER_QUERY_TOPIC
 from .guide.guides import select_guide
@@ -42,15 +44,21 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     setup_logging("worker")
     # Validate approval and pin guide bytes before opening model or hub clients.
     selected_guide = None
+    catalog = ()
     if config.mode == "guide":
         if config.guide is None:
             raise ValueError("guide mode requires guide configuration")
         selected_guide = select_guide(config.guide.guides_dir, config.guide.guide_name)
     elif config.capture is None:
         raise ValueError("capture mode requires capture configuration")
+    if config.mode == "router":
+        if config.guide is None:
+            raise ValueError("router mode requires guide catalog configuration")
+        catalog = approved_guides(config.guide.guides_dir)
     models = load_models_config(config.models_config)
     stt, tts, vlm = make_stt(models, "stt"), make_tts(models, "tts"), make_vlm(models, "vlm")
-    llm = make_llm(models, "llm") if selected_guide is not None else None
+    llm = make_llm(models, "llm") if config.mode != "capture" else None
+    decisions = make_decision(models, "router") if config.mode == "router" else None
     # Capture must finish draining after voice stops. Its frame and participant
     # endpoint therefore has a lifetime controlled by this composition layer.
     endpoint = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
@@ -59,7 +67,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         endpoint=endpoint, images=images, frame_max_age_s=config.frame_max_age_s, frame_timeout_s=config.frame_timeout_s
     )
     runtime = AgentRuntime()
-    capture = guide = aggregation = None
+    capture = guide = aggregation = routing = None
     voice_options = {}
     probes = {"stt": stt.health, "tts": tts.health, "vlm": vlm.health}
     if selected_guide is None:
@@ -73,8 +81,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         # One owner orders command boundaries and admitted narration, including
         # repeated captures on the same participant connection.
-        capture = runtime.register("capture", CaptureAgent(capture_backend))
-        endpoint.on_participant(capture.receive)
+        capture = CaptureAgent(capture_backend)
+        if config.mode == "capture":
+            runtime.register("capture", capture)
+            endpoint.on_participant(capture.receive)
     else:
         aggregation = runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
         guide = runtime.register("guide", GuideAgent(
@@ -93,10 +103,28 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             "interrupted_topic": INTERRUPTED_TOPIC,
             "interrupt_on_supersede": True,
         }
+    if config.mode == "router":
+        aggregation = runtime.register("voice-aggregation", VoiceAggregationAgent(llm=llm))
+        guides = tuple((selected, GuideAgent(
+            guide=selected, llm=llm, current_frame=frames, aggregation=aggregation,
+            image_query=ImageQueryTool(
+                images=images, vlm=vlm,
+                system_prompt=(Path(__file__).parent / "guide/prompts/guide_vision.txt").read_text(encoding="utf-8"),
+            ),
+            vision_timeout_s=config.guide.vision_timeout_s,
+        )) for selected in catalog)
+        routing = runtime.register("procedure-router", ProcedureRouterAgent(
+            decisions=decisions, capture=capture, guides=guides, aggregation=aggregation,
+        ))
+        routing.bind_runtime(runtime)
+        endpoint.on_participant(routing.receive)
+        probes.update({"llm": llm.health, "router": decisions.health})
+        voice_options = {"interrupted_topic": ROUTED_INTERRUPT_TOPIC, "interrupt_on_supersede": True}
     # Accepted voice input is delivered after prior speech is cancelled, so
     # each capture command cannot interrupt its own acknowledgement.
     voice = VoiceAgent(
-        query_topic=CAPTURE_INPUT_TOPIC if capture is not None else USER_QUERY_TOPIC,
+        query_topic=(ROUTED_QUERY_TOPIC if routing is not None
+                     else CAPTURE_INPUT_TOPIC if capture is not None else USER_QUERY_TOPIC),
         stt=stt,
         tts=tts,
         vad=VadConfig(
@@ -110,7 +138,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         voice_gate=load_voice_gate_config(config.voice_gate_yaml),
         probes=probes,
         ready_file=ready_file,
-        text_input=config.mode == "guide",
+        text_input=config.mode != "capture",
         **voice_options,
     )
     runtime.register("voice", voice)
@@ -123,7 +151,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         try:
             # Runtime shutdown drains message delivery, not agent-owned tasks
             # or filesystem threads. Explicitly finalize before closing resources.
-            if capture is not None:
+            if routing is not None:
+                await routing.stop()
+            elif capture is not None:
                 await capture.close()
             if guide is not None:
                 await guide.stop()
@@ -140,3 +170,5 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             await vlm.close()
             if llm is not None:
                 await llm.close()
+            if decisions is not None:
+                await decisions.close()

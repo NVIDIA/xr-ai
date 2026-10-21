@@ -50,7 +50,11 @@ def test_config_and_cli(monkeypatch, tmp_path, session_recording, explicit_mode)
         module._parser().parse_args(["--capture"])
     assert error.value.code == 2
     assert [p.name for p in module.PROCESSES] == ["hub", "worker"]
-    stack = Mock()
+    launched_configs = []
+    def capture_config(processes, _base):
+        config = next(p.config for p in processes if p.name == "worker")
+        launched_configs.append(load_config(_SAMPLE / config))
+    stack = Mock(side_effect=capture_config)
     monkeypatch.setattr(module, "run_stack", stack)
     args = ["--session-recording"] if session_recording else []
     if explicit_mode:
@@ -59,7 +63,8 @@ def test_config_and_cli(monkeypatch, tmp_path, session_recording, explicit_mode)
     module.run(args)
     assert [p.name for p in stack.call_args.args[0]] == expected
     worker_process = next(p for p in stack.call_args.args[0] if p.name == "worker")
-    assert worker_process.config == "yaml/worker.yaml"
+    assert launched_configs[0].mode == ("capture" if explicit_mode else "router")
+    assert (launched_configs[0].guide is None) == explicit_mode
     assert worker_process.command == "procedure_capture_guide_worker"
     recording_processes = [p for p in stack.call_args.args[0] if p.name == "capture"]
 
@@ -152,8 +157,15 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
     models = load_models_config(config.models_config)
     services = {process.name: process for process in launched}
     assert tuple(services) == ("stt", "tts", "omni", "vlm")
-    assert set(models.entries) == {"stt", "tts", "llm", "vlm"}
+    assert set(models.entries) == {"stt", "tts", "llm", "vlm", "router"}
+    # Routing reuses the independently launched Clef service, not an LLM chat endpoint.
+    import yaml
+    clef = yaml.safe_load((_SAMPLE.parents[1] / "model-server-samples/clef-flash/yaml/clef_server.yaml").read_text())
+    assert models.decision("router").model_name == clef["model_name"]
+    assert urlsplit(models.decision("router").base_url).port == clef["port"]
     for name, model in models.entries.items():
+        if name == "router":
+            continue
         service = services["omni" if name == "llm" else name]
         assert urlsplit(model.endpoint.base_url).port == service.port
         assert service.launch_mode == "persist"
@@ -183,7 +195,7 @@ def test_documented_model_deployment_matches_worker(gpu_profile, monkeypatch):
 def test_documented_model_commands_select_sample_deployment(document):
     commands = [line for line in document.read_text().splitlines()
                 if line.startswith("uv run --project ") and "procedure_capture_guide_model_servers" in line]
-    assert commands == [
+    assert list(dict.fromkeys(commands)) == [
         "uv run --project model-servers procedure_capture_guide_model_servers",
         "uv run --project model-servers procedure_capture_guide_model_servers --stop",
     ]

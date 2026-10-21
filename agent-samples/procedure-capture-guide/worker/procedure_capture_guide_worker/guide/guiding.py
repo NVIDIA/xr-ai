@@ -189,6 +189,10 @@ class _Guide:
         self._start(participant_id, active=False)
         return f"{self._guide.workflow.name} is ready. Say start guide to begin."
 
+    def is_active(self, participant_id: str) -> bool:
+        session = self._sessions.get(participant_id)
+        return session is not None and session.active
+
     async def guidance(self, participant_id: str) -> _GuidanceTurn | None:
         """Capture policy, state, and controls at one execution revision.
 
@@ -357,7 +361,7 @@ class _Guide:
                  "Polite action requests count; explanations, quotations, hypotheticals and negations do not.",
                  EmptyRequest, reset),
             tool("workflow__restart",
-                 "Begin a fresh run of the command-line-selected guide from step one "
+                 "Begin a fresh run of the selected guide from step one "
                  "for start guide or a direct restart request. "
                  "Works whether the guide is active or stopped. "
                  "Polite action requests count; explanations, quotations, hypotheticals and negations do not.",

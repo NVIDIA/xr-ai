@@ -8,3 +8,7 @@ samples images, obtains captions, and saves narration and packet summaries.
 captioning.py supplies caption requests and validation; config.py loads the
 capture settings. Shared infrastructure is supplied by the worker's app.py.
 """
+
+from .agent import CaptureAgent
+
+__all__ = ["CaptureAgent"]

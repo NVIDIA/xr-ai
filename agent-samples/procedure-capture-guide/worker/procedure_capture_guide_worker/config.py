@@ -4,8 +4,9 @@
 """Load the application settings that app.py uses to construct the worker.
 
 Read shared frame and speech settings from worker.yaml, locate the model and
-voice-gate configuration, and load only the selected capability's settings through
-capture/config.py or guide/config.py. Apply the launcher's mode and overrides.
+voice-gate configuration, and load the selected capability's settings through
+capture/config.py or guide/config.py. Routed mode loads both. Apply the launcher's
+mode and overrides.
 """
 
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ class WorkerConfig:
     voice_gate_yaml: Path
     capture: CaptureConfig | None = None
     guide: GuideConfig | None = None
-    mode: Literal["capture", "guide"] = "capture"
+    mode: Literal["capture", "guide", "router"] = "capture"
     frame_max_age_s: float = 2.0
     frame_timeout_s: float = 3.0
     silence_duration: float = 0.6
@@ -50,12 +51,14 @@ def load_config(path: Path | None) -> WorkerConfig:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     base = path.resolve().parent
     mode = overrides.get("mode", data.get("mode", "capture"))
-    if mode not in {"capture", "guide"}:
-        raise ValueError("mode must be capture or guide")
+    if mode not in {"capture", "guide", "router"}:
+        raise ValueError("mode must be capture, guide, or router")
     if mode == "guide" and output_root is not None:
         raise ValueError("--output-root is only available in capture mode")
-    if mode == "capture" and overrides.get("guide_name") is not None:
+    if mode != "guide" and overrides.get("guide_name") is not None:
         raise ValueError("GUIDE_NAME is only available in guide mode")
+    if mode == "guide" and not (overrides.get("guide_name") or "").strip():
+        raise ValueError("--mode guide requires a non-empty GUIDE_NAME")
     settings = {}
     for name in (
         "frame_max_age_s",
@@ -75,9 +78,9 @@ def load_config(path: Path | None) -> WorkerConfig:
         mode=mode,
         capture=load_capture_config(
             base / data.get("capture_config", "capture-agent-config.yaml"), output_root=output_root,
-        ) if mode == "capture" else None,
+        ) if mode != "guide" else None,
         guide=load_guide_config(
             base / data.get("guide_config", "guide-agent-config.yaml"), guide_name=overrides.get("guide_name"),
-        ) if mode == "guide" else None,
+        ) if mode != "capture" else None,
         **settings,
     )

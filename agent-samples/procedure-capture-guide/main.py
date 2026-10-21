@@ -9,7 +9,9 @@ approved local guide and verifies progress while providing spoken guidance.
 This is the user-facing process-stack entry point. The worker's __main__ module
 runs inside its own process and launches procedure_capture_guide_worker/app.py.
 This launcher supervises the hub and worker; model services must already be available.
-Choose --mode capture or --mode guide. In capture mode, say "start capture"
+Without --mode, a decision router selects capture or an approved guide from
+the spoken request. Choose --mode capture or --mode guide to bypass routing.
+In capture mode, say "start capture"
 to begin and "stop capture" to finish; --output-root selects the packet directory.
 Guide mode requires a guide name after --mode guide. Say "start guide" to begin
 that guide and "stop guide" to cancel; connecting alone does not start it.
@@ -58,7 +60,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Capture narrated procedures or follow an approved procedure with spoken guidance."
     )
-    parser.add_argument("--mode", choices=("capture", "guide"), default="capture", help="worker capability to run")
+    parser.add_argument("--mode", choices=("capture", "guide"),
+                        help="run one capability; omit to route spoken requests to capture or an approved guide")
     parser.add_argument(
         "guide_name", nargs="?", metavar="GUIDE_NAME", help="exact approved guide name or ID (guide mode only)",
     )
@@ -83,7 +86,7 @@ def run(argv: Sequence[str] | None = None) -> None:
     parser = _parser()
     args = parser.parse_args(argv)
     hub_config = args.hub_config.expanduser().resolve() if args.hub_config is not None else None
-    if args.mode == "capture" and args.guide_name is not None:
+    if args.mode != "guide" and args.guide_name is not None:
         parser.error("GUIDE_NAME requires --mode guide")
     if args.mode == "guide" and args.output_root is not None:
         parser.error("--output-root requires --mode capture")
@@ -99,7 +102,7 @@ def run(argv: Sequence[str] | None = None) -> None:
         request = Path(directory) / "worker.json"
         request.write_text(json.dumps({
             "worker_config": str(_BASE / "yaml/worker.yaml"),
-            "mode": args.mode,
+            "mode": args.mode or "router",
             "guide_name": args.guide_name,
             "output_root": str(args.output_root.expanduser().resolve()) if args.output_root is not None else None,
         }), encoding="utf-8")

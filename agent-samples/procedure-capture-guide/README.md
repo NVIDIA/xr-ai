@@ -23,15 +23,21 @@ servers and wait for them to report ready:
 uv run --project model-servers procedure_capture_guide_model_servers
 ```
 
-Then start the sample from the same terminal:
+For automatic routing, also start the shared Clef decision server, then the sample
+from the same terminal:
 
 ```bash
 uv sync
+uv run --project ../../model-server-samples/clef-flash clef_flash_model
 uv run main.py
 ```
 
-Capture is the default mode; `--mode capture` selects it explicitly.
-Alternatively, use the installed entry point:
+Without `--mode`, ask to capture a task or follow a named procedure. The router
+selects capture or one of the approved guides under `guides/` and starts it.
+Refer to the [routing reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#automatic-procedure-routing)
+for selection, clarification, and lifecycle behavior.
+
+To run capture alone without Clef, use the installed entry point:
 
 ```bash
 uv run procedure_capture_guide --mode capture
@@ -59,7 +65,7 @@ The guide must have `task.status: approved`. Guide mode uses the same model serv
 say **start guide** to begin and **stop guide** to cancel. Say **start guide**
 again to begin a fresh run of the same command-line-selected guide.
 Refer to the [guide reference](https://nvidia.github.io/xr-ai/latest/reference/procedure-capture-guide.html#follow-an-approved-guide)
-for verification and step-advance controls. Capture mode and guide mode run separately.
+for verification and step-advance controls. Explicit modes bypass the router.
 
 To also record the whole participant session in either mode, independently of
 spoken capture or guide commands, use:
@@ -77,6 +83,7 @@ Stop the sample with Ctrl+C. The shared models remain running; stop them with:
 
 ```bash
 uv run --project model-servers procedure_capture_guide_model_servers --stop
+uv run --project ../../model-server-samples/clef-flash clef_flash_model --stop
 ```
 
 ## Configure
@@ -87,7 +94,7 @@ uv run --project model-servers procedure_capture_guide_model_servers --stop
 | `yaml/capture-agent-config.yaml` | Task output directory, sampling rate, and caption interval |
 | `yaml/guide-agent-config.yaml` | Local guide directory and verification timeout |
 | `yaml/media_capture.yaml` | Opt-in session recording output and rendering profile |
-| `yaml/models.json` | Client adapters and endpoints for batch STT, LLM, VLM, and acknowledgement TTS |
+| `yaml/models.json` | Batch STT, LLM, VLM, acknowledgement TTS, and Clef routing endpoints |
 | `model-servers/yaml/<gpu-profile>.yaml` | Local model-server GPU placement and workload budgets |
 | `yaml/voice_gate.yaml` | Silent, wake-word-free narration input |
 | `yaml/voice_gate.guide.yaml` | Wake-word-free guide questions and controls |

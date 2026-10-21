@@ -17,6 +17,15 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Procedure sample default routing
+
+`procedure-capture-guide` now routes spoken requests when launched without
+`--mode`. This path additionally requires the configured Clef decision server.
+Use `uv run main.py --mode capture` to retain the previous capture-only behavior
+without Clef. `--mode guide "Guide Name"` still selects one approved guide and
+waits for **start guide**. Refer to {doc}`procedure-capture-guide` for the routed
+startup commands and approved-guide catalog.
+
 ### Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM

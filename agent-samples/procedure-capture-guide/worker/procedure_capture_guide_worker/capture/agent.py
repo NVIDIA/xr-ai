@@ -91,6 +91,26 @@ class CaptureAgent(Agent):
         if self._sessions.get(pid) is recording:
             self._sessions.pop(pid)
 
+    def has_capture(self, participant_id: str) -> bool:
+        """Include accepted starts and draining stops when claiming routing ownership."""
+        connection = self._connections.get(participant_id)
+        return (connection is not None and connection.recording is not None) or participant_id in self._sessions
+
+    def accepting_narration(self, participant_id: str) -> bool:
+        connection = self._connections.get(participant_id)
+        return connection is not None and connection.recording is not None
+
+    @staticmethod
+    def command(text: str) -> str | None:
+        match = _COMMAND.fullmatch(text)
+        return match[1].lower() if match else None
+
+    async def drain(self, participant_id: str) -> None:
+        """Wait for accepted work without transferring write ownership to the caller."""
+        task = self._tails.get(participant_id)
+        if task is not None:
+            await asyncio.shield(task)
+
     def receive(self, event: ParticipantEvent) -> Awaitable[None]:
         pid = event.participant_id
         connection = self._connections.get(pid)
@@ -141,9 +161,9 @@ class CaptureAgent(Agent):
             or transcript.timestamp_us < connection.joined_at_us
         ):
             return
-        command = _COMMAND.fullmatch(transcript.text)
+        command = self.command(transcript.text)
         recording = connection.recording
-        if command and command[1].lower() == "start":
+        if command == "start":
             if recording is not None:
                 return
             recording = _Recording(connection)
