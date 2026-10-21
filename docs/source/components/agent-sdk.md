@@ -13,6 +13,7 @@ installation.
 |---|---|---|
 | `xr-ai-hub` | `xr_ai_hub` | Minimal IPC with DeviceIOHub using msgpack over ZMQ |
 | `xr-ai-models` | `xr_ai_models` | Typed model protocols, profiles, and OpenAI-compatible clients |
+| `xr-ai-routing` | `xr_ai_routing` | Participant-scoped routing and the `RoutableAgent` contract |
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, transport, and private media pipeline |
@@ -20,7 +21,7 @@ installation.
 
 Refer to these versioned package guides:
 {doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
-{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`,
+{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-routing`, {doc}`/reference/agent-sdk-tools`,
 {doc}`/reference/agent-sdk-voice`, and {doc}`/reference/agent-sdk-web-events`.
 Refer to the generated {doc}`/reference/python/index` for public names,
 signatures, types, defaults, fields, and method-level behavior.
