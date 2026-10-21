@@ -114,8 +114,9 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 - `Parallel([p1, p2, ...])` — all non-`reuse` processes in the group are started
   at once; the launcher waits for every spawned member to signal ready before
   the next item in the sequence begins. If any spawned member exits before
-  signaling ready, the launcher shuts everything down, just as it would for a
-  serial process.
+  signaling ready, the launcher stops owned processes and unfinished persistent
+  wrappers, just as it would for a serial process. Persistent services that
+  had signaled readiness when cleanup began stay running.
 
 ```python
 PROCESSES = [
@@ -172,7 +173,10 @@ The launcher injects `--ready-file <path>` into every spawned command. The
 process must `Path(path).touch()` the moment it is fully initialized and able
 to serve requests. The launcher blocks on the file's existence; if the process
 exits before creating it, startup is aborted. Owned processes and unfinished
-persistent launches are stopped; already-ready persistent services stay running.
+persistent wrappers are stopped; persistent services that had signaled readiness
+when cleanup began stay running. A service in a separate session needs its
+wrapper to forward shutdown signals; persistent pip-backend vLLM does not
+forward them before readiness and can keep loading.
 This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.
@@ -196,13 +200,16 @@ its IPC receive loop is active.
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
 abort during startup (SIGINT, SIGTERM, a process exiting before it signals ready,
 or an unexpected exit while other members of its parallel group start), the launcher
-stops `own` processes and `persist` processes that have not signaled readiness.
-Already-ready `persist` services remain running, including ready members of a
-parallel group whose other members failed. For model-server stacks, use the
-sample's model command with `--stop` to clear retained models. Externally
+stops `own` processes and `persist` wrappers that have not signaled readiness.
+Persistent services that had signaled readiness when cleanup began stay running,
+including ready members of a parallel group whose other members failed. For
+model-server stacks, use the sample's model command with `--stop` to clear
+retained models. Externally
 started `reuse` services remain untouched. Signal handling stays active through
-cleanup; repeated cancellation does not interrupt that cleanup. SIGKILL and
-launcher crashes cannot run this cleanup.
+cleanup; repeated SIGINT or SIGTERM does not interrupt cleanup or force early
+SIGKILL. A wrapper that ignores SIGTERM can take the full 20-second shutdown
+timeout plus up to 5 seconds waiting after SIGKILL. SIGKILL and launcher crashes
+cannot run this cleanup.
 
 ## Process failures
 
@@ -223,10 +230,11 @@ cancellation returns `128 + signal number` (130 for SIGINT, 143 for SIGTERM);
 cancellation after readiness follows normal shutdown. Summary errors do not
 replace the original failure. Members of a
 parallel startup group remain monitored until the entire group is ready. An
-unexpected exit during that wait triggers startup cleanup, including when the
-process had already signaled ready. With `exit_after_ready=True`, a `persist`
-wrapper may exit successfully after signaling ready while its service keeps
-running.
+unexpected exit during that wait triggers startup cleanup even if the exiting
+process had already signaled ready. Other persistent services that had signaled
+readiness when cleanup began stay running. With `exit_after_ready=True`, a
+`persist` wrapper may exit successfully after signaling ready while its service
+keeps running.
 
 ## Adding a new managed process
 

@@ -74,6 +74,8 @@ the pointers below to the answers.
   startup.
 - **Launch failures:** follow `docs/source/guides/troubleshooting.md` and the
   failure message's process context and run-log directory. Model servers that
-  already signaled readiness survive a later startup failure or cancellation;
-  rerun the same model command to reuse them, or use its `--stop` option to
-  clear them. Refer to `docs/source/guides/customizing-model-servers.md`.
+  had signaled readiness when cleanup began survive a startup failure or
+  cancellation; rerun the same model command to reuse them. If the fix changes
+  a server that already started, run the model command with `--stop` first so
+  the new settings take effect. Use `--stop` to clear retained servers. Refer to
+  `docs/source/guides/customizing-model-servers.md`.

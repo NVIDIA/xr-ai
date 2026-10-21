@@ -19,10 +19,12 @@ its application code predates the update.
 
 ### Persistent services after startup failure
 
-Stacks using `launch_mode="persist"` now retain services that have signaled
-readiness when a later service fails or startup is cancelled. Owned processes
-and unfinished persistent launches are still stopped. If you relied on startup
-failure to clear the entire model stack, run the sample's model command with
+Stacks using `launch_mode="persist"` now retain services that had signaled
+readiness when cleanup began after a startup failure or cancellation. Owned
+processes and unfinished persistent wrappers are still stopped. Persistent
+pip-backend vLLM can keep loading in its separate session after its wrapper
+stops. If you relied on startup failure to clear the entire model stack, run
+the sample's model command with
 `--stop` explicitly. Refer to {doc}`/guides/customizing-model-servers`.
 
 ### Nemotron 3 embedding model
