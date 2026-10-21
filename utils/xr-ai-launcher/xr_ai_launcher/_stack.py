@@ -91,8 +91,9 @@ class Process:
     """Spawn and shutdown behavior.
 
     ``own`` starts the process and stops it with the stack. ``persist`` starts
-    it but leaves it running at shutdown. ``reuse`` assumes the process is
-    already running and neither starts nor stops it.
+    it but leaves it running at shutdown once it has signaled readiness,
+    including when another process fails during startup. ``reuse`` assumes
+    the process is already running and neither starts nor stops it.
     """
 
     port:                int | None = None
@@ -118,8 +119,9 @@ class Parallel:
     The launcher spawns every member at once and waits for *all* of them to
     signal readiness before advancing to the next item in the stack sequence.
     A member that signals readiness remains monitored until the whole group is
-    ready. An unexpected exit during that interval shuts everything down. A
-    successful ``persist`` process may exit after readiness only when
+    ready. An unexpected exit during that interval stops owned processes and
+    persistent processes that have not signaled readiness. A successful
+    ``persist`` process may exit after readiness only when
     ``run_stack(..., exit_after_ready=True)`` permits bootstrap wrappers to
     outlive the launcher.
 
@@ -559,9 +561,11 @@ def run_stack(
     the remaining foreground processes are terminated. The launcher preserves
     a positive child status, maps a signal to ``128 + signal``, and maps an
     unexpected zero exit to 1.
-    SIGINT or SIGTERM during startup stops all newly launched processes,
-    including persistent processes, and exits with ``128 + signal``. Reused
-    services are untouched. After readiness, signals follow normal shutdown.
+    Startup failure or cancellation stops owned processes and persistent
+    processes that have not signaled readiness. Already-ready persistent
+    processes and reused services are left running. SIGINT or SIGTERM during
+    startup exits with ``128 + signal``. After readiness, signals follow
+    normal shutdown.
     Spawn errors, readiness failures, and unexpected monitored exits print a
     concise summary with the constructed command and an existing configured
     run-log directory when available. Pass
@@ -603,11 +607,8 @@ def run_stack(
     failure_contexts: dict[str, FailureContext] = {}
     output_readers: dict[str, tuple[threading.Thread, ...]] = {}
 
-    # Tracks whether startup got interrupted before/at the "All processes ready"
-    # milestone. On abort we must tear down EVERYTHING — including persist
-    # processes — so each wrapper's process group gets SIGTERM and (for the
-    # vLLM docker wrapper) its self-stop signal handler kills the half-started
-    # container. Keeping persist alive is correct only on a clean ready-exit.
+    # Startup aborts must clean up unfinished persistent launches without
+    # unloading models that are already ready.
     aborted = False
     failure_status: int | None = None
 
@@ -690,37 +691,42 @@ def run_stack(
                 returncode=exc.returncode,
             )
             print(
-                "\nAborting — stopping launched processes and containers…",
+                "\nAborting — stopping owned and unfinished processes…",
                 flush=True,
             )
         except KeyboardInterrupt:
             aborted = True
             failure_status = 130
             print(
-                "\nAborting — stopping launched processes and containers…",
+                "\nAborting — stopping owned and unfinished processes…",
                 flush=True,
             )
         except SystemExit as exc:
             aborted = True
             failure_status = exc.code if isinstance(exc.code, int) and exc.code else 1
             print(
-                "\nAborting — stopping launched processes and containers…",
+                "\nAborting — stopping owned and unfinished processes…",
                 flush=True,
             )
         except Exception:
-            # A spawn/wait failure before ready is an abort. Kill everything,
-            # then re-raise so the original traceback remains visible.
+            # A spawn/wait failure still needs startup cleanup; re-raise so
+            # the original traceback remains visible.
             aborted = True
             print(
-                "\nAborting — stopping launched processes and containers…",
+                "\nAborting — stopping owned and unfinished processes…",
                 flush=True,
             )
             raise
         finally:
-            # Clean exit (including exit_after_ready's early return, which runs
-            # this finally with aborted=False) keeps persist/reuse alive. Abort
-            # passes no_kill=set() so persist processes are killed too.
-            _shutdown(launched, no_kill=(set() if aborted else _no_kill))
+            # Inspect readiness files even if cancellation or a parallel peer's
+            # failure interrupted the wait before it observed them.
+            no_kill = _no_kill
+            if aborted:
+                no_kill = {
+                    name for name in _no_kill
+                    if (tmpdir / f"{name}.ready").exists()
+                }
+            _shutdown(launched, no_kill=no_kill)
 
     if failure_status is not None:
         sys.exit(failure_status)

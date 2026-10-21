@@ -171,7 +171,7 @@ class TestRunStackShutdownContract:
             sig: _stack.signal.getsignal(sig) for sig in original_handlers
         } == original_handlers
 
-    def test_abort_during_startup_kills_everything_including_persist(
+    def test_abort_during_startup_kills_unready_persist(
         self, stub_stack, tmp_path, monkeypatch, capsys,
     ):
         # Simulate Ctrl-C while waiting for the (persist) server to come up.
@@ -187,11 +187,42 @@ class TestRunStackShutdownContract:
             _stack.run_stack(processes, tmp_path)
 
         assert excinfo.value.code == 130
-        # Despite a persist process, abort must tear down EVERYTHING.
+        # Persistent processes that have not reached readiness are cleaned up.
         assert stub_stack["no_kill"] == set()
         assert "vlm" in stub_stack["procs"]
         assert stub_stack["spawn_options"] == {"vlm": False}
         assert "Process failure:" not in capsys.readouterr().err
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_spawn_failure_preserves_ready_persist(
+        self, stub_stack, tmp_path, monkeypatch, parallel,
+    ):
+        spawn = _stack._spawn
+
+        def _spawn(proc, base, ready_file, **kwargs):
+            if proc.name == "later":
+                raise OSError("could not spawn later service")
+            child = spawn(proc, base, ready_file, **kwargs)
+            if proc.name != "pending":
+                ready_file.touch()
+            return child
+
+        monkeypatch.setattr(_stack, "_spawn", _spawn)
+        ready = [
+            _stack.Process("llm", ".", "llm", launch_mode="persist"),
+            _stack.Process("vlm", ".", "vlm", launch_mode="persist"),
+            _stack.Process("owned", ".", "owned"),
+        ]
+        pending = _stack.Process("pending", ".", "pending", launch_mode="persist")
+        later = _stack.Process("later", ".", "later")
+        processes = (
+            [_stack.Parallel([*ready, pending, later])] if parallel
+            else [*ready, _stack.Parallel([pending, later])]
+        )
+        with pytest.raises(OSError, match="could not spawn later service"):
+            _stack.run_stack(processes, tmp_path, exit_after_ready=True)
+        assert stub_stack["no_kill"] == {"llm", "vlm"}
+        assert set(stub_stack["procs"]) == {"llm", "vlm", "owned", "pending"}
 
     def test_clean_exit_after_ready_keeps_persist_alive(
         self, stub_stack, tmp_path, monkeypatch, capsys,

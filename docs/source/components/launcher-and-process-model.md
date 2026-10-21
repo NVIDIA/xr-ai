@@ -171,7 +171,8 @@ alive so the launcher can continue monitoring it.
 The launcher injects `--ready-file <path>` into every spawned command. The
 process must `Path(path).touch()` the moment it is fully initialized and able
 to serve requests. The launcher blocks on the file's existence; if the process
-exits before creating it, startup is aborted and the whole stack is torn down.
+exits before creating it, startup is aborted. Owned processes and unfinished
+persistent launches are stopped; already-ready persistent services stay running.
 This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
 its IPC receive loop is active.
@@ -195,7 +196,10 @@ its IPC receive loop is active.
 On a clean ready-exit, `persist` and `reuse` processes are left running. On an
 abort during startup (SIGINT, SIGTERM, a process exiting before it signals ready,
 or an unexpected exit while other members of its parallel group start), the launcher
-tears down all processes it launched, including `persist` processes. Externally
+stops `own` processes and `persist` processes that have not signaled readiness.
+Already-ready `persist` services remain running, including ready members of a
+parallel group whose other members failed. For model-server stacks, use the
+sample's model command with `--stop` to clear retained models. Externally
 started `reuse` services remain untouched. Signal handling stays active through
 cleanup; repeated cancellation does not interrupt that cleanup. SIGKILL and
 launcher crashes cannot run this cleanup.

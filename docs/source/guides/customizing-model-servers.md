@@ -64,6 +64,11 @@ this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
 command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
+If a later model fails to start, or startup is cancelled, servers that already
+signaled readiness remain running. Fix the failure and rerun the same model
+command to reuse them, or use `--stop` to clear them. Unfinished launches are
+stopped through their managed process groups.
+
 On startup failure, merged server YAML remains in a private `model-configs-*`
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the
