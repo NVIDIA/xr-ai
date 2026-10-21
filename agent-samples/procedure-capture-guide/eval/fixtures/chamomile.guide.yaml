@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Brand-neutral test recipe for synthetic scenes, not universal brewing advice.
-# Keep this fixture separate from the sample's user-facing example guide.
+# Shared procedure and verification rules are pinned to guides/tea-making.guide.yaml
+# by CPU tests so this evaluation detects changes to the shipped guide.
 schema_version: 1
 task:
   id: chamomile_eval
@@ -11,12 +11,14 @@ task:
   status: approved
   start_step: identify
   foreground_prompt: >-
-    Guide brewing Chamomile herbal tea, not green tea or another
-    chamomile blend. This recipe uses boiling water, verified here by a current
-    water reading of 100 C or 212 F, and a five-minute steep for this
-    evaluation's fixed recipe. Do not silently change the recipe.
-    If the user's packet differs, or local boiling temperature cannot reach
-    this display target, stop and adapt the guide rather than bypass verification.
+    Guide brewing chamomile tea. Accept any tea packet or box with the word
+    chamomile visibly printed on it, regardless of brand or blend. This recipe
+    follows the tea sample's brewing reference: boiling water, verified here by
+    a current water reading of 100 C or 212 F, and a five-minute steep selected
+    from its 5–7 minute range. Do not silently change the recipe. If the package
+    instructions require different brewing settings, or local boiling temperature
+    cannot reach this display target, stop and adapt the guide rather than
+    bypass verification.
     Use a stable heat-safe vessel and follow appliance instructions. Keep hands
     clear of hot water and steam; never ask the user to tilt a hot vessel for
     the camera. Visual judgments do not guarantee safety. No retrieval or
@@ -24,12 +26,12 @@ task:
     visual step. The timer starts only on entering the fourth step, not when
     immersion is first detected. When the timer expires the run ends automatically;
     no next command is needed to finish. Start guide begins a fresh run.
-  complete_message: Five minutes have elapsed. Your Chamomile guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
+  complete_message: Five minutes have elapsed. Your chamomile tea guide is complete. Carefully remove the tea bag and let the drink cool before tasting.
 
 state:
   tea_identified:
     type: boolean
-    description: The visible packet identifies the complete Chamomile blend name.
+    description: The word chamomile is visible on the tea packet or box.
     initial: false
   water_at_target:
     type: boolean
@@ -54,31 +56,33 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Read the full tea type or blend name printed on the tea packet or box.
-          Return the actual printed name in uppercase, without a heading or
-          explanation. Do not substitute the desired tea for the visible label.
-          If the name cannot be fully read, return UNKNOWN. Use printed words,
-          not colors, flowers, nearby cups, or knowledge of likely products.
-          Output only the tea name, or UNKNOWN.
+          Is CHAMOMILE visibly printed on the tea packet or box? Answer YES
+          if the word is legible, alone or within a longer tea name, regardless
+          of case or brand; the brand need not be visible. Answer NO if the
+          tea name is readable but lacks CHAMOMILE. Answer UNKNOWN if no packet
+          or box is visible or its label is obscured or unreadable. Read actual
+          words; do not infer from colors, flowers, or the requested tea.
+          Output only YES, NO, or UNKNOWN.
       result_field: text
     evidence:
-      pattern: '(?i)^CHAMOMILE$'
+      pattern: '(?i)^YES$'
       consecutive: 2
       commit: {tea_identified: true}
     voice:
       prompt: >-
-        Ask to see the packet front so the complete Chamomile name is legible.
-        Use current_view for label questions. A different tea or an incomplete
-        name is not the selected tea. Do not say the package is verified
-        based on a user assertion. The fixed recipe is
-        boiling water and five minutes, not green-tea settings.
+        Ask to see the tea packet or box so the word chamomile is legible.
+        Accept chamomile alone or as part of a blend name from any brand.
+        Use current_view for label questions. Do not say the package is verified
+        based on a user assertion. The fixed recipe is boiling water and five
+        minutes; stop and adapt the guide if the package specifies different
+        brewing settings.
       tools: [current_view]
     complete_when: {tea_identified: true}
     next: heat_water
     complete_on_skip: true
     messages:
-      enter: Show the Chamomile packet so I can read the complete tea name.
-      complete: The packet identifies Chamomile. Say next to check the water temperature.
+      enter: Show the tea packet or box so I can read the word chamomile.
+      complete: The packet identifies chamomile tea. Say next to check the water temperature.
       skip: Packet verification skipped; ending this run rather than choosing an unverified tea.
 
   - id: heat_water
@@ -153,7 +157,7 @@ steps:
     next: steep_timer
     complete_on_skip: true
     messages:
-      enter: Carefully put the Chamomile tea bag in the prepared water, keeping the vessel stable.
+      enter: Carefully put the chamomile tea bag in the prepared water, keeping the vessel stable.
       complete: The tea bag is visibly in the water. Say next now to start the five-minute steeping timer.
       skip: Immersion verification and the timer were skipped; this run is not a verified completion.
 

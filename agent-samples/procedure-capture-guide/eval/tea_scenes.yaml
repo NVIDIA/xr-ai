@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Schematic scenes drawn entirely in code, not photos or recording derivatives.
-# Packet typography is illustrative, not a reproduction of commercial packaging.
+# Scene content defines the visual distinctions scored by tea_visual_cases.yaml.
 breakfast: {kind: packet, blend: BREAKFAST BLACK, color: '#dea67d'}
 green: {kind: packet, blend: GREEN, color: '#b2ca90'}
 chamomile: {kind: packet, blend: CHAMOMILE, color: '#e5d191'}

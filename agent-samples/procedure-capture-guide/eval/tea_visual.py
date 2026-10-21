@@ -21,6 +21,7 @@ from pathlib import Path
 
 import yaml
 from _tea_scenes import load_scenes, render_scene
+from _visual_expectations import matches_answer, visual_cases
 from procedure_capture_guide_worker.guide.guides import select_guide
 from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
@@ -36,7 +37,7 @@ def score(case: dict, evidence_pattern: str, text: str, available: bool) -> dict
         return {"recognition": None, "gate_correct": None, "accepted": None, "status": "unavailable"}
     accepted = re.fullmatch(evidence_pattern, text.strip()) is not None
     return {
-        "recognition": re.fullmatch(case["answer"], text.strip(), re.IGNORECASE) is not None,
+        "recognition": matches_answer(case["answer"], text),
         "gate_correct": accepted == case["accept"],
         "accepted": accepted,
         "status": "scored",
@@ -62,18 +63,18 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
     manifest = yaml.safe_load(manifest_path.read_text())
     scenes = load_scenes(manifest_path, manifest)
     guide = select_guide(manifest_path.parent / manifest["guides_dir"], manifest["guide"])
-    cases = manifest["cases"]
-    if not cases or len({case["scene"] for case in cases}) != len(cases):
-        raise ValueError("visual cases must have unique scene names and must not be empty")
+    cases = list(visual_cases(manifest).values())
     for case in cases:
         step = guide.workflow.steps[case["step"]]
         if step.trigger.function != "current_view" or step.evidence is None:
             raise ValueError("visual cases require a current_view step with an evidence gate")
-        if not isinstance(case["accept"], bool) or not isinstance(case["answer"], str):
-            raise ValueError("cases require a boolean accept and a string answer regex")
-        re.compile(case["answer"])
-        if case["scene"] not in scenes or not re.fullmatch(r"[a-z0-9_]+", case["scene"]):
+        if case["scene"] not in scenes:
             raise ValueError("case scene must name a safe, defined scene")
+    sources = [manifest_path, Path(__file__), Path(__file__).with_name("_tea_scenes.py"),
+               Path(__file__).with_name("_visual_expectations.py"), _PROMPT, guide.path]
+    if manifest.get("scenes_file") is not None:
+        sources.append(manifest_path.parent / manifest["scenes_file"])
+    source_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
     output.mkdir(parents=True, exist_ok=False)
     provenance = []
     for case in cases:
@@ -83,11 +84,9 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
         image.save(path)
         provenance.append({"scene": name, "file": path.name,
                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-    sources = [manifest_path, manifest_path.parent / manifest["scenes_file"],
-               Path(__file__), Path(__file__).with_name("_tea_scenes.py"), _PROMPT, guide.path]
     (output / "provenance.json").write_text(json.dumps({
         "images": provenance,
-        "source_sha256": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
+        "source_sha256": source_hashes,
         "scenes": scenes, "manifest": manifest, "guide_sha256": guide.sha256,
         "system_prompt": _PROMPT.read_text(),
         "origin": "Deterministically drawn schematics; no photographs or recording frames.",

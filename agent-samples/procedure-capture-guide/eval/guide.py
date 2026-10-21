@@ -29,6 +29,7 @@ import nemo_relay
 import yaml
 from _recorded_camera import capture_frames, feed_recording
 from _tea_scenes import load_scenes, render_scene
+from _visual_expectations import matches_answer, visual_cases
 from loguru import logger
 from PIL import Image, ImageDraw
 from procedure_capture_guide_worker.config import load_config
@@ -54,6 +55,8 @@ def _runtime_hashes(models_config: Path) -> dict[str, str]:
     paths = {models_config.resolve(), _SAMPLE / "yaml/worker.yaml",
              _SAMPLE / "yaml/guide-agent-config.yaml", Path(__file__).resolve(),
              Path(__file__).with_name("_recorded_camera.py").resolve()}
+    paths.update(Path(__file__).with_name(name).resolve()
+                 for name in ("_tea_scenes.py", "_visual_expectations.py"))
     package = _SAMPLE / "worker/procedure_capture_guide_worker"
     for pattern in ("*.py", "*.txt"):
         paths.update(package.rglob(pattern))
@@ -124,9 +127,72 @@ class Speech(Agent):
         self.log("speech", text=output.text, timestamp_us=output.timestamp_us)
 
 
+def validate_actions(manifest: dict, cases: dict) -> None:
+    """Reject malformed checks before rendering fixtures or contacting models."""
+    actions = manifest.get("actions")
+    if not isinstance(actions, list) or not actions:
+        raise ValueError("actions must be a nonempty list")
+    has_say = False
+    for index, action in enumerate(actions):
+        label = f"action {index}"
+        if not isinstance(action, dict):
+            raise ValueError(f"{label}: expected an action mapping")
+        kind = action.get("action")
+        if kind not in {"image", "say", "observe", "wait_speech", "quiet"}:
+            raise ValueError(f"{label}: unknown action {kind!r}")
+        for field in ("expect", "after_speech"):
+            if field in action:
+                if not isinstance(action[field], str) or not action[field].strip():
+                    raise ValueError(f"{label}: {field} must be a nonempty regex string")
+                try:
+                    re.compile(action[field])
+                except re.error as exc:
+                    raise ValueError(f"{label}: invalid {field} regex") from exc
+        if kind == "wait_speech" and "expect" not in action:
+            raise ValueError(f"{label}: wait_speech requires expect")
+        if ("after_speech" in action) != ("minimum_elapsed_s" in action):
+            raise ValueError(f"{label}: after_speech and minimum_elapsed_s must appear together")
+        if "after_speech" in action and kind != "wait_speech":
+            raise ValueError(f"{label}: after_speech requires wait_speech")
+        if kind == "quiet" and ("duration_s" not in action or not has_say):
+            raise ValueError(f"{label}: quiet requires duration_s and a preceding say")
+        for field in ("duration_s", "minimum_elapsed_s", "timeout_s"):
+            if field not in action:
+                continue
+            value = action[field]
+            if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                    or value < 0 or (field != "minimum_elapsed_s" and value == 0)):
+                bound = "nonnegative" if field == "minimum_elapsed_s" else "positive"
+                raise ValueError(f"{label}: invalid {field}; use a finite {bound} number")
+        if kind == "observe":
+            count = action.get("count", 2)
+            if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+                raise ValueError(f"{label}: observe count must be a positive integer")
+            if "case" in action:
+                if not isinstance(action["case"], str) or action["case"] not in cases or "answers" in action:
+                    raise ValueError(f"{label}: observe requires a defined case or answers, not both")
+            elif (not isinstance(action.get("answers"), list) or not action["answers"]
+                  or not all(isinstance(item, str) for item in action["answers"])):
+                raise ValueError(f"{label}: observe requires answers or a defined case")
+        has_say |= kind == "say"
+
+
+def announcement_elapsed(events: list[dict], origin: str, completion: str) -> float | None:
+    """Measure first announcements within the latest restart, not later paraphrases."""
+    start = 0
+    for index, event in enumerate(events):
+        if event["kind"] == "model" and any(call["name"] == "workflow__restart" for call in event["calls"]):
+            start = index + 1
+    speeches = [event for event in events[start:] if event["kind"] == "speech"]
+    first = next((index for index, event in enumerate(speeches) if re.search(origin, event["text"])), None)
+    if first is None:
+        return None
+    last = next((event for event in speeches[first + 1:] if re.search(completion, event["text"])), None)
+    return None if last is None else last["elapsed_s"] - speeches[first]["elapsed_s"]
+
+
 async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | None = None,
                    guide_path: Path | None = None, tail_s: float = 5) -> bool:
-    output.mkdir(parents=True, exist_ok=False)
     rows = capture_frames(packet) if packet else None
     if packet:
         raw = guide_path.read_bytes()
@@ -155,11 +221,16 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     fail_fast = manifest.get("fail_fast", False)
     if not isinstance(fail_fast, bool):
         raise ValueError("fail_fast must be a boolean")
+    cases = {}
+    if manifest.get("visual_cases_file"):
+        cases = visual_cases(yaml.safe_load((manifest_path.parent / manifest["visual_cases_file"]).read_text()))
+    validate_actions(manifest, cases)
     if not packet:
         guide = load_guide(manifest_path.parent / manifest["guide_path"])
         raw = guide.path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != guide.sha256:
         raise ValueError("guide changed while loading; retry with a fixed guide")
+    output.mkdir(parents=True, exist_ok=False)
     fixtures = {}
     for name, scene in ({} if packet else load_scenes(manifest_path, manifest)).items():
         if "kind" in scene:
@@ -176,6 +247,8 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
         fixtures[name] = path.resolve()
     (output / "guide.yaml").write_bytes(raw)
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    if cases:
+        (output / "visual_cases.json").write_text(json.dumps(cases, indent=2))
     started = time.monotonic()
     events = []
 
@@ -247,6 +320,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     deadline = None
     passed = True
     speech_offset = 0
+    quiet_offset = 0
 
     async def wait_until(predicate, timeout=90):
         if deadline is not None:
@@ -258,13 +332,17 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                 await asyncio.sleep(0.02)
 
     async def say(text):
+        nonlocal quiet_offset
         timestamp = time.time_ns() // 1000
         log("user", text=text, timestamp_us=timestamp)
         await runtime.publish(USER_QUERY_TOPIC, UserQuery(text=text, timestamp_us=timestamp),
                               participant_id=_PID)
         # Correlate the delivered answer, not an unrelated background notice.
         await wait_until(lambda: any(item.timestamp_us == timestamp for item in speech.outputs))
-        return next(item.text for item in speech.outputs if item.timestamp_us == timestamp)
+        answer_index = next(index for index, item in enumerate(speech.outputs) if item.timestamp_us == timestamp)
+        # Include notices delivered during the following image switch, even before quiet begins.
+        quiet_offset = answer_index + 1
+        return speech.outputs[answer_index].text
 
     def relay_event(event):
         with (output / "relay.jsonl").open("a") as stream:
@@ -295,9 +373,19 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                     before = len(visual_results)
                     await wait_until(lambda: len([item for item in visual_results[before:]
                                                  if item["image"] == str(camera.path)]) >= action.get("count", 2))
-                    answers = [item["answer"].strip() for item in visual_results[before:]
-                               if item["image"] == str(camera.path)]
-                    action_passed = all(answer in action["answers"] for answer in answers)
+                    results = [item for item in visual_results[before:] if item["image"] == str(camera.path)]
+                    if "case" in action:
+                        case = cases[action["case"]]
+                        question = guide.workflow.steps[case["step"]].trigger.arguments["question"]
+                        action_passed = str(camera.path) == str(fixtures[case["scene"]]) and all(
+                            item["available"] and item["question"] == question
+                            and matches_answer(case["answer"], item["answer"]) for item in results
+                        )
+                    else:
+                        action_passed = all(item["available"] and any(
+                            matches_answer(re.escape(" ".join(answer.split())), item["answer"])
+                            for answer in action["answers"]
+                        ) for item in results)
                 elif kind == "say":
                     speech_offset = len(speech.outputs)
                     answer = await say(action["text"])
@@ -314,17 +402,11 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
                                                  for item in speech.outputs[speech_offset:]),
                                      action.get("timeout_s", 90))
                     if "after_speech" in action:
-                        origins = [event for event in events if event["kind"] == "speech"
-                                   and re.search(action["after_speech"], event["text"])]
-                        endings = [event for event in events if event["kind"] == "speech"
-                                   and re.search(action["expect"], event["text"])]
-                        action_passed = bool(origins and endings) and (
-                            endings[-1]["elapsed_s"] - origins[-1]["elapsed_s"] >= action["minimum_elapsed_s"]
-                        )
+                        elapsed = announcement_elapsed(events, action["after_speech"], action["expect"])
+                        action_passed = elapsed is not None and elapsed >= action["minimum_elapsed_s"]
                 elif kind == "quiet":
-                    before = len(speech.outputs)
                     await asyncio.sleep(action["duration_s"])
-                    action_passed = len(speech.outputs) == before
+                    action_passed = len(speech.outputs) == quiet_offset
                 else:
                     raise ValueError(f"unknown action: {kind}")
                 if packet:
