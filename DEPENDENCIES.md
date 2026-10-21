@@ -396,6 +396,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.30.0`
+  - `mcp>=2.2.0`
+  - `pillow>=13.0.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -416,6 +418,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.30.0`
+  - `mcp>=2.2.0`
+  - `pillow>=13.0.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -461,6 +465,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.30.0`
+  - `mcp>=2.2.0`
+  - `pillow>=13.0.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -481,6 +487,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.30.0`
+  - `mcp>=2.2.0`
+  - `pillow>=13.0.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -615,6 +623,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyjwt>=2.15.1`
   - `transformers>=5.17.0`
   - `vllm>=0.30.0`
+  - `mcp>=2.2.0`
+  - `pillow>=13.0.0`
   - `pyyaml>=6.0`
   - `huggingface-hub>=0.32.0`
   - `hf-xet>=1.1.2,<2.0.0`
@@ -953,13 +963,20 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Optional dependency groups:
   - `repository`:
     - `lab-instrument-monitoring` → [`lab-instrument-monitoring`](agent-samples/lab-instrument-monitoring/) (local, editable)
+    - `lab-instrument-monitoring-model-servers` → [`lab-instrument-monitoring-model-servers`](agent-samples/lab-instrument-monitoring/model-servers/) (local, editable)
     - `lab-instrument-monitoring-worker` → [`lab-instrument-monitoring-worker`](agent-samples/lab-instrument-monitoring/worker/) (local, editable)
+    - `procedure-capture-guide` → [`procedure-capture-guide`](agent-samples/procedure-capture-guide/) (local, editable)
+    - `procedure-capture-guide-model-servers` → [`procedure-capture-guide-model-servers`](agent-samples/procedure-capture-guide/model-servers/) (local, editable)
+    - `procedure-capture-guide-worker` → [`procedure-capture-guide-worker`](agent-samples/procedure-capture-guide/worker/) (local, editable)
     - `simple-vlm-example` → [`simple-vlm-example`](agent-samples/simple-vlm-example/) (local, editable)
+    - `simple-vlm-example-model-servers` → [`simple-vlm-example-model-servers`](agent-samples/simple-vlm-example/model-servers/) (local, editable)
     - `simple-vlm-example-worker` → [`simple-vlm-example-worker`](agent-samples/simple-vlm-example/worker/) (local, editable)
     - `tea-making-sample` → [`tea-making-sample`](agent-samples/tea-making-sample/) (local, editable)
+    - `tea-making-sample-model-servers` → [`tea-making-sample-model-servers`](agent-samples/tea-making-sample/model-servers/) (local, editable)
     - `tea-making-worker` → [`tea-making-worker`](agent-samples/tea-making-sample/worker/) (local, editable)
     - `xr-render-demo` → [`xr-render-demo`](agent-samples/xr-render-demo/) (local, editable)
     - `xr-render-demo-eval` → [`xr-render-demo-eval`](agent-samples/xr-render-demo/eval/) (local, editable)
+    - `xr-render-demo-model-servers` → [`xr-render-demo-model-servers`](agent-samples/xr-render-demo/model-servers/) (local, editable)
     - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
     - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
@@ -969,7 +986,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
     - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
     - `clef-flash-model-server` → [`clef-flash-model-server`](model-server-samples/clef-flash/) (local, editable)
-    - `model-servers`
     - `clef-server` → [`clef-server`](services/clef-server/) (local, editable)
     - `cloudxr-runtime` → [`cloudxr-runtime`](services/cloudxr-runtime/) (local, editable)
     - `device-io-hub` → [`device-io-hub`](services/device-io-hub/) (local, editable)
@@ -980,8 +996,10 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `stt-server` → [`stt-server`](services/stt-server/) (local, editable)
     - `xr-video-memory-service` → [`xr-video-memory-service`](services/video-memory-service/) (local, editable)
     - `xr-ai-tests` → [`xr-ai-tests`](tests/) (local, editable)
+    - `xr-ai-gpu` → [`xr-ai-gpu`](utils/xr-ai-gpu/) (local, editable)
     - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
     - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
+    - `xr-ai-model-server-stack` → [`xr-ai-model-server-stack`](utils/xr-ai-model-server-stack/) (local, editable)
     - `xr-ai-vad` → [`xr-ai-vad`](utils/xr-ai-vad/) (local, editable)
     - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
     - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)

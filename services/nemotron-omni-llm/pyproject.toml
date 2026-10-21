@@ -18,6 +18,9 @@ dependencies = [
     # CVE-2026-80047: check remote-code consent before caching custom generation code.
     "transformers>=5.17.0",
     "vllm>=0.30.0",
+    # CVE-2026-59951: reclaim stateful Streamable HTTP sessions.
+    "mcp>=2.2.0",
+    "pillow>=13.0.0",
     "pyyaml>=6.0",
     "huggingface-hub>=0.32.0",
     "hf-xet>=1.1.2,<2.0.0",

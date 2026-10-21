@@ -32,9 +32,11 @@ vllm = "2026-09-23T00:00:00Z"
 urllib3 = "2026-09-16T00:00:00Z"
 nvidia-cutlass-dsl = "2026-09-23T00:00:00Z"
 nvidia-cutlass-dsl-libs-core = "2026-09-23T00:00:00Z"
+pillow = "2026-10-17T00:00:00Z"
 nvidia-cutlass-dsl-libs-base = "2026-09-23T00:00:00Z"
 multidict = "2026-09-22T00:00:00Z"
 pyjwt = "2026-09-29T00:00:00Z"
+mcp-types = "2026-09-08T00:00:00Z"
 quack-kernels = "2026-09-23T00:00:00Z"
 flashinfer-python = "2026-09-23T00:00:00Z"
 nvidia-cutlass-dsl-libs-cu13 = "2026-09-23T00:00:00Z"
@@ -43,6 +45,7 @@ nvidia-cutlass-dsl-libs-cu12 = "2026-09-23T00:00:00Z"
 instanttensor = "2026-09-23T00:00:00Z"
 transformers = "2026-09-10T00:00:00Z"
 werkzeug = "2026-09-28T00:00:00Z"
+mcp = "2026-09-08T00:00:00Z"
 pytorch-lightning = "2026-09-11T00:00:00Z"
 
 [[package]]
@@ -645,7 +648,7 @@ dependencies = [
     { name = "accelerate" },
     { name = "fastapi" },
     { name = "huggingface-hub" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyyaml" },
     { name = "safetensors" },
     { name = "torch" },
@@ -697,6 +700,7 @@ source = { editable = "../services/cloudxr-runtime" }
 dependencies = [
     { name = "isaacteleop", extra = ["cloudxr"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "pyyaml" },
+    { name = "xr-ai-gpu" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
 ]
@@ -705,6 +709,7 @@ dependencies = [
 requires-dist = [
     { name = "isaacteleop", extras = ["cloudxr"], specifier = ">=1.3.131" },
     { name = "pyyaml" },
+    { name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
 ]
@@ -792,6 +797,60 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/59/ebfb8c677c75605cc27f7122c90313fd2f375ff3c8d19a1694bda74aaa63/contourpy-1.3.3-pp311-pypy311_pp73-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:70f9aad7de812d6541d29d2bbf8feb22ff7e1c299523db288004e3157ff4674e", size = 302202, upload-time = "2025-07-26T12:02:55.947Z" },
     { url = "https://files.pythonhosted.org/packages/3c/37/21972a15834d90bfbfb009b9d004779bd5a07a0ec0234e5ba8f64d5736f4/contourpy-1.3.3-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5ed3657edf08512fc3fe81b510e35c2012fbd3081d2e26160f27ca28affec989", size = 329207, upload-time = "2025-07-26T12:02:57.468Z" },
     { url = "https://files.pythonhosted.org/packages/0c/58/bd257695f39d05594ca4ad60df5bcb7e32247f9951fd09a9b8edb82d1daa/contourpy-1.3.3-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:3d1a3799d62d45c18bafd41c5fa05120b96a28079f2393af559b843d1a966a77", size = 225315, upload-time = "2025-07-26T12:02:58.801Z" },
+]
+
+[[package]]
+name = "coverage"
+version = "7.15.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/c3/4f2195f512fb172aa425a8803a874b2baa9ba7f80ff7b6080998761fc701/coverage-7.15.4.tar.gz", hash = "sha256:0548198fff07ccf4faf469520bce1c2eceb1ce3e62891921138dec10907f9d00", size = 936952, upload-time = "2026-08-06T13:50:24.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/66/edcec7d7a0b524aa8923e22925fde6fe50ce005a113dca13ae1581455c4c/coverage-7.15.4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:bbac5abad70df71019988f83f26ac7092ff2642975def4429e98dc7585ef3490", size = 222367, upload-time = "2026-08-06T13:47:15.578Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/c6/ab8de429e2e8548faf58ec7e1674a4ce00414b4113942d3fe87109cf0f68/coverage-7.15.4-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:357a173465c7ce028d07a95cc2b63b5bf59f50ecdd5ad75c5cbb78ada984048e", size = 222874, upload-time = "2026-08-06T13:47:16.961Z" },
+    { url = "https://files.pythonhosted.org/packages/be/c4/3b7b49587e8a6b9af79b3eb468d443d6042b6d65b47aa26586846a0d6566/coverage-7.15.4-cp311-cp311-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:21b803935e2efc3acebe9697197a294fccf5dc4e5382bd6369542ff7a7d2a1d7", size = 253287, upload-time = "2026-08-06T13:47:18.291Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/65/ec03b743a2a229c72cc1eff3e57be9d3564e9c6b4d5aba2d70744a3fc0d8/coverage-7.15.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:7a2b580774a4786c1053157c0165e04476e03ff293993d7c148eee784a94bae6", size = 255199, upload-time = "2026-08-06T13:47:19.765Z" },
+    { url = "https://files.pythonhosted.org/packages/41/4b/5163729e4b6582d61975cfd3ccab45b4ec53e21cf156d9941cb025188468/coverage-7.15.4-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a9464451c4efffe8d47ace5a540b10b0dc10e879066290f8600872b7f54a419d", size = 257308, upload-time = "2026-08-06T13:47:21.206Z" },
+    { url = "https://files.pythonhosted.org/packages/86/08/2167a0f08fb87d702fa423a48578a32865464b7c9e1db3911ad7812ab414/coverage-7.15.4-cp311-cp311-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:de602f34123c2f4af1c1869c6dbbbd60da6d5983bf01937367295d135cccbfce", size = 259268, upload-time = "2026-08-06T13:47:22.503Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/e5/68eebae3053dbd48508edea559c21b23fbdf3460784f91370c83a86a6acd/coverage-7.15.4-cp311-cp311-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:6879ded16a27f3eeca19b900c147e81616e7054db451471a611b2755ee5249f7", size = 253392, upload-time = "2026-08-06T13:47:23.88Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/46/fd4ced40a2b691c774e515c9b69500bfa64c7960b67fcee4b2f6fad97fc3/coverage-7.15.4-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:986be58c3ab54aae8d3496a6225eea74f760fdbe739b38bd442c7e8d133aa53b", size = 255001, upload-time = "2026-08-06T13:47:25.469Z" },
+    { url = "https://files.pythonhosted.org/packages/53/25/ae2e5fa710bb6957a9aadeb9e3598d3b3e4af6587ce857ad42e8639a3f30/coverage-7.15.4-cp311-cp311-musllinux_1_2_i686.whl", hash = "sha256:c6103639613fe6c1e989082948419bc77a2d26b6c825c99d7fad25f7d3d87afc", size = 253061, upload-time = "2026-08-06T13:47:26.845Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/31/67ddc0365db2c6e93ac8580bc4bbc50f65273262f973f63ebcdbc15c0495/coverage-7.15.4-cp311-cp311-musllinux_1_2_ppc64le.whl", hash = "sha256:d3af93dddb5659276c63bc16ac6466ac2033a70ca816097bbc06345b8ccdf571", size = 256831, upload-time = "2026-08-06T13:47:28.217Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/78/82b8fd18f57fb13f12d98fe874995bb2c4f9f17be8aff762c426323fdb96/coverage-7.15.4-cp311-cp311-musllinux_1_2_riscv64.whl", hash = "sha256:b10075e5421d04265766a6d1dac809bbeb8a946fbb23c8f82c227409b2190719", size = 252781, upload-time = "2026-08-06T13:47:29.712Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/eb/6c74ef4dd12b252e573c49bdef9e2ac265bf3dbb79b8d7feb3266e084e9e/coverage-7.15.4-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:a67a9f78b2942d87ba8ce3059c642164d2aedd65337377fb52fe9803656bc5c7", size = 253692, upload-time = "2026-08-06T13:47:31.192Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/66/eb9aed1c3fd2d36ee00eb173f434b14fa607fc056739c9a89ff4244010ea/coverage-7.15.4-cp311-cp311-win32.whl", hash = "sha256:69484d1aca26e322e1c3ce03f09341e84524ababad2d7202161738d83cc9f82e", size = 224461, upload-time = "2026-08-06T13:47:32.572Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/6d/81fa4161dfb3ed9d74e40d58647eff83a56b7612e78352581280fce2f477/coverage-7.15.4-cp311-cp311-win_amd64.whl", hash = "sha256:63fd6fcd1dd6e158f7eb78606e72933b3f6d01e7b747f99c6c12d764307a0fdc", size = 224937, upload-time = "2026-08-06T13:47:34.205Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/c1/d8dacf683c6cad3cf85ce68fd3774a6774ec402128822fdfaed920f11e6a/coverage-7.15.4-cp311-cp311-win_arm64.whl", hash = "sha256:ea82116c9893fa89e929b7f197ee5a1950a76e91cc5c85ba503fc02379d04890", size = 224479, upload-time = "2026-08-06T13:47:36.118Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/48/bc8d4ba7b37551a767bd863f15b3f80182b271c2f55975356f5f7dbe94c2/coverage-7.15.4-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:d4fedd1f7f428f9fe83b1ead5e7cc87a43427be31aadafbac3ac0636dc7abb22", size = 222543, upload-time = "2026-08-06T13:47:37.562Z" },
+    { url = "https://files.pythonhosted.org/packages/20/dd/88d6f83f1fffc974a3691a34a97951c5b12df7512a6782c5963883cbc058/coverage-7.15.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:37e2f0cdf58e2e1fed4e4d5a8f8786ae2f7eb80b478016876667dc4a01d60a97", size = 222905, upload-time = "2026-08-06T13:47:38.927Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/5c/54ee0d4748585bb0acab9891cd8d92f2d3593165b4e59fc9de113bfb3140/coverage-7.15.4-cp312-cp312-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:fb55d0e70bb15f2e81477613627286581414693d74ac7963c93a790dd453ca9d", size = 254407, upload-time = "2026-08-06T13:47:40.488Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/3f/f0642a372f494bd0d7dad3b497083b910194a5f1c88be2c94fef707c3b59/coverage-7.15.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:899b9da30f3c6c336566e3707495bb23e8302d39d862f01fa78c48b99b9437e2", size = 257145, upload-time = "2026-08-06T13:47:41.931Z" },
+    { url = "https://files.pythonhosted.org/packages/71/17/8b46d0ed68251016002ec972c8fc0119961a765d0984cafb8bf317c43758/coverage-7.15.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d15715e8c46552827e5e4f30a35575a2dbcad14454cf3284c54483946bd16931", size = 258257, upload-time = "2026-08-06T13:47:43.527Z" },
+    { url = "https://files.pythonhosted.org/packages/30/b8/8498a0e72d0adbe15477dd07463d2b3bb2c9f6a4815e8589e50939e2c3ae/coverage-7.15.4-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:002a438859f7b430bc99afeaf01a6d187dad1d0dc907b64cdeffc632a5db8fd8", size = 260517, upload-time = "2026-08-06T13:47:45.121Z" },
+    { url = "https://files.pythonhosted.org/packages/41/e1/7dce19c3bdb1e3dd63e769508216500edad81bd5f69a26d724e32aceaf78/coverage-7.15.4-cp312-cp312-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:e4193a04b518f7968f3099755f5509ee7cccc6dc2b92a6b14841934d22e222c9", size = 254785, upload-time = "2026-08-06T13:47:46.541Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/b1/e1494703c675a2561723cd9b89f45c9168782c31280c611b1f767851e57c/coverage-7.15.4-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:e98dcc55d572b38e69d117da7e8e8efb8500f1f5eaf81ecd460a63220790b839", size = 256176, upload-time = "2026-08-06T13:47:48.155Z" },
+    { url = "https://files.pythonhosted.org/packages/73/76/a5629d270fb638a43a4b10466f51e2f49d532c1aa4da2913cbbb150bbe0a/coverage-7.15.4-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:af6c538498ce66c10d3fd541c2a8d5b03da5850355add34e6cba564210cb9e72", size = 254321, upload-time = "2026-08-06T13:47:49.757Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/4f/9c44447218435d5766b911534f9d798144a5560f85e9a54ebe5f3f5d19f9/coverage-7.15.4-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:1d10025d96ea89fc2f73714dbc4cbd433fe012c1ac9e23f895d7728b238b6e52", size = 258390, upload-time = "2026-08-06T13:47:51.248Z" },
+    { url = "https://files.pythonhosted.org/packages/de/36/c1e127616fb3fa18a9ff71e76c417f2fd7424332a4870015ac224ef4c039/coverage-7.15.4-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:d802e1947603162ded419bff83ac7489820355d2b856dfb09206574e3a37ac0c", size = 253894, upload-time = "2026-08-06T13:47:52.816Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/b9/fdb92c8ae7a8bb9b850cc253b7b3b9c8526f68130002048b5671cd510d09/coverage-7.15.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:c2de40895718f91951b86712b4c5b694acaf9a0a49be13874896f599a1eed3f4", size = 255763, upload-time = "2026-08-06T13:47:54.296Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/c0/a7d51b2587c7bdb76e71b0896d2565bf7d60436b5122fc83e511adb1f7cd/coverage-7.15.4-cp312-cp312-win32.whl", hash = "sha256:5c3431b2161279b7db5c2a1aa58ae02e5cb8c3c42d93a5094be3f5537bd5b11b", size = 224597, upload-time = "2026-08-06T13:47:56.074Z" },
+    { url = "https://files.pythonhosted.org/packages/49/b9/5c5f80cc55f5acaaca6dee677626bfcec8c87204a7809b438b08e84f4571/coverage-7.15.4-cp312-cp312-win_amd64.whl", hash = "sha256:6befeab5fb2b51c958ca4ac6c5d141a1e8240f4f76e46350f1911963deda49cd", size = 225135, upload-time = "2026-08-06T13:47:57.52Z" },
+    { url = "https://files.pythonhosted.org/packages/47/e4/2a4561f89ff6bf7c925c287d0f2cce8bdf139c3a33735c87e3203401cf94/coverage-7.15.4-cp312-cp312-win_arm64.whl", hash = "sha256:67bc345491ab55b837277d76f5775d057e8c7f1ac44d890d8c2c82adde258c6f", size = 224515, upload-time = "2026-08-06T13:47:58.977Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/84/651a9310859673aaa3b3203f1aa1641ca60fcf2494683e1c9474c7172780/coverage-7.15.4-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:c705b28feb2775dc82a25f1d473a370bc37ff93f5177f4e29ce2425f560f6921", size = 222565, upload-time = "2026-08-06T13:48:00.796Z" },
+    { url = "https://files.pythonhosted.org/packages/82/f9/4dcf700137e8af550670f4d74d1b63828ce93e1e2b05e5f10710eb2ea987/coverage-7.15.4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:3ff205ab5e3ecc670f6a4dd19d9cbf12ede53dd41cfc1e15716ec961ea6d314e", size = 222936, upload-time = "2026-08-06T13:48:02.391Z" },
+    { url = "https://files.pythonhosted.org/packages/07/4a/612ff1e780b3fbfd637486f542f84adc5503873d8b5d279dec1ffeef9414/coverage-7.15.4-cp313-cp313-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:5172326e861a38b48b48befca15e0f477a26b283337a33a739c8fed229934e36", size = 253926, upload-time = "2026-08-06T13:48:04.382Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/04/d1cff1c2ead4708a6a79c01d3736b6a25bd38a36678398f72a8dd33dfad9/coverage-7.15.4-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:12b59c90084e3234fb11184886bf4a40f4f16a8c8f867be2e087b81f8e8868d4", size = 256523, upload-time = "2026-08-06T13:48:05.996Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/80/d34e13fb4b293cbdb9665838cf5522077b8ad14ef947550631a4bced36a5/coverage-7.15.4-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:349062d66f00b40fa2c1c222438bad25fabf755631b5d82937fe985c8008615c", size = 257759, upload-time = "2026-08-06T13:48:08.036Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/e7/2c5fe7636fdb0732fe0f09f308a5b066864078b7fc61f6678e8478554f2e/coverage-7.15.4-cp313-cp313-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:4256ced708e598e05209bc1a8ab4074e04a51dba4c62fb45926a229af675ace7", size = 259890, upload-time = "2026-08-06T13:48:09.834Z" },
+    { url = "https://files.pythonhosted.org/packages/92/28/9689f0858dfff59c2ea688938ab9fa2925631235df67126a42b6c5c70ae1/coverage-7.15.4-cp313-cp313-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:d80f974b20782d9612c8b4c9beeca867074c7cf4079d1419843fa25a26428b25", size = 254121, upload-time = "2026-08-06T13:48:11.459Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/e2/785077c230c157243eb5aa9a26c3be260ecd02001bead54a3cada3df8e03/coverage-7.15.4-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:2e179f19bfe1d31f8eeeaa12990194d761c4f62f0759661000bca6cd8729f40b", size = 255891, upload-time = "2026-08-06T13:48:13.209Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/90/e20371b17b40f912f21305c2db2f30efa3de306f7320fc916804872c85a4/coverage-7.15.4-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:8bc16bb47b7679670eceff71d78bfb7d6e5b143f6c2cd117487ec7c75e0d4b78", size = 253859, upload-time = "2026-08-06T13:48:14.736Z" },
+    { url = "https://files.pythonhosted.org/packages/05/49/25371987ee459a5f67c0427fb75c74f9358e65f2c71fe75bf41c1b6c5fcb/coverage-7.15.4-cp313-cp313-musllinux_1_2_ppc64le.whl", hash = "sha256:1cd685005cd2c4200adfc14cf39a603b9320efab3f18a8f7f156d20c9cc3345f", size = 258011, upload-time = "2026-08-06T13:48:16.464Z" },
+    { url = "https://files.pythonhosted.org/packages/30/6e/32e67467f6154bf4f1c4f63b05acc5097cba4237d45bbeeea446b52e8ac1/coverage-7.15.4-cp313-cp313-musllinux_1_2_riscv64.whl", hash = "sha256:337399ad2c93b3acd2a937627dae8b3e86b66707cd3d3e856347999aadf1ef8d", size = 253676, upload-time = "2026-08-06T13:48:18.493Z" },
+    { url = "https://files.pythonhosted.org/packages/03/c1/8b24192e89286399765155251f99ee9f070a9d637109018ac23d99b99f6f/coverage-7.15.4-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:96e257121228ec5cd2bb919276e94ac11074471bc37d68dbae0e8308cce15fff", size = 255453, upload-time = "2026-08-06T13:48:20.057Z" },
+    { url = "https://files.pythonhosted.org/packages/16/6f/8b41ebdf67c87854e17c035336a90f1cfbad0c14c2a584301be6ff148718/coverage-7.15.4-cp313-cp313-win32.whl", hash = "sha256:c65a9e0dfc6143491879da4e13b5e30f8be192055de508d737fb14601edbd22c", size = 224605, upload-time = "2026-08-06T13:48:21.655Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/e2/2946c7f0b42b152ecb21ff1bdad72e3d301e790c0c487e4a86e8c9f69347/coverage-7.15.4-cp313-cp313-win_amd64.whl", hash = "sha256:2ff8f5e9b8f7a94f0c11c45631eee103dbcb7d63274edd12c56efe1be690b3b4", size = 225148, upload-time = "2026-08-06T13:48:23.376Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/83/3f4a69957f48ae7a0aba76c34743f88963d607b19e03f3f8e66f91cae0f9/coverage-7.15.4-cp313-cp313-win_arm64.whl", hash = "sha256:6e0a8a5083b096487d6cfced94cdd514d8f5db6f113610fb36c0620edb1028cf", size = 224536, upload-time = "2026-08-06T13:48:25.117Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/d9/e70c286c979378f061d8266e279b686ab0b0b688e1fe0af864684f23a77d/coverage-7.15.4-py3-none-any.whl", hash = "sha256:964730a1e9de9c0cf11be6a1a3c79ce419c34882842abd256086ba4698705e84", size = 214332, upload-time = "2026-08-06T13:50:22.192Z" },
 ]
 
 [[package]]
@@ -1286,7 +1345,9 @@ source = { editable = "../services/embedding-server" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "mcp" },
     { name = "multidict" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -1300,7 +1361,9 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -2351,13 +2414,24 @@ requires-dist = [
 ]
 
 [[package]]
+name = "lab-instrument-monitoring-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/lab-instrument-monitoring/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
 name = "lab-instrument-monitoring-worker"
 version = "0.1.0"
 source = { editable = "../agent-samples/lab-instrument-monitoring/worker" }
 dependencies = [
     { name = "loguru" },
     { name = "nemo-relay" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
@@ -2576,7 +2650,9 @@ source = { editable = "../services/llama-nemotron-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "mcp" },
     { name = "multidict" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -2590,7 +2666,9 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -2887,7 +2965,7 @@ dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyparsing" },
     { name = "python-dateutil" },
 ]
@@ -2928,7 +3006,7 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "2.1.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -2946,22 +3024,22 @@ dependencies = [
     { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/6e/21fb8e5d579dbe21d96ea4d5034200d46d8bdf2261053b5bd041f3c2f612/mcp-2.1.1.tar.gz", hash = "sha256:50b7ba1ebbe117008ea7bdd288234043e69c20b403d6851d19661e6d431a75ef", size = 3984589, upload-time = "2026-08-25T16:14:02.376Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/31/ac54fb0fdd5b37de704486e288bba4fbbb463f24cfcfedbede407b854513/mcp-2.2.0.tar.gz", hash = "sha256:2dc37ecb1974becdcebdbf7561e7c15a07dbbf20ba21ba16c3593b3038b3afbd", size = 4084129, upload-time = "2026-09-07T16:06:23.439Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/af/8644cc5fa26a59afd2df2e98eeb19e72926887fa4b7441aba4ff661140db/mcp-2.1.1-py3-none-any.whl", hash = "sha256:1c6c31c5d6471c58db76af3af8af67f46d11d01f0a59077d0a308cbdb3d3e915", size = 357912, upload-time = "2026-08-25T16:13:59.024Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/ff/8e7eade68b8a28f7da0ed1085544341b51f9c935dbf6b95c76b7edfea6a0/mcp-2.2.0-py3-none-any.whl", hash = "sha256:bde982589473a060ae145e3406e9a5333fe538c97229ba841f5a7f92be004f81", size = 365656, upload-time = "2026-09-07T16:06:19.711Z" },
 ]
 
 [[package]]
 name = "mcp-types"
-version = "2.1.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/dd/1c4417dc0b722c23a1669032d5f044e41170fe5d4773b488a50fcce98c32/mcp_types-2.1.1.tar.gz", hash = "sha256:77dcbe48fba73cca71a673f2646a5f037a017b7a0a07ac89cec1113028890eda", size = 66674, upload-time = "2026-08-25T16:14:03.861Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/91/762d7755d971aff8a28d75f7961656148edf27875c8026e6385aaab08ae7/mcp_types-2.2.0.tar.gz", hash = "sha256:d3ed53703ddd10d9c6399f29d322bb66f3f67ab41348ac8556ba23e07fedefad", size = 65892, upload-time = "2026-09-07T16:06:25.187Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/d0/242e63c510f4a17381f55b1549a3f94f5687a0595984febd2b6f87a687a0/mcp_types-2.1.1-py3-none-any.whl", hash = "sha256:26f9f7f03f2a5730717a5b98e2ab7eb640ac352d05a00cdc725c311864778295", size = 69656, upload-time = "2026-08-25T16:14:00.667Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/d7/6ffba5d8cd5dd9b8a19478875c50e04945314ba5074e84d749283f27f62d/mcp_types-2.2.0-py3-none-any.whl", hash = "sha256:ea476b73ee86709ab5abc9452385ed36cc05907e582355622e294595c9a04f13", size = 69106, upload-time = "2026-09-07T16:06:21.461Z" },
 ]
 
 [[package]]
@@ -2981,7 +3059,7 @@ dependencies = [
     { name = "jsonschema" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pydantic" },
     { name = "pydantic-extra-types", extra = ["pycountry"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "requests" },
@@ -3041,23 +3119,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2d/5f/bc0d0fce1bd0a35378696aa13b21feffa18d9cda837f4e1be124e45ee090/model_hosting_container_standards-0.1.16.tar.gz", hash = "sha256:d34589633900e53c3ee5f7c78280a7cf7e4f6532c35e763341a262fc85cbe84a", size = 94130, upload-time = "2026-06-15T21:29:34.771Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/ef/6eabeb251d2a0598cb5f9a274159e05ae07a1e3fe6a1473bf6035793252a/model_hosting_container_standards-0.1.16-py3-none-any.whl", hash = "sha256:47f4f65713120bc3a69feb022981a38db9e557aedf88dbd72077f20588caa12b", size = 125666, upload-time = "2026-06-15T21:29:33.415Z" },
-]
-
-[[package]]
-name = "model-servers"
-version = "0.1.0"
-source = { editable = "../model-server-samples/model-servers" }
-dependencies = [
-    { name = "xr-ai-launcher" },
-    { name = "xr-ai-logging" },
-    { name = "xr-ai-vllm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
-    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
-    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
 ]
 
 [[package]]
@@ -3408,7 +3469,9 @@ source = { editable = "../services/nemotron-omni-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "mcp" },
     { name = "multidict" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -3422,7 +3485,9 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -3439,7 +3504,9 @@ source = { editable = "../services/nemotron3-nano-llm" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "mcp" },
     { name = "multidict" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -3453,7 +3520,9 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -4604,6 +4673,17 @@ wheels = [
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'win32'",
+    "python_full_version >= '3.13' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7dbde16ed1843984665ff2e0a518f5db43e77ec540b9/pillow-12.3.0.tar.gz", hash = "sha256:3b8182a766685eaa002637e28b4ec8d6b18819a0c71f579bf0dbaa5830297cce", size = 47025035, upload-time = "2026-07-01T11:56:38.965Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/c8/0a78b0e02d7ac54bc03e5321c9220da52f0c2ea83b21f7c40e7f3169c502/pillow-12.3.0-cp311-cp311-macosx_10_10_x86_64.whl", hash = "sha256:00808c5e14ef63ac5161091d242999076604ff74b883423a11e5d7bbb38bf756", size = 5392415, upload-time = "2026-07-01T11:53:47.162Z" },
@@ -4644,6 +4724,62 @@ wheels = [
 ]
 
 [[package]]
+name = "pillow"
+version = "13.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin'",
+    "python_full_version < '3.12' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and sys_platform != 'darwin'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/a4/9cc30690a394a8305e8be4c9036aa16d0dfddadd09079860b582f562496d/pillow-13.0.0.tar.gz", hash = "sha256:cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510", size = 47058631, upload-time = "2026-10-16T22:18:09.718Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/d7/af6af1b8cc55e07cb0489d5b0950bf5a9bb1461eeba825700b6d8d0e26ea/pillow-13.0.0-cp311-cp311-macosx_10_10_x86_64.whl", hash = "sha256:6f38f3f885a09cafc93fd667b1173a92f379e43785d635e7983c893f0da319fb", size = 5592324, upload-time = "2026-10-16T22:15:24.672Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/d2/2c12cb4fbb5d95f38d1001ff3d95fafcb830077018cba40e56a8f932dfbc/pillow-13.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:37290fbef0c73e2d51d594eb78fded7dc7170d1c3ad0a890269e6fd8c8c4e061", size = 4856298, upload-time = "2026-10-16T22:15:27.669Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/ee/229b27472483a4801ea94990815e710391836afdf987b4b722b62bd75db6/pillow-13.0.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7c88c10dd432f3b39ccdafc9ed81d0c21b8fd634502574da76d1bfa4fe2c76d0", size = 6517304, upload-time = "2026-10-16T22:15:29.43Z" },
+    { url = "https://files.pythonhosted.org/packages/36/46/f509b74787f40ce0627501089d630b2c741b63b244c1f40b640b3b01e181/pillow-13.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a625df9a2a5597fa5e5266e01aefc82604bb85d291e3547981e863560d75da6c", size = 7140667, upload-time = "2026-10-16T22:15:31.368Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/a4/5a398b8ec2c37145397d6461c0b551c23ec03072aa64f357aed25e582b00/pillow-13.0.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:10b5019883c98f1dd819ca48ffc6f33a91cee04948fe637c605f4345c7cafd6f", size = 6610583, upload-time = "2026-10-16T22:15:34.025Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/7b/f2f1109b230fd4e2d57ab2305de31adc37ea9b4ff8719436c623cb484415/pillow-13.0.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:f391dc92a015c478745192fe4f2e120c2af2aba18d9fe0616341cbf537599806", size = 7218241, upload-time = "2026-10-16T22:15:36.214Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/d3/069edb9083b267746baf59756282cacef904d3475c5288c7216fb5195a98/pillow-13.0.0-cp311-cp311-win32.whl", hash = "sha256:6a0920cb55df5a4d3f6862964908078c0bd59332bdd1bcd20d14e8c70ef27cc5", size = 6515278, upload-time = "2026-10-16T22:15:38.129Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/f6/6e2d96413e4c9dbec12ea584d9e646d602877d4cce3ea669099f959deac6/pillow-13.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:d7710eb676e9bb68965cb045be0d333b4c0d7f9dfbaa7fbf121385b1588683d3", size = 7278471, upload-time = "2026-10-16T22:15:40.286Z" },
+    { url = "https://files.pythonhosted.org/packages/70/e7/baff21f8cb60496c8c250609501b88919eeedb4088d3da106f6c62f3f3c0/pillow-13.0.0-cp311-cp311-win_arm64.whl", hash = "sha256:12fbb851cf323cc19aac3eea1df5ad17b57e91e9fe3cfd06100dba7bb8208c13", size = 2698981, upload-time = "2026-10-16T22:15:42.637Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/b8/58d79332229482eb0d27c82973850808c19d37e5bdc14443d3417bd373f5/pillow-13.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:67c8d44ad89fa7eb88de5d6ef6199b1e03dd24974f85a67639fc8badb801fe79", size = 5568643, upload-time = "2026-10-16T22:15:44.474Z" },
+    { url = "https://files.pythonhosted.org/packages/39/4b/f2ed53d83aa44ac19599ac0a54897f867fafb95f406980d1e24083f8cbe3/pillow-13.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fc481f742ccda20e9ed760b8f978dff50f2a4e9bc253ac167fb0a05b0783ef52", size = 4852329, upload-time = "2026-10-16T22:15:46.284Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/bb/9e30e8ed18c20800ee327a12107d5249ad8dc444867b3adfcc21654e3c71/pillow-13.0.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8bf295fe459343bc6093c8e5e0df60bfa189e0fcb775a22e2c2488fdeccc6c0d", size = 6519309, upload-time = "2026-10-16T22:15:48.14Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/99/fdf65cc539e266ab93546c261bdf98411fe165c6e4e13f9dbf597097192b/pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:42d63be3af4f9b951b199b0a9d23365d37ab14687e6d77b74940432c8515c4ca", size = 7144542, upload-time = "2026-10-16T22:15:50.093Z" },
+    { url = "https://files.pythonhosted.org/packages/26/9b/f38b7c4d8f599537e2d1a6d546cec9beef7536ff8f5c49a3f9c78179d8ac/pillow-13.0.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:4bd024d567eca931b668978d672dba914d4b8e2628e2c3073a2ad178de8a2620", size = 6618042, upload-time = "2026-10-16T22:15:52.054Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/7c/45ee28531f89ee4582967d8a17f7a26d71ca64cd902b93c269590cd60a00/pillow-13.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:23edf4ec4b6f4f240e8df6e4985e9ee2ced86474632433e55fb1e2548744bf40", size = 7228137, upload-time = "2026-10-16T22:15:54.009Z" },
+    { url = "https://files.pythonhosted.org/packages/01/bc/9c2a969cb1b70201d04fa17fd5aedf02a732870b8da86bceaaa30b0ca385/pillow-13.0.0-cp312-cp312-win32.whl", hash = "sha256:02464da86f561f410e13b061ec37c3068a9cb557a095494157742d07b3c24a27", size = 6515423, upload-time = "2026-10-16T22:15:56.25Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/cd/73a79ecdc822076002eb24b5e1e4a530b0bb5310fcb6d239abbec877110b/pillow-13.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:ff3fe9eb621fbb9db4c4be33ab946f6bac5f98ab50ca8d3260503653656c961b", size = 7272166, upload-time = "2026-10-16T22:15:58.597Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/a3/be5a1236efd085b3984e4305da8f179ae9dab80c991d2ad78f2bd5c4c843/pillow-13.0.0-cp312-cp312-win_arm64.whl", hash = "sha256:c3bc8ee0271387e0b1e3ad0ff893645990a656e79bf9c42f4f734a3642b11d51", size = 2698943, upload-time = "2026-10-16T22:16:00.637Z" },
+    { url = "https://files.pythonhosted.org/packages/82/e2/9132d38df320e8099e2642d9fa538f18a7dfebf68a875a31725dc2a115aa/pillow-13.0.0-cp313-cp313-ios_13_0_arm64_iphoneos.whl", hash = "sha256:e98b4f91f99b24b1da72e10621ba181f7281922384a7403094debb4199de6c00", size = 4190620, upload-time = "2026-10-16T22:16:02.527Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/be/436dac0996876f65ef1916ffb711c5ef4af2ebc57414b6f16642e07f6b47/pillow-13.0.0-cp313-cp313-ios_13_0_arm64_iphonesimulator.whl", hash = "sha256:34fb3db1149c879343861831728c243c432d4a5afc8f1878ca7612ef8de2a033", size = 4290286, upload-time = "2026-10-16T22:16:04.861Z" },
+    { url = "https://files.pythonhosted.org/packages/60/16/7c1007162e4169ea0d5bec47e2e0b2174f56c50cf5b8c02a1dc23e41037e/pillow-13.0.0-cp313-cp313-ios_13_0_x86_64_iphonesimulator.whl", hash = "sha256:2d50500a4a3bc6469adcdb319cf05d688b08ca3bf0f22a05339f3b25b433a599", size = 3723169, upload-time = "2026-10-16T22:16:06.956Z" },
+    { url = "https://files.pythonhosted.org/packages/08/bc/578ab2eaa04705a8978bd9be0fe15c3d43a8fc95097c4f7e39540e79e4fa/pillow-13.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:ef5fe6b7db3f501c56000ba8fe7c7e1a35ca1d45824fbeb95a67daa85cff4dbe", size = 5568469, upload-time = "2026-10-16T22:16:08.664Z" },
+    { url = "https://files.pythonhosted.org/packages/98/c8/ccede3dcc4f274b80fb49199eed1ef34ba05566c8b71976b9d1f111da2e3/pillow-13.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:f11a3c1358bb3c68012a7b1f41b223c3db9f7bfde90b481df028cfe1c3363313", size = 4852187, upload-time = "2026-10-16T22:16:10.693Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/3c/cd0770e96d20bfd990db024bcbd43897ff3e88da1f4782cf90ea231b1d4f/pillow-13.0.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:19b66ca0a4d25cc0200b381ce824c7ea090db61427315e73cfb05dbf1b35c369", size = 6515908, upload-time = "2026-10-16T22:16:12.896Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/fe/f5cdaa2d1c4086e757430f368c271a58ee29cfe7378e7ae7b9d964015c25/pillow-13.0.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5f56499c1a74d2b862beb0c33b8016f99d095858455df9d21583bbbc1c15b582", size = 7142544, upload-time = "2026-10-16T22:16:14.844Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/b5/a54f6d44adbcd23737c8c12953f42be107e4cca64e247c0ca3a5b563061c/pillow-13.0.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:a2a14cd73d5e6c927f644b0110ee81f59c4ef506259ec9183904747f2caacc81", size = 6613097, upload-time = "2026-10-16T22:16:16.893Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/b4/9e6c1207c21b2e91db0d15c16d30f3701ce5add1bd4da0e787761e66cb6e/pillow-13.0.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:08b826a9bf1265c76de04a42061d61ea6b109418b7826f28ff1ecdfaa26c5502", size = 7224846, upload-time = "2026-10-16T22:16:19.195Z" },
+    { url = "https://files.pythonhosted.org/packages/78/9f/d3c3cb0518f3dd1eee0ef501535f53d15597a53c5c4118d178086143397a/pillow-13.0.0-cp313-cp313-win32.whl", hash = "sha256:12b0fa15879fe5a9d9eebe66e4e2d74128a773b1a4448010c9c714f45e04b9d8", size = 6516013, upload-time = "2026-10-16T22:16:21.389Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/ed/1b16fb66a37e1b9e41370b93b2c614c7da761a5b2a41dc333f7af4639962/pillow-13.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:9dda0788a9932776a75d8bcc020076edc308ce2508b51f6739a45e3158b3fc42", size = 7284777, upload-time = "2026-10-16T22:16:23.393Z" },
+    { url = "https://files.pythonhosted.org/packages/87/7d/8d02eba9f7ecc87f8e90f731e032cc4773802f2a843763afd0c66a535ff4/pillow-13.0.0-cp313-cp313-win_arm64.whl", hash = "sha256:40a266371ece581e5de13b6635ef78d7487824af80561b6ca27694a88c19bc0f", size = 2698826, upload-time = "2026-10-16T22:16:25.382Z" },
+    { url = "https://files.pythonhosted.org/packages/68/c0/fb7b1caf25ed5ac5d46116f09b8b0706b9559833c65c667cecb1a53153f2/pillow-13.0.0-pp311-pypy311_pp80-macosx_10_15_x86_64.whl", hash = "sha256:405be6058e206a86fedce2f715ecc2343f94072d7925251632dffa2c05f70dca", size = 5521630, upload-time = "2026-10-16T22:17:50.008Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/e6/4d11d5b1137f4fc080605cce410cfaae4f303ad400bdec75d27d3083fa29/pillow-13.0.0-pp311-pypy311_pp80-macosx_11_0_arm64.whl", hash = "sha256:b84be41387fc00db28c13c02e30d42b02d8d8f6a4a741a1aee6012ca7f1f6039", size = 4806023, upload-time = "2026-10-16T22:17:51.932Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/45/0923202a658e8ff6aafd72c1a4395ebadcdebaa182c437d8595d3dd3db32/pillow-13.0.0-pp311-pypy311_pp80-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a192360d512305fe92d3053e4f7627bbad1f7708f1f4ad38cccd9336acabe9ad", size = 5464831, upload-time = "2026-10-16T22:17:53.742Z" },
+    { url = "https://files.pythonhosted.org/packages/07/52/d3e38f0cad1dadea2a658b9a7d6ba8a04048f5ae14f011b806e5c3bd6bcb/pillow-13.0.0-pp311-pypy311_pp80-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:83b37abd87b590acd8f47ca8a61f70893322b11834d36e07c2298dacad4d14d2", size = 6043133, upload-time = "2026-10-16T22:17:55.625Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/f9/2ed7685980c1d64f8131a7d87a19c369424747577152622b73ddeff163b7/pillow-13.0.0-pp311-pypy311_pp80-win_amd64.whl", hash = "sha256:73ee25cf8cf8b75d5a5aeed7cb6588f5e5dbfbb0fde51707b630bbb23897645c", size = 7365208, upload-time = "2026-10-16T22:17:57.509Z" },
+    { url = "https://files.pythonhosted.org/packages/60/da/f6d644e631c5b370c5d0b899f3ccadd2780aab070b29a110527cf4e1fd2c/pillow-13.0.0-pp312-pypy312_pp80-macosx_10_15_x86_64.whl", hash = "sha256:8619685cad8efc4c38c66d3b36aad854523297c43d748b3b6f0cc03c90ba3463", size = 5523188, upload-time = "2026-10-16T22:17:59.334Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/b0/2594f202d743a35d4fe80682bfd96f277e5ca7aecb27cf64ef5bfc1d000b/pillow-13.0.0-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:7e91e97a929232cdb828889ee6ad0e48d7f40f4ec38818f4e4a8968b2b1af22e", size = 4806808, upload-time = "2026-10-16T22:18:01.188Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/ed/d504165ef79af6fafe25c76726cf30f544cc236002f7ed054f1d51adc4ff/pillow-13.0.0-pp312-pypy312_pp80-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:93ff9c9c3663ce23aaa5d0b6b6abac55359e2a0c06c7e30f3771829af816be63", size = 5464358, upload-time = "2026-10-16T22:18:02.779Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/fe/a10aba5503ca13e9e009b8bd0a1a4ce5584bdce246245fd6f3a83701369c/pillow-13.0.0-pp312-pypy312_pp80-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e65dd6e75de67b2362a4fa3e16aa627595f65054dc4ec73d64680c84d592fa61", size = 6043514, upload-time = "2026-10-16T22:18:04.538Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/37/66b12dc476041fe523bca29c9d58fbf1ea92a4eaf73acfb9e993948f1191/pillow-13.0.0-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:567f20f1c75897d7663830da6ea8af719e03d712b1d9ee7f813319f9ece42e5a", size = 7366030, upload-time = "2026-10-16T22:18:06.638Z" },
+]
+
+[[package]]
 name = "pipecat-ai"
 version = "1.8.1"
 source = { registry = "https://pypi.org/simple" }
@@ -4662,7 +4798,7 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "onnxruntime" },
     { name = "openai", version = "2.54.0", source = { registry = "https://pypi.org/simple" } },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -4775,6 +4911,65 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0d/8e/27672cd2dde9d2345ead0352146a401be4ec0af132be86ca7a2db24afb09/portalocker-4.3.0.tar.gz", hash = "sha256:69bf8e46769d66eb0a23219b9550253d2c3b5f03400202a2333784c1e6395e32", size = 263582, upload-time = "2026-08-25T18:05:20.267Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/76/57be9bb352b3f91c80671a7b7ce2cd51f99ad324c89df82a098df9b9e609/portalocker-4.3.0-py3-none-any.whl", hash = "sha256:aa91709ccfc322b8225171392d64a2f9fc833f15f5ab741cfba6d3fba285ce31", size = 129554, upload-time = "2026-08-25T18:05:18.64Z" },
+]
+
+[[package]]
+name = "procedure-capture-guide"
+version = "0.1.0"
+source = { editable = "../agent-samples/procedure-capture-guide" }
+dependencies = [
+    { name = "xr-ai-launcher" },
+    { name = "xr-ai-logging" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+]
+
+[[package]]
+name = "procedure-capture-guide-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/procedure-capture-guide/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
+name = "procedure-capture-guide-worker"
+version = "0.1.0"
+source = { editable = "../agent-samples/procedure-capture-guide/worker" }
+dependencies = [
+    { name = "loguru" },
+    { name = "nemo-relay" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-hub-client" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-tools", extra = ["frames", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "xr-ai-voice" },
+    { name = "xr-ai-voicegate" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "nemo-relay", specifier = ">=0.7.2,<0.8" },
+    { name = "pydantic", specifier = ">=2.0,<3.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-tools", extras = ["frames", "vision"], editable = "../agent-sdk/xr-ai-tools" },
+    { name = "xr-ai-voice", editable = "../agent-sdk/xr-ai-voice" },
+    { name = "xr-ai-voicegate", editable = "../utils/xr-ai-voicegate" },
 ]
 
 [[package]]
@@ -6148,6 +6343,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "simple-vlm-example-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/simple-vlm-example/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
 name = "simple-vlm-example-worker"
 version = "0.1.0"
 source = { editable = "../agent-samples/simple-vlm-example/worker" }
@@ -6415,6 +6621,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "tea-making-sample-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/tea-making-sample/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
 name = "tea-making-worker"
 version = "0.1.0"
 source = { editable = "../agent-samples/tea-making-sample/worker" }
@@ -6469,7 +6686,7 @@ dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "packaging", version = "24.2", source = { registry = "https://pypi.org/simple" } },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "protobuf", version = "6.33.5", source = { registry = "https://pypi.org/simple" } },
     { name = "setuptools" },
     { name = "tensorboard-data-server" },
@@ -6815,7 +7032,8 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-vllm') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
     { name = "torch", marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository' or extra == 'extra-25-xr-ai-dependency-manifest-vllm'" },
 ]
 wheels = [
@@ -7061,7 +7279,7 @@ dependencies = [
     { name = "opentelemetry-semantic-conventions-ai" },
     { name = "outlines-core" },
     { name = "partial-json-parser" },
-    { name = "pillow" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "prometheus-client" },
     { name = "prometheus-fastapi-instrumentator" },
     { name = "protobuf", version = "7.36.0", source = { registry = "https://pypi.org/simple" } },
@@ -7109,7 +7327,9 @@ source = { editable = "../services/vlm-server" }
 dependencies = [
     { name = "hf-xet" },
     { name = "huggingface-hub" },
+    { name = "mcp" },
     { name = "multidict" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pyjwt" },
     { name = "pyyaml" },
     { name = "transformers" },
@@ -7123,7 +7343,9 @@ dependencies = [
 requires-dist = [
     { name = "hf-xet", specifier = ">=1.1.2,<2.0.0" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
+    { name = "mcp", specifier = ">=2.2.0" },
     { name = "multidict", specifier = ">=6.9.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "transformers", specifier = ">=5.17.0" },
@@ -7546,19 +7768,26 @@ repository = [
     { name = "cloudxr-runtime" },
     { name = "device-io-hub" },
     { name = "lab-instrument-monitoring" },
+    { name = "lab-instrument-monitoring-model-servers" },
     { name = "lab-instrument-monitoring-worker" },
     { name = "magpie-tts-server" },
-    { name = "model-servers" },
     { name = "pocket-tts-server" },
+    { name = "procedure-capture-guide" },
+    { name = "procedure-capture-guide-model-servers" },
+    { name = "procedure-capture-guide-worker" },
     { name = "simple-vlm-example" },
+    { name = "simple-vlm-example-model-servers" },
     { name = "simple-vlm-example-worker" },
     { name = "stt-server" },
     { name = "tea-making-sample" },
+    { name = "tea-making-sample-model-servers" },
     { name = "tea-making-worker" },
     { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
+    { name = "xr-ai-model-server-stack" },
     { name = "xr-ai-models", extra = ["riva", "speaker"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tests" },
     { name = "xr-ai-tools", extra = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
@@ -7571,6 +7800,7 @@ repository = [
     { name = "xr-rag-service" },
     { name = "xr-render-demo" },
     { name = "xr-render-demo-eval" },
+    { name = "xr-render-demo-model-servers" },
     { name = "xr-render-demo-worker" },
     { name = "xr-render-scene" },
     { name = "xr-video-memory-service" },
@@ -7591,23 +7821,30 @@ requires-dist = [
     { name = "device-io-hub", marker = "extra == 'repository'", editable = "../services/device-io-hub" },
     { name = "embedding-server", marker = "extra == 'vllm'", editable = "../services/embedding-server" },
     { name = "lab-instrument-monitoring", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring" },
+    { name = "lab-instrument-monitoring-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring/model-servers" },
     { name = "lab-instrument-monitoring-worker", marker = "extra == 'repository'", editable = "../agent-samples/lab-instrument-monitoring/worker" },
     { name = "llama-nemotron-llm-server", marker = "extra == 'vllm'", editable = "../services/llama-nemotron-llm" },
     { name = "magpie-tts-server", marker = "extra == 'repository'", editable = "../services/magpie-tts" },
-    { name = "model-servers", marker = "extra == 'repository'", editable = "../model-server-samples/model-servers" },
     { name = "nemotron-omni-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron-omni-llm" },
     { name = "nemotron3-nano-llm-server", marker = "extra == 'vllm'", editable = "../services/nemotron3-nano-llm" },
     { name = "pocket-tts-server", marker = "extra == 'repository'", editable = "../services/pocket-tts" },
+    { name = "procedure-capture-guide", marker = "extra == 'repository'", editable = "../agent-samples/procedure-capture-guide" },
+    { name = "procedure-capture-guide-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/procedure-capture-guide/model-servers" },
+    { name = "procedure-capture-guide-worker", marker = "extra == 'repository'", editable = "../agent-samples/procedure-capture-guide/worker" },
     { name = "simple-vlm-example", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example" },
+    { name = "simple-vlm-example-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example/model-servers" },
     { name = "simple-vlm-example-worker", marker = "extra == 'repository'", editable = "../agent-samples/simple-vlm-example/worker" },
     { name = "stt-server", marker = "extra == 'repository'", editable = "../services/stt-server" },
     { name = "tea-making-sample", marker = "extra == 'repository'", editable = "../agent-samples/tea-making-sample" },
+    { name = "tea-making-sample-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/tea-making-sample/model-servers" },
     { name = "tea-making-worker", marker = "extra == 'repository'", editable = "../agent-samples/tea-making-sample/worker" },
     { name = "vlm-server", marker = "extra == 'vllm'", editable = "../services/vlm-server" },
     { name = "xr-ai-agent-runtime", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-gpu", marker = "extra == 'repository'", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-launcher", marker = "extra == 'repository'", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", marker = "extra == 'repository'", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-model-server-stack", marker = "extra == 'repository'", editable = "../utils/xr-ai-model-server-stack" },
     { name = "xr-ai-models", extras = ["riva", "speaker"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tests", marker = "extra == 'repository'", editable = "../tests" },
     { name = "xr-ai-tools", extras = ["capture", "frames", "image-editing", "marker-tracking", "relay", "services", "vision"], marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-tools" },
@@ -7620,11 +7857,17 @@ requires-dist = [
     { name = "xr-rag-service", marker = "extra == 'repository'", editable = "../services/rag-service" },
     { name = "xr-render-demo", marker = "extra == 'repository'", editable = "../agent-samples/xr-render-demo" },
     { name = "xr-render-demo-eval", marker = "extra == 'repository'", editable = "../agent-samples/xr-render-demo/eval" },
+    { name = "xr-render-demo-model-servers", marker = "extra == 'repository'", editable = "../agent-samples/xr-render-demo/model-servers" },
     { name = "xr-render-demo-worker", marker = "extra == 'repository'", editable = "../agent-samples/xr-render-demo/worker" },
     { name = "xr-render-scene", marker = "extra == 'repository'", editable = "../agent-samples/xr-render-demo/scene" },
     { name = "xr-video-memory-service", marker = "extra == 'repository'", editable = "../services/video-memory-service" },
 ]
 provides-extras = ["repository", "vllm"]
+
+[[package]]
+name = "xr-ai-gpu"
+version = "0.1.0"
+source = { editable = "../utils/xr-ai-gpu" }
 
 [[package]]
 name = "xr-ai-hub-client"
@@ -7645,6 +7888,12 @@ requires-dist = [
 name = "xr-ai-launcher"
 version = "0.1.0"
 source = { editable = "../utils/xr-ai-launcher" }
+dependencies = [
+    { name = "xr-ai-gpu" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" }]
 
 [[package]]
 name = "xr-ai-logging"
@@ -7656,6 +7905,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "loguru", specifier = ">=0.7" }]
+
+[[package]]
+name = "xr-ai-model-server-stack"
+version = "0.1.0"
+source = { editable = "../utils/xr-ai-model-server-stack" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "xr-ai-launcher" },
+    { name = "xr-ai-logging" },
+    { name = "xr-ai-vllm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
+    { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-vllm", editable = "../utils/xr-ai-vllm" },
+]
 
 [[package]]
 name = "xr-ai-models"
@@ -7693,19 +7961,22 @@ version = "0.1.0"
 source = { editable = "../tests" }
 dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "coverage" },
     { name = "device-io-hub" },
     { name = "huggingface-hub" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-launcher" },
     { name = "xr-ai-logging" },
+    { name = "xr-ai-model-server-stack" },
     { name = "xr-ai-models", extra = ["riva"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-tools", extra = ["frames", "image-editing", "marker-tracking", "services", "vision"], marker = "extra == 'extra-25-xr-ai-dependency-manifest-repository'" },
     { name = "xr-ai-vad" },
@@ -7723,6 +7994,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "coverage", specifier = ">=7.10" },
     { name = "device-io-hub", editable = "../services/device-io-hub" },
     { name = "huggingface-hub", specifier = ">=0.32.0" },
     { name = "numpy", specifier = ">=1.24" },
@@ -7732,9 +8004,11 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },
     { name = "xr-ai-logging", editable = "../utils/xr-ai-logging" },
+    { name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" },
     { name = "xr-ai-models", extras = ["riva"], editable = "../agent-sdk/xr-ai-models" },
     { name = "xr-ai-tools", extras = ["frames", "image-editing", "marker-tracking", "services", "vision"], editable = "../agent-sdk/xr-ai-tools" },
     { name = "xr-ai-vad", editable = "../utils/xr-ai-vad" },
@@ -7765,17 +8039,17 @@ capture = [
 frames = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "xr-ai-hub-client" },
 ]
 image-editing = [
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
 ]
 marker-tracking = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "opencv-contrib-python-headless" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "xr-ai-hub-client" },
     { name = "zxing-cpp" },
 ]
@@ -7988,6 +8262,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "xr-render-demo-model-servers"
+version = "0.1.0"
+source = { editable = "../agent-samples/xr-render-demo/model-servers" }
+dependencies = [
+    { name = "xr-ai-model-server-stack" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xr-ai-model-server-stack", editable = "../utils/xr-ai-model-server-stack" }]
+
+[[package]]
 name = "xr-render-demo-worker"
 version = "0.1.0"
 source = { editable = "../agent-samples/xr-render-demo/worker" }
@@ -8048,7 +8333,7 @@ source = { editable = "../services/video-memory-service" }
 dependencies = [
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and extra == 'extra-25-xr-ai-dependency-manifest-repository') or (extra == 'extra-25-xr-ai-dependency-manifest-repository' and extra == 'extra-25-xr-ai-dependency-manifest-vllm')" },
-    { name = "pillow" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
     { name = "pynvvideocodec", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
     { name = "pyyaml" },
     { name = "xr-ai-logging" },

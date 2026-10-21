@@ -11,6 +11,7 @@ plugins {
 // CVEs; lift anything older to the pinned version. Buildscript and project configurations
 // resolve separately, so both need the rule.
 val nettyPin = libs.versions.netty.get()
+val guavaPin = libs.versions.guava.get()
 val nettyPinParts = nettyPin.split('.').mapNotNull { it.toIntOrNull() }
 
 fun belowNettyPin(version: String): Boolean {
@@ -23,15 +24,19 @@ fun belowNettyPin(version: String): Boolean {
     return false
 }
 
-fun Configuration.forceNettyVersion() = resolutionStrategy.eachDependency {
+fun Configuration.applySecurityVersions() = resolutionStrategy.eachDependency {
     if (requested.group == "io.netty" && belowNettyPin(requested.version.orEmpty())) {
         useVersion(nettyPin)
+    }
+    // CVE-2026-102554: avoid eager allocation during Guava deserialization.
+    if (requested.group == "com.google.guava" && requested.name == "guava") {
+        useVersion(guavaPin)
     }
 }
 
 allprojects {
-    buildscript.configurations.configureEach { forceNettyVersion() }
-    configurations.configureEach { forceNettyVersion() }
+    buildscript.configurations.configureEach { applySecurityVersions() }
+    configurations.configureEach { applySecurityVersions() }
 }
 
 // Opt-in only: the locks under dependency-manifest/android are a cutoff snapshot
