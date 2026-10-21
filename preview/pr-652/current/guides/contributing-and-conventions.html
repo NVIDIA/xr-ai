@@ -319,6 +319,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
@@ -369,6 +370,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../reference/python/xr_ai_models/presets/index.html">xr_ai_models.presets</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_routing/index.html">xr_ai_routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_runtime/index.html">xr_ai_runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_logging/index.html">xr_ai_logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
@@ -438,15 +440,15 @@
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
 <p>Refer to the root
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2a006c5852e0cc9f1ebefe8248a2e9563de8e12d/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7b7d5fd7ab56379bab2b88cd07024e6d6de10184/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for setup, testing, pull requests, and DCO sign-off. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2a006c5852e0cc9f1ebefe8248a2e9563de8e12d/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7b7d5fd7ab56379bab2b88cd07024e6d6de10184/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> for the
 architecture and change constraints used by humans and coding agents. Refer to
 <a class="reference internal" href="documentation-style.html"><span class="doc">Documentation style</span></a> for requirements governing
 customer-facing Markdown and reStructuredText. Refer to
 <a class="reference internal" href="python-code-style.html"><span class="doc">Python code style</span></a> for the public API, exception handling,
 and module layout conventions for Python code. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2a006c5852e0cc9f1ebefe8248a2e9563de8e12d/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7b7d5fd7ab56379bab2b88cd07024e6d6de10184/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 for the package dependency map.</p>
 <p>For a Python change:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>&lt;affected-project&gt;
@@ -462,7 +464,7 @@ a narrative page when concepts, workflows, operations, or architecture change,
 and add a migration entry for a breaking change. Refer to
 <a class="reference internal" href="#migration-release-rollover"><span class="std std-ref">Migration entries and release rollover</span></a> for the migration guide’s release scope.</p>
 <p>The repository-wide README and documentation ownership rules live in the
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2a006c5852e0cc9f1ebefe8248a2e9563de8e12d/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/7b7d5fd7ab56379bab2b88cd07024e6d6de10184/AGENTS.md#comments-and-documentation"><code class="docutils literal notranslate"><span class="pre">Comments</span> <span class="pre">and</span> <span class="pre">documentation</span></code></a>
 section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>. Follow that contract instead of introducing another
 placement rule in a package or sample.</p>
 <p>Ruff enforces exception-handling rules (<code class="docutils literal notranslate"><span class="pre">BLE001</span></code>, <code class="docutils literal notranslate"><span class="pre">S110</span></code>, <code class="docutils literal notranslate"><span class="pre">S112</span></code>, <code class="docutils literal notranslate"><span class="pre">B904</span></code>) on
