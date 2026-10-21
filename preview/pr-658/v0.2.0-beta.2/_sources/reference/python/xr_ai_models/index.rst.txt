@@ -35,6 +35,7 @@ Attributes
    xr_ai_models.KIND_SYSTEMONE
    xr_ai_models.ModelKind
    xr_ai_models.Spec
+   xr_ai_models.ThinkingControl
 
 
 Classes
@@ -75,6 +76,7 @@ Classes
    xr_ai_models.STTSpec
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
+   xr_ai_models.ThinkingSpec
    xr_ai_models.RivaSTT
    xr_ai_models.RivaTTS
 
@@ -471,6 +473,11 @@ Package Contents
 
    Structural interface for text chat-completion services.
 
+   ``enable_thinking`` requests or suppresses model reasoning for one call;
+   ``None`` uses the endpoint's configured default.  The endpoint renders it
+   in the model's own dialect, and models without a switch ignore it.
+   ``thinking_budget`` caps reasoning tokens where the model supports it.
+
 
    .. py:attribute:: capabilities
       :type:  Capabilities
@@ -751,7 +758,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
@@ -940,7 +947,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible client for image- and video-bearing chat requests.
 
@@ -1075,6 +1082,13 @@ Package Contents
       :type:  dict[str, Any]
 
       Model-specific fields merged into every request payload.
+
+
+
+   .. py:attribute:: thinking
+      :type:  xr_ai_models.ThinkingSpec
+
+      How the model switches reasoning, and its default state.
 
 
 
@@ -1492,6 +1506,52 @@ Package Contents
 
    ``source`` labels validation errors and is useful when the mapping did not
    originate from a file.
+
+
+.. py:data:: ThinkingControl
+
+   How a model receives the reasoning switch.
+
+
+.. py:class:: ThinkingSpec
+
+   How a model endpoint switches reasoning, and its default state.
+
+
+   .. py:attribute:: control
+      :type:  ThinkingControl
+      :value: 'chat_template'
+
+
+      The model's switch dialect.
+
+      ``chat_template`` sends ``chat_template_kwargs.enable_thinking`` (and
+      ``thinking_budget``), as vLLM and NIM Nemotron/Qwen-style templates expect.
+      ``system_prompt`` prepends ``detailed thinking on|off`` to the system
+      message, as Llama-Nemotron expects.  ``none`` leaves requests unchanged
+      for models without a switch or endpoints that reject template arguments.
+
+
+
+   .. py:attribute:: default
+      :type:  bool | None
+      :value: None
+
+
+      Reasoning state when a call leaves ``enable_thinking`` unset.
+
+      ``None`` sends no switch, so the model's own template default applies.
+
+
+
+   .. py:method:: from_mapping(value: Mapping[str, Any]) -> ThinkingSpec
+      :classmethod:
+
+
+      Build a spec from a ``thinking`` configuration mapping.
+
+      Raises :class:`ValueError` for unknown keys or invalid values.
+
 
 
 .. py:function:: make_decision(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.DecisionService
