@@ -11,18 +11,22 @@ for the behavior they check. Start an OpenAI-compatible LLM (for example the
 `model-servers` Nemotron Omni LLM on port 8108), then run from this package:
 
 ```bash
-uv run --project . python eval/conflict_eval.py
-uv run --project . python eval/compaction_eval.py
-uv run --project . python eval/background_eval.py
+uv run --project . --group eval python eval/conflict_eval.py
+uv run --project . --group eval python eval/compaction_eval.py
 ```
 
 Each script accepts `--base-url` and `--preset` (default
 `http://localhost:8108` with `nemotron_omni`), or `--models path/to/models.json`
-with `--model`, and `--samples` to override the sampling in its case file. A
+with `--model`, and `--samples` to override the sampling in its case files. A
 script exits non-zero when a check fails.
 
 | Eval | Cases | Checks |
 |---|---|---|
-| `conflict_eval.py` | `cases/conflicts.yaml` | A summary older than newer, contradicting material: answers follow the newer material |
-| `compaction_eval.py` | `cases/session.yaml` | One long session: no prompt-time drops, summaries within limits, no failed compactions, every probed fact still in the final prompt, and probe recall |
-| `background_eval.py` | `cases/background.yaml` | Compaction duration and kept facts per `compaction_thinking_budget`, and foreground first-token latency while compaction runs |
+| `conflict_eval.py` | `cases/conflicts.yaml` | A summary disagrees with material from a different time, in the same or another section: each case must be answered with the newer fact in most samples |
+| `compaction_eval.py` | `cases/session_lab.yaml`, `cases/session_renovation.yaml` | Long sessions with corrections and oversized exchanges and updates: no failed compactions or prompt omissions, every probed fact still in the final prompt, and each probe answered correctly in most samples |
+
+Cases are seeded through the engine's public flow. Questions ask for a closed
+answer, graded by whole words, and each case lists accepted and rejected
+example answers that the repository tests use to check the graders offline.
+`session_renovation.yaml` and the `held-out-` conflict cases use entities that
+appear nowhere in the compaction prompts.

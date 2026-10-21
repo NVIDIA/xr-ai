@@ -5,8 +5,8 @@
 
 # xr-ai-conversation
 
-Reusable streamed conversation and participant-scoped background context, with
-optional typed current-view tools.
+Reusable streamed text conversation with participant-scoped background context
+and rolling-summary compaction. Live-model evals are in [`eval/`](eval/).
 
 Refer to the [conversation SDK reference](https://nvidia.github.io/xr-ai/latest/reference/agent-sdk-conversation.html)
 for the conversation, context, and lifecycle contracts. Routing is provided by

@@ -119,11 +119,9 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `nemo-relay>=0.7.2,<0.8`
   - `pydantic>=2.10`
-  - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)
-  - `xr-ai-tools[frames,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
