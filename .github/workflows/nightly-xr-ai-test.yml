@@ -44,6 +44,16 @@ jobs:
     runs-on: gpu
     timeout-minutes: 60
     steps:
+      - name: Restore model-cache ownership before checkout
+        # Docker model servers can leave root-owned cache directories on the
+        # persistent runner, preventing checkout from cleaning the workspace.
+        run: |
+          set -euo pipefail
+          model_cache="${GITHUB_WORKSPACE:?}/models"
+          if [[ -d "$model_cache" && ! -L "$model_cache" ]]; then
+            sudo -n chown -hR -P -- "$(id -u):$(id -g)" "$model_cache"
+          fi
+
       - name: Isolate Docker credentials
         # The vllm wrapper runs `docker login nvcr.io` when NGC_API_KEY is set.
         # Keep that login out of the runner-global ~/.docker/config.json.
