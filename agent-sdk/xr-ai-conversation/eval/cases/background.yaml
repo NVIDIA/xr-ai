@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Background compaction cost and foreground impact for each
+# compaction_thinking_budget setting. The compacted input is the user side of
+# cases/session.yaml with short assistant replies, merged in two requests.
+trials: 4
+summary_limit_bytes: 750
+# null keeps the model's default (the presets disable thinking).
+thinking_budgets: [null, 512, 2048]
+# Facts each summary should keep, as any_of substrings.
+facts:
+  name: [priya]
+  corrected-day: [tuesday]
+  allergy: [latex]
+  room: [b214]
+  lamp: [hl-2000-77]
+  error-code: [e-4471]
+  unit-preference: [nanomet]
+  loop-owner: [jonas]
+# Foreground answers run while one compaction request is in flight. Their
+# median first-token latency may exceed the idle median by at most this much.
+max_first_token_slowdown_ms: 250
+foreground:
+  context: "Recent exchanges: the user calibrated a spectrometer, reported an interlock trip, and asked about lamps."
+  question: Summarize what we discussed in two sentences.

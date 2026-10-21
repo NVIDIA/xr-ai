@@ -9,10 +9,11 @@ Only modules in ``xr_ai_conversation`` use this implementation.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 import nemo_relay
@@ -58,6 +59,11 @@ class _ContextRecord:
     text: str
     timestamp_us: int | None
 
+    @property
+    def utf8_size(self) -> int:
+        time_label = _format_minute(self.timestamp_us) if self.timestamp_us is not None else "unknown"
+        return len(self.text.encode("utf-8")) + len(time_label.encode("utf-8"))
+
 
 @dataclass(slots=True)
 class _ParticipantMemory:
@@ -69,16 +75,36 @@ class _ParticipantMemory:
     dialogue_background: _BackgroundSection = field(default_factory=lambda: _BackgroundSection("", -1))
     revisions: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     dialogue_revision: int = 0
+    # Only exchanges not yet compacted stay in ``transcript``; ``seen`` keeps
+    # identities of recent exchanges so a front-end window that still contains
+    # compacted exchanges is not replayed.
+    next_dialogue_sequence: int = 0
+    next_record_sequence: int = 0
+    seen: deque[_Exchange] = field(default_factory=lambda: deque(maxlen=_SEEN_EXCHANGES))
     dialogue_job: asyncio.Task[bool] | None = None
     context_jobs: dict[str, asyncio.Task[bool]] = field(default_factory=dict)
     context_order: list[str] = field(default_factory=list)
     retired_jobs: set[asyncio.Task[bool]] = field(default_factory=set)
 
 
-_Compactor = Callable[[str, str, Sequence[_TranscriptEntry]], Awaitable[str]]
-_DialogueCompactor = Callable[[str, Sequence[_TranscriptEntry]], Awaitable[str]]
+# Compactors receive the rendered earlier summary, new entries (empty when only
+# condensing an oversized summary) and the byte limit for the result.
+_Compactor = Callable[[str, str, Sequence[_TranscriptEntry], int], Awaitable[str]]
+_DialogueCompactor = Callable[[str, Sequence[_TranscriptEntry], int], Awaitable[str]]
 _logger = logging.getLogger(__name__)
 _Exchange = tuple[str, str, int | None, object | None]
+_SEEN_EXCHANGES = 256
+# After a failed compaction, uncompacted dialogue or source updates beyond this
+# multiple of the trigger size are dropped oldest first.
+_STORAGE_FACTOR = 8
+
+
+def _exchange_key(user: str, assistant: str, timestamp_us: int | None, exchange_id: object | None) -> _Exchange:
+    return (_digest(user), _digest(assistant), timestamp_us, exchange_id)
+
+
+def _digest(text: str) -> str:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).hexdigest()
 
 
 def _same_exchange(left: _Exchange, right: _Exchange) -> bool:
@@ -101,7 +127,12 @@ def _contains_exchange_window(existing: tuple[_Exchange, ...], incoming: tuple[_
 
 
 class _ConversationContext:
-    """Retain exact turns and compact old entries independently by source.
+    """Retain recent turns and compact old entries independently by source.
+
+    Dialogue and each incremental source use a rolling summary: entries
+    accumulate until they pass the trigger size, then the model merges the
+    previous summary with the oldest entries into a new summary and those
+    entries are discarded.
 
     ``payload_budget_bytes`` bounds the prior background and transcript text
     supplied to one compaction request. It does not include instructions or
@@ -133,8 +164,10 @@ class _ConversationContext:
         exchange_id: object | None = None,
     ) -> _TranscriptEntry:
         memory = self._memory(participant)
-        entry = _TranscriptEntry(len(memory.transcript), "dialogue", user, assistant, timestamp_us, exchange_id)
+        entry = _TranscriptEntry(memory.next_dialogue_sequence, "dialogue", user, assistant, timestamp_us, exchange_id)
+        memory.next_dialogue_sequence += 1
         memory.transcript.append(entry)
+        memory.seen.append(_exchange_key(user, assistant, timestamp_us, exchange_id))
         return entry
 
     def reconcile_transcript(
@@ -147,9 +180,7 @@ class _ConversationContext:
         """Merge a front-end history window without replaying retained exchanges."""
 
         memory = self._memory(participant)
-        existing = tuple(
-            (entry.user, entry.assistant, entry.timestamp_us, entry.exchange_id) for entry in memory.transcript
-        )
+        existing = tuple(memory.seen)
         if exchange_ids and len(exchange_ids) != len(exchanges):
             raise ValueError("history exchange IDs must align with the exchanges")
         normalized = tuple(
@@ -163,21 +194,24 @@ class _ConversationContext:
         )
         if not normalized:
             return
+        keys = tuple(_exchange_key(*exchange) for exchange in normalized)
 
         # FE history is a bounded recent window and can start after every turn
         # retained here. Match its overlap with our tail; a non-overlapping
         # window is new completed context, not a divergent transcript to drop.
-        if _contains_exchange_window(existing, normalized):
+        if _contains_exchange_window(existing, keys):
             return
-        overlap = min(len(existing), len(normalized))
+        overlap = min(len(existing), len(keys))
         while overlap and not all(
-            _same_exchange(left, right) for left, right in zip(existing[-overlap:], normalized[:overlap])
+            _same_exchange(left, right) for left, right in zip(existing[-overlap:], keys[:overlap])
         ):
             overlap -= 1
         for user, assistant, timestamp_us, exchange_id in normalized[overlap:]:
             self.append(participant, user, assistant, timestamp_us=timestamp_us, exchange_id=exchange_id)
 
     def transcript(self, participant: str) -> tuple[_TranscriptEntry, ...]:
+        """Return the exchanges not yet compacted into the dialogue summary."""
+
         memory = self._participants.get(participant)
         return () if memory is None else tuple(memory.transcript)
 
@@ -204,7 +238,12 @@ class _ConversationContext:
         summary_budget_bytes: int,
         compact: _DialogueCompactor,
     ) -> asyncio.Task[bool] | None:
-        """Compact an old immutable dialogue prefix when unprocessed history is large."""
+        """Compact the oldest exchanges into the summary when unsummarized dialogue is large.
+
+        ``summary_budget_bytes`` must leave room in ``payload_budget_bytes``
+        for new exchanges; one exchange larger than the remaining room is
+        clipped for the request rather than blocking compaction.
+        """
 
         memory = self._participants.get(participant)
         if memory is None or memory.clearing:
@@ -213,7 +252,7 @@ class _ConversationContext:
         if current is not None and not current.done():
             return current
         previous = memory.dialogue_background
-        pending = tuple(entry for entry in memory.transcript if entry.sequence > previous.through_sequence)
+        pending = tuple(memory.transcript)
         pending_bytes = sum(entry.utf8_size for entry in pending)
         if pending_bytes <= trigger_budget_bytes:
             return None
@@ -223,24 +262,8 @@ class _ConversationContext:
         if not prefix:
             return None
         previous_input = _summary_for_compaction(previous, time_label="exchange completion times")
-        available_bytes = payload_budget_bytes - len(previous_input.encode("utf-8"))
-        if available_bytes <= 0:
-            _logger.error(
-                "dialogue compaction deferred participant=%r summary_bytes=%d payload_budget_bytes=%d",
-                participant,
-                len(previous_input.encode("utf-8")),
-                payload_budget_bytes,
-            )
-            return None
-        try:
-            batch = _oldest_batch(prefix, available_bytes)
-        except ValueError:
-            _logger.error(
-                "dialogue exchange exceeds compaction payload budget participant=%r budget_bytes=%d",
-                participant,
-                available_bytes,
-            )
-            return None
+        available_bytes = max(payload_budget_bytes - len(previous_input.encode("utf-8")), 1)
+        batch = _clip_single_entry(_oldest_batch(prefix, available_bytes), available_bytes)
         revision = memory.dialogue_revision
         task = asyncio.create_task(
             self._compact_dialogue(
@@ -249,6 +272,7 @@ class _ConversationContext:
                 previous,
                 previous_input,
                 batch,
+                payload_budget_bytes,
                 summary_budget_bytes,
                 compact,
             ),
@@ -275,31 +299,48 @@ class _ConversationContext:
         previous: _BackgroundSection,
         previous_input: str,
         batch: tuple[_TranscriptEntry, ...],
+        payload_budget_bytes: int,
         summary_budget_bytes: int,
         compact: _DialogueCompactor,
     ) -> bool:
-        summary = await compact(previous_input, batch)
+        summary = await _bounded_summary(
+            participant,
+            "dialogue",
+            await compact(previous_input, batch, summary_budget_bytes),
+            lambda text: compact(text, (), summary_budget_bytes),
+            summary_budget_bytes,
+            payload_budget_bytes,
+        )
         memory = self._participants.get(participant)
-        # Commit only while the prior summary and compacted transcript prefix
-        # still match; newer tail turns may remain uncompacted.
+        # Commit only while the prior summary is unchanged. Exchanges are only
+        # appended, so the summary covers everything through the batch's last
+        # sequence and newer exchanges stay verbatim.
         if memory is None or memory.clearing or memory.dialogue_revision != revision:
             return False
         if memory.dialogue_background != previous:
             return False
-        transcript_prefix = tuple(memory.transcript[entry.sequence] for entry in batch)
-        if transcript_prefix != batch:
-            return False
-        summary_size = len(summary.encode("utf-8"))
-        if summary_size > summary_budget_bytes:
-            _logger.error(
-                "dropping oversized dialogue summary participant=%r size_bytes=%d budget_bytes=%d",
-                participant,
-                summary_size,
-                summary_budget_bytes,
-            )
-            return False
-        memory.dialogue_background = _merge_background(summary, batch[-1].sequence, previous, batch)
+        through = batch[-1].sequence
+        memory.dialogue_background = _merge_background(summary, through, previous, batch)
+        memory.transcript = [entry for entry in memory.transcript if entry.sequence > through]
         return True
+
+    def source_snapshots(
+        self, participant: str
+    ) -> tuple[tuple[str, _BackgroundSection | None, tuple[_ContextRecord, ...]], ...]:
+        """Return each source's summary and its uncompacted updates, in source order."""
+
+        memory = self._participants.get(participant)
+        if memory is None:
+            return ()
+        order = list(memory.context_order)
+        order.extend(source for source in memory.backgrounds if source not in order)
+        snapshots = []
+        for source in order:
+            background = memory.backgrounds.get(source)
+            records = tuple(memory.context_records.get(source, ()))
+            if background is not None or records:
+                snapshots.append((source, background, records))
+        return tuple(snapshots)
 
     def sections(self, participant: str) -> tuple[tuple[str, str], ...]:
         return tuple((source, text) for source, text, _ in self.sections_with_recency(participant))
@@ -348,9 +389,9 @@ class _ConversationContext:
     ) -> tuple[bool, bool]:
         """Store an authoritative summary or append a source update.
 
-        The caller rejects a summary that exceeds its budget before calling
-        this method. Incremental records that exceed the budget are dropped as
-        whole records; raw conversation transcript entries remain untouched.
+        A summary whose rendered size exceeds ``context_budget_bytes`` clears
+        the source. Incremental records are always kept until compaction folds
+        them into the source summary.
         """
 
         memory = self._participants.get(participant)
@@ -365,8 +406,6 @@ class _ConversationContext:
             memory.backgrounds.pop(source, None)
             memory.context_records.pop(source, None)
             return False, True
-        if mode == "incremental" and len(text.encode("utf-8")) > context_budget_bytes:
-            return False, True
         if mode == "summary":
             self._cancel_source_jobs(memory, source)
             memory.revisions[source] += 1
@@ -375,19 +414,13 @@ class _ConversationContext:
             memory.backgrounds[source] = _BackgroundSection(text, -1, timestamp_us, timestamp_us, timestamp_us is None)
             memory.context_records.pop(source, None)
             return True, False
-        records = memory.context_records.setdefault(source, [])
-        original_count = len(records)
         if source not in memory.context_order:
             memory.context_order.append(source)
-        sequence = len(memory.transcript)
-        records.append(_ContextRecord(sequence, text, timestamp_us))
-        # Keep complete updates only, dropping the oldest whole source updates.
-        while records and _source_context_size(memory, source, records) > context_budget_bytes:
-            records.pop(0)
-        dropped = len(records) != original_count + 1
-        if not records:
-            memory.context_records.pop(source, None)
-        return bool(records), dropped
+        memory.context_records.setdefault(source, []).append(
+            _ContextRecord(memory.next_record_sequence, text, timestamp_us)
+        )
+        memory.next_record_sequence += 1
+        return True, False
 
     async def drop_source(self, participant: str, source: str) -> None:
         memory = self._participants.get(participant)
@@ -405,11 +438,17 @@ class _ConversationContext:
         participant: str,
         source: str,
         *,
+        trigger_budget_bytes: int,
         payload_budget_bytes: int,
-        summary_budget_bytes: int | None = None,
+        summary_budget_bytes: int,
         compact: _Compactor,
     ) -> asyncio.Task[bool] | None:
-        """Compact one source's incremental updates without blocking delivery."""
+        """Compact a source's oldest updates into its summary once they exceed the trigger size.
+
+        Runs without blocking delivery. As for dialogue, the summary limit must
+        leave room in the request, and one update larger than the remaining
+        room is clipped for the request.
+        """
 
         memory = self._participants.get(participant)
         if memory is None or memory.clearing or not memory.context_records.get(source):
@@ -418,34 +457,24 @@ class _ConversationContext:
         if current is not None and not current.done():
             return current
         records = tuple(memory.context_records[source])
-        if summary_budget_bytes is None:
-            summary_budget_bytes = payload_budget_bytes
-        if summary_budget_bytes <= 0:
-            raise ValueError("summary_budget_bytes must be positive")
+        if sum(record.utf8_size for record in records) <= trigger_budget_bytes:
+            return None
         previous = memory.backgrounds.get(source, _BackgroundSection("", -1))
         previous_input = _summary_for_compaction(previous, time_label="publication times")
-        payload_size = len(previous_input.encode("utf-8")) + sum(
-            len(record.text.encode("utf-8"))
-            + len(
-                (_format_minute(record.timestamp_us) if record.timestamp_us is not None else "unknown").encode("utf-8")
-            )
-            for record in records
-        )
-        if payload_size > payload_budget_bytes:
-            return None
-        revision = memory.revisions[source]
+        available_bytes = max(payload_budget_bytes - len(previous_input.encode("utf-8")), 1)
         entries = tuple(
             _TranscriptEntry(record.sequence, source, record.text, "", record.timestamp_us) for record in records
         )
+        batch = _clip_single_entry(_oldest_batch(entries, available_bytes), available_bytes)
+        revision = memory.revisions[source]
         task = asyncio.create_task(
             self._compact_context(
                 participant,
                 source,
                 revision,
-                records,
                 previous,
                 previous_input,
-                entries,
+                batch,
                 payload_budget_bytes,
                 summary_budget_bytes,
                 compact,
@@ -459,6 +488,7 @@ class _ConversationContext:
                 participant,
                 source,
                 done,
+                trigger_budget_bytes=trigger_budget_bytes,
                 payload_budget_bytes=payload_budget_bytes,
                 summary_budget_bytes=summary_budget_bytes,
                 compact=compact,
@@ -471,41 +501,34 @@ class _ConversationContext:
         participant: str,
         source: str,
         revision: int,
-        records: tuple[_ContextRecord, ...],
         previous: _BackgroundSection,
         previous_input: str,
-        entries: tuple[_TranscriptEntry, ...],
+        batch: tuple[_TranscriptEntry, ...],
         payload_budget_bytes: int,
         summary_budget_bytes: int,
         compact: _Compactor,
     ) -> bool:
-        summary = await compact(source, previous_input, entries)
+        summary = await _bounded_summary(
+            participant,
+            source,
+            await compact(source, previous_input, batch, summary_budget_bytes),
+            lambda text: compact(source, text, (), summary_budget_bytes),
+            summary_budget_bytes,
+            payload_budget_bytes,
+        )
         memory = self._participants.get(participant)
-        # Source revisions and record prefixes make this commit conditional on
-        # the exact snapshot passed to the compactor.
+        # A summary replacement or source drop changes the revision; records
+        # are otherwise only appended, so the summary covers everything
+        # through the batch's last sequence and later records stay verbatim.
         if memory is None or memory.clearing or memory.revisions[source] != revision:
             return False
         if memory.backgrounds.get(source, _BackgroundSection("", -1)) != previous:
             return False
-        current_records = tuple(memory.context_records.get(source, ()))
-        if current_records[: len(records)] != records:
-            return False
-        summary_size = len(summary.encode("utf-8"))
-        if summary_size > summary_budget_bytes:
-            memory.backgrounds.pop(source, None)
-            memory.context_records.pop(source, None)
-            _logger.error(
-                "dropping oversized compacted context participant=%r source=%r size_bytes=%d budget_bytes=%d",
-                participant,
-                source,
-                summary_size,
-                summary_budget_bytes,
-            )
-            return False
-        memory.backgrounds[source] = _merge_background(summary, records[-1].sequence, previous, records)
-        tail = current_records[len(records) :]
+        through = batch[-1].sequence
+        memory.backgrounds[source] = _merge_background(summary, through, previous, batch)
+        tail = [record for record in memory.context_records.get(source, ()) if record.sequence > through]
         if tail:
-            memory.context_records[source] = list(tail)
+            memory.context_records[source] = tail
         else:
             memory.context_records.pop(source, None)
         return True
@@ -559,17 +582,18 @@ class _ConversationContext:
         summary_budget_bytes: int,
         compact: _DialogueCompactor,
     ) -> None:
-        memory = self._participants.get(participant)
-        if memory is not None and memory.dialogue_job is task:
-            memory.dialogue_job = None
         _log_task_error(participant, "dialogue", task)
-        if (
-            memory is not None
-            and not memory.clearing
-            and not task.cancelled()
-            and task.exception() is None
-            and task.result()
-        ):
+        memory = self._participants.get(participant)
+        # Act only on the memory that still owns this job, never on a later
+        # session's memory for the same participant.
+        if memory is None or memory.dialogue_job is not task:
+            return
+        memory.dialogue_job = None
+        if not task.cancelled() and task.exception() is not None:
+            # Failed exchanges stay for the next attempt, bounded so a model
+            # that keeps failing cannot grow memory without limit.
+            _drop_oldest_beyond(participant, "dialogue", memory.transcript, trigger_budget_bytes * _STORAGE_FACTOR)
+        if not memory.clearing and not task.cancelled() and task.exception() is None and task.result():
             self.schedule_dialogue_compaction(
                 participant,
                 trigger_budget_bytes=trigger_budget_bytes,
@@ -584,17 +608,22 @@ class _ConversationContext:
         source: str,
         task: asyncio.Task[bool],
         *,
+        trigger_budget_bytes: int,
         payload_budget_bytes: int,
         summary_budget_bytes: int,
         compact: _Compactor,
     ) -> None:
-        memory = self._participants.get(participant)
-        if memory is not None and memory.context_jobs.get(source) is task:
-            memory.context_jobs.pop(source, None)
         _log_task_error(participant, source, task)
+        memory = self._participants.get(participant)
+        # As for dialogue, a retired or superseded job does not touch the source.
+        if memory is None or memory.context_jobs.get(source) is not task:
+            return
+        memory.context_jobs.pop(source, None)
+        if not task.cancelled() and task.exception() is not None:
+            records = memory.context_records.get(source, [])
+            _drop_oldest_beyond(participant, source, records, trigger_budget_bytes * _STORAGE_FACTOR)
         if (
-            memory is not None
-            and not memory.clearing
+            not memory.clearing
             and not task.cancelled()
             and task.exception() is None
             and memory.context_records.get(source)
@@ -602,6 +631,7 @@ class _ConversationContext:
             self.schedule_context_compaction(
                 participant,
                 source,
+                trigger_budget_bytes=trigger_budget_bytes,
                 payload_budget_bytes=payload_budget_bytes,
                 summary_budget_bytes=summary_budget_bytes,
                 compact=compact,
@@ -644,13 +674,13 @@ def _log_task_error(participant: str, source: str, task: asyncio.Task[bool]) -> 
 
 
 def _oldest_batch(entries: tuple[_TranscriptEntry, ...], input_budget_bytes: int) -> tuple[_TranscriptEntry, ...]:
+    """Take the oldest entries that fit; the first entry is always taken so compaction progresses."""
+
     batch = []
     size = 0
     for entry in entries:
         if batch and size + entry.utf8_size > input_budget_bytes:
             break
-        if not batch and entry.utf8_size > input_budget_bytes:
-            raise ValueError("one completed exchange exceeds compaction payload budget")
         batch.append(entry)
         size += entry.utf8_size
         if size >= input_budget_bytes:
@@ -658,38 +688,82 @@ def _oldest_batch(entries: tuple[_TranscriptEntry, ...], input_budget_bytes: int
     return tuple(batch)
 
 
-def _source_context_size(
-    memory: _ParticipantMemory,
+def _clip_single_entry(batch: tuple[_TranscriptEntry, ...], limit_bytes: int) -> tuple[_TranscriptEntry, ...]:
+    """Clip a lone exchange that exceeds the request budget, keeping its start and end."""
+
+    if len(batch) != 1 or batch[0].utf8_size <= limit_bytes:
+        return batch
+    entry = batch[0]
+    half = limit_bytes // 2
+    return (replace(entry, user=_clip(entry.user, half), assistant=_clip(entry.assistant, half)),)
+
+
+def _clip(text: str, limit_bytes: int) -> str:
+    data = text.encode("utf-8")
+    if len(data) <= limit_bytes:
+        return text
+    marker = f"\n[... {len(data) - limit_bytes} bytes omitted ...]\n".encode()
+    room = limit_bytes - len(marker)
+    if room <= 0:
+        return _truncate(text, limit_bytes)
+    head = room // 2
+    return (data[:head] + marker + data[len(data) - (room - head) :]).decode("utf-8", "ignore")
+
+
+def _truncate(text: str, limit_bytes: int) -> str:
+    return text.encode("utf-8")[: max(limit_bytes, 0)].decode("utf-8", "ignore")
+
+
+def _drop_oldest_beyond(
+    participant: str,
     source: str,
-    records: Sequence[_ContextRecord],
-) -> int:
-    """Size one rendered source section, including its publication-time label."""
+    entries: list[_TranscriptEntry] | list[_ContextRecord],
+    limit_bytes: int,
+) -> None:
+    """Bound uncompacted entries while compaction keeps failing; the newest entry is kept."""
 
-    background = memory.backgrounds.get(source, _BackgroundSection("", -1))
-    text = "\n".join(filter(None, (background.text, *(record.text for record in records))))
-    times = [record.timestamp_us for record in records]
-    known = [timestamp for timestamp in times if timestamp is not None]
-    if background.earliest_us is not None:
-        known.append(background.earliest_us)
-    if background.latest_us is not None:
-        known.append(background.latest_us)
-    recency = _recency(
-        min(known) if known else None,
-        max(known) if known else None,
-        background.has_unknown_time or any(timestamp is None for timestamp in times),
-    )
-    return _rendered_source_size(source, text, recency=recency)
+    while len(entries) > 1 and sum(entry.utf8_size for entry in entries) > limit_bytes:
+        dropped = entries.pop(0)
+        _logger.error(
+            "dropping uncompacted context entry participant=%r source=%r size_bytes=%d limit_bytes=%d",
+            participant,
+            source,
+            dropped.utf8_size,
+            limit_bytes,
+        )
 
 
-def _rendered_source_size(
+async def _bounded_summary(
+    participant: str,
     source: str,
-    text: str,
-    timestamp_us: int | None = None,
-    *,
-    recency: str | None = None,
-) -> int:
-    if recency is None:
-        recency = _recency(timestamp_us, timestamp_us, timestamp_us is None)
+    summary: str,
+    condense: Callable[[str], Awaitable[str]],
+    limit_bytes: int,
+    payload_budget_bytes: int,
+) -> str:
+    """Return a non-empty summary within ``limit_bytes``.
+
+    An oversized summary is condensed once by the model and truncated if it
+    still overshoots, so a summary can never block later compaction.
+    """
+
+    summary = summary.strip()
+    if len(summary.encode("utf-8")) > limit_bytes:
+        _logger.warning(
+            "condensing oversized context summary participant=%r source=%r size_bytes=%d budget_bytes=%d",
+            participant,
+            source,
+            len(summary.encode("utf-8")),
+            limit_bytes,
+        )
+        summary = _truncate((await condense(_clip(summary, payload_budget_bytes))).strip(), limit_bytes)
+    if not summary:
+        raise ValueError("context compaction returned an empty summary")
+    return summary
+
+
+def _rendered_source_size(source: str, text: str, timestamp_us: int | None = None) -> int:
+    recency = _recency(timestamp_us, timestamp_us, timestamp_us is None)
     rendered = f"Source {source} (publication time {recency}):\n{text}"
     return len(rendered.encode("utf-8"))
 
