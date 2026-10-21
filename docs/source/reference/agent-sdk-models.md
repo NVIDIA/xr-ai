@@ -85,23 +85,6 @@ A client profile names logical roles and declares adapters and endpoints:
   outside the sample, whether locally or remotely. Existing explicit `reused`
   and `external` entries remain supported for compatibility.
 
-(model-call-tracing)=
-## Inspecting typed model calls
-
-The OpenAI-compatible LLM and VLM clients write structured `llm.trace` DEBUG
-records for each chat request. A call ID groups the effective model request,
-provider response chunks (including reasoning fields, tool-call deltas, usage,
-and finish information when returned), and a final status for completion,
-cancellation, or error. These records do not include request headers or
-embedded image and video data. Request messages and text responses can contain
-conversation content, so protect the per-run log directory like other
-application data.
-
-`xr-ai-logging` always writes DEBUG records to
-`/tmp/log_<namespace>_<timestamp>/<process>.log`. `XR_AI_VERBOSE` controls
-whether DEBUG records also appear on stderr; it does not enable or disable the
-trace records in the per-run file.
-
 ## Annotated consumer configuration
 
 The package reference below shows local endpoint examples, not a default launch
