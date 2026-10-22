@@ -263,7 +263,7 @@ def test_hardware_profiles_pin_reasoner_cache_with_admission_limits() -> None:
     assert "spark_uma" not in blackwell
     assert "spark_uma" not in dual_ada
     assert blackwell["max_num_seqs"] == 4
-    assert "max_num_seqs" not in dual_ada
+    assert dual_ada["max_num_seqs"] == 4
     assert spark["max_num_seqs"] == 4
     assert spark["spark_uma"] is True
 

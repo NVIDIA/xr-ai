@@ -221,6 +221,18 @@ The new stop plan covers only its selected services. Stop that plan before
 changing its configuration or switching samples. Refer to
 {doc}`/guides/customizing-model-servers` for the current workflow.
 
+### Standalone model-server defaults
+
+Sample model stacks now start from each service's own YAML under `services/`,
+so standalone launches use the values that stacks used. If you run these servers
+directly and depend on the earlier defaults, set them in your YAML:
+
+| Server | Now | Earlier |
+|---|---|---|
+| VLM and embedding | `enforce_eager: true` | `false` |
+| Omni | `max_model_len: 32768`, `video_num_frames: 64` | `131072`, `256` |
+| Pocket TTS | `device: cuda` | `auto` |
+
 ### Shared model-stack speaker filtering
 
 (batch-stt-migration)=
