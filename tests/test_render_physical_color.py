@@ -70,12 +70,8 @@ def _query_tool(text: str, available: bool = True, error: Exception | None = Non
 
 
 async def _expect_rejection(tool, source: str, needle: str) -> None:
-    # The Relay Tool boundary re-raises handler errors as RuntimeError with
-    # the original class name in the text; the tolerant toolset recovers the
-    # rejection from exactly that shape.
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ValueError) as excinfo:
         await tool.execute(ResolvePhysicalColorRequest(source_words=source))
-    assert "ValueError: " in str(excinfo.value)
     assert needle in str(excinfo.value)
 
 
@@ -125,9 +121,8 @@ async def test_resolver_query_transport_failure_degrades() -> None:
 
 async def test_resolver_genuine_bug_propagates() -> None:
     tool = make_physical_color_tool(_frame_tool(error=TypeError("wiring bug")), _query_tool("x"))
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(TypeError, match="wiring bug") as excinfo:
         await tool.execute(ResolvePhysicalColorRequest(source_words="the lid"))
-    assert "TypeError: wiring bug" in str(excinfo.value)
     assert "ValueError" not in str(excinfo.value)
     assert "unavailable" not in str(excinfo.value)
 

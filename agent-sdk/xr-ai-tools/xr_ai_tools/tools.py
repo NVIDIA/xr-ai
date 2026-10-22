@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from inspect import isawaitable
 from typing import Any, Generic, TypeVar, cast
 
-from nemo_relay import typed
+from nemo_relay import ToolExecutionResult, typed
 from pydantic import BaseModel, ValidationError
 
 RequestT = TypeVar("RequestT", bound=BaseModel)
@@ -65,15 +65,21 @@ class Tool(Generic[RequestT, ResultT]):
         self._render_result = render_result or _json_result
 
     async def execute(self, request: RequestT) -> ResultT:
-        """Run one validated request through the shared Relay tool lifecycle."""
+        """Run one validated request through the shared Relay tool lifecycle.
 
-        return await typed.tool_execute(
+        Handler exceptions propagate with their original type, instance, and
+        cause. Relay records failures before propagating them; middleware can
+        recover from or replace a handler failure. Cancellation propagates.
+        """
+
+        result = await typed.tool_execute(
             self.name,
             request,
             self._execute_handler,
             self._request_codec,
             self._result_codec,
         )
+        return result.result
 
     async def invoke(self, arguments: str) -> ToolInvocationResult:
         """Validate and run one model-supplied JSON argument payload."""
@@ -99,11 +105,11 @@ class Tool(Generic[RequestT, ResultT]):
             return_direct=False,
         )
 
-    async def _execute_handler(self, request: RequestT) -> ResultT:
+    async def _execute_handler(self, request: RequestT) -> ToolExecutionResult[ResultT]:
         result = self.handler(request)
         if isawaitable(result):
-            return await cast(Awaitable[ResultT], result)
-        return cast(ResultT, result)
+            result = await cast(Awaitable[ResultT], result)
+        return ToolExecutionResult(cast(ResultT, result))
 
 
 class ToolSet:

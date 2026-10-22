@@ -421,11 +421,12 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
     assert closed.is_set()
 
 
-async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
+async def test_simple_vlm_agent_reports_typed_missing_camera_frame() -> None:
     published: list[ResponseOutput] = []
+    unavailable = FrameUnavailable("No camera frame available — please try again.")
 
     async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
-        raise FrameUnavailable("No camera frame available — please try again.")
+        raise unavailable
 
     missing_frame_tool = Tool(
         "missing_camera_frame",
@@ -434,10 +435,9 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
         ImageFrame,
         missing_frame,
     )
-    with pytest.raises(RuntimeError, match="internal error: FrameUnavailable") as wrapped:
+    with pytest.raises(FrameUnavailable) as raised:
         await missing_frame_tool.execute(CurrentFrameRequest(participant_id="alice"))
-    assert wrapped.value.__cause__ is None
-    assert wrapped.value.__context__ is None
+    assert raised.value is unavailable
 
     class Context:
         agent_name = "simple-vlm"
@@ -892,7 +892,7 @@ async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> N
 
     monkeypatch.setattr(current_frame_module, "frame_to_pil", malformed_frame)
 
-    with pytest.raises(RuntimeError, match="malformed pixels"):
+    with pytest.raises(ValueError, match="malformed pixels"):
         await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 

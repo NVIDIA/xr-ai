@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import traceback
 from builtins import BaseExceptionGroup
 from collections.abc import AsyncIterator
 
 import nemo_relay
 import pytest
 from pydantic import BaseModel
+from xr_ai_hub import FrameUnavailable
 from xr_ai_models import ChatMessage, ToolCall, ToolDef
 from xr_ai_tools import AsyncTool, Tool, ToolSet
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
@@ -252,7 +254,10 @@ async def test_handled_tool_calls_use_the_relay_tool_lifecycle() -> None:
     finally:
         nemo_relay.subscribers.deregister(subscriber)
 
-    assert "tool" in {getattr(event, "category", None) for event in events}
+    lifecycle = [event for event in events if event.category == "tool" and event.name == "add"]
+    assert [event.scope_category for event in lifecycle] == ["start", "end"]
+    assert lifecycle[1].data == {"total": 5}
+    assert lifecycle[1].metadata["otel.status_code"] == "OK"
 
 
 async def test_invalid_tool_arguments_are_returned_to_the_model_for_repair() -> None:
@@ -346,3 +351,158 @@ def test_tool_set_namespaces_similarly_named_tool_groups() -> None:
     ]
     assert tools.get("vision__status") is vision_status
     assert tools.get("planner__status") is planner_status
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("error_type", [FrameUnavailable, ValueError])
+async def test_tool_preserves_handler_exception_and_failed_relay_trace(
+    asynchronous: bool, error_type: type[Exception],
+) -> None:
+    cause = OSError("source failed")
+    error = error_type("handler failed")
+
+    def fail(_request: AddRequest) -> AddResult:
+        raise error from cause
+
+    async def async_fail(request: AddRequest) -> AddResult:
+        return fail(request)
+
+    tool = Tool(
+        "typed_failure", "Fail with a typed exception.", AddRequest, AddResult,
+        async_fail if asynchronous else fail,
+    )
+    events = []
+    subscriber = "xr-ai-typed-failure"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        with pytest.raises(error_type) as raised:
+            await tool.execute(AddRequest(left=2, right=3))
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
+
+    assert raised.value is error
+    assert raised.value.__cause__ is cause
+    assert any(frame.name == "fail" for frame in traceback.extract_tb(error.__traceback__))
+    lifecycle = [event for event in events if event.name == tool.name]
+    assert [event.scope_category for event in lifecycle] == ["start", "end"]
+    assert lifecycle[0].uuid == lifecycle[1].uuid
+    assert lifecycle[1].metadata["otel.status_code"] == "ERROR"
+    assert lifecycle[1].metadata["exception.type"] == error_type.__name__
+
+
+async def test_tool_concurrent_handler_failures_are_invocation_local() -> None:
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    errors = {1: FrameUnavailable("first"), 2: ValueError("second")}
+    started = 0
+
+    async def fail(request: AddRequest) -> AddResult:
+        nonlocal started
+        started += 1
+        if started == 2:
+            both_started.set()
+        await release.wait()
+        raise errors[request.left]
+
+    tool = Tool("concurrent_failure", "Fail independently.", AddRequest, AddResult, fail)
+    first = asyncio.create_task(tool.execute(AddRequest(left=1, right=0)))
+    second = asyncio.create_task(tool.execute(AddRequest(left=2, right=0)))
+    try:
+        await asyncio.wait_for(both_started.wait(), timeout=1.0)
+    finally:
+        release.set()
+    results = await asyncio.gather(first, second, return_exceptions=True)
+
+    assert results[0] is errors[1]
+    assert results[1] is errors[2]
+    tool.handler = add
+    assert await tool.execute(AddRequest(left=1, right=2)) == AddResult(total=3)
+
+
+async def test_tool_cancellation_propagates_and_closes_handler() -> None:
+    started = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def block(_request: AddRequest) -> AddResult:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            closed.set()
+
+    tool = Tool("cancel_finite", "Wait for cancellation.", AddRequest, AddResult, block)
+    task = asyncio.create_task(tool.execute(AddRequest(left=1, right=2)))
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.wait_for(closed.wait(), timeout=1.0)
+
+
+async def test_tool_result_codec_failure_retains_relay_error() -> None:
+    def invalid_result(_request: AddRequest) -> None:
+        return "invalid"  # type: ignore[return-value]
+
+    tool = Tool("invalid_result", "Return an invalid result.", AddRequest, None, invalid_result)
+    with pytest.raises(TypeError, match="side-effect tools must return None"):
+        await tool.execute(AddRequest(left=1, right=2))
+
+
+async def test_async_tool_preserves_typed_failure_after_buffered_chunk() -> None:
+    error = FrameUnavailable("stream source unavailable")
+    chunks = []
+
+    async def stream(request: AddRequest) -> AsyncIterator[AddResult]:
+        yield AddResult(total=request.left)
+        raise error
+
+    tool = AsyncTool("typed_stream", "Stream then fail.", AddRequest, AddResult, stream)
+    with pytest.raises(FrameUnavailable) as raised:
+        async for chunk in tool.stream(AddRequest(left=1, right=2)):
+            chunks.append(chunk)
+    assert raised.value is error
+    assert chunks == [AddResult(total=1)]
+
+
+@pytest.mark.parametrize("recover", [False, True])
+async def test_relay_middleware_owns_recovery_or_replacement(recover: bool) -> None:
+    source = FrameUnavailable("camera unavailable")
+    replacement = LookupError("middleware replacement")
+    observed = []
+    events = []
+
+    async def fail(_request: AddRequest) -> AddResult:
+        raise source
+
+    async def intercept(context, next_call):
+        try:
+            result = await next_call(context.args)
+        except FrameUnavailable as exc:
+            observed.append(exc)
+            if not recover:
+                raise replacement from exc
+            return nemo_relay.ToolExecutionInterceptOutcome({"total": 9})
+        return nemo_relay.ToolExecutionInterceptOutcome(result.result)
+
+    tool = Tool("intercepted_failure", "Let middleware handle failure.", AddRequest, AddResult, fail)
+    name = "xr-ai-native-tool-recovery"
+    nemo_relay.intercepts.register_tool_execution(name, 0, intercept)
+    nemo_relay.subscribers.register(name, events.append)
+    try:
+        if recover:
+            assert await tool.execute(AddRequest(left=1, right=2)) == AddResult(total=9)
+        else:
+            with pytest.raises(LookupError) as raised:
+                await tool.execute(AddRequest(left=1, right=2))
+            assert raised.value is replacement
+            assert raised.value.__cause__ is source
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.intercepts.deregister_tool_execution(name)
+        nemo_relay.subscribers.deregister(name)
+    assert observed == [source]
+    end = next(event for event in events if event.name == tool.name and event.scope_category == "end")
+    assert end.metadata["otel.status_code"] == ("OK" if recover else "ERROR")
+    if not recover:
+        assert end.metadata["exception.type"] == "LookupError"

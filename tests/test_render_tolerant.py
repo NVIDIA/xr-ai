@@ -79,7 +79,5 @@ async def test_tolerant_tool_converts_value_error_and_propagates_bugs() -> None:
     ])
     result = await toolset.get("reject").invoke("{}")
     assert json.loads(result.content)["detail"] == "no such object"
-    # The Relay Tool boundary rewraps handler bugs as RuntimeError; the
-    # tolerant layer must let that propagate, not convert it.
-    with pytest.raises(RuntimeError, match="TypeError: wiring bug"):
+    with pytest.raises(TypeError, match="wiring bug"):
         await toolset.get("explode").invoke("{}")

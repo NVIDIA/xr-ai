@@ -43,8 +43,8 @@ _LICENSE_SENSITIVE_PACKAGES = frozenset(
 
 _LICENSE_RECORDS = {
     "certifi": (
-        "2026.7.22",
-        (("certifi-2026.7.22/LICENSE", "Mozilla Public License"),),
+        "2026.10.19",
+        (("certifi-2026.10.19/LICENSE", "Mozilla Public License"),),
     ),
     "num2words": (
         "0.5.14",
@@ -78,11 +78,11 @@ _LICENSE_RECORDS = {
         ),
     ),
     "soundfile": (
-        "0.14.0",
+        "0.13.1",
         (
             ("libsndfile-1.2.2/COPYING", "GNU LESSER GENERAL PUBLIC LICENSE"),
-            ("soundfile-0.14.0/license_notes.md", "libmp3lame"),
-            ("soundfile-0.14.0/license_notes.md", "libmpg123"),
+            ("soundfile-0.13.1/native-notices.md", "Lame by Mike Cheng"),
+            ("soundfile-0.13.1/native-notices.md", "Mpg123 by Michael Hipp"),
         ),
     ),
     "soxr": (
@@ -94,8 +94,8 @@ _LICENSE_RECORDS = {
         ),
     ),
     "tqdm": (
-        "4.70.0",
-        (("tqdm-4.70.0/LICENCE", "Mozilla Public Licence (MPL) v. 2.0"),),
+        "4.70.1",
+        (("tqdm-4.70.1/LICENCE", "Mozilla Public Licence (MPL) v. 2.0"),),
     ),
 }
 

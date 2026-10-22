@@ -29,7 +29,6 @@ MANIFEST_NAME = "xr-ai-dependency-manifest"
 VLLM_PROJECTS = frozenset(
     {
         "embedding-server",
-        "llama-nemotron-llm-server",
         "nemotron-omni-llm-server",
         "nemotron3-nano-llm-server",
         "vlm-server",
