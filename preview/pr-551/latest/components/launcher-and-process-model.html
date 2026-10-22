@@ -466,7 +466,7 @@ sample’s separate <code class="docutils literal notranslate"><span class="pre"
 </div>
 <p>Samples may add capability or eval sub-projects. Each sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code>
 project is a separate inference convenience launcher with no worker. It combines
-shared defaults under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with sample-owned GPU
+each service’s own YAML under <code class="docutils literal notranslate"><span class="pre">services/</span></code> with sample-owned GPU
 profiles. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html"><span class="doc">Customizing model servers</span></a> for configuration and
 startup, shutdown, and sample-switching workflows.</p>
 <p><strong>Configuration convention</strong> — the YAML configuration path for each process is declared

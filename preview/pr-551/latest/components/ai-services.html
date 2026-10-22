@@ -568,9 +568,9 @@ Refer to the
 </pre></div>
 </div>
 <p>The service is also registered as <code class="docutils literal notranslate"><span class="pre">ocr</span></code> in the shared model-stack launcher,
-like embedding and VLM. Shared defaults live in
-<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/ocr_server.yaml</span></code>; sample-owned GPU profiles
-override them. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html#sample-ocr-service"><span class="std std-ref">Add OCR to a sample</span></a> for opt-in integration entirely
+like embedding and VLM. Both launch paths use
+<code class="docutils literal notranslate"><span class="pre">services/ocr-server/ocr_server.yaml</span></code>; sample-owned GPU profiles override those
+service defaults. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html#sample-ocr-service"><span class="std std-ref">Add OCR to a sample</span></a> for opt-in integration entirely
 inside a sample. Provision GPU capacity before starting it alongside other
 services. Registration does not enable OCR in existing samples, change their
 GPU allocations, or qualify concurrent workloads on every supported GPU.</p>
@@ -1039,7 +1039,7 @@ failed inspection abort cleanup without sending a signal, and
 the sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.</p>
 <p>Stop targets are only the servers listed by that sample’s convenience launcher,
-with ports read from the shared defaults and selected sample GPU overrides.
+with ports read from the service defaults and selected sample GPU overrides.
 Use the same explicit <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span> <span class="pre">NAME</span></code> on start and stop. Stop does not
 require model-download credentials.</p>
 <p>Before switching samples, updating the checkout, or editing server settings,
@@ -1339,8 +1339,7 @@ When <code class="docutils literal notranslate"><span class="pre">recordings_dir
 and recorded-media operations return <code class="docutils literal notranslate"><span class="pre">recording_disabled</span></code>.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p>Standalone service YAMLs live beside services for direct single-service
-launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
-<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> with overrides under
+launches; they are not sample configuration. Sample convenience stacks start from those service YAMLs and apply overrides under
 <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>. Workers
 consume the resulting endpoints through their models JSON.</p></li>
 </ul>

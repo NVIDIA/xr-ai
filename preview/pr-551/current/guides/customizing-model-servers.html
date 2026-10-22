@@ -566,8 +566,8 @@ utility; sample code imports only public XR AI APIs.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Shared server defaults</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/*.yaml</span></code></p></td>
+<tr class="row-even"><td><p>Service defaults</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/&lt;service&gt;/&lt;entry&gt;.yaml</span></code></p></td>
 <td><p>Models, images, ports, cache paths, and common runtime settings</p></td>
 </tr>
 <tr class="row-odd"><td><p>Sample GPU profile</p></td>
@@ -585,13 +585,13 @@ utility; sample code imports only public XR AI APIs.</p>
 </tbody>
 </table>
 </div>
-<p>The launcher combines each server’s shared defaults with its entry in the
+<p>The launcher combines each server’s service defaults with its entry in the
 selected sample GPU profile. Sample values replace whole top-level fields;
 there is no recursive inheritance. For example, a <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code> mapping
 replaces the shared mapping entirely. Every selected server must have a
 mapping in the profile, including <code class="docutils literal notranslate"><span class="pre">{}</span></code> if no overrides are needed.</p>
 <p>The resulting complete YAML files are temporary startup inputs to the existing
-service commands. Cache paths in shared defaults resolve relative to the shared
+service commands. Cache paths in service defaults resolve relative to the service
 YAML; a sample <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> override resolves relative to that sample profile.
 The helper makes those paths absolute before launching services. Other relative
 path settings must be supplied as absolute paths when added to an override.
@@ -627,8 +627,8 @@ hardware and inspect vLLM’s reported token capacity and concurrency.</p>
 </section>
 <section id="change-a-model-or-endpoint">
 <h2>Change a model or endpoint<a class="headerlink" href="#change-a-model-or-endpoint" title="Link to this heading">#</a></h2>
-<p>Stop models before changing shared defaults, sample overrides, or ports. A
-shared default edit affects every sample that uses that server. Keep each
+<p>Stop models before changing service defaults, sample overrides, or ports. A
+service default edit affects every sample and standalone launch that uses that server. Keep each
 consumer profile’s model adapters and endpoints synchronized with the service.
 Consumer profiles do not need deployment ownership objects; the convenience
 launcher’s explicit server list controls local startup and shutdown.</p>
@@ -682,8 +682,9 @@ from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</
 the client on shutdown. Application-specific image selection, tools, and
 result handling remain sample-owned.</p></li>
 </ol>
-<p>The shared defaults provide port 8112, persistent cache settings, and a detector
-length of 1024. OCR starts after embedding when both are selected. The normal
+<p>The service-owned defaults in <code class="docutils literal notranslate"><span class="pre">services/ocr-server/ocr_server.yaml</span></code> provide port
+8112, persistent cache settings, and a detector length of 1024. OCR starts after
+embedding when both are selected. The normal
 stack start and stop commands include only selected services. Match any port
 override in the consumer profile and stop command. Qualify the combined GPU
 workload; registering OCR does not reserve memory or change other models’ budgets.

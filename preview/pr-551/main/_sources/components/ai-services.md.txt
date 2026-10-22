@@ -427,7 +427,7 @@ the sample's model command with `--stop` exits nonzero if any target could not b
 servers are silently skipped.
 
 Stop targets are only the servers listed by that sample's convenience launcher,
-with ports read from the shared defaults and selected sample GPU overrides.
+with ports read from the service defaults and selected sample GPU overrides.
 Use the same explicit `--gpu-profile NAME` on start and stop. Stop does not
 require model-download credentials.
 
@@ -701,7 +701,6 @@ cleanup.
   and recorded-media operations return `recording_disabled`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - Standalone service YAMLs live beside services for direct single-service
-  launches; they are not sample configuration. Sample convenience stacks combine shared defaults under
-  `utils/xr-ai-model-server-stack/yaml/` with overrides under
+  launches; they are not sample configuration. Sample convenience stacks start from those service YAMLs and apply overrides under
   `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml`. Workers
   consume the resulting endpoints through their models JSON.

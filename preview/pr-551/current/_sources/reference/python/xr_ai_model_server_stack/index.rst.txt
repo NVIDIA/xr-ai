@@ -33,7 +33,8 @@ Package Contents
    ``services`` selects from ``speaker-stt``, ``stt``, ``tts``, ``omni``, ``vlm``,
    ``embedding``, and ``ocr``. The selected ``base/yaml/<gpu_profile>.yaml`` must contain
    exactly those server mappings. Each mapping overrides the corresponding
-   shared server YAML. Launch order is speaker ASR, batch STT, TTS, Omni, VLM, embedding, then OCR,
+   service's own YAML in ``services/``. Launch order is speaker ASR, batch STT,
+   TTS, Omni, VLM, embedding, then OCR,
    omitting unselected services.
 
    ``gpu_profile`` selects a checked-in profile by filename stem; ``None``

@@ -591,7 +591,7 @@ LOVR inherits the pin; <code class="docutils literal notranslate"><span class="p
 <p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.</p>
-<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> and
+<p>The model-side fields live in the services’ own YAML under <code class="docutils literal notranslate"><span class="pre">services/</span></code> and
 <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/model-servers/yaml/</span></code>. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.</p>

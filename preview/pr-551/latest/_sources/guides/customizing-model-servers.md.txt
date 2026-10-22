@@ -120,19 +120,19 @@ utility; sample code imports only public XR AI APIs.
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Shared server defaults | `utils/xr-ai-model-server-stack/yaml/*.yaml` | Models, images, ports, cache paths, and common runtime settings |
+| Service defaults | `services/<service>/<entry>.yaml` | Models, images, ports, cache paths, and common runtime settings |
 | Sample GPU profile | `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml` | Placement, memory budgets, concurrency, and workload overrides for that sample |
 | Model selection | `agent-samples/<sample>/model-servers/main.py` | Explicit list of required local servers |
 | Consumer profile | `agent-samples/<sample>/yaml/models*.json` | Client adapters and endpoints used by workers and capability services |
 
-The launcher combines each server's shared defaults with its entry in the
+The launcher combines each server's service defaults with its entry in the
 selected sample GPU profile. Sample values replace whole top-level fields;
 there is no recursive inheritance. For example, a `hf_overrides` mapping
 replaces the shared mapping entirely. Every selected server must have a
 mapping in the profile, including `{}` if no overrides are needed.
 
 The resulting complete YAML files are temporary startup inputs to the existing
-service commands. Cache paths in shared defaults resolve relative to the shared
+service commands. Cache paths in service defaults resolve relative to the service
 YAML; a sample `model_cache` override resolves relative to that sample profile.
 The helper makes those paths absolute before launching services. Other relative
 path settings must be supplied as absolute paths when added to an override.
@@ -172,8 +172,8 @@ hardware and inspect vLLM's reported token capacity and concurrency.
 
 ## Change a model or endpoint
 
-Stop models before changing shared defaults, sample overrides, or ports. A
-shared default edit affects every sample that uses that server. Keep each
+Stop models before changing service defaults, sample overrides, or ports. A
+service default edit affects every sample and standalone launch that uses that server. Keep each
 consumer profile's model adapters and endpoints synchronized with the service.
 Consumer profiles do not need deployment ownership objects; the convenience
 launcher's explicit server list controls local startup and shutdown.
@@ -233,8 +233,9 @@ To add local OCR, keep these changes inside your sample:
    the client on shutdown. Application-specific image selection, tools, and
    result handling remain sample-owned.
 
-The shared defaults provide port 8112, persistent cache settings, and a detector
-length of 1024. OCR starts after embedding when both are selected. The normal
+The service-owned defaults in `services/ocr-server/ocr_server.yaml` provide port
+8112, persistent cache settings, and a detector length of 1024. OCR starts after
+embedding when both are selected. The normal
 stack start and stop commands include only selected services. Match any port
 override in the consumer profile and stop command. Qualify the combined GPU
 workload; registering OCR does not reserve memory or change other models' budgets.
