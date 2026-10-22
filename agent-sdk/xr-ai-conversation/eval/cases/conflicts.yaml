@@ -9,6 +9,8 @@
 # which text is still verbatim. The question is then answered by the model
 # under evaluation; ``accept`` and ``reject`` are grader self-checks.
 samples: 5
+# Minutes between seeding steps, as in a real session.
+step_minutes: 3
 # Each case must be answered correctly in at least this share of samples.
 min_pass_rate: 0.8
 filler: &filler
@@ -64,6 +66,23 @@ cases:
     none_of: [hl-1000-12]
     accept: ["HL-2000-77"]
     reject: ["HL-1000-12", "HL-1000-12 or HL-2000-77"]
+
+  - name: topic-update-inside-a-later-dialogue-summary-span
+    dialogue_budget_bytes: 600
+    incremental_topics: {lab.notes: 4000}
+    summaries:
+      dialogue: The user said bench 3 is broken and must not be used.
+    steps:
+      - say: {user: "Bench 3 is broken, don't use it.", assistant: "Noted, bench 3 is out of use."}
+      - publish: {topic: lab.notes, text: "Bench 3 repaired; usable again."}
+      - say: *filler
+      - say: *filler
+    expect: {summarized: [dialogue], verbatim: ["usable again"]}
+    question: Can I use bench 3 right now? Answer yes or no.
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes."]
+    reject: ["No.", "No, it is broken."]
 
   - name: newest-summary-topic-state
     summary_topics: {tea.status: 400}

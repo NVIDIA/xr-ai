@@ -10,16 +10,34 @@ scripted answers and summaries, then answered by the model under evaluation.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
+from unittest.mock import patch
 
 from _common import ScriptedLLM, ask, load_cases, make_eval_llm, matches, normalize, parser, settle, validate_suite
 from xr_ai_conversation import Conversation, ConversationContextUpdate
 from xr_ai_runtime import AgentRuntime, Topic
 
 _PARTICIPANT = "alice"
+_MINUTE_NS = 60_000_000_000
 
 
-async def _seed(llm: ScriptedLLM, case: dict[str, Any]) -> tuple[Conversation, AgentRuntime]:
+class _Clock:
+    """Wall clock for one case, so seeding steps are minutes apart as in a real session."""
+
+    def __init__(self) -> None:
+        self.now_ns = time.time_ns()
+
+    def __call__(self) -> int:
+        return self.now_ns
+
+    def advance(self, minutes: float) -> None:
+        self.now_ns += int(minutes * _MINUTE_NS)
+
+
+async def _seed(
+    llm: ScriptedLLM, case: dict[str, Any], clock: _Clock, step_minutes: float
+) -> tuple[Conversation, AgentRuntime]:
     summary_topics = case.get("summary_topics", {})
     incremental_topics = case.get("incremental_topics", {})
     conversation = Conversation(
@@ -35,6 +53,7 @@ async def _seed(llm: ScriptedLLM, case: dict[str, Any]) -> tuple[Conversation, A
     llm.summaries = dict(case.get("summaries", {}))
     await runtime.start()
     for step in case["steps"]:
+        clock.advance(step_minutes)
         if "say" in step:
             llm.answer = step["say"]["assistant"]
             async for _ in conversation.stream(step["say"]["user"], _PARTICIPANT):
@@ -49,6 +68,7 @@ async def _seed(llm: ScriptedLLM, case: dict[str, Any]) -> tuple[Conversation, A
         await settle(conversation, _PARTICIPANT)
     llm.answer = None
     llm.summaries = {}
+    clock.advance(step_minutes)
     return conversation, runtime
 
 
@@ -82,15 +102,19 @@ async def main() -> None:
     try:
         for case in suite["cases"]:
             scripted = ScriptedLLM(llm)
-            conversation, runtime = await _seed(scripted, case)
+            clock = _Clock()
+            # The runtime and the engine read wall time through time.time_ns().
+            with patch("time.time_ns", clock):
+                conversation, runtime = await _seed(scripted, case, clock, suite["step_minutes"])
             try:
                 if errors := _seeding_errors(conversation, case.get("expect", {})):
                     failures.append(f"{case['name']}: seeding {'; '.join(errors)}")
                     print(f"FAIL {case['name']}: seeding {'; '.join(errors)}")
                     continue
-                answers = await asyncio.gather(
-                    *(ask(llm, conversation, _PARTICIPANT, case["question"]) for _ in range(samples))
-                )
+                with patch("time.time_ns", clock):
+                    answers = await asyncio.gather(
+                        *(ask(llm, conversation, _PARTICIPANT, case["question"]) for _ in range(samples))
+                    )
             finally:
                 await conversation.close()
                 await runtime.stop()

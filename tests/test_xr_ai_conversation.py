@@ -6,7 +6,9 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import inspect
+import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import xr_ai_conversation as conversation_package
@@ -17,7 +19,7 @@ from xr_ai_conversation._context import (
     _ConversationContext,
     _TruncatedSummary,
 )
-from xr_ai_models import ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
+from xr_ai_models import Capabilities, ChatResponse, ChatStreamEvent, DecisionAnswer, DecisionResponse
 from xr_ai_routing import (
     Admission,
     AgentExchange,
@@ -57,6 +59,8 @@ def _response(content, finish_reason="stop"):
 
 
 class _LLM:
+    capabilities = Capabilities()
+
     def __init__(self) -> None:
         self.messages = []
         self.calls = []
@@ -401,8 +405,8 @@ async def test_prompt_orders_every_section_by_time_so_corrections_follow_what_th
 
 
 @pytest.mark.asyncio
-async def test_compacted_dialogue_summary_follows_an_older_uncompacted_topic_update():
-    """Review finding: a newer summary used to render before older raw material from another section."""
+async def test_summary_renders_first_with_its_time_when_another_section_has_older_raw_updates():
+    """A summary's span can overlap another section's raw update; both show their times for the model."""
 
     conversation = Conversation(_LLM(), incremental_context_topics=("lab.notes",))  # type: ignore[arg-type]
     context = conversation._context
@@ -411,15 +415,19 @@ async def test_compacted_dialogue_summary_follows_an_older_uncompacted_topic_upd
     memory.context_records["lab.notes"] = [
         _ContextRecord(0, "lab.notes", "Reference lamp in use is HL-1000-12.", _NOON_US)
     ]
-    # The 10:40 lamp swap has been compacted into the dialogue summary.
+    # The 12:40 lamp swap has been compacted into the dialogue summary.
     memory.dialogue_background = _BackgroundSection(
         "The user swapped lamps: use HL-2000-77 from now on.", 0, _NOON_US + 40 * _MINUTE_US
     )
 
     rendered = conversation._answer_messages("alice", "Which lamp should I use?")[1].content
 
-    update, summary = _positions(rendered, "HL-1000-12", "HL-2000-77")
-    assert update < summary
+    summary, update = _positions(
+        rendered,
+        "up to around 2026-10-01 12:40 UTC:\nThe user swapped lamps",
+        "published around 2026-10-01 12:00 UTC:\nReference lamp in use is HL-1000-12.",
+    )
+    assert summary < update
     await conversation.close()
 
 
@@ -1137,3 +1145,70 @@ def test_eval_case_files_are_well_formed_and_graders_reject_superseded_answers()
     # Whole-word grading: "yes" must not match "yesterday".
     assert not common.matches("Yesterday", {"any_of": ["yes"]})
     assert common.matches("Yes.", {"any_of": ["yes"]})
+
+
+@pytest.mark.asyncio
+async def test_cancelled_answer_closes_the_model_stream_and_records_nothing():
+    """The router cancels answer() on barge-in; the model stream must close and nothing be recorded."""
+
+    first_chunk = asyncio.Event()
+    stream_closed = asyncio.Event()
+
+    class _BlockingStreamLLM(_LLM):
+        def stream_events(self, messages, **_kwargs):
+            async def events():
+                try:
+                    yield ChatStreamEvent(kind="text", text="Partial answer")
+                    await asyncio.Event().wait()
+                finally:
+                    stream_closed.set()
+
+            # Holding the stream, as a client could, means only an explicit close runs its finally.
+            self.stream = events()
+            return self.stream
+
+    conversation = Conversation(_BlockingStreamLLM())  # type: ignore[arg-type]
+
+    async def emit(_source, _text):
+        # Barge-in arrives while the first chunk is being delivered, with the model stream paused at it.
+        first_chunk.set()
+        await asyncio.Event().wait()
+
+    answering = asyncio.create_task(conversation.answer(AgentTurn("alice", "turn-1", "Tell me a story."), emit=emit))
+    await asyncio.wait_for(first_chunk.wait(), 1)
+    answering.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await answering
+
+    assert stream_closed.is_set()
+    assert conversation._context.transcript("alice") == ()
+    await conversation.close()
+
+
+def _conflict_eval():
+    eval_dir = Path(__file__).resolve().parents[1] / "agent-sdk" / "xr-ai-conversation" / "eval"
+    sys.path.insert(0, str(eval_dir))
+    try:
+        import conflict_eval
+    finally:
+        sys.path.remove(str(eval_dir))
+    return conflict_eval
+
+
+@pytest.mark.asyncio
+async def test_every_conflict_case_seeds_the_shape_it_claims():
+    """A budget change must not leave a conflict case seeding no summary and testing nothing."""
+
+    conflict_eval = _conflict_eval()
+    suite = conflict_eval.load_cases("conflicts.yaml")
+    for case in suite["cases"]:
+        clock = conflict_eval._Clock()
+        with patch("time.time_ns", clock):
+            conversation, runtime = await conflict_eval._seed(
+                conflict_eval.ScriptedLLM(_LLM()), case, clock, suite["step_minutes"]
+            )
+        try:
+            assert conflict_eval._seeding_errors(conversation, case.get("expect", {})) == [], case["name"]
+        finally:
+            await conversation.close()
+            await runtime.stop()

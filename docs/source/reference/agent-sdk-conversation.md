@@ -61,8 +61,9 @@ Dialogue and each incremental topic use the same rolling summary. Entries
 accumulate verbatim; when they grow large enough, the model merges the
 previous summary with the oldest entries into one new summary, and those
 entries are discarded. Only the summary and the entries added since it was
-written are kept, so memory grows with the conversation only until the next
-compaction.
+written are kept, so text grows with the conversation only until the next
+compaction. A short identity of every exchange is kept for the session so that
+router history is not replayed.
 
 Each section of the rendered context has its own budget, in UTF-8 bytes of
 rendered text rather than model tokens:
@@ -101,11 +102,16 @@ model configuration, as the model presets do.
 An answer request has three messages:
 
 1. The system prompt with core and application instructions.
-2. The context, oldest first: every summary, uncompacted exchange, topic
-   update, and summary-topic state is placed at the time of its newest
-   content, and the current time comes last. A later entry supersedes an
-   earlier one it contradicts, across sections.
+2. The context: summaries of earlier material first, then uncompacted
+   exchanges, topic updates, and summary-topic states in recorded-time order,
+   and the current time last.
 3. The current request.
+
+Each section compacts on its own schedule, so a summary can cover a time span
+that overlaps an uncompacted entry from another section, for example a
+dialogue summary covering 14:13 to 14:43 and a topic update published at
+14:18. The order then cannot show which fact is newer; the model resolves such
+a conflict from the times shown and can get it wrong.
 
 The system prompt contains no clock, so it stays an identical prefix across
 requests.
@@ -117,7 +123,11 @@ requires; the router calls it when focus moves to another destination.
 `participant_left()` cancels the participant's compaction jobs, waits for them,
 and forgets its context; `close()` does the same for every participant and
 stops new answers. Other participants are unaffected by one participant's
-departure.
+departure. The router calls `participant_left()` only on destinations the
+participant was routed to, so when topics publish for a participant who never
+speaks to this conversation, the application calls
+`conversation.participant_left()` itself after `router.participant_left()` or
+`router.stop()` returns.
 
 An answer still streaming when its participant leaves is not stopped. When it
 completes, it records its exchange as the start of new context for that
