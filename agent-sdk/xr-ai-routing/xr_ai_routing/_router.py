@@ -12,11 +12,19 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
+from typing import TYPE_CHECKING, Literal
 
 import nemo_relay
 from xr_ai_models import ChatMessage, DecisionQuestion, DecisionService, LLMService
+
+if TYPE_CHECKING:
+    from xr_ai_runtime import Agent, Topic
+    from xr_ai_voice import UserQuery, VoiceInterrupted, VoiceOutput, VoiceParticipantJoined, VoiceParticipantLeft
+
+    from ._runtime import _RuntimeTurn
 
 from ._contracts import (
     Admission,
@@ -96,16 +104,48 @@ class AgentRouter:
     destination signals its first meaningful response, excluding routing, admission,
     waiting for committed acknowledgment delivery, and audio playback.
 
+    Supply ``query_topic`` and ``output_topic`` together, then register
+    ``runtime_subscriber()`` with :class:`xr_ai_runtime.AgentRuntime`. This
+    requires the ``xr-ai-routing[voice]`` extra; ordinary ``handle()`` use never
+    imports the runtime or voice media. No input or lifecycle topic is
+    subscribed unless explicitly supplied.
+    Runtime queries use their publication identity and originating timestamp.
+    Destinations publish their own output; the router publishes only finite
+    admission, clarification, acknowledgment, and failure messages for turns that
+    fail before the destination calls ``started()``. After that call, the
+    destination owns failure output and stream finalization. Runtime background
+    failures are logged once.
+
     :param destinations: Registered destinations keyed by their stable route names.
     :param decisions: Typed Clef decision service used to select routes.
     :param output: Async callback receiving the current ``AgentTurn``, route name, and finite control text,
         including acknowledgments, admission preambles, and clarification or release messages.
+        Required for direct ``handle()`` calls; runtime queries publish control text through ``output_topic``.
         Destinations publish their own answer output directly.
     :param default_destination: Registered route used for exhausted-decline fallback.
     :param context_budget_bytes: UTF-8 byte budget for retained completed history and routing history input.
     :param acknowledgment_llm: Optional non-reasoning client for intention acknowledgments and duration prediction.
     :param acknowledgment_delay_secs: Finite positive delay before fallback
         acknowledgment; requires ``acknowledgment_llm``.
+    :param query_topic: Explicit runtime input topic carrying ``xr_ai_voice.UserQuery``.
+    :param output_topic: Explicit topic carrying ``xr_ai_voice.VoiceOutput`` for router control output.
+    :param participant_joined_topic: Optional explicit ``VoiceParticipantJoined`` topic reopening admission.
+    :param participant_left_topic: Optional explicit ``VoiceParticipantLeft`` topic for departure cleanup;
+        requires ``participant_joined_topic`` so a departed participant can be readmitted.
+    :param interrupted_topic: Optional explicit ``VoiceInterrupted`` topic for participant or global interruption.
+    :param initialize_participant: Optional initialization, awaited once before the participant's first turn,
+        whether called directly or published. An interrupted initialization runs again on the next turn.
+    :param cleanup_participant: Optional idempotent application cleanup after destination work is drained.
+        Used also for initialized participants who never selected a route; failed cleanup can be retried.
+    :param set_status: Optional asynchronous callback receiving ``processing`` or ``idle``, then the participant ID,
+        around each runtime turn. Its failures are logged and do not fail the turn.
+        All callbacks run on the delivery event loop and must not reenter this router's operations.
+
+    Topic payload classes must match exactly and configured topic names must be
+    distinct. Incomplete runtime configuration raises ``ValueError``; a wrong
+    payload class raises ``TypeError``. Missing optional voice support raises
+    ``ImportError`` when runtime configuration is supplied. The application must
+    await ``stop()`` before stopping its runtime or closing destination resources.
     """
 
     def __init__(
@@ -113,11 +153,19 @@ class AgentRouter:
         destinations: Mapping[str, RoutableAgent],
         decisions: DecisionService,
         *,
-        output: Callable[[AgentTurn, str, str], Awaitable[None]],
+        output: Callable[[AgentTurn, str, str], Awaitable[None]] | None = None,
         default_destination: str = "conversation",
         context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
         acknowledgment_llm: LLMService | None = None,
         acknowledgment_delay_secs: float | None = None,
+        query_topic: Topic[UserQuery] | None = None,
+        output_topic: Topic[VoiceOutput] | None = None,
+        participant_joined_topic: Topic[VoiceParticipantJoined] | None = None,
+        participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
+        interrupted_topic: Topic[VoiceInterrupted] | None = None,
+        initialize_participant: Callable[[str], Awaitable[None]] | None = None,
+        cleanup_participant: Callable[[str], Awaitable[None]] | None = None,
+        set_status: Callable[[Literal["processing", "idle"], str], Awaitable[None]] | None = None,
     ) -> None:
         if not destinations or default_destination not in destinations:
             raise ValueError("default destination must be registered")
@@ -142,12 +190,64 @@ class AgentRouter:
         self._generation: dict[str, object] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._departure_tasks: dict[str, asyncio.Task[None]] = {}
+        self._join_tasks: dict[str, asyncio.Task[None]] = {}
+        self._initialization_locks: dict[str, asyncio.Lock] = {}
         self._stop_task: asyncio.Task[None] | None = None
         self._history: dict[str, list[AgentExchange]] = {}
         self._history_times: dict[str, list[int | None]] = {}
         self._history_exchange_ids: dict[str, list[object | None]] = {}
         self._destinations_used: dict[str, set[str]] = {}
         self._first_answer_samples: dict[str, dict[str, list[tuple[str, float]]]] = {}
+        self._initialized: set[str] = set()
+        self._departed: set[str] = set()
+        self._participant_epochs: dict[str, object] = {}
+        self._lifecycle = object()
+        self._initialize_participant = initialize_participant
+        self._cleanup_participant = cleanup_participant
+        self._set_status = set_status
+        self._runtime = None
+        if query_topic is None:
+            if any(
+                value is not None
+                for value in (
+                    output_topic,
+                    participant_joined_topic,
+                    participant_left_topic,
+                    interrupted_topic,
+                    initialize_participant,
+                    cleanup_participant,
+                    set_status,
+                )
+            ):
+                raise ValueError("runtime options require query_topic and output_topic")
+            if output is None:
+                raise ValueError("direct routing requires output")
+        else:
+            if output_topic is None:
+                raise ValueError("runtime routing requires output_topic")
+            if participant_left_topic is not None and participant_joined_topic is None:
+                raise ValueError("participant_left_topic requires participant_joined_topic to readmit participants")
+            from ._runtime import _RuntimeRouting
+
+            self._runtime = _RuntimeRouting(
+                self,
+                query_topic,
+                output_topic,
+                participant_joined_topic=participant_joined_topic,
+                participant_left_topic=participant_left_topic,
+                interrupted_topic=interrupted_topic,
+            )
+
+    def runtime_subscriber(self) -> Agent:
+        """Return the runtime agent that delivers configured topics to this router.
+
+        Register it once with the application's ``AgentRuntime``. Requires
+        ``query_topic`` and ``output_topic`` on the constructor.
+        """
+
+        if self._runtime is None:
+            raise ValueError("runtime_subscriber() requires query_topic and output_topic")
+        return self._runtime.subscriber()
 
     async def handle(
         self,
@@ -178,28 +278,55 @@ class AgentRouter:
         Canceling a cleanup waiter does not abandon the owned operation;
         cancellation propagates after that operation completes.
 
+        Configure ``output`` on the constructor before calling this direct entry point.
+
         :param turn: Current request and optional initial completed history.
         :return: The final answer, focus, release, or clarification disposition.
         """
 
+        if self._output is None:
+            raise ValueError("direct handle() requires output configured on AgentRouter")
+        task = await self._submit(turn, emit=self._output)
+        if task is None:
+            raise RuntimeError("direct turn admission did not create work")
+        try:
+            return await asyncio.shield(task)
+        finally:
+            if not task.done():
+                if self._tasks.get(turn.participant_id) is task:
+                    self._generation.pop(turn.participant_id, None)
+                await _cancel_and_drain((task,))
+
+    async def _submit(
+        self,
+        turn: AgentTurn,
+        *,
+        emit: _Emit,
+        runtime_turn: _RuntimeTurn | None = None,
+    ) -> asyncio.Task[DestinationResult] | None:
         self._check_lifecycle_caller()
         participant_id = turn.participant_id
-        if self._stop_task is not None:
-            raise RuntimeError("router is stopping")
-        # Departure owns the participant until destination cleanup finishes.
-        if participant_id in self._departure_tasks:
-            raise RuntimeError("participant is leaving")
+        lifecycle = self._lifecycle
+        participant_epoch = self._participant_epochs.setdefault(participant_id, object())
+
+        def admitted() -> bool:
+            reason = self._admission_error(participant_id, lifecycle, participant_epoch)
+            if reason is None:
+                return True
+            if runtime_turn is not None:
+                _logger.warning("runtime query dropped participant=%r: %s", participant_id, reason)
+                return False
+            raise RuntimeError(reason)
+
+        if not admitted():
+            return None
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
-            if self._stop_task is not None:
-                raise RuntimeError("router is stopping")
-            if participant_id in self._departure_tasks:
-                raise RuntimeError("participant is leaving")
+            if not admitted():
+                return None
             await self._interrupt_responses(participant_id)
-            if self._stop_task is not None:
-                raise RuntimeError("router is stopping")
-            if participant_id in self._departure_tasks:
-                raise RuntimeError("participant is leaving")
+            if not admitted():
+                return None
             owned_history = self._history.get(participant_id)
             if participant_id not in self._history:
                 owned_history = list(turn.history)
@@ -230,52 +357,156 @@ class AgentRouter:
                 if self._generation.get(participant_id) is generation:
                     turn_output.control = True
                     try:
-                        await self._output(output_turn, source, text)
+                        await emit(output_turn, source, text)
                     except Exception:
                         turn_output.control_failed = True
                         raise
 
             async def run_handle() -> DestinationResult:
-                timestamp_token = _active_history_timestamps.set(timestamps)
-                history_id_token = _active_history_exchange_ids.set(exchange_ids)
-                current_id_token = _active_exchange_id.set(current_exchange_id)
-                try:
-                    return await self._handle(
-                        current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
-                    )
-                except Exception:
-                    if not turn_output.response and not turn_output.control_failed:
-                        try:
-                            await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
-                        except Exception:  # noqa: BLE001
-                            # isolation boundary: the turn's own failure, not this message's, propagates.
-                            _logger.exception("failed to publish turn failure message participant=%r", participant_id)
-                    raise
-                finally:
-                    _active_exchange_id.reset(current_id_token)
-                    _active_history_exchange_ids.reset(history_id_token)
-                    _active_history_timestamps.reset(timestamp_token)
+                scope = self._runtime.scope(current_turn, runtime_turn) if runtime_turn is not None else nullcontext()
+                with scope:
+                    timestamp_token = _active_history_timestamps.set(timestamps)
+                    history_id_token = _active_history_exchange_ids.set(exchange_ids)
+                    current_id_token = _active_exchange_id.set(current_exchange_id)
+                    reported_status = False
+                    try:
+                        if not admitted():
+                            raise asyncio.CancelledError
+                        # Not under the participant lock, so a replacement turn can still cancel this one.
+                        await self._initialize_once(participant_id, generation=generation)
+                        if self._generation.get(participant_id) is not generation:
+                            raise asyncio.CancelledError
+                        if not admitted():
+                            raise asyncio.CancelledError
+                        if runtime_turn is not None:
+                            reported_status = True
+                            await self._report_status("processing", participant_id)
+                        return await self._handle(
+                            current_turn, emit=emit_if_current, generation=generation, turn_output=turn_output,
+                        )
+                    except Exception:
+                        # A turn refused by admission never ran, so it gets no failure message.
+                        if (
+                            not turn_output.response
+                            and not turn_output.control_failed
+                            and self._admission_error(participant_id, lifecycle, participant_epoch) is None
+                        ):
+                            try:
+                                await emit_if_current(current_turn, self._default_destination, _FAILURE_TEXT)
+                            except Exception:  # noqa: BLE001
+                                # isolation boundary: the turn's own failure, not this message's, propagates.
+                                _logger.exception(
+                                    "failed to publish turn failure message participant=%r", participant_id
+                                )
+                        raise
+                    finally:
+                        _active_exchange_id.reset(current_id_token)
+                        _active_history_exchange_ids.reset(history_id_token)
+                        _active_history_timestamps.reset(timestamp_token)
+                        if reported_status:
+                            await self._report_status("idle", participant_id)
 
             task = asyncio.create_task(
                 run_handle(),
-                name=f"conversation-front-end:{participant_id}",
+                name=f"routing-turn:{participant_id}",
                 context=self._owned_context(),
             )
             self._tasks[participant_id] = task
+            task.add_done_callback(partial(self._discard_turn, participant_id, supervised=runtime_turn is not None))
+            return task
+
+    def _discard_turn(self, participant_id: str, task: asyncio.Task[DestinationResult], *, supervised: bool) -> None:
+        if self._tasks.get(participant_id) is task:
+            self._tasks.pop(participant_id)
+            self._generation.pop(participant_id, None)
+        if supervised and not task.cancelled() and (error := task.exception()) is not None:
+            # isolation boundary: the runtime delivery has returned; this router owns the failed turn.
+            _logger.error("runtime routing failed participant=%r", participant_id, exc_info=error)
+
+    def _admission_error(self, participant_id: str, lifecycle: object, participant_epoch: object) -> str | None:
+        if self._stop_task is not None or lifecycle is not self._lifecycle:
+            return "router is stopping or its lifecycle changed"
+        if participant_id in self._departure_tasks or participant_epoch is not self._participant_epochs.get(
+            participant_id
+        ):
+            return "participant is leaving or its lifecycle changed"
+        if participant_id in self._departed:
+            return "participant has left; a participant-joined event is required"
+        return None
+
+    async def _initialize_once(self, participant_id: str, *, generation: object | None = None) -> None:
+        # Only router-owned turn and join tasks initialize, so interruption can always cancel the holder.
+        async with self._initialization_locks.setdefault(participant_id, asyncio.Lock()):
+            if participant_id in self._initialized:
+                return
+            if self._initialize_participant is not None:
+                await self._call_hook(self._initialize_participant, participant_id)
+            task = asyncio.current_task()
+            if (task is not None and task.cancelling()) or (
+                generation is not None and self._generation.get(participant_id) is not generation
+            ):
+                raise asyncio.CancelledError
+            self._initialized.add(participant_id)
+
+    async def _participant_joined(self, participant_id: str) -> None:
+        self._check_lifecycle_caller()
+        lifecycle = self._lifecycle
+        participant_epoch = self._participant_epochs.setdefault(participant_id, object())
+        if self._stop_task is not None:
+            return
+        if participant_id in self._departure_tasks:
+            # Joins an in-flight departure, or retries one whose cleanup failed.
+            await self._participant_left(participant_id)
+        lock = self._locks.setdefault(participant_id, asyncio.Lock())
+        async with lock:
+            if (
+                self._stop_task is not None
+                or lifecycle is not self._lifecycle
+                or participant_epoch is not self._participant_epochs.get(participant_id)
+                or participant_id in self._departure_tasks
+            ):
+                return
+            self._departed.discard(participant_id)
+            if participant_id in self._initialized:
+                return
+            task = self._join_tasks.get(participant_id)
+            if task is None:
+                task = asyncio.create_task(
+                    self._initialize_once(participant_id),
+                    name=f"routing-join:{participant_id}",
+                    context=self._owned_context(),
+                )
+                self._join_tasks[participant_id] = task
+                task.add_done_callback(partial(self._discard_join, participant_id))
         try:
-            return await asyncio.shield(task)
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is None or not current.cancelling():
+                # Departure, stop, or a newer turn canceled it; the next turn initializes again.
+                return
+            await _cancel_and_drain((task,))
+            raise
+
+    def _discard_join(self, participant_id: str, task: asyncio.Task[None]) -> None:
+        if self._join_tasks.get(participant_id) is task:
+            self._join_tasks.pop(participant_id)
+
+    async def _report_status(self, status: Literal["processing", "idle"], participant_id: str) -> None:
+        if self._set_status is None:
+            return
+        try:
+            await self._call_hook(self._set_status, status, participant_id)
+        except Exception:  # noqa: BLE001
+            # isolation boundary: a status indicator failure must not fail or relabel the turn.
+            _logger.exception("set_status(%r) failed participant=%r", status, participant_id)
+
+    async def _call_hook(self, callback: Callable[..., Awaitable[None]], *args: str) -> None:
+        token = _active_routers.set(_active_routers.get() | {self._owner_identity})
+        try:
+            await callback(*args)
         finally:
-            try:
-                if not task.done():
-                    self._generation.pop(participant_id, None)
-                    if not task.cancelling():
-                        task.cancel()
-                    await _drain_tasks((task,))
-            finally:
-                if self._tasks.get(participant_id) is task and task.done():
-                    self._tasks.pop(participant_id, None)
-                if self._generation.get(participant_id) is generation:
-                    self._generation.pop(participant_id, None)
+            _active_routers.reset(token)
 
     async def interrupt(self, participant_id: str | None = None) -> None:
         """Cancel active response work while retaining completed history and focus.
@@ -290,18 +521,18 @@ class AgentRouter:
 
     async def _interrupt_responses(self, participant_id: str | None = None) -> None:
         if participant_id is None:
-            tasks = tuple(self._tasks.values())
+            tasks = (*self._tasks.values(), *self._join_tasks.values())
             self._generation.clear()
         else:
-            task = self._tasks.get(participant_id)
             self._generation.pop(participant_id, None)
-            tasks = () if task is None else (task,)
-        for task in tasks:
-            if not task.done() and not task.cancelling():
-                task.cancel()
+            tasks = tuple(
+                task
+                for task in (self._tasks.get(participant_id), self._join_tasks.get(participant_id))
+                if task is not None
+            )
         if tasks:
             try:
-                await _drain_tasks(tasks)
+                await _cancel_and_drain(tasks)
             finally:
                 for identity, task in tuple(self._tasks.items()):
                     if task in tasks and task.done():
@@ -317,10 +548,23 @@ class AgentRouter:
         successfully, ``handle()`` raises ``RuntimeError`` for that participant.
         Concurrent callers join the same owned departure. Canceling a waiter
         waits for that operation to finish before propagating cancellation.
-        Retry after a cleanup failure; success reopens participant admission.
+        Retry after a cleanup failure. With runtime topics configured, departure
+        also closes direct ``handle()`` admission until a participant-joined event.
+        Without runtime topics, successful cleanup permits a fresh later turn.
         """
 
         self._check_lifecycle_caller()
+        if self._runtime is not None:
+            self._departed.add(participant_id)
+        self._participant_epochs[participant_id] = object()
+        stop_task = self._stop_task
+        if stop_task is not None:
+            await _drain_tasks((stop_task,))
+            stop_task.result()
+            return
+        await self._participant_left(participant_id)
+
+    async def _participant_left(self, participant_id: str) -> None:
         task = self._departure_operation(participant_id)
         await _drain_tasks((task,))
         task.result()
@@ -337,8 +581,12 @@ class AgentRouter:
         """
 
         self._check_lifecycle_caller()
+        await self._stop()
+
+    async def _stop(self) -> None:
         task = self._stop_task
         if task is None or task.done():
+            self._lifecycle = object()
             task = asyncio.create_task(
                 self._run_stop(),
                 name="routing-stop",
@@ -372,9 +620,9 @@ class AgentRouter:
         return task
 
     async def _run_departure(self, participant_id: str) -> None:
+        await self._interrupt_responses(participant_id)
         lock = self._locks.setdefault(participant_id, asyncio.Lock())
         async with lock:
-            await self._interrupt_responses(participant_id)
             used = set(self._destinations_used.get(participant_id, ()))
             focused = self._focus.pop(participant_id, None)
             if focused is not None:
@@ -396,16 +644,27 @@ class AgentRouter:
                     errors.append(error)
                 else:
                     self._forget_destination(participant_id, destination_name)
+            if self._cleanup_participant is not None:
+                try:
+                    await self._call_hook(self._cleanup_participant, participant_id)
+                except Exception as error:  # noqa: BLE001 -- attempt independent cleanup owners before raising.
+                    errors.append(error)
             if errors:
                 raise ExceptionGroup(f"failed to release destinations for {participant_id!r}", errors)
+            self._initialized.discard(participant_id)
             self._departure_tasks.pop(participant_id)
             self._locks.pop(participant_id, None)
+            self._initialization_locks.pop(participant_id, None)
 
     async def _run_stop(self) -> None:
         await self._interrupt_responses()
         participants = (
-            self._destinations_used.keys() | self._focus.keys() | self._history.keys()
-            | self._locks.keys() | self._departure_tasks.keys() | self._first_answer_samples.keys()
+            self._destinations_used.keys()
+            | self._focus.keys()
+            | self._history.keys()
+            | self._locks.keys()
+            | self._departure_tasks.keys()
+            | self._first_answer_samples.keys()
         )
         errors = []
         for participant_id in tuple(participants):
@@ -418,6 +677,8 @@ class AgentRouter:
                 errors.append(error)
         if errors:
             raise ExceptionGroup("failed to release conversation destinations", errors)
+        self._departed.clear()
+        self._participant_epochs.clear()
         self._stop_task = None
 
     async def _handle(
@@ -550,7 +811,7 @@ class AgentRouter:
                     and not acknowledgment_task.done()
                     and not acknowledgment_committed.is_set()
                 ):
-                    acknowledgment_task.cancel()
+                    _cancel_once(acknowledgment_task)
                 with nemo_relay.scope.scope(
                     "conversation.response-started",
                     nemo_relay.ScopeType.Agent,
@@ -623,8 +884,7 @@ class AgentRouter:
                 response_open = False
                 if acknowledgment_task is not None:
                     if not acknowledgment_committed.is_set():
-                        if not acknowledgment_task.cancelling():
-                            acknowledgment_task.cancel()
+                        _cancel_once(acknowledgment_task)
                     await _drain_tasks((acknowledgment_task,))
             if self._generation.get(turn.participant_id) is not generation:
                 raise asyncio.CancelledError()
@@ -755,8 +1015,7 @@ class AgentRouter:
                 await delay_task
             if answer_started.is_set():
                 return
-            if not prediction_task.done() and not prediction_task.cancelling():
-                prediction_task.cancel()
+            _cancel_once(prediction_task)
             messages = (
                 ChatMessage(role="system", content=_ACKNOWLEDGMENT_PROMPT),
                 ChatMessage(
@@ -805,8 +1064,7 @@ class AgentRouter:
                 await emit(_ACKNOWLEDGMENT_FALLBACK + " ")
         finally:
             for task in (delay_task, prediction_task):
-                if not task.done() and not task.cancelling():
-                    task.cancel()
+                _cancel_once(task)
             drain = asyncio.gather(delay_task, prediction_task, return_exceptions=True)
             owner_cancelled = False
             while True:
@@ -1001,6 +1259,21 @@ class AgentRouter:
                 },
             )
         return selected
+
+
+def _cancel_once(task: asyncio.Task) -> None:
+    """Request cancellation unless one is already pending; a second request would interrupt the task's cleanup."""
+
+    if not task.done() and not task.cancelling():
+        task.cancel()
+
+
+async def _cancel_and_drain(tasks: tuple[asyncio.Task, ...]) -> None:
+    """Cancel owned tasks at most once and wait for their cleanup to finish."""
+
+    for task in tasks:
+        _cancel_once(task)
+    await _drain_tasks(tasks)
 
 
 async def _drain_tasks(tasks: tuple[asyncio.Task, ...]) -> None:

@@ -15,8 +15,12 @@ dependencies = [
     "xr-ai-models",
 ]
 
+[project.optional-dependencies]
+voice = ["xr-ai-voice"]
+
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }
+xr-ai-voice = { path = "../xr-ai-voice", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_routing"]
