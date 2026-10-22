@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -477,6 +479,17 @@ OpenAI-compatible endpoints.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ThinkingControl" title="xr_ai_models.ThinkingControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThinkingControl</span></code></a></p></td>
 <td><p>How a model receives the reasoning switch.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ModelServiceError" title="xr_ai_models.ModelServiceError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></p></td>
+<td><p>Failure to determine or maintain an embedding model's reported identity.</p></td>
 </tr>
 </tbody>
 </table>
@@ -905,6 +918,23 @@ reason.</p>
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">EmbeddingService</span></span><a class="headerlink" href="#xr_ai_models.EmbeddingService" title="Link to this definition">#</a></dt>
 <dd><p>Structural interface for text-embedding services.</p>
 <dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.EmbeddingService.model_identity">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">model_identity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.EmbeddingService.model_identity" title="Link to this definition">#</a></dt>
+<dd><p>Return a stable backing-model identity, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when absent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">None</span></code> means a successful lookup found no identity; it must not hide
+a failed operation. This is not a weight checksum: deployments that
+replace weights under the same identity need an explicit cache revision.
+Consumers choose whether absence permits operation without caching.</p>
+<dl class="simple">
+<dt>Raises:</dt><dd><dl class="simple">
+<dt>ModelServiceError: Identity lookup failed or returned invalid</dt><dd><p>metadata. Consumers own any fallback or retry policy.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.EmbeddingService.embed">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embed</span></span><span class="sig-paren">(</span>
 
@@ -930,6 +960,12 @@ reason.</p>
 <dd><p>Release resources owned by the service.</p>
 </dd></dl>
 
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_models.ModelServiceError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">ModelServiceError</span></span><a class="headerlink" href="#xr_ai_models.ModelServiceError" title="Link to this definition">#</a></dt>
+<dd><p>Failure to determine or maintain an embedding model’s reported identity.</p>
 </dd></dl>
 
 <dl class="py data">
@@ -1469,6 +1505,23 @@ disabled at construction time.</p>
 <dd><p>OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/embeddings</span></code> client.</p>
 <p>The API key is read once from <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> during construction. An
 injected HTTP client remains owned by the caller and is not closed here.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.OpenAICompatEmbedding.model_identity">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">model_identity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.OpenAICompatEmbedding.model_identity" title="Link to this definition">#</a></dt>
+<dd><p>Read the configured model’s backing <code class="docutils literal notranslate"><span class="pre">root</span></code> from <code class="docutils literal notranslate"><span class="pre">/v1/models</span></code>.</p>
+<p>Return <code class="docutils literal notranslate"><span class="pre">None</span></code> only when a successful response has no matching model
+or no backing identity. A served alias alone does not identify weights.
+Uses the HTTP client’s configured timeout; callers own fallback policy.</p>
+<dl class="simple">
+<dt>Raises:</dt><dd><dl class="simple">
+<dt>ModelServiceError: The request failed or the response contains</dt><dd><p>invalid or ambiguous metadata. The original transport or JSON
+exception is retained as the cause when available.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.OpenAICompatEmbedding.embed">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embed</span></span><span class="sig-paren">(</span>
@@ -2526,6 +2579,7 @@ before returning, so a caller can safely release recognition resources.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodules">Submodules</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#attributes">Attributes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exceptions">Exceptions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#package-contents">Package Contents</a><ul class="nav section-nav flex-column">
@@ -2586,11 +2640,13 @@ before returning, so a caller can safely release recognition resources.</p>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ContentPart"><code class="docutils literal notranslate"><span class="pre">ContentPart</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingService"><code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingService.model_identity"><code class="docutils literal notranslate"><span class="pre">model_identity()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingService.embed"><code class="docutils literal notranslate"><span class="pre">embed()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingService.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.EmbeddingService.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelServiceError"><code class="docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ImageInput"><code class="docutils literal notranslate"><span class="pre">ImageInput</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ImagePart"><code class="docutils literal notranslate"><span class="pre">ImagePart</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ImagePart.url"><code class="docutils literal notranslate"><span class="pre">url</span></code></a></li>
@@ -2664,6 +2720,7 @@ before returning, so a caller can safely release recognition resources.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding"><code class="docutils literal notranslate"><span class="pre">OpenAICompatEmbedding</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.model_identity"><code class="docutils literal notranslate"><span class="pre">model_identity()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.embed"><code class="docutils literal notranslate"><span class="pre">embed()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OpenAICompatEmbedding.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>

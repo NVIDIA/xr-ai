@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -523,6 +525,12 @@ do not pull in the dependency chain of the processes they manage.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.load_model_deployment" title="xr_ai_launcher.load_model_deployment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_model_deployment</span></code></a>(→ ModelDeployment)</p></td>
 <td><p>Load the JSON profile selected by a YAML worker configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.has_ownership_marker" title="xr_ai_launcher.has_ownership_marker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_ownership_marker</span></code></a>(→ bool)</p></td>
+<td><p>Return whether <em>pid</em> was started with <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_MANAGED=1</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_PORT=&lt;port&gt;</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_launcher.pid_on_port_checked" title="xr_ai_launcher.pid_on_port_checked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pid_on_port_checked</span></code></a>(→ tuple[int | None, bool, bool])</p></td>
+<td><p>Return the listening PID, inspection status, and listener presence.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_launcher.ManagedProcess" title="xr_ai_launcher.ManagedProcess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ManagedProcess</span></code></a>(name, cmd[, cwd, env])</p></td>
 <td><p>Run <em>cmd</em> as a subprocess and terminate it cleanly when the context exits.</p></td>
@@ -677,6 +685,21 @@ replaces named config selection. It deliberately has no fallback.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.has_ownership_marker">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">has_ownership_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_launcher.has_ownership_marker" title="Link to this definition">#</a></dt>
+<dd><p>Return whether <em>pid</em> was started with <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_MANAGED=1</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_PORT=&lt;port&gt;</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_launcher.pid_on_port_checked">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">pid_on_port_checked</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_launcher.pid_on_port_checked" title="Link to this definition">#</a></dt>
+<dd><p>Return the listening PID, inspection status, and listener presence.</p>
+<p>Tries <cite>ss</cite> first (always present on modern Linux), falls back to <cite>lsof</cite>.
+A listener without a visible PID is still reported so callers fail closed
+instead of mistaking an uninspectable listener for an unused port.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_launcher.ManagedProcess">
 <em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_launcher.</span></span><span class="sig-name descname"><span class="pre">ManagedProcess</span></span><span class="sig-paren">(</span>
 
@@ -713,8 +736,9 @@ otherwise the child inherits the parent’s.</p>
 <p>The launcher spawns every member at once and waits for <em>all</em> of them to
 signal readiness before advancing to the next item in the stack sequence.
 A member that signals readiness remains monitored until the whole group is
-ready. An unexpected exit during that interval shuts everything down. A
-successful <code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
+ready. An unexpected exit during that interval stops owned processes and
+persistent processes that have not signaled readiness. A successful
+<code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
 <code class="docutils literal notranslate"><span class="pre">run_stack(...,</span> <span class="pre">exit_after_ready=True)</span></code> permits bootstrap wrappers to
 outlive the launcher.</p>
 <p>Example:</p>
@@ -772,8 +796,9 @@ outlive the launcher.</p>
 <span class="sig-name descname"><span class="pre">launch_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'own'</span></em><a class="headerlink" href="#xr_ai_launcher.Process.launch_mode" title="Link to this definition">#</a></dt>
 <dd><p>Spawn and shutdown behavior.</p>
 <p><code class="docutils literal notranslate"><span class="pre">own</span></code> starts the process and stops it with the stack. <code class="docutils literal notranslate"><span class="pre">persist</span></code> starts
-it but leaves it running at shutdown. <code class="docutils literal notranslate"><span class="pre">reuse</span></code> assumes the process is
-already running and neither starts nor stops it.</p>
+it but leaves it running at shutdown once it has signaled readiness,
+including when another process fails during startup. <code class="docutils literal notranslate"><span class="pre">reuse</span></code> assumes
+the process is already running and neither starts nor stops it.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -819,6 +844,11 @@ remains visible.</p>
 the remaining foreground processes are terminated. The launcher preserves
 a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an
 unexpected zero exit to 1.
+Startup failure or cancellation stops owned processes and persistent
+processes that have not signaled readiness. Already-ready persistent
+processes and reused services are left running. SIGINT or SIGTERM during
+startup exits with <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>. After readiness, signals follow
+normal shutdown.
 Spawn errors, readiness failures, and unexpected monitored exits print a
 concise summary with the constructed command and an existing configured
 run-log directory when available. Pass
@@ -922,6 +952,8 @@ and <code class="docutils literal notranslate"><span class="pre">Process.config<
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_deployment_profile"><code class="docutils literal notranslate"><span class="pre">load_deployment_profile()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.load_model_deployment"><code class="docutils literal notranslate"><span class="pre">load_model_deployment()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.has_ownership_marker"><code class="docutils literal notranslate"><span class="pre">has_ownership_marker()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.pid_on_port_checked"><code class="docutils literal notranslate"><span class="pre">pid_on_port_checked()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.ManagedProcess"><code class="docutils literal notranslate"><span class="pre">ManagedProcess()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel"><code class="docutils literal notranslate"><span class="pre">Parallel</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_launcher.Parallel.processes"><code class="docutils literal notranslate"><span class="pre">processes</span></code></a></li>

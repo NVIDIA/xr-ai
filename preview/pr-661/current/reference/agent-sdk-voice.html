@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -877,7 +879,7 @@ their configuration fingerprints can differ. From the repository root:</p>
 <span class="w">  </span>simple_vlm_example_model_servers
 </pre></div>
 </div>
-<p>It composes shared <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/speaker_stt.yaml</span></code>
+<p>It composes the <code class="docutils literal notranslate"><span class="pre">services/speaker-stt/speaker_stt.yaml</span></code>
 defaults with that sample’s <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code> placement
 and capacity overrides, waits for decoder warmup, and reuses matching warm
 instances. The sample’s model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> includes the speaker service. Stop the stack

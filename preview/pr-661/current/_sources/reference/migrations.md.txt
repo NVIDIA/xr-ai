@@ -17,6 +17,16 @@ before updating the checkout. Start the updated services before restarting
 workers; launchers can reuse a running service whose identity matches even when
 its application code predates the update.
 
+### Persistent services after startup failure
+
+Stacks using `launch_mode="persist"` now retain services that had signaled
+readiness when cleanup began after a startup failure or cancellation. Owned
+processes and unfinished persistent wrappers are still stopped. Persistent
+pip-backend vLLM can keep loading in its separate session after its wrapper
+stops. If you relied on startup failure to clear the entire model stack, run
+the sample's model command with
+`--stop` explicitly. Refer to {doc}`/guides/customizing-model-servers`.
+
 ### Nemotron 3 embedding model
 
 The embedding server now defaults to `nvidia/Nemotron-3-Embed-1B-BF16`; the NIM
@@ -58,6 +68,49 @@ Independently deployed NIM endpoints must serve the new model before using the
 updated NIM profile. For later model changes behind an unchanged profile, set
 an explicit model revision in `cache_key` and restart RAG. Do not change models
 while RAG is running; its document vectors must match query embeddings.
+
+(embedding-service-identity-migration)=
+### Embedding SDK identity and RAG cache contract
+
+`EmbeddingService` now requires `async model_identity() -> str | None`.
+Custom implementations must add this method to satisfy the runtime-checkable
+protocol and support RAG startup. Return a stable backing-model identifier when
+known, or `None` only when a successful lookup finds no identity metadata. Do
+not use an alias that can silently switch weights. Existing implementations
+without this method no longer satisfy the protocol.
+
+The built-in OpenAI-compatible client reads the matching model's `root` from
+`/v1/models`. HTTP failures, timeouts, invalid JSON, and malformed or ambiguous
+metadata raise `ModelServiceError`, exported by `xr_ai_models`, with the original
+transport or JSON error retained as the cause. Custom adapters must likewise
+raise this error for lookup failures instead of returning `None`.
+
+RAG permits retrieval without persistent cache reads or writes when a successful
+lookup returns `None`. It propagates lookup failures and fails startup: fix the
+endpoint, credentials, or metadata response before restarting. Cancellation
+continues to propagate. `cache_key` does not override missing identity or a
+failed lookup.
+
+The cache format now combines the reported identity, a hash of the resolved
+embedding role, manual `cache_key`, indexing settings, and document content.
+Existing caches are rebuilt once and can be deleted afterward. `cache_key`
+now supplements the role hash instead of replacing it. Unrelated LLM, VLM,
+or TTS edits and profile formatting changes do not rebuild the index.
+
+The reported identity is not a weight checksum. This repository's Docker
+launcher reports a resolved snapshot path; pip reports the Hugging Face
+repository ID. Switching backends can rebuild the cache, while a Hub revision
+change under the same pip model ID requires a new `cache_key`.
+
+The post-build check raises `ModelServiceError` if the reported identity changes,
+including appearing or disappearing, before saving or serving the vectors.
+A failed lookup also aborts startup. Metadata and embeddings are separate
+requests: matching before/after identities cannot detect a swap-and-restore
+or mixed replicas behind one endpoint. Every replica must remain on the same
+weights for the entire indexing run and serving lifetime. Health probes check
+availability, not model consistency. Stop RAG before changing models, bump
+`cache_key` if weights change under the same reported identity, and restart
+against the stable deployment.
 
 ### Shared accepted-query display
 
@@ -160,13 +213,25 @@ uv run --project model-servers simple_vlm_example_model_servers --stop
 Other samples have corresponding `<sample>_model_servers` commands. Keep
 `--gpu-profile NAME` for hardware selection. Pass the same profile to `--stop`
 when it overrides service ports. Remove `--models` and `--allow-anonymous`;
-local stacks require `HF_TOKEN`. Move custom server settings into shared
-defaults under `utils/xr-ai-model-server-stack/yaml/` or sample GPU overrides
+local stacks require `HF_TOKEN`. Move custom server settings into the
+service's own YAML under `services/` or sample GPU overrides
 under `agent-samples/<sample>/model-servers/yaml/`.
 
 The new stop plan covers only its selected services. Stop that plan before
 changing its configuration or switching samples. Refer to
 {doc}`/guides/customizing-model-servers` for the current workflow.
+
+### Standalone model-server defaults
+
+Sample model stacks now start from each service's own YAML under `services/`,
+so standalone launches use the values that stacks used. If you run these servers
+directly and depend on the earlier defaults, set them in your YAML:
+
+| Server | Now | Earlier |
+|---|---|---|
+| VLM and embedding | `enforce_eager: true` | `false` |
+| Omni | `max_model_len: 32768`, `video_num_frames: 64` | `131072`, `256` |
+| Pocket TTS | `device: cuda` | `auto` |
 
 ### Shared model-stack speaker filtering
 
@@ -231,11 +296,16 @@ previously not be turned off per call. Refer to {ref}`agent-sdk-models-thinking`
       default: true
   ```
 
-- **`thinking_budget`:** now sent as vLLM's `thinking_token_budget`, which
-  the server enforces, instead of `chat_template_kwargs.thinking_budget`, which
-  the Nemotron chat templates ignored. Budgets now cap reasoning, and are
-  omitted when reasoning is off. A vLLM server started without
-  `--reasoning-parser` rejects a request that sets one.
+- **`thinking_budget` call argument:** now sent as vLLM's
+  `thinking_token_budget` instead of `chat_template_kwargs.thinking_budget`,
+  which the Nemotron chat templates ignored. The argument is omitted when
+  reasoning is off. Enforcement requires server support and has been verified
+  on Nemotron Omni with vLLM's `--reasoning-parser nemotron_v3`; NIM budget
+  support has not been qualified. Other endpoints may reject or ignore it;
+  the SDK does not detect support or retry without the budget. Refer to
+  {ref}`agent-sdk-models-thinking`. Raw
+  `default_extras.chat_template_kwargs.thinking_budget` profile values are
+  forwarded unchanged, not migrated to the new field.
 - **Custom `LLMService` implementations:** `enable_thinking` now defaults to
   `None` instead of `False`. Treat `None` as the endpoint's configured default.
 - **Profiles with the legacy key:** no change is required. With a template-driven

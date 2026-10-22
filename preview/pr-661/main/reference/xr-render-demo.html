@@ -342,6 +342,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -401,6 +402,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -614,7 +616,7 @@ LOVR inherits the pin; <code class="docutils literal notranslate"><span class="p
 <p>If <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
 failing startup.</p>
-<p>The model-side fields live under <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code> and
+<p>The model-side fields live in the services’ own YAML under <code class="docutils literal notranslate"><span class="pre">services/</span></code> and
 <code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/model-servers/yaml/</span></code>. Set them
 to different GPUs so
 the XR compositor and the agentic LLM do not share a card.</p>

@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -691,12 +693,22 @@ the adapter’s <code class="docutils literal notranslate"><span class="pre">thi
 <td><p><code class="docutils literal notranslate"><span class="pre">cosmos3_nano_reasoner</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>unset</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> when <code class="docutils literal notranslate"><span class="pre">default</span></code> is set; otherwise only <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> is sent</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">chat_template</span></code> when <code class="docutils literal notranslate"><span class="pre">default</span></code> is set; otherwise only an explicit <code class="docutils literal notranslate"><span class="pre">enable_thinking=True</span></code> sends the switch. A supplied budget is sent unless reasoning is explicitly off.</p></td>
 <td><p>Profiles without a preset</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The per-call <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> is sent as <code class="docutils literal notranslate"><span class="pre">thinking_token_budget</span></code> for
+<code class="docutils literal notranslate"><span class="pre">chat_template</span></code> and unset controls unless reasoning is off. Budget enforcement
+requires support in the deployed model server, independently of support for
+the thinking switch. It has been verified on Nemotron Omni served by vLLM with
+<code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nemotron_v3</span></code>; NIM budget support has not been qualified.
+Other endpoints may reject or ignore the field. The SDK does not detect budget
+support or retry without it. Omitting <code class="docutils literal notranslate"><span class="pre">thinking_budget</span></code> (or passing <code class="docutils literal notranslate"><span class="pre">None</span></code>)
+leaves the thinking switch available without requesting a reasoning cap.
+Sample requests that explicitly pass a budget continue to send it; selecting
+a different endpoint profile does not independently disable that budget.</p>
 <p><code class="docutils literal notranslate"><span class="pre">default</span></code> is the endpoint’s reasoning state when a call does not choose one;
 <code class="docutils literal notranslate"><span class="pre">null</span></code> sends no switch and leaves the model’s own default. With <code class="docutils literal notranslate"><span class="pre">system_prompt</span></code>,
 a complete <code class="docutils literal notranslate"><span class="pre">detailed</span> <span class="pre">thinking</span> <span class="pre">on</span></code> or <code class="docutils literal notranslate"><span class="pre">off</span></code> line already in the system message

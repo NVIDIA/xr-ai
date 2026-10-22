@@ -64,6 +64,15 @@ this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
 command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
+If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with `--stop` first so the new settings take
+effect. You can also use `--stop` to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use `--stop` once it is listening to clear it.
+
 On startup failure, merged server YAML remains in a private `model-configs-*`
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the
@@ -111,19 +120,19 @@ utility; sample code imports only public XR AI APIs.
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Shared server defaults | `utils/xr-ai-model-server-stack/yaml/*.yaml` | Models, images, ports, cache paths, and common runtime settings |
+| Service defaults | `services/<service>/<entry>.yaml` | Models, images, ports, cache paths, and common runtime settings |
 | Sample GPU profile | `agent-samples/<sample>/model-servers/yaml/<gpu-profile>.yaml` | Placement, memory budgets, concurrency, and workload overrides for that sample |
 | Model selection | `agent-samples/<sample>/model-servers/main.py` | Explicit list of required local servers |
 | Consumer profile | `agent-samples/<sample>/yaml/models*.json` | Client adapters and endpoints used by workers and capability services |
 
-The launcher combines each server's shared defaults with its entry in the
+The launcher combines each server's service defaults with its entry in the
 selected sample GPU profile. Sample values replace whole top-level fields;
 there is no recursive inheritance. For example, a `hf_overrides` mapping
 replaces the shared mapping entirely. Every selected server must have a
 mapping in the profile, including `{}` if no overrides are needed.
 
 The resulting complete YAML files are temporary startup inputs to the existing
-service commands. Cache paths in shared defaults resolve relative to the shared
+service commands. Cache paths in service defaults resolve relative to the service
 YAML; a sample `model_cache` override resolves relative to that sample profile.
 The helper makes those paths absolute before launching services. Other relative
 path settings must be supplied as absolute paths when added to an override.
@@ -163,8 +172,8 @@ hardware and inspect vLLM's reported token capacity and concurrency.
 
 ## Change a model or endpoint
 
-Stop models before changing shared defaults, sample overrides, or ports. A
-shared default edit affects every sample that uses that server. Keep each
+Stop models before changing service defaults, sample overrides, or ports. A
+service default edit affects every sample and standalone launch that uses that server. Keep each
 consumer profile's model adapters and endpoints synchronized with the service.
 Consumer profiles do not need deployment ownership objects; the convenience
 launcher's explicit server list controls local startup and shutdown.
@@ -202,5 +211,15 @@ when changing the endpoint.
 For a hosted provider without a health route, set `readiness: none` in the
 embedding role's `endpoint`. Otherwise use `readiness: health` and the
 provider's `health_path`. Omitting these settings probes `/health`, which can
-prevent RAG startup when that route is absent. Refer to
-{doc}`deploying-with-nim` for native Riva speech and NIM configuration.
+prevent RAG startup when that route is absent.
+
+`readiness: none` disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful `GET /v1/models` for model
+identity discovery during indexing, using the embedding role's credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing `root` permits indexing without
+persistent caching, so documents are re-embedded on every startup. `cache_key`
+does not override missing metadata. Refer to {ref}`embedding-service-identity-migration`
+for the identity contract and {doc}`deploying-with-nim` for native Riva speech
+and NIM configuration.

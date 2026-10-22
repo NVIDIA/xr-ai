@@ -317,6 +317,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -376,6 +377,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -505,6 +507,14 @@ profile overrides ports, pass that same <code class="docutils literal notranslat
 this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to <a class="reference internal" href="../reference/command-line.html"><span class="doc">Command-line reference</span></a> for each sample’s
 command. Each launcher has only <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code>, besides help.</p>
+<p>If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> first so the new settings take
+effect. You can also use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> once it is listening to clear it.</p>
 <p>On startup failure, merged server YAML remains in a private <code class="docutils literal notranslate"><span class="pre">model-configs-*</span></code>
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the
@@ -556,8 +566,8 @@ utility; sample code imports only public XR AI APIs.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Shared server defaults</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/*.yaml</span></code></p></td>
+<tr class="row-even"><td><p>Service defaults</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services/&lt;service&gt;/&lt;entry&gt;.yaml</span></code></p></td>
 <td><p>Models, images, ports, cache paths, and common runtime settings</p></td>
 </tr>
 <tr class="row-odd"><td><p>Sample GPU profile</p></td>
@@ -575,13 +585,13 @@ utility; sample code imports only public XR AI APIs.</p>
 </tbody>
 </table>
 </div>
-<p>The launcher combines each server’s shared defaults with its entry in the
+<p>The launcher combines each server’s service defaults with its entry in the
 selected sample GPU profile. Sample values replace whole top-level fields;
 there is no recursive inheritance. For example, a <code class="docutils literal notranslate"><span class="pre">hf_overrides</span></code> mapping
 replaces the shared mapping entirely. Every selected server must have a
 mapping in the profile, including <code class="docutils literal notranslate"><span class="pre">{}</span></code> if no overrides are needed.</p>
 <p>The resulting complete YAML files are temporary startup inputs to the existing
-service commands. Cache paths in shared defaults resolve relative to the shared
+service commands. Cache paths in service defaults resolve relative to the service
 YAML; a sample <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> override resolves relative to that sample profile.
 The helper makes those paths absolute before launching services. Other relative
 path settings must be supplied as absolute paths when added to an override.
@@ -617,8 +627,8 @@ hardware and inspect vLLM’s reported token capacity and concurrency.</p>
 </section>
 <section id="change-a-model-or-endpoint">
 <h2>Change a model or endpoint<a class="headerlink" href="#change-a-model-or-endpoint" title="Link to this heading">#</a></h2>
-<p>Stop models before changing shared defaults, sample overrides, or ports. A
-shared default edit affects every sample that uses that server. Keep each
+<p>Stop models before changing service defaults, sample overrides, or ports. A
+service default edit affects every sample and standalone launch that uses that server. Keep each
 consumer profile’s model adapters and endpoints synchronized with the service.
 Consumer profiles do not need deployment ownership objects; the convenience
 launcher’s explicit server list controls local startup and shutdown.</p>
@@ -651,8 +661,17 @@ when changing the endpoint.</p>
 <p>For a hosted provider without a health route, set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> in the
 embedding role’s <code class="docutils literal notranslate"><span class="pre">endpoint</span></code>. Otherwise use <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code> and the
 provider’s <code class="docutils literal notranslate"><span class="pre">health_path</span></code>. Omitting these settings probes <code class="docutils literal notranslate"><span class="pre">/health</span></code>, which can
-prevent RAG startup when that route is absent. Refer to
-<a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech and NIM configuration.</p>
+prevent RAG startup when that route is absent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code> disables only the health probe. The OpenAI-compatible
+embedding adapter still requires a successful <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/v1/models</span></code> for model
+identity discovery during indexing, using the embedding role’s credentials.
+HTTP errors (including 401 and 404), transport failures, and invalid metadata
+abort startup; fix the endpoint or its access settings before retrying. A
+successful response with no matching backing <code class="docutils literal notranslate"><span class="pre">root</span></code> permits indexing without
+persistent caching, so documents are re-embedded on every startup. <code class="docutils literal notranslate"><span class="pre">cache_key</span></code>
+does not override missing metadata. Refer to <a class="reference internal" href="../reference/migrations.html#embedding-service-identity-migration"><span class="std std-ref">Embedding SDK identity and RAG cache contract</span></a>
+for the identity contract and <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a> for native Riva speech
+and NIM configuration.</p>
 </section>
 </section>
 

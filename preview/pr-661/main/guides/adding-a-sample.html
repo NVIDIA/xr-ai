@@ -342,6 +342,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-conversation.html">xr-ai-conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-routing.html">xr-ai-routing</a></li>
@@ -401,6 +402,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_launcher/index.html">xr_ai_launcher</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_voicegate/index.html">xr_ai_voicegate</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_web_events/index.html">xr_ai_web_events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_conversation/index.html">xr_ai_conversation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/python/xr_ai_model_server_stack/index.html">xr_ai_model_server_stack</a></li>
 </ul>
 </details></li>
@@ -546,8 +548,8 @@ entry point.</p>
 adapter and endpoint spec, with optional deployment metadata. Consumer samples
 omit <code class="docutils literal notranslate"><span class="pre">deployment</span></code> and connect to configured endpoints. A sample-local
 <code class="docutils literal notranslate"><span class="pre">model-servers/</span></code> convenience launcher declares the required local servers
-separately and owns small GPU-profile overrides; shared defaults live under
-<code class="docutils literal notranslate"><span class="pre">utils/xr-ai-model-server-stack/yaml/</span></code>. For startup probes, refer to
+separately and owns small GPU-profile overrides; service defaults live in
+<code class="docutils literal notranslate"><span class="pre">services/&lt;service&gt;/</span></code>. For startup probes, refer to
 <a class="reference internal" href="../reference/python/xr_ai_voice/index.html#xr_ai_voice.VoiceAgent" title="xr_ai_voice.VoiceAgent"><code class="xref py py-class docutils literal notranslate"><span class="pre">VoiceAgent</span></code></a> and <a class="reference internal" href="../components/launcher-and-process-model.html#consumer-model-readiness"><span class="std std-ref">Consumer model readiness</span></a>.
 Worker-only profiles may remain in the legacy flat JSON or YAML shape; a profile
 read through the generic launcher deployment loaders requires the
