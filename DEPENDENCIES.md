@@ -979,6 +979,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
     - `xr-render-demo-model-servers` → [`xr-render-demo-model-servers`](agent-samples/xr-render-demo/model-servers/) (local, editable)
     - `xr-render-scene` → [`xr-render-scene`](agent-samples/xr-render-demo/scene/) (local, editable)
     - `xr-render-demo-worker` → [`xr-render-demo-worker`](agent-samples/xr-render-demo/worker/) (local, editable)
+    - `xr-ai-conversation` → [`xr-ai-conversation`](agent-sdk/xr-ai-conversation/) (local, editable)
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
     - `xr-ai-models[riva,speaker]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
     - `xr-ai-routing` → [`xr-ai-routing`](agent-sdk/xr-ai-routing/) (local, editable)

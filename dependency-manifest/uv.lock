@@ -7757,6 +7757,30 @@ requires-dist = [
 ]
 
 [[package]]
+name = "xr-ai-conversation"
+version = "0.1.0"
+source = { editable = "../agent-sdk/xr-ai-conversation" }
+dependencies = [
+    { name = "nemo-relay" },
+    { name = "pydantic" },
+    { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-models" },
+    { name = "xr-ai-routing" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nemo-relay", specifier = ">=0.7.2,<0.8" },
+    { name = "pydantic", specifier = ">=2.10" },
+    { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-models", editable = "../agent-sdk/xr-ai-models" },
+    { name = "xr-ai-routing", editable = "../agent-sdk/xr-ai-routing" },
+]
+
+[package.metadata.requires-dev]
+eval = [{ name = "pyyaml", specifier = ">=6.0" }]
+
+[[package]]
 name = "xr-ai-dependency-manifest"
 version = "0.0.0"
 source = { virtual = "." }
@@ -7783,6 +7807,7 @@ repository = [
     { name = "tea-making-sample-model-servers" },
     { name = "tea-making-worker" },
     { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-conversation" },
     { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-launcher" },
@@ -7841,6 +7866,7 @@ requires-dist = [
     { name = "tea-making-worker", marker = "extra == 'repository'", editable = "../agent-samples/tea-making-sample/worker" },
     { name = "vlm-server", marker = "extra == 'vllm'", editable = "../services/vlm-server" },
     { name = "xr-ai-agent-runtime", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-conversation", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-conversation" },
     { name = "xr-ai-gpu", marker = "extra == 'repository'", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", marker = "extra == 'repository'", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-launcher", marker = "extra == 'repository'", editable = "../utils/xr-ai-launcher" },
@@ -7989,6 +8015,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "xr-ai-agent-runtime" },
+    { name = "xr-ai-conversation" },
     { name = "xr-ai-gpu" },
     { name = "xr-ai-hub-client" },
     { name = "xr-ai-launcher" },
@@ -8022,6 +8049,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "xr-ai-agent-runtime", editable = "../agent-sdk/xr-ai-runtime" },
+    { name = "xr-ai-conversation", editable = "../agent-sdk/xr-ai-conversation" },
     { name = "xr-ai-gpu", editable = "../utils/xr-ai-gpu" },
     { name = "xr-ai-hub-client", editable = "../agent-sdk/xr-ai-hub" },
     { name = "xr-ai-launcher", editable = "../utils/xr-ai-launcher" },

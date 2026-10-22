@@ -33,6 +33,7 @@ repository = [
     "xr-render-demo-model-servers",
     "xr-render-scene",
     "xr-render-demo-worker",
+    "xr-ai-conversation",
     "xr-ai-hub-client",
     "xr-ai-models[riva,speaker]",
     "xr-ai-routing",
@@ -89,6 +90,7 @@ conflicts = [[{ extra = "repository" }, { extra = "vllm" }]]
 "xr-render-demo-model-servers"            = { path = "../agent-samples/xr-render-demo/model-servers", editable = true }
 "xr-render-scene"                         = { path = "../agent-samples/xr-render-demo/scene", editable = true }
 "xr-render-demo-worker"                   = { path = "../agent-samples/xr-render-demo/worker", editable = true }
+"xr-ai-conversation"                      = { path = "../agent-sdk/xr-ai-conversation", editable = true }
 "xr-ai-hub-client"                        = { path = "../agent-sdk/xr-ai-hub", editable = true }
 "xr-ai-models"                            = { path = "../agent-sdk/xr-ai-models", editable = true }
 "xr-ai-routing"                           = { path = "../agent-sdk/xr-ai-routing", editable = true }
