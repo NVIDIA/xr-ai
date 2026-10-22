@@ -166,7 +166,7 @@ def test_shipped_tea_identification_requires_an_affirmative_answer(answer, shoul
 
 
 def test_tea_identification_eval_uses_the_shipped_guide():
-    path = _SAMPLE / "eval/tea/identification.yaml"
+    path = _SAMPLE / "eval/tea-guide/label_reading_scenario.yaml"
     manifest = yaml.safe_load(path.read_text())
     guide = load_guide(path.parent / manifest["guide_path"])
     assert guide.path == _SAMPLE / "examples/tea-making/guide.yaml"

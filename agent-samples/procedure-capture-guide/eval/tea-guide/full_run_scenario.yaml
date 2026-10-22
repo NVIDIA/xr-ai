@@ -3,12 +3,12 @@
 
 # Evaluation scenario for eval/guide.py, not a procedure guide definition.
 # Follow the successful path through the five-minute timer, restart, and stop.
-# This runs independently so a recognition failure in the negative scenario
+# This runs independently so a failure in the step-verification scenario
 # cannot hide timer and lifecycle coverage.
 guides_dir: ../../guides
 guide: Tea Making
 fail_fast: true
-scenes_file: scenes.yaml
+scenes_file: image_scenes.yaml
 actions:
   - {action: image, scene: chamomile}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}

@@ -28,15 +28,15 @@ from pathlib import Path
 import nemo_relay
 import yaml
 from _recorded_camera import capture_frames, feed_recording
+from _scene_rendering import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
 from loguru import logger
-from PIL import Image, ImageDraw
+from PIL import Image
 from procedure_capture_guide_worker.config import load_config
 from procedure_capture_guide_worker.guide._workflow_spec import parse_workflow
 from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide, load_guide
-from tea._scenes import load_scenes, render_scene
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_models import load_models_config, make_llm, make_vlm
@@ -56,7 +56,7 @@ def _runtime_hashes(models_config: Path) -> dict[str, str]:
              _SAMPLE / "yaml/guide-agent-config.yaml", Path(__file__).resolve(),
              Path(__file__).with_name("_recorded_camera.py").resolve()}
     paths.update((Path(__file__).parent / name).resolve()
-                 for name in ("tea/_scenes.py", "_visual_expectations.py"))
+                 for name in ("_scene_rendering.py", "_visual_expectations.py"))
     package = _SAMPLE / "worker/procedure_capture_guide_worker"
     for pattern in ("*.py", "*.txt"):
         paths.update(package.rglob(pattern))
@@ -235,15 +235,7 @@ async def evaluate(manifest_path: Path | None, output: Path, *, packet: Path | N
     output.mkdir(parents=True, exist_ok=False)
     fixtures = {}
     for name, scene in ({} if packet else load_scenes(manifest_path, manifest)).items():
-        if "kind" in scene:
-            image = render_scene(scene)
-        else:
-            image = Image.new("RGB", (640, 480), "white")
-            draw = ImageDraw.Draw(image)
-            if "rectangle" in scene:
-                draw.rectangle((120, 100, 520, 380), fill=scene["rectangle"])
-            if "text" in scene:
-                draw.multiline_text((40, 40), scene["text"], fill="black", font_size=42, spacing=20)
+        image = render_scene(scene)
         path = output / f"{name}.png"
         image.save(path)
         fixtures[name] = path.resolve()

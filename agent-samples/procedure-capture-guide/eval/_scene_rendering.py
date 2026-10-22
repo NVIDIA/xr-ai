@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Generate controlled tea-making images for this sample's evaluation scripts.
+"""Render synthetic image fixtures shared by the visual and guide evaluators.
 
-Draw packet labels, temperature displays, and vessel states from scene descriptions.
-These schematic fixtures isolate visual distinctions without using demonstration
-photos. Expected answers belong to the case manifest, never to the renderer.
+Draw label cards, colored rectangles, packets, temperature displays, and vessel
+states from scene descriptions. Expected answers belong to the case manifest,
+never to the renderer.
 """
 
 from pathlib import Path
@@ -23,6 +23,14 @@ def load_scenes(manifest_path: Path, manifest: dict) -> dict:
 
 
 def render_scene(scene: dict) -> Image.Image:
+    if "kind" not in scene:
+        image = Image.new("RGB", (640, 480), "white")
+        draw = ImageDraw.Draw(image)
+        if "rectangle" in scene:
+            draw.rectangle((120, 100, 520, 380), fill=scene["rectangle"])
+        if "text" in scene:
+            draw.multiline_text((40, 40), scene["text"], fill="black", font_size=42, spacing=20)
+        return image
     image = Image.new("RGB", (800, 600), "#eeeae1")
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 500, 800, 600), fill="#c9b79c")

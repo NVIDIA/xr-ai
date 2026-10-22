@@ -22,21 +22,20 @@ _SAMPLE = Path(__file__).resolve().parents[1] / "agent-samples/procedure-capture
 
 @pytest.fixture
 def evaluator(monkeypatch):
-    monkeypatch.syspath_prepend(str(_SAMPLE))
     monkeypatch.syspath_prepend(str(_SAMPLE / "worker"))
     monkeypatch.syspath_prepend(str(_SAMPLE / "eval"))
-    spec = importlib.util.spec_from_file_location("eval.tea.visual", _SAMPLE / "eval/tea/visual.py")
+    spec = importlib.util.spec_from_file_location("visual_eval", _SAMPLE / "eval/visual.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
-    cases, guide = evaluator.prepare(_SAMPLE / "eval/tea/visual_cases.yaml", tmp_path / "images")
+    cases, guide = evaluator.prepare(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "images")
     assert len(cases) == 25
     assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
     assert guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"] == 300
-    scenes = yaml.safe_load((_SAMPLE / "eval/tea/scenes.yaml").read_text())
+    scenes = yaml.safe_load((_SAMPLE / "eval/tea-guide/image_scenes.yaml").read_text())
     for scene in scenes.values():
         if scene["kind"] == "packet":
             assert set(scene) <= {"kind", "blend", "color", "covered"}
@@ -54,21 +53,22 @@ def test_scenes_are_reproducible_and_distinct(evaluator, tmp_path):
     assert len(provenance["images"]) == len(cases)
     assert provenance["guide_sha256"] == guide.sha256
     with pytest.raises(FileExistsError):
-        evaluator.prepare(_SAMPLE / "eval/tea/visual_cases.yaml", tmp_path / "images")
+        evaluator.prepare(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "images")
 
 
-def test_tea_visual_module_entry_point_renders_without_models(tmp_path, monkeypatch):
+def test_visual_entry_point_renders_tea_manifest_without_models(tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONPATH", str(_SAMPLE / "worker"))
     output = tmp_path / "preview"
     result = subprocess.run(
-        [sys.executable, "-m", "eval.tea.visual", "--render-only", "--output", str(output)],
+        [sys.executable, "eval/visual.py", "--manifest", "eval/tea-guide/visual_expectations.yaml",
+         "--render-only", "--output", str(output)],
         cwd=_SAMPLE, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     provenance = json.loads((output / "provenance.json").read_text())
     assert len(provenance["images"]) == 25
     assert str(_SAMPLE / "guides/tea-making.guide.yaml") in provenance["source_sha256"]
-    assert str(_SAMPLE / "eval/tea/_scenes.py") in provenance["source_sha256"]
+    assert str(_SAMPLE / "eval/_scene_rendering.py") in provenance["source_sha256"]
     assert str(_SAMPLE / "eval/_visual_expectations.py") in provenance["source_sha256"]
 
 
@@ -107,8 +107,8 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
     requests = []
     fake_vlm = SimpleNamespace(close=AsyncMock())
     monkeypatch.setattr(evaluator, "make_vlm", lambda *_args: fake_vlm)
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea/visual_cases.yaml").read_text())
-    scenes = evaluator.load_scenes(_SAMPLE / "eval/tea/visual_cases.yaml", manifest)
+    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
+    scenes = evaluator.load_scenes(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", manifest)
     canonical = []
     for case in manifest["cases"]:
         if case["step"] == "heat_water" and case["answer"] != "UNKNOWN":
@@ -132,7 +132,7 @@ async def test_visual_evaluator_uses_guide_question_not_answer(evaluator, tmp_pa
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", FakeTool)
     output = tmp_path / "visual"
-    summary = await evaluator.evaluate(_SAMPLE / "eval/tea/visual_cases.yaml", output,
+    summary = await evaluator.evaluate(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", output,
                                       _SAMPLE / "yaml/models.json", 2, 1)
     assert summary["attempts"] == 50
     assert summary["false_rejects"] == (0 if correct else 10)
@@ -161,7 +161,7 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
             raise TimeoutError("simulated")
 
     monkeypatch.setattr(evaluator, "ImageQueryTool", TimeoutTool)
-    summary = await evaluator.evaluate(_SAMPLE / "eval/tea/visual_cases.yaml", tmp_path / "timeouts",
+    summary = await evaluator.evaluate(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", tmp_path / "timeouts",
                                       _SAMPLE / "yaml/models.json", 1, 1)
     assert summary["unavailable"] == 25
     assert summary["scored"] == summary["gate_correct"] == 0
@@ -169,26 +169,28 @@ async def test_timeout_is_not_a_correct_negative(evaluator, tmp_path, monkeypatc
     fake_vlm.close.assert_awaited_once()
 
 
-@pytest.mark.parametrize("filename", ["negative_and_recovery.yaml", "completion_and_lifecycle.yaml"])
+@pytest.mark.parametrize("filename", ["step_verification_scenario.yaml", "full_run_scenario.yaml"])
 def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
-    path = _SAMPLE / "eval/tea" / filename
+    path = _SAMPLE / "eval/tea-guide" / filename
     manifest = yaml.safe_load(path.read_text())
     guide = evaluator.select_guide(path.parent / manifest["guides_dir"], manifest["guide"])
     assert guide.path == _SAMPLE / "guides/tea-making.guide.yaml"
     scenes = evaluator.load_scenes(path, manifest)
     assert all(action["scene"] in scenes for action in manifest["actions"] if action["action"] == "image")
     utterances = [action for action in manifest["actions"] if action["action"] == "say"]
-    timer = next(action for action in utterances if action["tools"] == ["clock__timer"])
-    assert timer["arguments"] == [{}]
     assert any(action["text"] == "Stop guide" for action in utterances)
-    assert sum(action["text"] == "Start guide" for action in utterances) == 2
     waits = [action for action in manifest["actions"] if action["action"] == "wait_speech"]
-    completion = next(action for action in waits if "Five minutes" in action["expect"])
-    assert completion["timeout_s"] > guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"]
     for action in manifest["actions"]:
         if "expect" in action:
             re.compile(action["expect"])
-    if filename == "negative_and_recovery.yaml":
+    if filename == "step_verification_scenario.yaml":
+        assert sum(action["text"] == "Start guide" for action in utterances) == 1
+        assert not any("clock__timer" in action["tools"] for action in utterances)
+        assert not any("Five minutes" in action["expect"] for action in waits)
+        assert len(waits) == 3
+        assert manifest["actions"][-3]["expect"] == "The tea bag is visibly in the water"
+        assert manifest["actions"][-2]["text"] == "Stop guide"
+        assert manifest["actions"][-1]["expect"] == "inactive"
         cases = evaluator.visual_cases(yaml.safe_load((path.parent / manifest["visual_cases_file"]).read_text()))
         scene = None
         for action in manifest["actions"]:
@@ -197,12 +199,20 @@ def test_flow_uses_shipped_guide_and_control_contract(evaluator, filename):
             elif action["action"] == "observe":
                 assert "answers" not in action
                 assert cases[action["case"]]["scene"] == scene
-    assert all(action["duration_s"] >= 10 for action in manifest["actions"] if action["action"] == "quiet")
+    else:
+        timer = next(action for action in utterances if action["tools"] == ["clock__timer"])
+        assert timer["arguments"] == [{}]
+        assert sum(action["text"] == "Start guide" for action in utterances) == 2
+        completion = next(action for action in waits if "Five minutes" in action["expect"])
+        assert completion["timeout_s"] > guide.workflow.steps["steep_timer"].trigger.arguments["duration_s"]
+        assert completion["minimum_elapsed_s"] == 295
+        quiet = [action for action in manifest["actions"] if action["action"] == "quiet"]
+        assert len(quiet) == 1 and quiet[0]["duration_s"] >= 10
 
 
 @pytest.mark.parametrize("filename,fail_fast", [
-    ("tea/negative_and_recovery.yaml", True),
-    ("tea/completion_and_lifecycle.yaml", True),
+    ("tea-guide/step_verification_scenario.yaml", True),
+    ("tea-guide/full_run_scenario.yaml", True),
     ("guide_cases.yaml", True),
     ("guide_routing.yaml", False),
 ])
@@ -224,8 +234,8 @@ async def test_manifest_rejects_non_boolean_fail_fast(evaluator, tmp_path, value
 
 
 def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea/visual_cases.yaml").read_text())
-    manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "eval/tea/visual_cases.yaml", manifest)
+    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
+    manifest["scenes"] = evaluator.load_scenes(_SAMPLE / "eval/tea-guide/visual_expectations.yaml", manifest)
     del manifest["scenes_file"]
     manifest["guides_dir"] = str(_SAMPLE / "guides")
     path = tmp_path / "inline.yaml"
@@ -249,9 +259,9 @@ def test_inline_scene_manifest_preserves_provenance(evaluator, tmp_path):
     ("chamomile", "YES\n", True, True),
 ])
 def test_recognition_and_runtime_gate_have_distinct_contracts(evaluator, scene, text, recognition, accepted):
-    manifest = yaml.safe_load((_SAMPLE / "eval/tea/visual_cases.yaml").read_text())
+    manifest = yaml.safe_load((_SAMPLE / "eval/tea-guide/visual_expectations.yaml").read_text())
     case = evaluator.visual_cases(manifest)[scene]
-    guide = evaluator.select_guide(_SAMPLE / "eval/tea" / manifest["guides_dir"], manifest["guide"])
+    guide = evaluator.select_guide(_SAMPLE / "eval/tea-guide" / manifest["guides_dir"], manifest["guide"])
     pattern = guide.workflow.steps[case["step"]].evidence.pattern
     row = evaluator.score(case, pattern, text, True)
     assert row["recognition"] is recognition

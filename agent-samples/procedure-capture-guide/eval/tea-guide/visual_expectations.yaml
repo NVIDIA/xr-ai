@@ -7,7 +7,7 @@
 # the shipped guide's question reach the configured VLM; these expectations never do.
 guides_dir: ../../guides
 guide: Tea Making
-scenes_file: scenes.yaml
+scenes_file: image_scenes.yaml
 cases:
   - {scene: breakfast, step: identify, answer: 'NO', accept: false}
   - {scene: green, step: identify, answer: 'NO', accept: false}

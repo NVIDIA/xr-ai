@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Evaluate the shipped tea-making guide's visual checks on generated tea scenes.
+"""Evaluate a guide's visual checks against a manifest of generated image scenes.
 
 Run each step independently so an early recognition failure cannot hide later
 cases. Save image and prompt provenance, raw responses, and separate recognition
@@ -20,16 +20,14 @@ import time
 from pathlib import Path
 
 import yaml
+from _scene_rendering import load_scenes, render_scene
+from _visual_expectations import matches_answer, visual_cases
 from procedure_capture_guide_worker.guide.guides import select_guide
 from xr_ai_models import load_models_config, make_vlm
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
 
-from eval._visual_expectations import matches_answer, visual_cases
-
-from ._scenes import load_scenes, render_scene
-
-_SAMPLE = Path(__file__).resolve().parents[2]
+_SAMPLE = Path(__file__).resolve().parents[1]
 _PROMPT = _SAMPLE / "worker/procedure_capture_guide_worker/guide/prompts/guide_vision.txt"
 
 
@@ -72,8 +70,8 @@ def prepare(manifest_path: Path, output: Path) -> tuple:
             raise ValueError("visual cases require a current_view step with an evidence gate")
         if case["scene"] not in scenes:
             raise ValueError("case scene must name a safe, defined scene")
-    sources = [manifest_path, Path(__file__), Path(__file__).with_name("_scenes.py"),
-               Path(__file__).parent.parent / "_visual_expectations.py", _PROMPT, guide.path]
+    sources = [manifest_path, Path(__file__), Path(__file__).with_name("_scene_rendering.py"),
+               Path(__file__).with_name("_visual_expectations.py"), _PROMPT, guide.path]
     if manifest.get("scenes_file") is not None:
         sources.append(manifest_path.parent / manifest["scenes_file"])
     source_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
@@ -153,7 +151,7 @@ async def evaluate(manifest_path: Path, output: Path, models_path: Path, repeats
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=Path(__file__).with_name("visual_cases.yaml"))
+    parser.add_argument("--manifest", type=Path, required=True, help="Visual expectations and image-scene definitions")
     parser.add_argument("--models", type=Path, default=_SAMPLE / "yaml/models.json")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repeats", type=int, default=3)

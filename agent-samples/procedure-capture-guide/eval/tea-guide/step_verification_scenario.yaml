@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Evaluation scenario for eval/guide.py, not a procedure guide definition.
-# Present incorrect scenes before correct ones to test rejection and recovery,
-# then exercise completion, restart, and stop using the shipped Tea Making guide.
+# Present incorrect scenes before correct ones for each visual step, checking
+# that advancement is blocked until verification succeeds. Stop before the timer;
+# full_run_scenario.yaml covers timed completion, restart, and post-stop silence.
 guides_dir: ../../guides
 guide: Tea Making
 fail_fast: true
-scenes_file: scenes.yaml
-visual_cases_file: visual_cases.yaml
+scenes_file: image_scenes.yaml
+visual_cases_file: visual_expectations.yaml
 actions:
   - {action: image, scene: breakfast}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
@@ -40,14 +41,5 @@ actions:
   - {action: observe, case: above}
   - {action: image, scene: immersed}
   - {action: wait_speech, expect: The tea bag is visibly in the water}
-  - {action: say, text: Next, expect: five-minute steeping timer is now running, tools: [workflow__advance], arguments: [{skip: false}]}
-  - {action: say, text: 'How much time remains?', tools: [clock__timer], arguments: [{}]}
-  - {action: say, text: Next, expect: not complete, tools: [workflow__advance], arguments: [{skip: false}]}
-  - {action: wait_speech, expect: Five minutes have elapsed, timeout_s: 330}
-  - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
-  - {action: image, scene: breakfast}
-  - {action: say, text: Start guide, expect: Show the tea packet, tools: [workflow__restart]}
   - {action: say, text: Stop guide, expect: Guide stopped, tools: [workflow__reset]}
-  - {action: image, scene: chamomile}
-  - {action: quiet, duration_s: 10}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}
