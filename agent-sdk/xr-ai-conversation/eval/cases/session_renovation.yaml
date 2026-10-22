@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Held-out session: a different domain and entities from the compaction
+# prompts and the lab session, with the same stresses (corrections, an
+# oversized pasted quote, and site updates that supersede earlier ones).
+participant: homeowner
+topic: site.updates
+budgets:
+  dialogue_bytes: 3000
+  topic_bytes: 2000
+samples: 3
+
+turns:
+  - user: We're renovating the kitchen; the contractor's lead is Marisol and the permit number is PRM-5531.
+  - user: Paint the cabinets in Sage Mist, colour code SM-204.
+    topic_update: Demolition finished; old cabinets removed.
+  - user: The wall tiles should be 30 by 60 centimetres.
+  - user: What order do trades usually work in for a kitchen refit?
+    topic_update: Electrician scheduled for Wednesday morning.
+  - user:
+      prefix: "Here is the full itemised quote; the total is on the last line:"
+      repeat: "Line {index:03d}: fixings and sundries, 1 unit, 4.{digit}0 EUR"
+      count: 300
+      suffix: "QUOTE TOTAL: 18,500 EUR including VAT"
+    topic_update: Countertop delivery delayed to next Friday.
+  - user: "Change of plan: make the wall tiles 60 by 120 centimetres instead."
+  - user: Should we seal the grout, and how soon after tiling?
+    topic_update:
+      prefix: "Moisture meter readings follow:"
+      repeat: "wall-{index}: {digit}.{digit}%"
+      count: 500
+  - user: Please keep all measurements metric.
+    topic_update: Countertop delivered and installed today.
+  - user: The plumber can only come on Thursdays.
+  - user: How long does cabinet paint need before rehanging doors?
+
+probes:
+  - name: contractor-lead
+    question: Who is the contractor's lead? Answer with only the name.
+    any_of: [marisol]
+    accept: ["Marisol"]
+    reject: ["Marissa"]
+  - name: permit-number
+    question: What is the permit number? Answer with only the number.
+    any_of: [prm-5531]
+    accept: ["PRM-5531"]
+    reject: ["PRM-5513"]
+  - name: paint-code
+    question: What colour code is the cabinet paint? Answer with only the code.
+    any_of: [sm-204]
+    accept: ["SM-204"]
+    reject: ["SM-240"]
+  - name: corrected-tile-size
+    question: What size are the wall tiles now? Answer with only the size.
+    any_of: ["60 by 120", "60 x 120", "60x120", "60 × 120", "60×120"]
+    none_of: ["30 by 60", "30 x 60", "30x60", "30 × 60", "30×60"]
+    accept: ["60 by 120 centimetres", "60 x 120 cm", "60×120 cm"]
+    reject: ["30 by 60 centimetres"]
+  - name: quote-total
+    question: What is the quote total? Answer with only the amount.
+    any_of: ["18,500", "18500", "18.500"]
+    accept: ["18,500 EUR"]
+    reject: ["1,850 EUR"]
+  - name: countertop-latest-state
+    question: Has the countertop been installed? Answer yes or no.
+    in_prompt: [installed]
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes."]
+    reject: ["No, it was delayed."]
+  - name: plumber-day
+    question: Which day can the plumber come? Answer with only the day.
+    any_of: [thursday, thursdays]
+    accept: ["Thursdays"]
+    reject: ["Wednesday"]
+  - name: unit-preference
+    question: Which measurement system should you use with me? Answer with one word.
+    any_of: [metric]
+    none_of: [imperial]
+    accept: ["Metric"]
+    reject: ["Imperial"]

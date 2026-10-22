@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# One long session that forces repeated dialogue and topic compaction: facts
+# spread over many turns, a correction, one exchange far larger than the whole
+# dialogue budget, and one topic update far larger than its topic budget.
+participant: priya
+topic: lab.notes
+budgets:
+  dialogue_bytes: 3000
+  topic_bytes: 3000
+samples: 3
+
+turns:
+  - user: Hi, my name is Priya and I'm setting up the lab for the spectrometer calibration.
+  - user: Note that I'm allergic to latex, so only nitrile gloves for me.
+    topic_update: Detector temperature stable at -10.2 C.
+  - user: The calibration meeting is on Monday at 3pm in room B214.
+  - user: What is a good order to warm up a spectrometer and the cooling loop?
+    topic_update: Cooling loop flow 2.1 L/min, nominal.
+  - user: We use the reference lamp serial HL-2000-77 for wavelength checks.
+    topic_update: Bench 3 has a cracked cuvette holder; do not use bench 3.
+  - user:
+      prefix: "Here is the full controller log, the important bit is at the end:"
+      repeat: "[{index:05d}] INFO heartbeat ok temp=21.{digit}C"
+      count: 400
+      suffix: "[00400] ERROR interlock tripped code E-4471"
+    topic_update:
+      prefix: "Raw detector dump follows:"
+      repeat: "px{index}=0.{digit}{digit}"
+      count: 700
+  - user: "Correction: the meeting moved to Tuesday, same time and room."
+  - user: Can you explain what dark-current subtraction does, briefly?
+    topic_update: Bench 3 holder replaced; bench 3 is usable again.
+  - user: Also my preferred units are nanometers, not angstroms.
+    topic_update: Detector temperature drifted to -9.1 C after door opened.
+  - user: How long should the lamp stabilise before taking a reference?
+  - user: Remind me later that Jonas owns the cooling loop.
+    topic_update: Nitrogen purge started at 14:10.
+  - user: What's the usual tolerance for a wavelength check?
+
+# Asked after the session without recording an exchange. Each probe must be
+# answered correctly in most samples, and its ``in_prompt`` phrases (default
+# ``any_of``) must still appear in the final prompt context: compaction must
+# not have lost the fact.
+probes:
+  - name: user-name
+    question: What is my name? Answer with only the name.
+    any_of: [priya]
+    none_of: [jonas]
+    accept: ["Priya"]
+    reject: ["Jonas", "Not provided"]
+  - name: corrected-meeting-day
+    question: Which day is the calibration meeting? Answer with only the day.
+    any_of: [tuesday]
+    none_of: [monday]
+    accept: ["Tuesday"]
+    reject: ["Monday"]
+  - name: meeting-room
+    question: Which room is the calibration meeting in? Answer with only the room.
+    any_of: [b214]
+    accept: ["B214", "Room B214"]
+    reject: ["B241"]
+  - name: allergy
+    question: What am I allergic to? Answer with only the substance.
+    any_of: [latex]
+    accept: ["Latex"]
+    reject: ["Nitrile"]
+  - name: lamp-serial
+    question: Which reference lamp serial do we use? Answer with only the serial.
+    any_of: [hl-2000-77]
+    accept: ["HL‑2000‑77"]
+    reject: ["HL-2000-7"]
+  - name: log-error-code
+    question: What error code was at the end of the controller log? Answer with only the code.
+    any_of: [e-4471]
+    accept: ["E-4471"]
+    reject: ["E-447", "I don't have access to the log."]
+  - name: unit-preference
+    question: Which units do I prefer for wavelengths? Answer with only the unit.
+    any_of: [nanometers, nanometer, nm]
+    none_of: [angstroms, angstrom]
+    accept: ["Nanometers", "nm"]
+    reject: ["Angstroms"]
+  - name: loop-owner
+    question: Who owns the cooling loop? Answer with only the name.
+    any_of: [jonas]
+    accept: ["Jonas"]
+    reject: ["Priya"]
+  - name: bench-3-latest-state
+    question: Can I use bench 3 right now? Answer yes or no.
+    in_prompt: ["usable again"]
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes."]
+    reject: ["No.", "Yesterday, no."]
+  - name: purge-state
+    question: Has a nitrogen purge been started? Answer yes or no.
+    in_prompt: [purge]
+    any_of: ["yes"]
+    none_of: ["no", "not"]
+    accept: ["Yes."]
+    reject: ["No."]
