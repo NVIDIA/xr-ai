@@ -64,6 +64,15 @@ this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to {doc}`/reference/command-line` for each sample's
 command. Each launcher has only `--stop` and `--gpu-profile`, besides help.
 
+If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with `--stop` first so the new settings take
+effect. You can also use `--stop` to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use `--stop` once it is listening to clear it.
+
 On startup failure, merged server YAML remains in a private `model-configs-*`
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the

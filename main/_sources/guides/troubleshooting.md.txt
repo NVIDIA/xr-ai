@@ -600,8 +600,9 @@ checkout, or changing the old configuration. Refer to
 
 For Pocket TTS this sends `SIGTERM` to its verified launcher-owned process
 group, waits up to 20 s, then sends `SIGKILL`. Pocket TTS remains in that group
-so the same escalation also reaches it during an aborted stack startup. Cleanup
-falls back to the listener PID if process-group ownership cannot be verified,
+so the same escalation also reaches it if stack startup aborts before TTS
+signals readiness. Already-ready model servers are retained until explicit
+cleanup. The stop command falls back to the listener PID if process-group ownership cannot be verified,
 and other local servers always use PID-only cleanup. For docker-mode servers it runs
 `docker stop <container_name>` (escalating to `docker kill` after 20 s). Safe
 to run while the stack is down. The command exits nonzero rather than reporting

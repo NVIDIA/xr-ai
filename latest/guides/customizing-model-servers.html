@@ -532,6 +532,14 @@ profile overrides ports, pass that same <code class="docutils literal notranslat
 this applies its port settings without inspecting the GPU. GPU placement and
 memory budgets do not affect cleanup. Refer to <a class="reference internal" href="../reference/command-line.html"><span class="doc">Command-line reference</span></a> for each sample’s
 command. Each launcher has only <code class="docutils literal notranslate"><span class="pre">--stop</span></code> and <code class="docutils literal notranslate"><span class="pre">--gpu-profile</span></code>, besides help.</p>
+<p>If a later model fails to start, or startup is cancelled, servers that had
+signaled readiness when cleanup began stay running. Fix the failure and rerun
+the same model command to reuse them. If the fix changes a server that already
+started, run the model command with <code class="docutils literal notranslate"><span class="pre">--stop</span></code> first so the new settings take
+effect. You can also use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> to clear retained servers. Unfinished Docker
+backend launches are stopped through their managed wrappers. Persistent
+pip-backend vLLM runs in a separate session and can keep loading after its
+wrapper is stopped; use <code class="docutils literal notranslate"><span class="pre">--stop</span></code> once it is listening to clear it.</p>
 <p>On startup failure, merged server YAML remains in a private <code class="docutils literal notranslate"><span class="pre">model-configs-*</span></code>
 directory under the existing run logs, at the paths printed in the failure
 summary. Successful startup removes those files. Credentials belong in the

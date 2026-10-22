@@ -740,8 +740,9 @@ otherwise the child inherits the parent’s.</p>
 <p>The launcher spawns every member at once and waits for <em>all</em> of them to
 signal readiness before advancing to the next item in the stack sequence.
 A member that signals readiness remains monitored until the whole group is
-ready. An unexpected exit during that interval shuts everything down. A
-successful <code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
+ready. An unexpected exit during that interval stops owned processes and
+persistent processes that have not signaled readiness. A successful
+<code class="docutils literal notranslate"><span class="pre">persist</span></code> process may exit after readiness only when
 <code class="docutils literal notranslate"><span class="pre">run_stack(...,</span> <span class="pre">exit_after_ready=True)</span></code> permits bootstrap wrappers to
 outlive the launcher.</p>
 <p>Example:</p>
@@ -799,8 +800,9 @@ outlive the launcher.</p>
 <span class="sig-name descname"><span class="pre">launch_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'own'</span></em><a class="headerlink" href="#xr_ai_launcher.Process.launch_mode" title="Link to this definition">#</a></dt>
 <dd><p>Spawn and shutdown behavior.</p>
 <p><code class="docutils literal notranslate"><span class="pre">own</span></code> starts the process and stops it with the stack. <code class="docutils literal notranslate"><span class="pre">persist</span></code> starts
-it but leaves it running at shutdown. <code class="docutils literal notranslate"><span class="pre">reuse</span></code> assumes the process is
-already running and neither starts nor stops it.</p>
+it but leaves it running at shutdown once it has signaled readiness,
+including when another process fails during startup. <code class="docutils literal notranslate"><span class="pre">reuse</span></code> assumes
+the process is already running and neither starts nor stops it.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -846,6 +848,11 @@ remains visible.</p>
 the remaining foreground processes are terminated. The launcher preserves
 a positive child status, maps a signal to <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>, and maps an
 unexpected zero exit to 1.
+Startup failure or cancellation stops owned processes and persistent
+processes that have not signaled readiness. Already-ready persistent
+processes and reused services are left running. SIGINT or SIGTERM during
+startup exits with <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">+</span> <span class="pre">signal</span></code>. After readiness, signals follow
+normal shutdown.
 Spawn errors, readiness failures, and unexpected monitored exits print a
 concise summary with the constructed command and an existing configured
 run-log directory when available. Pass
