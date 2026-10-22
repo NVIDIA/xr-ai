@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Negative observations precede each success so premature completion fails the run.
-guides_dir: ../guides
+# Evaluation scenario for eval/guide.py, not a procedure guide definition.
+# Present incorrect scenes before correct ones to test rejection and recovery,
+# then exercise completion, restart, and stop using the shipped Tea Making guide.
+guides_dir: ../../guides
 guide: Tea Making
 fail_fast: true
-scenes_file: tea_scenes.yaml
-visual_cases_file: tea_visual_cases.yaml
+scenes_file: scenes.yaml
+visual_cases_file: visual_cases.yaml
 actions:
   - {action: image, scene: breakfast}
   - {action: say, text: 'What is my status?', expect: inactive, tools: [workflow__status]}

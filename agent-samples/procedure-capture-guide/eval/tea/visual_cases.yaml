@@ -1,11 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Oracles describe the drawing, not a model's prior responses. Only pixels and
+# Expected answers for isolated visual checks and multi-turn observations.
+# This is evaluation input, not a procedure guide. Oracles describe the drawing,
+# not a model's prior responses. Only pixels and
 # the shipped guide's question reach the configured VLM; these expectations never do.
-guides_dir: ../guides
+guides_dir: ../../guides
 guide: Tea Making
-scenes_file: tea_scenes.yaml
+scenes_file: scenes.yaml
 cases:
   - {scene: breakfast, step: identify, answer: 'NO', accept: false}
   - {scene: green, step: identify, answer: 'NO', accept: false}

@@ -28,7 +28,6 @@ from pathlib import Path
 import nemo_relay
 import yaml
 from _recorded_camera import capture_frames, feed_recording
-from _tea_scenes import load_scenes, render_scene
 from _visual_expectations import matches_answer, visual_cases
 from loguru import logger
 from PIL import Image, ImageDraw
@@ -37,6 +36,7 @@ from procedure_capture_guide_worker.guide._workflow_spec import parse_workflow
 from procedure_capture_guide_worker.guide.agent import GuideAgent
 from procedure_capture_guide_worker.guide.events import PARTICIPANT_JOINED_TOPIC, USER_QUERY_TOPIC
 from procedure_capture_guide_worker.guide.guides import SelectedGuide, load_guide
+from tea._scenes import load_scenes, render_scene
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
 from xr_ai_interaction import ParticipantJoined, ResponseOutput, UserQuery
 from xr_ai_models import load_models_config, make_llm, make_vlm
@@ -55,8 +55,8 @@ def _runtime_hashes(models_config: Path) -> dict[str, str]:
     paths = {models_config.resolve(), _SAMPLE / "yaml/worker.yaml",
              _SAMPLE / "yaml/guide-agent-config.yaml", Path(__file__).resolve(),
              Path(__file__).with_name("_recorded_camera.py").resolve()}
-    paths.update(Path(__file__).with_name(name).resolve()
-                 for name in ("_tea_scenes.py", "_visual_expectations.py"))
+    paths.update((Path(__file__).parent / name).resolve()
+                 for name in ("tea/_scenes.py", "_visual_expectations.py"))
     package = _SAMPLE / "worker/procedure_capture_guide_worker"
     for pattern in ("*.py", "*.txt"):
         paths.update(package.rglob(pattern))
