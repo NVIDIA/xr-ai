@@ -284,6 +284,16 @@ A per-call `enable_thinking=True` or `False` always applies to that call. A
 legacy `default_extras.chat_template_kwargs.enable_thinking: true` default could
 previously not be turned off per call. Refer to {ref}`agent-sdk-models-thinking`.
 
+- **`thinking_budget` call argument:** now sent as vLLM's
+  `thinking_token_budget` instead of `chat_template_kwargs.thinking_budget`,
+  which the Nemotron chat templates ignored. The argument is omitted when
+  reasoning is off. Enforcement requires server support and has been verified
+  on Nemotron Omni with vLLM's `--reasoning-parser nemotron_v3`; NIM budget
+  support has not been qualified. Other endpoints may reject or ignore it;
+  the SDK does not detect support or retry without the budget. Refer to
+  {ref}`agent-sdk-models-thinking`. Raw
+  `default_extras.chat_template_kwargs.thinking_budget` profile values are
+  forwarded unchanged, not migrated to the new field.
 - **Custom `LLMService` implementations:** `enable_thinking` now defaults to
   `None` instead of `False`. Treat `None` as the endpoint's configured default.
 - **Profiles with the legacy key:** no change is required. With a template-driven

@@ -31,8 +31,9 @@ class ThinkingSpec:
     control: ThinkingControl | None = None
     """The model's switch dialect.
 
-    ``chat_template`` sends ``chat_template_kwargs.enable_thinking`` (and
-    ``thinking_budget``), as vLLM and NIM Nemotron/Qwen-style templates expect.
+    ``chat_template`` sends ``chat_template_kwargs.enable_thinking``, as vLLM
+    and NIM Nemotron/Qwen-style templates expect, and a budget as vLLM's
+    ``thinking_token_budget``.
     ``system_prompt`` puts a ``detailed thinking on|off`` line at the start of
     the system message, as Llama-Nemotron expects.  ``none`` leaves requests
     unchanged for models without a switch or endpoints that reject template
@@ -141,12 +142,15 @@ def apply_thinking(
 ) -> None:
     """Render the effective reasoning switch into an outgoing *payload*.
 
-    A per-call ``enable_thinking`` wins over the spec default.  Models with
-    ``control="none"`` and the ``system_prompt`` dialect ignore
-    ``thinking_budget``, which only template-driven models understand.
+    A per-call ``enable_thinking`` wins over the spec default.
+    ``thinking_budget`` becomes vLLM's ``thinking_token_budget``, which the
+    server enforces through its reasoning parser regardless of the chat
+    template.  It is omitted when reasoning is off and for ``control="none"``
+    and ``system_prompt`` models, whose servers have no reasoning parser.
     """
 
     effective = spec.default if enable_thinking is None else enable_thinking
+    reasoning_off = effective is False
     control = spec.control
     if control is None:
         if spec.default is not None:
@@ -155,16 +159,13 @@ def apply_thinking(
             # Undeclared dialect: an explicit off adds nothing, as before.
             effective = None
     if control in (None, "chat_template"):
-        tpl: dict[str, Any] = {}
         if effective is not None:
-            tpl["enable_thinking"] = effective
-        if thinking_budget is not None:
-            tpl["thinking_budget"] = thinking_budget
-        if tpl:
             payload["chat_template_kwargs"] = {
                 **payload.get("chat_template_kwargs", {}),
-                **tpl,
+                "enable_thinking": effective,
             }
+        if thinking_budget is not None and not reasoning_off:
+            payload["thinking_token_budget"] = thinking_budget
     elif control == "system_prompt" and effective is not None:
         _set_system_switch(
             payload["messages"], effective, forced=enable_thinking is not None,

@@ -320,7 +320,7 @@ class LLMService(Protocol):
     ``enable_thinking`` requests or suppresses model reasoning for one call;
     ``None`` uses the endpoint's configured default.  The endpoint renders it
     in the model's own dialect, and models without a switch ignore it.
-    ``thinking_budget`` caps reasoning tokens where the model supports it.
+    ``thinking_budget`` caps reasoning tokens on servers that enforce it.
     """
 
     capabilities: Capabilities
