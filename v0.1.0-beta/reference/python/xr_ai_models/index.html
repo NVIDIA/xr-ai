@@ -437,10 +437,10 @@
                   
   <section id="module-xr_ai_models">
 <span id="xr-ai-models"></span><h1>xr_ai_models<a class="headerlink" href="#module-xr_ai_models" title="Link to this heading">#</a></h1>
-<p>Unified service protocols and OpenAI-compatible clients for XR AI models.</p>
+<p>Unified typed service protocols and model clients for XR AI.</p>
 <p>Repository code talks to the typed <code class="docutils literal notranslate"><span class="pre">*Service</span></code> protocols. The concrete
-<code class="docutils literal notranslate"><span class="pre">OpenAICompat*</span></code> clients cover every in-tree backend and external
-OpenAI-compatible endpoints.</p>
+<code class="docutils literal notranslate"><span class="pre">OpenAICompat*</span></code> clients cover chat, embeddings, and HTTP speech;
+OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.</p>
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading">#</a></h2>
 <div class="toctree-wrapper compound">
@@ -489,7 +489,13 @@ OpenAI-compatible endpoints.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ModelServiceError" title="xr_ai_models.ModelServiceError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelServiceError</span></code></a></p></td>
-<td><p>Failure to determine or maintain an embedding model's reported identity.</p></td>
+<td><p>Base for model-service failures, including embedding identity and OCR errors.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRRequestError" title="xr_ai_models.OCRRequestError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></p></td>
+<td><p>OCR input could not be read or the HTTP request failed.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRResponseError" title="xr_ai_models.OCRResponseError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></p></td>
+<td><p>The OCR endpoint returned malformed JSON or invalid detection data.</p></td>
 </tr>
 </tbody>
 </table>
@@ -531,6 +537,12 @@ OpenAI-compatible endpoints.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.LLMService" title="xr_ai_models.LLMService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMService</span></code></a></p></td>
 <td><p>Structural interface for text chat-completion services.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.OCRService" title="xr_ai_models.OCRService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRService</span></code></a></p></td>
+<td><p>Single-image OCR shared by local Hugging Face and NIM v2 servers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRRegion" title="xr_ai_models.OCRRegion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRRegion</span></code></a></p></td>
+<td><p>One recognized text region; polygon coordinates are normalized to [0, 1].</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.STTService" title="xr_ai_models.STTService"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTService</span></code></a></p></td>
 <td><p>Structural interface for speech-to-text services.</p></td>
@@ -589,22 +601,25 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelsConfig</span></code></a></p></td>
 <td><p>Logical-name to typed model-role specifications.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.STTSpec" title="xr_ai_models.STTSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.OCRSpec" title="xr_ai_models.OCRSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OCRSpec</span></code></a></p></td>
+<td><p>Configuration for OCR via the Nemotron v2 HTTP protocol.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.STTSpec" title="xr_ai_models.STTSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STTSpec</span></code></a></p></td>
 <td><p>Configuration for a speech-to-text model role.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.TTSSpec" title="xr_ai_models.TTSSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.TTSSpec" title="xr_ai_models.TTSSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TTSSpec</span></code></a></p></td>
 <td><p>Configuration for a text-to-speech model role.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.VLMSpec" title="xr_ai_models.VLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLMSpec</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.VLMSpec" title="xr_ai_models.VLMSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLMSpec</span></code></a></p></td>
 <td><p>Configuration for an image- or video-language model role.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThinkingSpec</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.ThinkingSpec" title="xr_ai_models.ThinkingSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThinkingSpec</span></code></a></p></td>
 <td><p>How a model endpoint switches reasoning, and its default state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaSTT" title="xr_ai_models.RivaSTT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaSTT</span></code></a></p></td>
 <td><p>Riva ASR client: offline (batch) recognition over gRPC.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.RivaTTS" title="xr_ai_models.RivaTTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RivaTTS</span></code></a></p></td>
 <td><p>Riva TTS client with buffered WAV or PCM synthesis.</p></td>
 </tr>
 </tbody>
@@ -630,13 +645,16 @@ OpenAI-compatible endpoints.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.make_llm" title="xr_ai_models.make_llm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_llm</span></code></a>(→ xr_ai_models.LLMService)</p></td>
 <td><p>Construct the text chat service for the named configuration entry.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.make_stt" title="xr_ai_models.make_stt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_stt</span></code></a>(→ xr_ai_models.STTService)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.make_ocr" title="xr_ai_models.make_ocr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_ocr</span></code></a>(→ xr_ai_models.OCRService)</p></td>
+<td><p>Construct OCR for <em>name</em>; reject a missing role, wrong role, or unsupported kind.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.make_stt" title="xr_ai_models.make_stt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_stt</span></code></a>(→ xr_ai_models.STTService)</p></td>
 <td><p>Construct the speech-to-text service for the named configuration entry.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.make_tts" title="xr_ai_models.make_tts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tts</span></code></a>(→ xr_ai_models.TTSService)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.make_tts" title="xr_ai_models.make_tts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tts</span></code></a>(→ xr_ai_models.TTSService)</p></td>
 <td><p>Construct the text-to-speech service for the named configuration entry.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_models.make_vlm" title="xr_ai_models.make_vlm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vlm</span></code></a>(→ xr_ai_models.VLMService)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_models.make_vlm" title="xr_ai_models.make_vlm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vlm</span></code></a>(→ xr_ai_models.VLMService)</p></td>
 <td><p>Construct the visual chat service for the named configuration entry.</p></td>
 </tr>
 </tbody>
@@ -965,7 +983,7 @@ Consumers choose whether absence permits operation without caching.</p>
 <dl class="py exception">
 <dt class="sig sig-object py" id="xr_ai_models.ModelServiceError">
 <em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">ModelServiceError</span></span><a class="headerlink" href="#xr_ai_models.ModelServiceError" title="Link to this definition">#</a></dt>
-<dd><p>Failure to determine or maintain an embedding model’s reported identity.</p>
+<dd><p>Base for model-service failures, including embedding identity and OCR errors.</p>
 </dd></dl>
 
 <dl class="py data">
@@ -1078,6 +1096,70 @@ truncated or malformed function call is never exposed as executable.</p>
 <dt class="sig sig-object py" id="xr_ai_models.LLMService.close">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.LLMService.close" title="Link to this definition">#</a></dt>
 <dd><p>Release resources owned by the service.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_models.OCRService">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRService</span></span><a class="headerlink" href="#xr_ai_models.OCRService" title="Link to this definition">#</a></dt>
+<dd><p>Single-image OCR shared by local Hugging Face and NIM v2 servers.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.OCRService.read_text">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">read_text</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ImageInput</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">merge_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'word'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'sentence'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'paragraph'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'word'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#xr_ai_models.OCRRegion" title="xr_ai_models.OCRRegion"><span class="pre">OCRRegion</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#xr_ai_models.OCRService.read_text" title="Link to this definition">#</a></dt>
+<dd><p>Transcribe inline PNG/JPEG bytes, a Path, or a base64 data URL.</p>
+<p>Remote URLs are not accepted. Regions follow backend reading order.
+This method does not crop, sharpen, parse fields, or change resolution.</p>
+<dl>
+<dt>Raises:</dt><dd><p>OCRRequestError: Input-file, transport, timeout, or HTTP failure.</p>
+<p>OCRResponseError: The endpoint returned malformed OCR data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.OCRService.health">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#xr_ai_models.OCRService.health" title="Link to this definition">#</a></dt>
+<dd><p>Return whether the configured endpoint is ready.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.OCRService.close">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_models.OCRService.close" title="Link to this definition">#</a></dt>
+<dd><p>Release owned client resources.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_models.OCRRegion">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRRegion</span></span><a class="headerlink" href="#xr_ai_models.OCRRegion" title="Link to this definition">#</a></dt>
+<dd><p>One recognized text region; polygon coordinates are normalized to [0, 1].</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRRegion.text">
+<span class="sig-name descname"><span class="pre">text</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#xr_ai_models.OCRRegion.text" title="Link to this definition">#</a></dt>
+<dd><p>Transcribed text.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRRegion.confidence">
+<span class="sig-name descname"><span class="pre">confidence</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#xr_ai_models.OCRRegion.confidence" title="Link to this definition">#</a></dt>
+<dd><p>Recognition confidence reported by the backend.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRRegion.polygon">
+<span class="sig-name descname"><span class="pre">polygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_models.OCRRegion.polygon" title="Link to this definition">#</a></dt>
+<dd><p>Ordered (x, y) vertices in the input image’s coordinate system.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2122,6 +2204,12 @@ even when the endpoint takes no API key.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="xr_ai_models.ModelsConfig.ocr">
+<span class="sig-name descname"><span class="pre">ocr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_models.OCRSpec" title="xr_ai_models.OCRSpec"><span class="pre">OCRSpec</span></a></span></span><a class="headerlink" href="#xr_ai_models.ModelsConfig.ocr" title="Link to this definition">#</a></dt>
+<dd><p>Return the OCR specification named <em>name</em>.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="xr_ai_models.ModelsConfig.decision">
 <span class="sig-name descname"><span class="pre">decision</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_models.DecisionSpec" title="xr_ai_models.DecisionSpec"><span class="pre">DecisionSpec</span></a></span></span><a class="headerlink" href="#xr_ai_models.ModelsConfig.decision" title="Link to this definition">#</a></dt>
 <dd><p>Return the decision specification named <em>name</em>.</p>
@@ -2131,6 +2219,30 @@ even when the endpoint takes no API key.</p>
 <dt class="sig sig-object py" id="xr_ai_models.ModelsConfig.required_credentials">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">required_credentials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#xr_ai_models.ModelsConfig.required_credentials" title="Link to this definition">#</a></dt>
 <dd><p>Return the sorted environment-variable names required by all roles.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="xr_ai_models.OCRSpec">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRSpec</span></span><a class="headerlink" href="#xr_ai_models.OCRSpec" title="Link to this definition">#</a></dt>
+<dd><p>Configuration for OCR via the Nemotron v2 HTTP protocol.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRSpec.adapter">
+<span class="sig-name descname"><span class="pre">adapter</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.AdapterSpec" title="xr_ai_models.AdapterSpec"><span class="pre">AdapterSpec</span></a></em><a class="headerlink" href="#xr_ai_models.OCRSpec.adapter" title="Link to this definition">#</a></dt>
+<dd><p>OCR request dialect.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRSpec.endpoint">
+<span class="sig-name descname"><span class="pre">endpoint</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.EndpointSpec" title="xr_ai_models.EndpointSpec"><span class="pre">EndpointSpec</span></a></em><a class="headerlink" href="#xr_ai_models.OCRSpec.endpoint" title="Link to this definition">#</a></dt>
+<dd><p>Endpoint connectivity and readiness.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="xr_ai_models.OCRSpec.deployment">
+<span class="sig-name descname"><span class="pre">deployment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#xr_ai_models.DeploymentSpec" title="xr_ai_models.DeploymentSpec"><span class="pre">DeploymentSpec</span></a></em><a class="headerlink" href="#xr_ai_models.OCRSpec.deployment" title="Link to this definition">#</a></dt>
+<dd><p>Launcher ownership metadata.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2379,6 +2491,19 @@ adapter kind.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="xr_ai_models.make_ocr">
+<span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">make_ocr</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#xr_ai_models.ModelsConfig" title="xr_ai_models.ModelsConfig"><span class="pre">xr_ai_models.ModelsConfig</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#xr_ai_models.OCRService" title="xr_ai_models.OCRService"><span class="pre">xr_ai_models.OCRService</span></a></span></span><a class="headerlink" href="#xr_ai_models.make_ocr" title="Link to this definition">#</a></dt>
+<dd><p>Construct OCR for <em>name</em>; reject a missing role, wrong role, or unsupported kind.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="xr_ai_models.make_stt">
 <span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">make_stt</span></span><span class="sig-paren">(</span>
 
@@ -2424,6 +2549,23 @@ adapter kind.</p>
 <p>Raises <code class="xref py py-class docutils literal notranslate"><span class="pre">KeyError</span></code> when <em>name</em> is absent, <code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code> when it
 names a different model role, and <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unsupported
 adapter kind.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_models.OCRRequestError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRRequestError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#xr_ai_models.OCRRequestError" title="Link to this definition">#</a></dt>
+<dd><p>OCR input could not be read or the HTTP request failed.</p>
+<p><code class="docutils literal notranslate"><span class="pre">status_code</span></code> is the HTTP failure status, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for file/transport
+failures. The original exception is preserved as <code class="docutils literal notranslate"><span class="pre">__cause__</span></code>. Requests
+are not retried automatically.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="xr_ai_models.OCRResponseError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">xr_ai_models.</span></span><span class="sig-name descname"><span class="pre">OCRResponseError</span></span><a class="headerlink" href="#xr_ai_models.OCRResponseError" title="Link to this definition">#</a></dt>
+<dd><p>The OCR endpoint returned malformed JSON or invalid detection data.</p>
+<p>Also inherits <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> to preserve existing response-validation
+handlers. Caller argument errors remain ordinary <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>/<code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -2660,6 +2802,18 @@ before returning, so a caller can safely release recognition resources.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.LLMService.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRService"><code class="docutils literal notranslate"><span class="pre">OCRService</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRService.read_text"><code class="docutils literal notranslate"><span class="pre">read_text()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRService.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRService.close"><code class="docutils literal notranslate"><span class="pre">close()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRRegion"><code class="docutils literal notranslate"><span class="pre">OCRRegion</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRRegion.text"><code class="docutils literal notranslate"><span class="pre">text</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRRegion.confidence"><code class="docutils literal notranslate"><span class="pre">confidence</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRRegion.polygon"><code class="docutils literal notranslate"><span class="pre">polygon</span></code></a></li>
+</ul>
+</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService"><code class="docutils literal notranslate"><span class="pre">STTService</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService.transcribe"><code class="docutils literal notranslate"><span class="pre">transcribe()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.STTService.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>
@@ -2806,8 +2960,15 @@ before returning, so a caller can safely release recognition resources.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.stt"><code class="docutils literal notranslate"><span class="pre">stt()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.tts"><code class="docutils literal notranslate"><span class="pre">tts()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.embedding"><code class="docutils literal notranslate"><span class="pre">embedding()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.ocr"><code class="docutils literal notranslate"><span class="pre">ocr()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.decision"><code class="docutils literal notranslate"><span class="pre">decision()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.ModelsConfig.required_credentials"><code class="docutils literal notranslate"><span class="pre">required_credentials</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRSpec"><code class="docutils literal notranslate"><span class="pre">OCRSpec</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRSpec.adapter"><code class="docutils literal notranslate"><span class="pre">adapter</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRSpec.endpoint"><code class="docutils literal notranslate"><span class="pre">endpoint</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRSpec.deployment"><code class="docutils literal notranslate"><span class="pre">deployment</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.Spec"><code class="docutils literal notranslate"><span class="pre">Spec</span></code></a></li>
@@ -2841,9 +3002,12 @@ before returning, so a caller can safely release recognition resources.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_decision"><code class="docutils literal notranslate"><span class="pre">make_decision()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_embedding"><code class="docutils literal notranslate"><span class="pre">make_embedding()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_llm"><code class="docutils literal notranslate"><span class="pre">make_llm()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_ocr"><code class="docutils literal notranslate"><span class="pre">make_ocr()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_stt"><code class="docutils literal notranslate"><span class="pre">make_stt()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_tts"><code class="docutils literal notranslate"><span class="pre">make_tts()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.make_vlm"><code class="docutils literal notranslate"><span class="pre">make_vlm()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRRequestError"><code class="docutils literal notranslate"><span class="pre">OCRRequestError</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.OCRResponseError"><code class="docutils literal notranslate"><span class="pre">OCRResponseError</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT"><code class="docutils literal notranslate"><span class="pre">RivaSTT</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT.transcribe"><code class="docutils literal notranslate"><span class="pre">transcribe()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_models.RivaSTT.health"><code class="docutils literal notranslate"><span class="pre">health()</span></code></a></li>

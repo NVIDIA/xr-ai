@@ -455,6 +455,8 @@
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMSpec.adapter">(xr_ai_models.LLMSpec attribute)</a>
 </li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRSpec.adapter">(xr_ai_models.OCRSpec attribute)</a>
+</li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.STTSpec.adapter">(xr_ai_models.STTSpec attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TTSSpec.adapter">(xr_ai_models.TTSSpec attribute)</a>
@@ -649,6 +651,8 @@
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMService.close">(xr_ai_models.LLMService method)</a>
 </li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRService.close">(xr_ai_models.OCRService method)</a>
+</li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatEmbedding.close">(xr_ai_models.OpenAICompatEmbedding method)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatLLM.close">(xr_ai_models.OpenAICompatLLM method)</a>
@@ -687,7 +691,11 @@
       <li><a href="reference/python/xr_ai_gpu/index.html#xr_ai_gpu.GPUDevice.compute_capability">compute_capability (xr_ai_gpu.GPUDevice attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.DecisionAnswer.confidence">confidence (xr_ai_models.DecisionAnswer attribute)</a>
+
+      <ul>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRRegion.confidence">(xr_ai_models.OCRRegion attribute)</a>
 </li>
+      </ul></li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.config">config (xr_ai_launcher.Process attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.connected_participants">connected_participants (xr_ai_hub.ProcessorEndpoint property)</a>
@@ -796,10 +804,10 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.Subscribe.DEFAULT">DEFAULT (xr_ai_hub.Subscribe attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ThinkingSpec.default">default (xr_ai_models.ThinkingSpec attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.AdapterSpec.default_extras">default_extras (xr_ai_models.AdapterSpec attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_vllm/index.html#xr_ai_vllm.DEFAULT_IMAGE">DEFAULT_IMAGE (in module xr_ai_vllm)</a>
@@ -810,6 +818,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EmbeddingSpec.deployment">(xr_ai_models.EmbeddingSpec attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMSpec.deployment">(xr_ai_models.LLMSpec attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRSpec.deployment">(xr_ai_models.OCRSpec attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.STTSpec.deployment">(xr_ai_models.STTSpec attribute)</a>
 </li>
@@ -892,6 +902,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EmbeddingSpec.endpoint">(xr_ai_models.EmbeddingSpec attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMSpec.endpoint">(xr_ai_models.LLMSpec attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRSpec.endpoint">(xr_ai_models.OCRSpec attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.STTSpec.endpoint">(xr_ai_models.STTSpec attribute)</a>
 </li>
@@ -1064,6 +1076,8 @@
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EmbeddingService.health">(xr_ai_models.EmbeddingService method)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.LLMService.health">(xr_ai_models.LLMService method)</a>
+</li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRService.health">(xr_ai_models.OCRService method)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OpenAICompatEmbedding.health">(xr_ai_models.OpenAICompatEmbedding method)</a>
 </li>
@@ -1314,6 +1328,8 @@
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.make_llm">make_llm() (in module xr_ai_models)</a>
 </li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.make_ocr">make_ocr() (in module xr_ai_models)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.make_stt">make_stt() (in module xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.make_tts">make_tts() (in module xr_ai_models)</a>
@@ -1384,10 +1400,10 @@
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.ModelDeployment">ModelDeployment (class in xr_ai_launcher)</a>
 </li>
-      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelKind">ModelKind (in module xr_ai_models)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelKind">ModelKind (in module xr_ai_models)</a>
+</li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelsConfig">ModelsConfig (class in xr_ai_models)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelServiceError">ModelServiceError</a>
@@ -1513,6 +1529,18 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.observe_tts_wav">observe_tts_wav() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ModelsConfig.ocr">ocr() (xr_ai_models.ModelsConfig method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRRegion">OCRRegion (class in xr_ai_models)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRRequestError">OCRRequestError</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRResponseError">OCRResponseError</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRService">OCRService (class in xr_ai_models)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRSpec">OCRSpec (class in xr_ai_models)</a>
+</li>
       <li><a href="reference/python/xr_ai_tools/spatial/index.html#xr_ai_tools.spatial.offset_user_frame">offset_user_frame() (in module xr_ai_tools.spatial)</a>
 </li>
       <li><a href="reference/python/xr_ai_tools/text_memory/index.html#xr_ai_tools.text_memory.AddTranscriptResult.ok">ok (xr_ai_tools.text_memory.AddTranscriptResult attribute)</a>
@@ -1531,14 +1559,14 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ProcessorEndpoint.on_participant">on_participant() (xr_ai_hub.ProcessorEndpoint method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.on_participant_joined">on_participant_joined() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.on_phrase_only">on_phrase_only() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.on_query">on_query() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.on_stop">on_stop() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
       <li><a href="reference/python/xr_ai_vad/index.html#xr_ai_vad.OnSpeechStartCb">OnSpeechStartCb (in module xr_ai_vad)</a>
@@ -1637,10 +1665,10 @@
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.LiveFrameSource.participants">participants() (xr_ai_hub.LiveFrameSource method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_tools/video_memory/index.html#xr_ai_tools.video_memory.RecordedVideoResult.path">path (xr_ai_tools.video_memory.RecordedVideoResult attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ControlMessage.payload">payload (xr_ai_hub.ControlMessage attribute)</a>
 
       <ul>
@@ -1660,6 +1688,8 @@
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.VoiceGate.play_chime">play_chime() (xr_ai_voicegate.VoiceGate method)</a>
 </li>
       <li><a href="reference/python/xr_ai_voicegate/index.html#xr_ai_voicegate.AudioSink.play_wav">play_wav() (xr_ai_voicegate.AudioSink method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRRegion.polygon">polygon (xr_ai_models.OCRRegion attribute)</a>
 </li>
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.Process.port">port (xr_ai_launcher.Process attribute)</a>
 </li>
@@ -1764,6 +1794,8 @@
       <li><a href="reference/python/xr_ai_launcher/index.html#xr_ai_launcher.read_device_profile">read_device_profile() (in module xr_ai_launcher)</a>
 </li>
       <li><a href="reference/python/xr_ai_hub/index.html#xr_ai_hub.ShmRingBuffer.read_slot">read_slot() (xr_ai_hub.ShmRingBuffer method)</a>
+</li>
+      <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRService.read_text">read_text() (xr_ai_models.OCRService method)</a>
 </li>
       <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.EndpointSpec.readiness">readiness (xr_ai_models.EndpointSpec attribute)</a>
 </li>
@@ -2159,6 +2191,8 @@
 
       <ul>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.ChatStreamEvent.text">(xr_ai_models.ChatStreamEvent attribute)</a>
+</li>
+        <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.OCRRegion.text">(xr_ai_models.OCRRegion attribute)</a>
 </li>
         <li><a href="reference/python/xr_ai_models/index.html#xr_ai_models.TextPart.text">(xr_ai_models.TextPart attribute)</a>
 </li>

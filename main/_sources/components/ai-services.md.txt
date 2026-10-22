@@ -29,15 +29,161 @@ recorded video, and document retrieval.
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/clef-server/` | `clef_server` | 8120 | Cloudflare Clef-Flash 9B | Native SystemOne choice decisions |
 | `services/embedding-server/` | `embedding_server` | 8109 | Nemotron-3-Embed-1B-BF16 | vLLM (pip or docker) |
+| `services/ocr-server/` | Operator-run container | 8000 (container); 8112 in example | Nemotron OCR v2 multilingual | Hugging Face in a local CUDA container |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 
-Local model artifacts land in the service's `model_cache` directory, set per
+Launcher-managed local model artifacts land in the service's `model_cache` directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted
 NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every `models/` tree is excluded from version
 control. The model-servers profiles share `models/` at the repository root;
 the exact layout per launch style is below.
+
+(ocr-serving)=
+
+## OCR serving
+
+The reusable `services/ocr-server` provides multilingual Nemotron OCR v2 in
+an operator-managed container. No supplied sample launches or consumes OCR.
+The Dockerfile builds an isolated Python 3.12, PyTorch 2.9.1, CUDA 13 runtime
+with NVIDIA's pinned Hugging Face source. At startup, the service downloads
+`v2_multilingual` weights and keeps the model loaded across requests.
+Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
+are required; a host CUDA toolkit is not. The first build takes several minutes.
+Refer to the
+[upstream installation instructions](https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md).
+
+Set the build argument `TORCH_CUDA_ARCH_LIST` for the selected GPU: `8.9` for
+Ada, `12.0` for Blackwell, or `12.1` for Spark. From the repository root,
+build the image; this example targets Blackwell:
+
+```bash
+docker build --build-arg TORCH_CUDA_ARCH_LIST=12.0 \
+  -t xr-ai-nemotron-ocr:local services/ocr-server/ocr_server
+```
+
+Run it in the foreground on GPU 0, publishing the API only on localhost:
+
+```bash
+mkdir -p models
+docker run --rm --name xr-ai-ocr-manual --gpus device=0 --ipc=host \
+  -e HF_TOKEN -e OCR_INFER_LENGTH=1024 \
+  -p 127.0.0.1:8112:8000 -v "$PWD/models:/models" \
+  xr-ai-nemotron-ocr:local
+```
+
+The operator owns GPU placement, container startup and shutdown, cache mounts,
+and readiness checks. After startup completes, check readiness in another terminal:
+
+```bash
+curl --fail http://localhost:8112/v1/health/ready
+```
+
+The service loads and warms the model before accepting requests. There is no
+host `ocr_server` command or `run_model_stack` registration. Sample stack stop
+commands do not stop this container, and no automatic reuse or replacement is
+performed. Provision GPU capacity before running it alongside other services;
+no GPU allocations are changed and coexistence is not qualified.
+Repository GPU tests do not discover arbitrary operator-run containers. Stop
+this container before running GPU tests that use the same device; the HTTP-only
+OCR smoke test below can run against it without managing containers.
+
+For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
+consumer profile. The operator selects the multilingual variant and owns GPU
+placement, model downloads, caches, and container lifecycle. XR AI does not
+start an OCR NIM container or require a local HTTP proxy. Refer to
+{doc}`/guides/deploying-with-nim` for the endpoint example and validation.
+
+Both backends expose `POST /v1/ocr` and readiness at
+`GET /v1/health/ready`. Use the `nemotron_ocr` preset and typed SDK factory:
+
+```python
+from pathlib import Path
+from xr_ai_models import load_models_config_from_dict, make_ocr
+
+config = load_models_config_from_dict({"ocr": {
+    "adapter": {"preset": "nemotron_ocr"},
+    "endpoint": {"base_url": "http://localhost:8112"},
+    "deployment": {"ownership": "external"},
+}})
+async with make_ocr(config, "ocr") as ocr:
+    regions = await ocr.read_text(Path("image.png"))
+    for region in regions:
+        print(region.text, region.confidence, region.polygon)
+```
+
+Applications reuse the endpoint; an OCR tool does not load its own GPU model.
+The client sends one inline PNG or JPEG and returns text, confidence, and
+normalized polygons. Remote image URLs are intentionally unsupported.
+Word, sentence, and paragraph grouping are available; recognition results
+need not be identical across backends.
+
+Send an opaque image. The local Hugging Face server converts inputs to RGB
+without compositing transparency: opaque black text on a transparent black
+background becomes uniformly black, losing the visible text. Composite
+transparent PNGs onto an appropriate background before calling either backend.
+For dark text intended for a white background:
+
+```python
+from PIL import Image
+
+with Image.open("input.png") as source:
+    rgba = source.convert("RGBA")
+    opaque = Image.new("RGBA", rgba.size, "white")
+    opaque.alpha_composite(rgba)
+    opaque.convert("RGB").save("ocr-input.png")
+```
+
+Choose a contrasting background for light text. This preparation remains
+caller-owned; the service does not infer the intended background color.
+
+The Hugging Face server clips finite bounding-box coordinates to the image's
+normalized `[0, 1]` bounds while preserving recognized text and confidence.
+Non-finite model coordinates are an inference failure (HTTP 500), not valid
+detections. The SDK continues to reject malformed responses from any endpoint.
+
+The Hugging Face server accepts one image per request, at most 10 MiB of PNG
+or JPEG file bytes after base64 decoding, and 20 million pixels after
+full-resolution square padding:
+`max(width, height)² <= 20,000,000` (longest side at most 4,472 pixels).
+This check runs before RGB conversion or inference because upstream pads the
+image on CUDA before resizing; lowering `infer_length` does not reduce that
+allocation. The padded FP16 RGB tensor alone is bounded to about 114 MiB;
+this is not a bound on total inference memory. Requests that exceed the schema's
+data-URL string-length limit receive HTTP 422 before image decoding. Requests
+that pass that limit but exceed the decoded image-file byte limit or padded
+pixel limit receive HTTP 413. Both limits apply before model inference;
+callers must reduce the encoded file size, downsample, or tile oversized inputs.
+The server serializes inference and rejects overlapping requests with HTTP 503.
+Its detector length is configured server-wide by `OCR_INFER_LENGTH` (640 or
+1024, default 1024). NIM request limits and engine settings belong to the deployed version,
+not this local server configuration. Neither integration adds experimental
+text-dense cropping or sharpening; preprocessing remains caller-owned.
+
+Local weights and the torchvision backbone are cached at `/models/huggingface`
+and `/models/torch` inside the container. The example mounts the repository's
+`models/` directory there; change the host mount to use another persistent
+cache. The compiled CUDA extension stays in the Docker image.
+Stop only the container you launched with `docker stop xr-ai-ocr-manual`.
+The example's `--rm` removes the stopped container, not the mounted cache.
+Rebuild after source changes and rerun after configuration changes. Docker
+rejects an occupied name or port rather than replacing an existing service.
+Closing an SDK client stops neither the local service nor an externally deployed NIM.
+
+To test transcription against a running endpoint, run from the repository root:
+
+```bash
+XR_AI_OCR_TEST_URL=http://localhost:8112 uv --config-file uv.toml run --project tests \
+  pytest tests/test_ocr_server.py::test_live_ocr_equipment_text
+```
+
+This opt-in HTTP test does not require a local GPU or Docker and never owns
+containers. It skips when `XR_AI_OCR_TEST_URL` is unset; do not mark it `gpu`
+or run it through container-management fixtures.
+The smoke test checks transcription on a square image, not polygon placement.
+CPU tests cover the response coordinate contract with mocked predictions;
+they do not establish real-model normalization on non-square images.
 
 ## Speaker-conditioned STT
 

@@ -5,11 +5,11 @@ xr_ai_models
 
 .. autoapi-nested-parse::
 
-   Unified service protocols and OpenAI-compatible clients for XR AI models.
+   Unified typed service protocols and model clients for XR AI.
 
    Repository code talks to the typed ``*Service`` protocols. The concrete
-   ``OpenAICompat*`` clients cover every in-tree backend and external
-   OpenAI-compatible endpoints.
+   ``OpenAICompat*`` clients cover chat, embeddings, and HTTP speech;
+   OCR uses the Nemotron v2 protocol and Riva speech uses optional gRPC.
 
 
 
@@ -44,6 +44,8 @@ Exceptions
 .. autoapisummary::
 
    xr_ai_models.ModelServiceError
+   xr_ai_models.OCRRequestError
+   xr_ai_models.OCRResponseError
 
 
 Classes
@@ -62,6 +64,8 @@ Classes
    xr_ai_models.EmbeddingService
    xr_ai_models.ImagePart
    xr_ai_models.LLMService
+   xr_ai_models.OCRService
+   xr_ai_models.OCRRegion
    xr_ai_models.STTService
    xr_ai_models.TextPart
    xr_ai_models.ToolCall
@@ -81,6 +85,7 @@ Classes
    xr_ai_models.EndpointSpec
    xr_ai_models.LLMSpec
    xr_ai_models.ModelsConfig
+   xr_ai_models.OCRSpec
    xr_ai_models.STTSpec
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
@@ -99,6 +104,7 @@ Functions
    xr_ai_models.make_decision
    xr_ai_models.make_embedding
    xr_ai_models.make_llm
+   xr_ai_models.make_ocr
    xr_ai_models.make_stt
    xr_ai_models.make_tts
    xr_ai_models.make_vlm
@@ -470,7 +476,7 @@ Package Contents
 
 
 
-   Failure to determine or maintain an embedding model's reported identity.
+   Base for model-service failures, including embedding identity and OCR errors.
 
 
 .. py:data:: ImageInput
@@ -554,6 +560,71 @@ Package Contents
 
 
       Release resources owned by the service.
+
+
+
+.. py:class:: OCRService
+
+
+
+   Single-image OCR shared by local Hugging Face and NIM v2 servers.
+
+
+   .. py:method:: read_text(image: ImageInput, *, merge_level: Literal['word', 'sentence', 'paragraph'] = 'word', timeout: float | None = None) -> list[OCRRegion]
+      :async:
+
+
+      Transcribe inline PNG/JPEG bytes, a Path, or a base64 data URL.
+
+      Remote URLs are not accepted. Regions follow backend reading order.
+      This method does not crop, sharpen, parse fields, or change resolution.
+
+      Raises:
+          OCRRequestError: Input-file, transport, timeout, or HTTP failure.
+
+          OCRResponseError: The endpoint returned malformed OCR data.
+
+
+
+   .. py:method:: health() -> bool
+      :async:
+
+
+      Return whether the configured endpoint is ready.
+
+
+
+   .. py:method:: close() -> None
+      :async:
+
+
+      Release owned client resources.
+
+
+
+.. py:class:: OCRRegion
+
+   One recognized text region; polygon coordinates are normalized to [0, 1].
+
+
+   .. py:attribute:: text
+      :type:  str
+
+      Transcribed text.
+
+
+
+   .. py:attribute:: confidence
+      :type:  float
+
+      Recognition confidence reported by the backend.
+
+
+
+   .. py:attribute:: polygon
+      :type:  tuple[tuple[float, float], Ellipsis]
+
+      Ordered (x, y) vertices in the input image's coordinate system.
 
 
 
@@ -1436,6 +1507,12 @@ Package Contents
 
 
 
+   .. py:method:: ocr(name: str) -> OCRSpec
+
+      Return the OCR specification named *name*.
+
+
+
    .. py:method:: decision(name: str) -> DecisionSpec
 
       Return the decision specification named *name*.
@@ -1447,6 +1524,34 @@ Package Contents
 
 
       Return the sorted environment-variable names required by all roles.
+
+
+
+.. py:class:: OCRSpec
+
+
+
+   Configuration for OCR via the Nemotron v2 HTTP protocol.
+
+
+   .. py:attribute:: adapter
+      :type:  AdapterSpec
+
+      OCR request dialect.
+
+
+
+   .. py:attribute:: endpoint
+      :type:  EndpointSpec
+
+      Endpoint connectivity and readiness.
+
+
+
+   .. py:attribute:: deployment
+      :type:  DeploymentSpec
+
+      Launcher ownership metadata.
 
 
 
@@ -1639,6 +1744,11 @@ Package Contents
    adapter kind.
 
 
+.. py:function:: make_ocr(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.OCRService
+
+   Construct OCR for *name*; reject a missing role, wrong role, or unsupported kind.
+
+
 .. py:function:: make_stt(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.STTService
 
    Construct the speech-to-text service for the named configuration entry.
@@ -1664,6 +1774,27 @@ Package Contents
    Raises :class:`KeyError` when *name* is absent, :class:`TypeError` when it
    names a different model role, and :class:`ValueError` for an unsupported
    adapter kind.
+
+
+.. py:exception:: OCRRequestError(message: str, *, status_code: int | None = None)
+
+
+
+   OCR input could not be read or the HTTP request failed.
+
+   ``status_code`` is the HTTP failure status, or ``None`` for file/transport
+   failures. The original exception is preserved as ``__cause__``. Requests
+   are not retried automatically.
+
+
+.. py:exception:: OCRResponseError
+
+
+
+   The OCR endpoint returned malformed JSON or invalid detection data.
+
+   Also inherits ``ValueError`` to preserve existing response-validation
+   handlers. Caller argument errors remain ordinary ``ValueError``/``TypeError``.
 
 
 .. py:class:: RivaSTT(base_url: str, *, api_key_env: str | None = None, function_id: str | None = None, use_ssl: bool = False, language: str = 'en-US', timeout: float = 30.0, health_check: bool = True)
