@@ -303,7 +303,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Python: `>=3.11,<3.15`
 - Build dependencies:
   - `hatchling`
-- Runtime dependencies: none
+- Runtime dependencies:
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
 - Optional dependency groups: none
 - Commands: none
 
@@ -336,8 +337,8 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `torchvision>=0.28.0`
   - `transformers>=5.17.0`
   - `uvicorn[standard]>=0.34.0`
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `clef_server` → `clef_server.__main__:run`
@@ -564,7 +565,7 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
   - `pyyaml>=6.0`
   - `xr-ai-voicegate` → [`xr-ai-voicegate`](utils/xr-ai-voicegate/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
+  - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `nemo-toolkit[asr]` (source: `https://github.com/NVIDIA-NeMo/Speech, rev=1688cc3d6a9ade854f544987810c53f605dc86fc`)
   - `lightning>2.2.1,<=2.4.0` (source: `https://github.com/Lightning-AI/pytorch-lightning, tag=2.4.0`)
   - `lhotse==2.0.0a6` (source: `https://files.pythonhosted.org/packages/18/ae/8ba7ee0b1db7fadf8de8f58121723a6b1ae3d88bdb0a1ffeee165b62d4ba/lhotse-2.0.0a6-py3-none-any.whl`)
@@ -907,7 +908,6 @@ the `dependency-manifest` workflow repeats each step and fails on drift:
 - Runtime dependencies:
   - `xr-ai-launcher` → [`xr-ai-launcher`](utils/xr-ai-launcher/) (local, editable)
   - `xr-ai-logging` → [`xr-ai-logging`](utils/xr-ai-logging/) (local, editable)
-  - `xr-ai-vllm` → [`xr-ai-vllm`](utils/xr-ai-vllm/) (local, editable)
 - Optional dependency groups: none
 - Commands:
   - `clef_flash_model` → `main:run`
@@ -1082,8 +1082,10 @@ Keep non-obvious fan-out in the same change:
 - `utils/xr-ai-gpu/` has zero runtime dependencies and uses only the standard library.
 - `utils/xr-ai-launcher/` depends only on `xr-ai-gpu`; neither pulls in service dependencies.
 - `utils/xr-ai-logging/` depends only on `loguru`.
-- `utils/xr-ai-vllm/` has zero runtime dependencies. Adding dependencies would
+- `utils/xr-ai-vllm/` depends only on `xr-ai-launcher`. Adding other dependencies would
   defeat docker mode by pulling vLLM-side packages into the wrapper environment.
+- Services and samples import process-ownership helpers from `xr-ai-launcher`, not
+  from `xr-ai-vllm` internals.
 - `agent-sdk/xr-ai-hub/` depends only on `pyzmq` and `msgpack`; it has no
   server-side packages.
 - `agent-sdk/xr-ai-models/` depends only on `xr-ai-logging`, `httpx`, and

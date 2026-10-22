@@ -48,7 +48,9 @@ from pathlib import Path
 from . import _docker, _pip
 from ._config import (
     gpu_compute_major,
+    gpu_is_dgx_spark,
     load_config,
+    parse_config_bool,
     resolve_model_cache,
     setup_hf_env,
 )
@@ -308,4 +310,6 @@ __all__ = [
     "load_config",
     "setup_hf_env",
     "gpu_compute_major",
+    "gpu_is_dgx_spark",
+    "parse_config_bool",
 ]

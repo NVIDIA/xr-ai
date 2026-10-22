@@ -41,7 +41,7 @@ uv run clef_flash_model
 ```
 
 The sample starts `services/clef-server` persistently on `127.0.0.1:8120`.
-Its `yaml/clef_server.yaml` pins model revision
+Its `services/clef-server/clef_server.yaml` pins model revision
 `17f0b0ad64efb65d273590632833508766b2aae6` from the
 `Cloudflare/clef-flash` model repository. The service resolves the configured
 pinned snapshot from the repository's ignored `models/` cache first and passes

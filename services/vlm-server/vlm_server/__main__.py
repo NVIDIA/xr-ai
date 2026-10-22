@@ -57,11 +57,11 @@ from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
+    parse_config_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import parse_config_bool
 
 _DEFAULT_PORT        = 8100
 _DEFAULT_HOST        = "0.0.0.0"

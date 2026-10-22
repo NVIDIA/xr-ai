@@ -474,7 +474,7 @@ async def test_real_loopback_server_exchanges_ordered_pcm(tmp_path, monkeypatch)
         monkeypatch.setenv(service._READY_PROCESS_MAY_EXIT_ENV, "1")
         reused_ready = tmp_path / "reused.ready"
         monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (os.getpid(), True, True))
-        monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+        monkeypatch.setattr(service, "has_ownership_marker", lambda *_args: True)
         assert await service._reuse(cfg, reused_ready)
         assert reused_ready.exists()
         with pytest.raises(RuntimeError, match="configuration changed"):
@@ -531,7 +531,7 @@ def test_persistent_reuse_returns_before_exec_or_clearing_launcher_flag(tmp_path
     monkeypatch.setenv(service._READY_PROCESS_MAY_EXIT_ENV, "1")
     monkeypatch.setattr(service, "setup_logging", lambda *_args: None)
     monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (123, True, True))
-    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(service, "_status", AsyncMock(return_value=service._identity(cfg)))
     watcher = AsyncMock()
     monkeypatch.setattr(service, "_watch_reused", watcher)
@@ -550,7 +550,7 @@ def test_persistent_reuse_returns_before_exec_or_clearing_launcher_flag(tmp_path
 async def test_reuse_requires_verified_managed_listener_before_http_probe(monkeypatch, inspection, marked, error):
     status = AsyncMock()
     monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: inspection)
-    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: marked)
+    monkeypatch.setattr(service, "has_ownership_marker", lambda *_args: marked)
     monkeypatch.setattr(service, "_status", status)
     with pytest.raises(RuntimeError, match=error):
         await service._reuse(_CFG, None)
@@ -560,7 +560,7 @@ async def test_reuse_requires_verified_managed_listener_before_http_probe(monkey
 @pytest.mark.asyncio
 async def test_owned_warming_listener_does_not_allocate_another_model(monkeypatch):
     monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (123, True, True))
-    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(service, "_status", AsyncMock(return_value=None))
     with pytest.raises(RuntimeError, match="not ready"):
         await service._reuse(_CFG, None)
@@ -570,7 +570,7 @@ async def test_owned_warming_listener_does_not_allocate_another_model(monkeypatc
 async def test_reuse_detects_listener_replacement_during_health_probe(monkeypatch):
     pids = iter([123, 456])
     monkeypatch.setattr(service, "pid_on_port_checked", lambda _port: (next(pids), True, True))
-    monkeypatch.setattr(service, "has_xr_ai_ownership_marker", lambda *_args: True)
+    monkeypatch.setattr(service, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(service, "_status", AsyncMock(return_value=service._identity(_CFG)))
     with pytest.raises(RuntimeError, match="changed during inspection"):
         await service._reuse(_CFG, None)

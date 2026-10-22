@@ -8,6 +8,7 @@ import signal
 import time
 
 import xr_ai_vllm
+from xr_ai_launcher import _ownership
 
 
 def test_stop_fails_closed_when_listener_discovery_fails(monkeypatch) -> None:
@@ -49,6 +50,7 @@ def test_stop_does_not_signal_external_vllm_process(tmp_path, monkeypatch) -> No
     (proc_root / "cmdline").write_text("vllm\0serve\0external-model")
     (proc_root / "environ").write_bytes(b"PATH=/bin\0")
     monkeypatch.setattr(xr_ai_vllm._docker, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
+    monkeypatch.setattr(_ownership, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
     monkeypatch.setattr(xr_ai_vllm._docker, "container_on_port_checked", lambda _port: (None, True))
     monkeypatch.setattr(xr_ai_vllm._docker, "pid_on_port_checked", lambda _port: (1234, True, True))
     monkeypatch.setattr(xr_ai_vllm.os, "kill", lambda *_args: (_ for _ in ()).throw(AssertionError()))
@@ -64,6 +66,7 @@ def test_pip_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> Non
         b"XR_AI_VLLM_MANAGED=1\0XR_AI_VLLM_PORT=8108\0"
     )
     monkeypatch.setattr(xr_ai_vllm._docker, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
+    monkeypatch.setattr(_ownership, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
 
     assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8108)
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "omni", 8107)
@@ -81,6 +84,7 @@ def test_unmarked_pocket_process_is_not_owned(tmp_path, monkeypatch) -> None:
         "Path",
         lambda _path: proc_root / _path.rsplit("/", 1)[-1],
     )
+    monkeypatch.setattr(_ownership, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
 
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
 
@@ -97,6 +101,7 @@ def test_pocket_ownership_marker_matches_service_port(tmp_path, monkeypatch) -> 
         "Path",
         lambda _path: proc_root / _path.rsplit("/", 1)[-1],
     )
+    monkeypatch.setattr(_ownership, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
 
     assert xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8105)
     assert not xr_ai_vllm._docker.is_xr_ai_server_process(1234, "tts", 8104)
@@ -117,6 +122,7 @@ def test_pocket_process_group_requires_matching_owned_session(
         "Path",
         lambda _path: proc_root / _path.rsplit("/", 1)[-1],
     )
+    monkeypatch.setattr(_ownership, "Path", lambda _path: proc_root / _path.rsplit("/", 1)[-1])
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getpgid", lambda _pid: 1234)
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 1234)
 
@@ -146,6 +152,7 @@ def test_pocket_process_group_accepts_verified_launcher_session(
         "Path",
         lambda raw: tmp_path / str(raw).removeprefix("/"),
     )
+    monkeypatch.setattr(_ownership, "Path", lambda raw: tmp_path / str(raw).removeprefix("/"))
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getpgid", lambda _pid: 4321)
     monkeypatch.setattr(xr_ai_vllm._docker.os, "getsid", lambda _pid: 4321)
 

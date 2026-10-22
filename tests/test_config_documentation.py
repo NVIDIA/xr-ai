@@ -22,9 +22,6 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
         for category in ("agent-samples", "model-server-samples")
         for path in (_ROOT / category).glob("*/pyproject.toml")
     ]
-    projects = {path.parent.name for path in project_paths}
-
-    assert {config.sample for config in configs} == projects | {"Shared model-server defaults"}
     assert len({config.path for config in configs}) == len(configs)
     assert [config.path for config in configs] == sorted(config.path for config in configs)
 
@@ -49,6 +46,13 @@ def test_config_catalog_covers_every_top_level_sample() -> None:
 
     expected.update(path.relative_to(_ROOT) for path in (_ROOT / "utils/xr-ai-model-server-stack/yaml").glob("*.yaml"))
     assert {config.path for config in configs} == expected
+    # A sample whose service owns its configuration has nothing to catalog.
+    projects = {
+        path.parent.name
+        for path in project_paths
+        if any(config.is_relative_to(path.parent.relative_to(_ROOT)) for config in expected)
+    }
+    assert {config.sample for config in configs} == projects | {"Shared model-server defaults"}
 
 
 def test_config_catalog_preserves_source_and_language() -> None:

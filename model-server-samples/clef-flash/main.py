@@ -11,16 +11,14 @@ import select
 import signal
 from pathlib import Path
 
-from xr_ai_launcher import Process, read_config_scalar, run_stack
+from xr_ai_launcher import Process, has_ownership_marker, pid_on_port_checked, read_config_scalar, run_stack
 from xr_ai_logging import setup_logging
-from xr_ai_vllm._docker import pid_on_port_checked
 
 _BASE = Path(__file__).resolve().parent
 
 
-_CONFIG = _BASE / "yaml" / "clef_server.yaml"
-_MANAGED_ENV = "XR_AI_CLEF_MANAGED"
-_PORT_ENV = "XR_AI_CLEF_PORT"
+_CONFIG = _BASE.parents[1] / "services/clef-server/clef_server.yaml"
+_MARKER = "XR_AI_CLEF"
 _STOP_TIMEOUT_S = 20.0
 _KILL_TIMEOUT_S = 5.0
 
@@ -33,17 +31,6 @@ def _port() -> int:
     if not 1 <= port <= 65535:
         raise ValueError(f"{_CONFIG}: port must be between 1 and 65535")
     return port
-
-
-def _has_clef_ownership(pid: int, port: int) -> bool:
-    try:
-        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
-    except OSError:
-        return False
-    return (
-        f"{_MANAGED_ENV}=1".encode() in entries
-        and f"{_PORT_ENV}={port}".encode() in entries
-    )
 
 
 def _wait_for_process_exit(pidfd: int, timeout_s: float) -> bool:
@@ -66,7 +53,7 @@ def _stop_clef(port: int) -> bool:
         # Capture identity before verification; all later signals address this
         # process handle even if Linux recycles its numeric PID during shutdown.
         pidfd = os.pidfd_open(pid)
-        if not _has_clef_ownership(pid, port):
+        if not has_ownership_marker(pid, port, _MARKER):
             print(f"clef-flash: listener on port {port} is not an owned Clef server; not stopping")
             return False
         if pid_on_port_checked(port) != (pid, True, True):
@@ -97,7 +84,7 @@ def run() -> None:
     parser.add_argument(
         "--stop",
         action="store_true",
-        help="Stop only the Clef service configured by yaml/clef_server.yaml.",
+        help="Stop only the Clef service configured by services/clef-server/clef_server.yaml.",
     )
     args = parser.parse_args()
     setup_logging("orchestrator", namespace="clef-flash")

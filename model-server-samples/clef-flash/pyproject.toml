@@ -9,12 +9,11 @@ build-backend = "hatchling.build"
 name = "clef-flash-model-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.15"
-dependencies = ["xr-ai-launcher", "xr-ai-logging", "xr-ai-vllm"]
+dependencies = ["xr-ai-launcher", "xr-ai-logging"]
 
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
-xr-ai-vllm = { path = "../../utils/xr-ai-vllm", editable = true }
 
 [project.scripts]
 clef_flash_model = "main:run"

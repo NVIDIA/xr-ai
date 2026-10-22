@@ -39,11 +39,11 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     load_config,
+    parse_config_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import parse_config_bool
 
 _DEFAULT_MODEL       = "nvidia/Nemotron-3-Embed-1B-BF16"
 _DEFAULT_PORT        = 8109

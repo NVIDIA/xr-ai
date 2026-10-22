@@ -38,11 +38,11 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     load_config,
+    parse_config_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import parse_config_bool
 
 _DEFAULT_PORT               = 8106
 _DEFAULT_HOST               = "0.0.0.0"

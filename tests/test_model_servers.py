@@ -108,7 +108,7 @@ def test_omni_applies_spark_sequence_default(
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
     monkeypatch.setattr(_omni, "gpu_compute_major", lambda: compute_major)
-    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: spark_uma)
+    monkeypatch.setattr(_omni, "gpu_is_dgx_spark", lambda: spark_uma)
     monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
 
     _omni.run()
@@ -146,7 +146,7 @@ def test_nano_standalone_applies_spark_sequence_default(
     monkeypatch.setattr(_nano, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_nano, "setup_hf_env", lambda *_a, **_k: None)
     monkeypatch.setattr(_nano, "gpu_compute_major", lambda: compute_major)
-    monkeypatch.setattr(_nano, "_gpu_is_dgx_spark", lambda: spark_uma)
+    monkeypatch.setattr(_nano, "gpu_is_dgx_spark", lambda: spark_uma)
     monkeypatch.setattr(
         _nano,
         "_ensure_reasoning_parser",
@@ -187,7 +187,7 @@ def test_omni_profiles_forward_admission_and_explicit_kv_cache(
     monkeypatch.setattr(_omni, "resolve_model_cache", lambda *_a, **_k: Path("models"))
     monkeypatch.setattr(_omni, "setup_hf_env", lambda *_a, **_k: None)
     monkeypatch.setattr(_omni, "gpu_compute_major", lambda: compute_major)
-    monkeypatch.setattr(_omni, "_gpu_is_dgx_spark", lambda: False)
+    monkeypatch.setattr(_omni, "gpu_is_dgx_spark", lambda: False)
     monkeypatch.setattr(_omni, "serve", lambda **kwargs: captured.update(kwargs))
 
     _omni.run()

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from xr_ai_vllm._config import _gpu_is_dgx_spark, gpu_compute_major, parse_config_bool, setup_hf_env
+from xr_ai_vllm._config import gpu_is_dgx_spark, gpu_compute_major, parse_config_bool, setup_hf_env
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
 
 
@@ -75,7 +75,7 @@ def test_dgx_spark_detection_uses_selected_gpu(
         lambda *_args, **_kwargs: gpu_rows,
     )
 
-    assert _gpu_is_dgx_spark() is expected
+    assert gpu_is_dgx_spark() is expected
 
 
 class TestSetupHfEnv:
