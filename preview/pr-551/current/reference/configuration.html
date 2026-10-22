@@ -438,8 +438,7 @@
   <section id="sample-configuration-reference">
 <h1>Sample configuration reference<a class="headerlink" href="#sample-configuration-reference" title="Link to this heading">#</a></h1>
 <p>This reference is generated directly from configuration files under each
-installed top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory in <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code> or
-<code class="docutils literal notranslate"><span class="pre">model-server-samples/</span></code>, and from configuration files
+installed top-level sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory in <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>, and from configuration files
 beside a direct capability subproject. Adding a file in either location enrolls
 it automatically. Values are sample- and hardware-specific examples, not
 universal defaults. Keep field guidance beside the value as a source comment;
@@ -450,7 +449,7 @@ configuration fields. Operational choices, credentials, and deployment
 workflows remain in the handwritten guides.</p>
 <p>To change a sample parameter:</p>
 <ol class="arabic simple">
-<li><p>Start in <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/</span></code> or <code class="docutils literal notranslate"><span class="pre">model-server-samples/&lt;sample&gt;/</span></code>
+<li><p>Start in <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;sample&gt;/</span></code>
 and find the owning file in that sample’s README or published guide.</p></li>
 <li><p>Edit the checked-in YAML or JSON value, preserving its documented type.
 Resolve relative paths from the file that declares them unless the sample
@@ -2227,24 +2226,6 @@ workflow.</p></li>
 </pre></div>
 </div>
 </section>
-<section id="config-model-server-defaults-ocr-server-yaml">
-<h3>ocr_server.yaml<a class="headerlink" href="#config-model-server-defaults-ocr-server-yaml" title="Link to this heading">#</a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
-<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
-
-<span class="c1"># Defaults for standalone launch and sample stacks; sample GPU profiles override these.</span>
-<span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8112</span>
-<span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xr-ai-ocr</span>
-<span class="c1"># Relative to this file; weights persist across container restarts.</span>
-<span class="nt">model_cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../models</span>
-<span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="c1"># Match the selected GPU: Ada = "8.9", Blackwell = "12.0", Spark = "12.1".</span>
-<span class="nt">cuda_arch</span><span class="p">:</span><span class="w"> </span><span class="s">"12.0"</span>
-<span class="c1"># Server-wide detector length: 640 or 1024. No cropping or enhancement.</span>
-<span class="nt">infer_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
-</pre></div>
-</div>
-</section>
 <section id="config-model-server-defaults-pocket-tts-server-yaml">
 <h3>pocket_tts_server.yaml<a class="headerlink" href="#config-model-server-defaults-pocket-tts-server-yaml" title="Link to this heading">#</a></h3>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
@@ -2516,7 +2497,6 @@ workflow.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-magpie-tts-server-yaml">magpie_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-nemotron-omni-llm-server-yaml">nemotron_omni_llm_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-nemotron3-nano-llm-server-yaml">nemotron3_nano_llm_server.yaml</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-ocr-server-yaml">ocr_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-pocket-tts-server-yaml">pocket_tts_server.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-speaker-stt-yaml">speaker_stt.yaml</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#config-model-server-defaults-stt-server-yaml">stt_server.yaml</a></li>

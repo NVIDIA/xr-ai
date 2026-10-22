@@ -652,46 +652,6 @@ partial and cannot be passed directly to a service command. For a manually
 assembled stack, provide complete service YAML and tune the aggregate GPU use.
 Refer to <a class="reference internal" href="../components/ai-services.html"><span class="doc">AI inference servers</span></a> for the service entry points and lifecycle.</p>
 </section>
-<section id="add-ocr-to-a-sample">
-<span id="sample-ocr-service"></span><h2>Add OCR to a sample<a class="headerlink" href="#add-ocr-to-a-sample" title="Link to this heading">#</a></h2>
-<p>OCR is an available service, not an enabled dependency of any supplied sample.
-To add local OCR, keep these changes inside your sample:</p>
-<ol class="arabic">
-<li><p>Add <code class="docutils literal notranslate"><span class="pre">&quot;ocr&quot;</span></code> to the service list passed to <code class="docutils literal notranslate"><span class="pre">run_model_stack</span></code> in
-<code class="docutils literal notranslate"><span class="pre">model-servers/main.py</span></code>.</p></li>
-<li><p>Add an <code class="docutils literal notranslate"><span class="pre">ocr</span></code> mapping to each selected <code class="docutils literal notranslate"><span class="pre">model-servers/yaml/&lt;gpu-profile&gt;.yaml</span></code>.
-Choose GPU placement and the matching <code class="docutils literal notranslate"><span class="pre">cuda_arch</span></code>: <code class="docutils literal notranslate"><span class="pre">&quot;8.9&quot;</span></code> for Ada,
-<code class="docutils literal notranslate"><span class="pre">&quot;12.0&quot;</span></code> for Blackwell, or <code class="docutils literal notranslate"><span class="pre">&quot;12.1&quot;</span></code> for Spark. For example, on Spark:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">ocr</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">cuda_visible_devices</span><span class="p">:</span><span class="w"> </span><span class="s">"0"</span>
-<span class="w">  </span><span class="nt">cuda_arch</span><span class="p">:</span><span class="w"> </span><span class="s">"12.1"</span>
-</pre></div>
-</div>
-</li>
-<li><p>Add the client role to the sample’s consumer model profile:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"ocr"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"adapter"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"preset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nemotron_ocr"</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"endpoint"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"base_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://localhost:8112"</span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</li>
-<li><p>In the consuming worker or capability service, use <code class="docutils literal notranslate"><span class="pre">make_ocr(config,</span> <span class="pre">&quot;ocr&quot;)</span></code>
-from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code> and call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">ocr.read_text(image)</span></code>. Declare the
-<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> dependency if the project does not already use it, and close
-the client on shutdown. Application-specific image selection, tools, and
-result handling remain sample-owned.</p></li>
-</ol>
-<p>The service-owned defaults in <code class="docutils literal notranslate"><span class="pre">services/ocr-server/ocr_server.yaml</span></code> provide port
-8112, persistent cache settings, and a detector length of 1024. OCR starts after
-embedding when both are selected. The normal
-stack start and stop commands include only selected services. Match any port
-override in the consumer profile and stop command. Qualify the combined GPU
-workload; registering OCR does not reserve memory or change other models’ budgets.
-Refer to <a class="reference internal" href="../components/ai-services.html#ocr-serving"><span class="std std-ref">OCR serving</span></a> for inference limits and standalone operation.</p>
-<p>For an external NIM endpoint, configure the consumer role but omit <code class="docutils literal notranslate"><span class="pre">ocr</span></code> from
-the local launcher and its GPU profiles. Refer to <a class="reference internal" href="deploying-with-nim.html"><span class="doc">Deploying samples with NIM endpoints</span></a>.</p>
-</section>
 <section id="rag-embedding-health">
 <span id="id1"></span><h2>RAG embedding health<a class="headerlink" href="#rag-embedding-health" title="Link to this heading">#</a></h2>
 <p>Tea making’s RAG service reads the <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role from the same
@@ -772,7 +732,6 @@ and NIM configuration.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tune-a-sample-and-hardware-combination">Tune a sample and hardware combination</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#change-a-model-or-endpoint">Change a model or endpoint</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#launch-a-service-individually">Launch a service individually</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-ocr-to-a-sample">Add OCR to a sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rag-embedding-health">RAG embedding health</a></li>
 </ul>
   </nav></div>

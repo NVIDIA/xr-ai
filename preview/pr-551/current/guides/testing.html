@@ -486,10 +486,8 @@ removes only containers with that exact session label, using immutable IDs.
 Test-mode launcher operations also check ownership before reusing, restarting,
 stopping, or removing a container. Ordinary sample launches are unchanged.</p>
 <p>If Docker ownership inventory fails or times out, the test is skipped rather
-than assuming the host is empty. Any foreign model-server container carrying
-the <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm.port</span></code> label, including OCR with a custom container name, causes
-<strong>all</strong> GPU tests to skip. Legacy <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-*</span></code> and <code class="docutils literal notranslate"><span class="pre">xr-ai-nim-*</span></code> names are
-also recognized. This applies to running and stopped containers, and includes
+than assuming the host is empty. Any foreign <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-*</span></code> or <code class="docutils literal notranslate"><span class="pre">xr-ai-nim-*</span></code>
+container, running or stopped, causes <strong>all</strong> GPU tests to skip, including
 NVENC and LiveKit tests that launch no model server. This conservative guard
 avoids GPU contention and accidental reuse or replacement of stopped servers.</p>
 <p>Fixture teardown handles test and fixture failures, but cannot run after

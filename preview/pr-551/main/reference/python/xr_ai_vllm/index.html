@@ -529,13 +529,10 @@ docker path stays light even when pip vllm is not installed.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.setup_hf_env" title="xr_ai_vllm.setup_hf_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup_hf_env</span></code></a>(→ str | None)</p></td>
 <td><p>Apply the shared HuggingFace / CUDA env block.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.serve_container" title="xr_ai_vllm.serve_container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve_container</span></code></a>(, container_port, health_path, ...)</p></td>
-<td><p>Serve a custom GPU inference image using the shared container lifecycle.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.serve" title="xr_ai_vllm.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a>(→ None)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.serve" title="xr_ai_vllm.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a>(→ None)</p></td>
 <td><p>Launch vLLM via <em>backend</em> (<cite>&quot;pip&quot;</cite> or <cite>&quot;docker&quot;</cite>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#xr_ai_vllm.stop_persistent_servers" title="xr_ai_vllm.stop_persistent_servers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_persistent_servers</span></code></a>(→ bool)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#xr_ai_vllm.stop_persistent_servers" title="xr_ai_vllm.stop_persistent_servers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_persistent_servers</span></code></a>(→ bool)</p></td>
 <td><p>Stop persisted servers and report whether every discovered server stopped.</p></td>
 </tr>
 </tbody>
@@ -609,40 +606,6 @@ docs/source/getting_started/credentials.md. <code class="docutils literal notran
 <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code>.</p>
 <p>Returns the YAML device selection when configured, otherwise inherited
 <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> (or <code class="docutils literal notranslate"><span class="pre">None</span></code>), for GPU probes and Docker placement.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="xr_ai_vllm.serve_container">
-<span class="sig-prename descclassname"><span class="pre">xr_ai_vllm.</span></span><span class="sig-name descname"><span class="pre">serve_container</span></span><span class="sig-paren">(</span>
-
-<dl>
-<dd><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">image_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">container_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">model_cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">cuda_visible_devices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">environment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">inherited_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">container_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8000</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">health_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/v1/health/ready'</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">log_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">ready_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
-</dl>
-
-<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#xr_ai_vllm.serve_container" title="Link to this definition">#</a></dt>
-<dd><p>Serve a custom GPU inference image using the shared container lifecycle.</p>
-<p>Mount <em>model_cache</em> at <code class="docutils literal notranslate"><span class="pre">/models</span></code> and publish <em>container_port</em> on host
-<em>port</em>. The image supplies its own entrypoint. <em>image_id</em> is its immutable
-Docker image ID, so rebuilding the same tag invalidates persistent reuse.
-<em>environment</em> contains non-secret settings; <em>inherited_env</em> names host
-variables to pass through without putting their values in command arguments.
-Changes to inherited values invalidate reuse through credential digests.</p>
-<p>This owns discovery, test-session ownership, and configuration labels as
-well as readiness, persistent reuse, and shutdown. Services must not add
-their own lifecycle labels. Readiness probes use <em>health_path</em> on localhost;
-<em>ready_file</em>, when supplied, is touched after the server is ready.</p>
 </dd></dl>
 
 <dl class="py data">
@@ -792,7 +755,6 @@ identified as xr-ai services fail closed without sending a signal.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.parse_config_bool"><code class="docutils literal notranslate"><span class="pre">parse_config_bool()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.resolve_model_cache"><code class="docutils literal notranslate"><span class="pre">resolve_model_cache()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.setup_hf_env"><code class="docutils literal notranslate"><span class="pre">setup_hf_env()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve_container"><code class="docutils literal notranslate"><span class="pre">serve_container()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.DEFAULT_IMAGE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_IMAGE</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.serve"><code class="docutils literal notranslate"><span class="pre">serve()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xr_ai_vllm.stop_persistent_servers"><code class="docutils literal notranslate"><span class="pre">stop_persistent_servers()</span></code></a></li>

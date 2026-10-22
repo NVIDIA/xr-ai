@@ -63,7 +63,6 @@ Functions
    xr_ai_vllm.parse_config_bool
    xr_ai_vllm.resolve_model_cache
    xr_ai_vllm.setup_hf_env
-   xr_ai_vllm.serve_container
    xr_ai_vllm.serve
    xr_ai_vllm.stop_persistent_servers
 
@@ -120,23 +119,6 @@ Package Contents
 
    Returns the YAML device selection when configured, otherwise inherited
    ``CUDA_VISIBLE_DEVICES`` (or ``None``), for GPU probes and Docker placement.
-
-
-.. py:function:: serve_container(*, image: str, image_id: str, container_name: str, port: int, model_cache: pathlib.Path, cuda_visible_devices: str, environment: dict[str, str], inherited_env: tuple[str, Ellipsis] = (), container_port: int = 8000, health_path: str = '/v1/health/ready', log_prefix: str, ready_file: pathlib.Path | None = None) -> None
-
-   Serve a custom GPU inference image using the shared container lifecycle.
-
-   Mount *model_cache* at ``/models`` and publish *container_port* on host
-   *port*. The image supplies its own entrypoint. *image_id* is its immutable
-   Docker image ID, so rebuilding the same tag invalidates persistent reuse.
-   *environment* contains non-secret settings; *inherited_env* names host
-   variables to pass through without putting their values in command arguments.
-   Changes to inherited values invalidate reuse through credential digests.
-
-   This owns discovery, test-session ownership, and configuration labels as
-   well as readiness, persistent reuse, and shutdown. Services must not add
-   their own lifecycle labels. Readiness probes use *health_path* on localhost;
-   *ready_file*, when supplied, is touched after the server is ready.
 
 
 .. py:data:: DEFAULT_IMAGE

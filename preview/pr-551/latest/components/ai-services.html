@@ -511,7 +511,7 @@ recorded video, and document retrieval.</p>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/clef-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code> via <code class="docutils literal notranslate"><span class="pre">model-server-samples/clef-flash/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">clef_server</span></code></p></td>
 <td><p>8120</p></td>
 <td><p>Cloudflare Clef-Flash 9B</p></td>
 <td><p>Native SystemOne choice decisions</p></td>
@@ -523,8 +523,8 @@ recorded video, and document retrieval.</p>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/ocr-server/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ocr_server</span></code></p></td>
-<td><p>8112</p></td>
+<td><p>Operator-run container</p></td>
+<td><p>8000 (container); 8112 in example</p></td>
 <td><p>Nemotron OCR v2 multilingual</p></td>
 <td><p>Hugging Face in a local CUDA container</p></td>
 </tr>
@@ -543,7 +543,7 @@ recorded video, and document retrieval.</p>
 </tbody>
 </table>
 </div>
-<p>Local model artifacts land in the service’s <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> directory, set per
+<p>Launcher-managed local model artifacts land in the service’s <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> directory, set per
 YAML and resolved relative to the YAML file. Operators configure self-hosted
 NIM caches for their optimized engines and weights; hosted endpoints keep no
 weights in this repository. Every <code class="docutils literal notranslate"><span class="pre">models/</span></code> tree is excluded from version
@@ -551,29 +551,43 @@ control. The model-servers profiles share <code class="docutils literal notransl
 the exact layout per launch style is below.</p>
 <section id="ocr-serving">
 <span id="id1"></span><h2>OCR serving<a class="headerlink" href="#ocr-serving" title="Link to this heading">#</a></h2>
-<p>The reusable <code class="docutils literal notranslate"><span class="pre">services/ocr-server</span></code> provides multilingual Nemotron OCR v2 on
-port <code class="docutils literal notranslate"><span class="pre">8112</span></code>. No supplied sample launches or consumes OCR. The launcher builds
-an isolated Python 3.12, PyTorch 2.9.1,
-CUDA 13 container, downloads NVIDIA’s pinned Hugging Face source and
-<code class="docutils literal notranslate"><span class="pre">v2_multilingual</span></code> weights, and keeps the model loaded across requests.
+<p>The reusable <code class="docutils literal notranslate"><span class="pre">services/ocr-server</span></code> provides multilingual Nemotron OCR v2 in
+an operator-managed container. No supplied sample launches or consumes OCR.
+The Dockerfile builds an isolated Python 3.12, PyTorch 2.9.1, CUDA 13 runtime
+with NVIDIA’s pinned Hugging Face source. At startup, the service downloads
+<code class="docutils literal notranslate"><span class="pre">v2_multilingual</span></code> weights and keeps the model loaded across requests.
 Docker, NVIDIA Container Toolkit, and a CUDA 13-compatible NVIDIA driver
 are required; a host CUDA toolkit is not. The first build takes several minutes.
 Refer to the
 <a class="reference external" href="https://huggingface.co/nvidia/nemotron-ocr-v2/blob/main/quickstart.md">upstream installation instructions</a>.</p>
-<p>Set <code class="docutils literal notranslate"><span class="pre">cuda_visible_devices</span></code> and <code class="docutils literal notranslate"><span class="pre">cuda_arch</span></code> in
-<code class="docutils literal notranslate"><span class="pre">services/ocr-server/ocr_server.yaml</span></code> for the selected GPU: <code class="docutils literal notranslate"><span class="pre">8.9</span></code> for Ada,
-<code class="docutils literal notranslate"><span class="pre">12.0</span></code> for Blackwell, or <code class="docutils literal notranslate"><span class="pre">12.1</span></code> for Spark. From the repository root, launch:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>services/ocr-server<span class="w"> </span>ocr_server<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--config<span class="w"> </span>services/ocr-server/ocr_server.yaml
+<p>Set the build argument <code class="docutils literal notranslate"><span class="pre">TORCH_CUDA_ARCH_LIST</span></code> for the selected GPU: <code class="docutils literal notranslate"><span class="pre">8.9</span></code> for
+Ada, <code class="docutils literal notranslate"><span class="pre">12.0</span></code> for Blackwell, or <code class="docutils literal notranslate"><span class="pre">12.1</span></code> for Spark. From the repository root,
+build the image; this example targets Blackwell:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>build<span class="w"> </span>--build-arg<span class="w"> </span><span class="nv">TORCH_CUDA_ARCH_LIST</span><span class="o">=</span><span class="m">12</span>.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-t<span class="w"> </span>xr-ai-nemotron-ocr:local<span class="w"> </span>services/ocr-server/ocr_server
 </pre></div>
 </div>
-<p>The service is also registered as <code class="docutils literal notranslate"><span class="pre">ocr</span></code> in the shared model-stack launcher,
-like embedding and VLM. Both launch paths use
-<code class="docutils literal notranslate"><span class="pre">services/ocr-server/ocr_server.yaml</span></code>; sample-owned GPU profiles override those
-service defaults. Refer to <a class="reference internal" href="../guides/customizing-model-servers.html#sample-ocr-service"><span class="std std-ref">Add OCR to a sample</span></a> for opt-in integration entirely
-inside a sample. Provision GPU capacity before starting it alongside other
-services. Registration does not enable OCR in existing samples, change their
-GPU allocations, or qualify concurrent workloads on every supported GPU.</p>
+<p>Run it in the foreground on GPU 0, publishing the API only on localhost:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>models
+docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--name<span class="w"> </span>xr-ai-ocr-manual<span class="w"> </span>--gpus<span class="w"> </span><span class="nv">device</span><span class="o">=</span><span class="m">0</span><span class="w"> </span>--ipc<span class="o">=</span>host<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span>HF_TOKEN<span class="w"> </span>-e<span class="w"> </span><span class="nv">OCR_INFER_LENGTH</span><span class="o">=</span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8112:8000<span class="w"> </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/models:/models"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>xr-ai-nemotron-ocr:local
+</pre></div>
+</div>
+<p>The operator owns GPU placement, container startup and shutdown, cache mounts,
+and readiness checks. After startup completes, check readiness in another terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>--fail<span class="w"> </span>http://localhost:8112/v1/health/ready
+</pre></div>
+</div>
+<p>The service loads and warms the model before accepting requests. There is no
+host <code class="docutils literal notranslate"><span class="pre">ocr_server</span></code> command or <code class="docutils literal notranslate"><span class="pre">run_model_stack</span></code> registration. Sample stack stop
+commands do not stop this container, and no automatic reuse or replacement is
+performed. Provision GPU capacity before running it alongside other services;
+no GPU allocations are changed and coexistence is not qualified.
+Repository GPU tests do not discover arbitrary operator-run containers. Stop
+this container before running GPU tests that use the same device; the HTTP-only
+OCR smoke test below can run against it without managing containers.</p>
 <p>For NIM, deploy Nemotron OCR v2 independently and configure its endpoint in the
 consumer profile. The operator selects the multilingual variant and owns GPU
 placement, model downloads, caches, and container lifecycle. XR AI does not
@@ -633,23 +647,19 @@ that pass that limit but exceed the decoded image-file byte limit or padded
 pixel limit receive HTTP 413. Both limits apply before model inference;
 callers must reduce the encoded file size, downsample, or tile oversized inputs.
 The server serializes inference and rejects overlapping requests with HTTP 503.
-Its detector length is configured server-wide in <code class="docutils literal notranslate"><span class="pre">ocr_server.yaml</span></code> (640 or
-1024). NIM request limits and engine settings belong to the deployed version,
+Its detector length is configured server-wide by <code class="docutils literal notranslate"><span class="pre">OCR_INFER_LENGTH</span></code> (640 or
+1024, default 1024). NIM request limits and engine settings belong to the deployed version,
 not this local server configuration. Neither integration adds experimental
 text-dense cropping or sharpening; preprocessing remains caller-owned.</p>
-<p>Local weights and the torchvision backbone are cached beneath the OCR YAML’s
-<code class="docutils literal notranslate"><span class="pre">model_cache</span></code>, which defaults to the repository <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory, using
-<code class="docutils literal notranslate"><span class="pre">huggingface/</span></code> and <code class="docutils literal notranslate"><span class="pre">torch/</span></code> subdirectories. The compiled CUDA extension stays
-in the Docker image. An existing OCR-specific cache can still be selected with
-an explicit <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> override; launching does not relocate or delete it.
-Changes to the local YAML or service source invalidate container reuse as
-needed. Stop the standalone container with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">xr-ai-ocr</span></code> (or the
-configured <code class="docutils literal notranslate"><span class="pre">container_name</span></code>) before changing its settings, then repeat the launch
-command. Closing a client stops neither the local service nor an externally
-deployed NIM.</p>
-<p>When launched by a sample model stack, use that stack’s normal stop command,
-including the GPU profile when it overrides the port. The shared launcher
-starts and stops OCR only when the sample explicitly selects <code class="docutils literal notranslate"><span class="pre">ocr</span></code>.</p>
+<p>Local weights and the torchvision backbone are cached at <code class="docutils literal notranslate"><span class="pre">/models/huggingface</span></code>
+and <code class="docutils literal notranslate"><span class="pre">/models/torch</span></code> inside the container. The example mounts the repository’s
+<code class="docutils literal notranslate"><span class="pre">models/</span></code> directory there; change the host mount to use another persistent
+cache. The compiled CUDA extension stays in the Docker image.
+Stop only the container you launched with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">xr-ai-ocr-manual</span></code>.
+The example’s <code class="docutils literal notranslate"><span class="pre">--rm</span></code> removes the stopped container, not the mounted cache.
+Rebuild after source changes and rerun after configuration changes. Docker
+rejects an occupied name or port rather than replacing an existing service.
+Closing an SDK client stops neither the local service nor an externally deployed NIM.</p>
 <p>To test transcription against a running endpoint, run from the repository root:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">XR_AI_OCR_TEST_URL</span><span class="o">=</span>http://localhost:8112<span class="w"> </span>uv<span class="w"> </span>--config-file<span class="w"> </span>uv.toml<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>tests<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>pytest<span class="w"> </span>tests/test_ocr_server.py::test_live_ocr_equipment_text
