@@ -31,6 +31,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
+
 from . import _diagnostics, _hf_snapshot, _lifecycle
 
 log = logging.getLogger(__name__)
@@ -1245,40 +1247,6 @@ def container_on_port(port: int) -> str | None:
     return container
 
 
-def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
-    """Return the listening PID, inspection status, and listener presence.
-
-    Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    A listener without a visible PID is still reported so callers fail closed
-    instead of mistaking an uninspectable listener for an unused port.
-    """
-    try:
-        out = subprocess.check_output(
-            ["ss", "-tlnpH", f"sport = :{port}"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-        m = re.search(r"pid=(\d+)", out)
-        if m:
-            return int(m.group(1)), True, True
-        return None, True, bool(out.strip())
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        pass
-    try:
-        out = subprocess.check_output(
-            ["lsof", "-ti", f"tcp:{port}"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-        if out:
-            return int(out.splitlines()[0]), True, True
-        return None, True, False
-    except subprocess.CalledProcessError:
-        return None, True, False
-    except FileNotFoundError:
-        return None, False, False
-
-
 def pid_on_port(port: int) -> int | None:
     """Return the pid listening on *port* (any v4/v6 socket), or None."""
     pid, _, _ = pid_on_port_checked(port)
@@ -1296,19 +1264,7 @@ def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     }
     if expected_command := in_process_servers.get(label):
         return expected_command in command
-    return has_xr_ai_ownership_marker(pid, port)
-
-
-def has_xr_ai_ownership_marker(pid: int, port: int) -> bool:
-    """Return whether *pid* carries xr-ai's matching managed-port marker."""
-    try:
-        environment = Path(f"/proc/{pid}/environ").read_bytes()
-    except OSError:
-        return False
-    return (
-        b"XR_AI_VLLM_MANAGED=1\0" in environment
-        and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
-    )
+    return has_ownership_marker(pid, port, "XR_AI_VLLM")
 
 
 def _pocket_owned_process_group(pid: int, port: int) -> int | None:

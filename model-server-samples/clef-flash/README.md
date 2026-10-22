@@ -12,7 +12,7 @@ behavior and deployment details.
 
 ## Configure
 
-`yaml/clef_server.yaml` selects the pinned model revision, cache directory,
+`services/clef-server/clef_server.yaml` selects the pinned model revision, cache directory,
 GPU device, context limit, and HTTP port. For example, raise the context limit
 after checking available GPU memory:
 
@@ -20,9 +20,9 @@ after checking available GPU memory:
 max_length: 8192
 ```
 
-Refer to the generated
-[configuration reference](https://nvidia.github.io/xr-ai/latest/reference/configuration.html)
-for the remaining checked-in fields and comments.
+Refer to the
+[Clef-Flash guide](https://nvidia.github.io/xr-ai/latest/reference/clef-flash.html)
+for the remaining fields.
 
 ## Run
 

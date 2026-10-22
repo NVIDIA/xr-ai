@@ -23,6 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from xr_ai_launcher import _ownership, has_ownership_marker
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "services" / "clef-server"))
@@ -232,7 +233,7 @@ def _health_response(config: ServerConfig):
 def test_matching_owned_ready_listener_is_reused(tmp_path: Path, monkeypatch, host, url_host) -> None:
     config = replace(_config(tmp_path), host=host)
     monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "has_ownership_marker", lambda *_args: True)
     urls = []
 
     def probe(url, **_kwargs):
@@ -260,7 +261,7 @@ def test_mismatched_configuration_is_not_reused(tmp_path: Path, monkeypatch) -> 
             return json.dumps(mismatched).encode()
 
     monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _Response())
 
     with pytest.raises(RuntimeError, match="different Clef configuration"):
@@ -270,7 +271,7 @@ def test_mismatched_configuration_is_not_reused(tmp_path: Path, monkeypatch) -> 
 def test_unmanaged_listener_is_not_reused(tmp_path: Path, monkeypatch) -> None:
     config = _config(tmp_path)
     monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: False)
+    monkeypatch.setattr(clef_main, "has_ownership_marker", lambda *_args: False)
     monkeypatch.setattr(
         clef_main,
         "urlopen",
@@ -285,7 +286,7 @@ def test_listener_replacement_during_reuse_fails_closed(tmp_path: Path, monkeypa
     config = _config(tmp_path)
     listeners = iter([(1234, True, True), (5678, True, True)])
     monkeypatch.setattr(clef_main, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_main, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_main, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(clef_main, "urlopen", lambda *_args, **_kwargs: _health_response(config))
 
     with pytest.raises(RuntimeError, match="changed during inspection"):
@@ -298,25 +299,17 @@ def test_clef_ownership_uses_exact_environment_not_command_line(tmp_path: Path, 
     (proc_root / "cmdline").write_text("python\0unrelated.py\0/tmp/clef_server.yaml")
     (proc_root / "environ").write_bytes(b"PATH=/bin\0")
     monkeypatch.setattr(
-        clef_main,
-        "Path",
-        lambda raw: tmp_path / str(raw).removeprefix("/"),
-    )
-    monkeypatch.setattr(
-        clef_sample,
+        _ownership,
         "Path",
         lambda raw: tmp_path / str(raw).removeprefix("/"),
     )
 
-    assert not clef_main._has_clef_ownership(1234, 8120)
-    assert not clef_sample._has_clef_ownership(1234, 8120)
+    assert not has_ownership_marker(1234, 8120, clef_main._MARKER)
     (proc_root / "environ").write_bytes(
         b"XR_AI_CLEF_MANAGED=1\0XR_AI_CLEF_PORT=8120\0"
     )
-    assert clef_main._has_clef_ownership(1234, 8120)
-    assert clef_sample._has_clef_ownership(1234, 8120)
-    assert not clef_main._has_clef_ownership(1234, 8121)
-    assert not clef_sample._has_clef_ownership(1234, 8121)
+    assert has_ownership_marker(1234, 8120, clef_main._MARKER)
+    assert not has_ownership_marker(1234, 8121, clef_main._MARKER)
 
 
 @pytest.fixture
@@ -327,7 +320,7 @@ def process_handle(monkeypatch):
 
 def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch, process_handle) -> None:
     monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: False)
+    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: False)
     monkeypatch.setattr(
         "xr_ai_vllm._docker.container_on_port_checked",
         lambda *_args: (_ for _ in ()).throw(AssertionError("Clef stop must not inspect Docker")),
@@ -344,7 +337,7 @@ def test_stop_ignores_docker_and_rejects_unowned_listener(monkeypatch, process_h
 def test_stop_rechecks_listener_pid_before_signalling(monkeypatch, process_handle) -> None:
     listeners = iter([(1234, True, True), (5678, True, True)])
     monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(
         clef_sample.signal,
         "pidfd_send_signal",
@@ -357,7 +350,7 @@ def test_stop_rechecks_listener_pid_before_signalling(monkeypatch, process_handl
 def test_stop_signals_verified_process_handle(monkeypatch, process_handle) -> None:
     signals = []
     monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: (1234, True, True))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
     monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
     monkeypatch.setattr(clef_sample, "_wait_for_process_exit", lambda *_args: True)
 
@@ -368,7 +361,7 @@ def test_stop_signals_verified_process_handle(monkeypatch, process_handle) -> No
 def test_force_stop_keeps_captured_identity_after_listener_replacement(monkeypatch, process_handle) -> None:
     listeners = iter([(1234, True, True), (1234, True, True), (5678, True, True)])
     monkeypatch.setattr(clef_sample, "pid_on_port_checked", lambda _port: next(listeners))
-    monkeypatch.setattr(clef_sample, "_has_clef_ownership", lambda *_args: True)
+    monkeypatch.setattr(clef_sample, "has_ownership_marker", lambda *_args: True)
     signals = []
     monkeypatch.setattr(clef_sample.signal, "pidfd_send_signal", lambda fd, sig: signals.append((fd, sig)))
     waits = iter([False, True])

@@ -41,12 +41,13 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
+    gpu_is_dgx_spark,
     load_config,
+    parse_config_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
 )
-from xr_ai_vllm._config import _gpu_is_dgx_spark, parse_config_bool
 
 _MODEL_BLACKWELL  = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 _MODEL_ADA        = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
@@ -99,7 +100,7 @@ def run() -> None:
     host          = cfg.get("host",                _DEFAULT_HOST)
     port          = int(cfg.get("port",            _DEFAULT_PORT))
     served_name   = cfg.get("served_model_name",   _DEFAULT_SERVED)
-    spark_uma_value = cfg["spark_uma"] if "spark_uma" in cfg else _gpu_is_dgx_spark()
+    spark_uma_value = cfg["spark_uma"] if "spark_uma" in cfg else gpu_is_dgx_spark()
     spark_uma     = parse_config_bool(spark_uma_value, "spark_uma")
     max_seqs      = int(cfg.get(
         "max_num_seqs", 4 if spark_uma else _DEFAULT_SEQS

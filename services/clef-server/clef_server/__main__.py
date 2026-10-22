@@ -17,26 +17,13 @@ from urllib.request import urlopen
 
 import uvicorn
 from loguru import logger
+from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
 from xr_ai_logging import setup_logging
-from xr_ai_vllm._docker import pid_on_port_checked
 
 from ._config import identity, load_config
 from ._service import create_app
 
-_MANAGED_ENV = "XR_AI_CLEF_MANAGED"
-_PORT_ENV = "XR_AI_CLEF_PORT"
-
-
-def _has_clef_ownership(pid: int, port: int) -> bool:
-    """Return whether the listener carries Clef's exact exec-time ownership."""
-    try:
-        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
-    except OSError:
-        return False
-    return (
-        f"{_MANAGED_ENV}=1".encode() in entries
-        and f"{_PORT_ENV}={port}".encode() in entries
-    )
+_MARKER = "XR_AI_CLEF"
 
 
 def run() -> None:
@@ -46,7 +33,7 @@ def run() -> None:
     args = parser.parse_args()
     try:
         config = load_config(args.config)
-        markers = {_MANAGED_ENV: "1", _PORT_ENV: str(config.port)}
+        markers = {f"{_MARKER}_MANAGED": "1", f"{_MARKER}_PORT": str(config.port)}
         if any(os.environ.get(key) != value for key, value in markers.items()):
             # /proc/<pid>/environ records the exec-time environment. Re-exec so
             # ownership remains independently verifiable after the launcher exits.
@@ -110,7 +97,7 @@ def _reuse_ready_server(config) -> bool:
     if not listening:
         return False
     assert pid is not None
-    if not _has_clef_ownership(pid, config.port):
+    if not has_ownership_marker(pid, config.port, _MARKER):
         raise RuntimeError(
             f"port {config.port} belongs to an unmanaged listener; stop it before launching"
         )

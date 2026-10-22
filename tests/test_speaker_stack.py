@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from xr_ai_launcher import _ownership
 from xr_ai_model_server_stack import _stack, run_model_stack
 from xr_ai_models import load_models_config
 from xr_ai_vllm import _docker
@@ -86,4 +87,5 @@ def test_speaker_cleanup_requires_matching_managed_listener(tmp_path, monkeypatc
     (proc / "cmdline").write_text("python\0-m\0speaker_stt\0--_serve")
     (proc / "environ").write_bytes(environment)
     monkeypatch.setattr(_docker, "Path", lambda path: proc / path.rsplit("/", 1)[-1])
+    monkeypatch.setattr(_ownership, "Path", lambda path: proc / path.rsplit("/", 1)[-1])
     assert _docker.is_xr_ai_server_process(1234, "speaker-stt", 8102) is owned

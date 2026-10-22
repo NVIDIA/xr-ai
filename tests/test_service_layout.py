@@ -32,6 +32,7 @@ _REQUIRED_SERVICES = {
     "device-io-hub",
 }
 _MODEL_SERVICES = {
+    "clef-server": ("clef-server", "clef_server", 8120),
     "embedding-server": ("embedding-server", "embedding_server", 8109),
     "llama-nemotron-llm": (
         "llama-nemotron-llm-server",
@@ -121,10 +122,14 @@ def _load_module(name: str, relative: str):
     return module
 
 
-def _model_cache_default(path: Path) -> str:
+def _model_cache_default(package: Path) -> str:
     defaults: list[str] = []
 
-    for node in ast.walk(ast.parse(path.read_text())):
+    for node in (
+        node
+        for path in package.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text()))
+    ):
         if not isinstance(node, ast.Call):
             continue
         if isinstance(node.func, ast.Name) and node.func.id == "resolve_model_cache":
@@ -141,8 +146,16 @@ def _model_cache_default(path: Path) -> str:
             and node.args[0].value == "model_cache"
         ):
             defaults.append(ast.literal_eval(node.args[1]))
+        elif (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "_string"
+            and len(node.args) >= 3
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "model_cache"
+        ):
+            defaults.append(ast.literal_eval(node.args[2]))
 
-    assert len(defaults) == 1, f"expected one model_cache default in {path}"
+    assert len(defaults) == 1, f"expected one model_cache default in {package}"
     return defaults[0]
 
 
@@ -383,7 +396,7 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert Path(os.path.normpath(project / config["model_cache"])) == _ROOT / "models", (
             f"{directory}: model_cache must target the repo models directory"
         )
-        default = _model_cache_default(project / command / "__main__.py")
+        default = _model_cache_default(project / command)
         assert Path(os.path.normpath(project / default)) == _ROOT / "models", (
             f"{directory}: default model cache must target the repo models directory"
         )

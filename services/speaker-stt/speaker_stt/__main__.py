@@ -23,8 +23,8 @@ import yaml
 from anyio import CancelScope
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
+from xr_ai_launcher import has_ownership_marker, pid_on_port_checked
 from xr_ai_logging import setup_logging
-from xr_ai_vllm._docker import has_xr_ai_ownership_marker, pid_on_port_checked
 from xr_ai_voicegate._speaker import _SpeakerConfig
 
 _SERVICE = "xr-ai-speaker-stt"
@@ -145,7 +145,7 @@ async def _reuse(cfg: dict, ready_file: Path | None) -> bool:
         raise RuntimeError(f"cannot inspect ownership of port {port}")
     if not listening:
         return False
-    if not has_xr_ai_ownership_marker(pid, port):
+    if not has_ownership_marker(pid, port, "XR_AI_VLLM"):
         raise RuntimeError(f"port {port} belongs to an unmanaged listener; stop it before launching")
     base_url = _base_url(cfg)
     status = await _status(base_url)

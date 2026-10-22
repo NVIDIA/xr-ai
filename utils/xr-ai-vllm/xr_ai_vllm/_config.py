@@ -137,7 +137,7 @@ def gpu_compute_major() -> int:
     return 0
 
 
-def _gpu_is_dgx_spark() -> bool:
+def gpu_is_dgx_spark() -> bool:
     """Return whether the selected GPU is the GB10 in a DGX Spark."""
     try:
         rows = subprocess.check_output(
