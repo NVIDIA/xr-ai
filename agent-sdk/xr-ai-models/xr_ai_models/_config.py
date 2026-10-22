@@ -12,6 +12,7 @@ from typing import Any, Literal, TypeVar
 import yaml
 
 from . import presets as _presets
+from ._thinking import ThinkingSpec, check_legacy_conflict, lift_legacy_default
 from ._utils import merge_dicts
 
 
@@ -70,6 +71,9 @@ class AdapterSpec:
 
     sample_rate: int = 44100
     """Riva TTS output sample rate in Hz."""
+
+    thinking: ThinkingSpec = field(default_factory=ThinkingSpec)
+    """How the model switches reasoning, and its default state."""
 
 
 @dataclass(frozen=True)
@@ -270,6 +274,7 @@ class LLMSpec(_RoleSpec):
         *,
         adapter: AdapterSpec | None = None,
         endpoint: EndpointSpec | None = None,
+        thinking: ThinkingSpec | None = None,
     ) -> None:
         structured = _structured_specs(
             adapter,
@@ -286,6 +291,7 @@ class LLMSpec(_RoleSpec):
                 reasoning_field=reasoning_field is not None,
                 capabilities=capabilities is not None,
                 default_extras=default_extras is not None,
+                thinking=thinking is not None,
                 timeout=timeout != 60.0,
                 health_check=health_check is not True,
             )
@@ -298,6 +304,7 @@ class LLMSpec(_RoleSpec):
                 reasoning_field=reasoning_field,
                 capabilities=capabilities or {},
                 default_extras=default_extras or {},
+                thinking=thinking or ThinkingSpec(),
             ),
             EndpointSpec(
                 base_url=base_url,
@@ -336,6 +343,7 @@ class VLMSpec(_RoleSpec):
         *,
         adapter: AdapterSpec | None = None,
         endpoint: EndpointSpec | None = None,
+        thinking: ThinkingSpec | None = None,
     ) -> None:
         structured = _structured_specs(
             adapter,
@@ -351,6 +359,7 @@ class VLMSpec(_RoleSpec):
                 api_key_env=api_key_env is not None,
                 capabilities=capabilities is not None,
                 default_extras=default_extras is not None,
+                thinking=thinking is not None,
                 timeout=timeout != 60.0,
                 health_check=health_check is not True,
             )
@@ -362,6 +371,7 @@ class VLMSpec(_RoleSpec):
                 model_name=model_name,
                 capabilities=capabilities or {},
                 default_extras=default_extras or {},
+                thinking=thinking or ThinkingSpec(),
             ),
             EndpointSpec(
                 base_url=base_url,
@@ -705,6 +715,15 @@ def _flatten_entry(body: dict[str, Any]) -> dict[str, Any]:
 
 def _build_spec(body: dict[str, Any]) -> Spec:
     resolved, preset_category = _resolve_preset(body)
+    # A profile's legacy enable_thinking key overrides an inherited preset
+    # default, so only a conflict within the profile itself is an error.
+    check_legacy_conflict(
+        ThinkingSpec(
+            control=_thinking_spec(resolved).control,
+            default=_thinking_spec(body).default,
+        ),
+        _mapping(body, "default_extras"),
+    )
     explicit_category = resolved.get("category")
     if (
         preset_category is not None
@@ -757,6 +776,9 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         readiness=_readiness(body),
         health_path=_health_path(body),
     )
+    thinking, default_extras = lift_legacy_default(
+        _thinking_spec(body), _mapping(body, "default_extras"),
+    )
     adapter = AdapterSpec(
         kind=kind,
         model_name=(
@@ -766,7 +788,8 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         ),
         reasoning_field=_optional_str(body, "reasoning_field"),
         capabilities=_mapping(body, "capabilities"),
-        default_extras=_mapping(body, "default_extras"),
+        default_extras=default_extras,
+        thinking=thinking,
         function_id=_optional_str(body, "function_id"),
         use_ssl=_riva_bool(body, "use_ssl", False),
         language=_riva_str(body, "language", "en-US", allow_empty=False),
@@ -883,6 +906,10 @@ def _mapping(body: dict[str, Any], key: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{key} must be a mapping")
     return dict(value)
+
+
+def _thinking_spec(body: dict[str, Any]) -> ThinkingSpec:
+    return ThinkingSpec.from_mapping(_mapping(body, "thinking"))
 
 
 def _optional_str(body: dict[str, Any], key: str) -> str | None:
