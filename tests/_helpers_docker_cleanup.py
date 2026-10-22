@@ -19,7 +19,11 @@ from contextlib import contextmanager
 import pytest
 from xr_ai_vllm._docker import TEST_SESSION_LABEL
 
-_MODEL_SERVER_NAME_FILTERS = ("name=^xr-ai-vllm-", "name=^xr-ai-nim-")
+# Current launchers label every model server, regardless of its configured
+# name or inference backend. Keep name discovery for legacy containers too.
+_MODEL_SERVER_FILTERS = (
+    "label=xr-ai-vllm.port", "name=^xr-ai-vllm-", "name=^xr-ai-nim-",
+)
 
 
 class _DockerInventoryError(RuntimeError):
@@ -57,8 +61,8 @@ def foreign_model_servers(session_id: str) -> list[str]:
     """Foreign model containers, including stopped ones the launcher could reuse."""
     fmt = '{{.Names}}\t{{.Label "' + TEST_SESSION_LABEL + '"}}'
     names: list[str] = []
-    for name_filter in _MODEL_SERVER_NAME_FILTERS:
-        out = _docker("ps", "-a", "--filter", name_filter, "--format", fmt, timeout=10)
+    for model_filter in _MODEL_SERVER_FILTERS:
+        out = _docker("ps", "-a", "--filter", model_filter, "--format", fmt, timeout=10)
         for line in out.splitlines():
             name, _, label = line.partition("\t")
             if name and label.strip() != session_id and name not in names:

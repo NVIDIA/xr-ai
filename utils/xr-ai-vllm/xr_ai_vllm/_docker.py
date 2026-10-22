@@ -99,6 +99,22 @@ def launch_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:20]
 
 
+def container_label_args(port: int) -> list[str]:
+    """Labels for model-server discovery and optional GPU-test ownership.
+
+    Return Docker CLI arguments identifying the server's host *port*, plus
+    ``xr-ai-test-session`` when ``XR_AI_TEST_SESSION`` is nonempty. Include
+    these arguments before the image in a new container's ``docker run``.
+    Ownership is creation-time metadata, not part of the launch fingerprint:
+    changing test sessions must not make a foreign container replaceable.
+    """
+    argv = ["--label", f"xr-ai-vllm.port={port}"]
+    test_session = os.environ.get(TEST_SESSION_ENV)
+    if test_session:
+        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
+    return argv
+
+
 def build_run_argv(
     *,
     image: str,
@@ -138,15 +154,7 @@ def build_run_argv(
 
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
-    # Label lets container_on_port find this container by port without the
-    # caller needing to know the container name — implementation detail stays
-    # inside this module.
-    argv += ["--label", f"xr-ai-vllm.port={port}"]
-    # Deliberately outside the launch fingerprint: it identifies who created
-    # the container, not how it is configured, so it must not force replacement.
-    test_session = os.environ.get(TEST_SESSION_ENV)
-    if test_session:
-        argv += ["--label", f"{TEST_SESSION_LABEL}={test_session}"]
+    argv += container_label_args(port)
     payload: dict[str, Any] = {
         "image": image,
         "port": port,

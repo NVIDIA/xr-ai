@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import _docker, load_config, resolve_model_cache
+from xr_ai_vllm import _docker, container_label_args, load_config, resolve_model_cache
 
 
 def run() -> None:
@@ -44,7 +44,7 @@ def run() -> None:
     })
     argv = [
         "docker", "run", "--name", name,
-        "--label", f"xr-ai-vllm.port={port}",
+        *container_label_args(port),
         "--label", f"{_docker._CONFIG_LABEL}={fingerprint}",
         "--runtime", "nvidia", "--ipc", "host",
         "-e", f"NVIDIA_VISIBLE_DEVICES={gpu}",

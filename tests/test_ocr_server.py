@@ -347,6 +347,7 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:first")
     monkeypatch.setattr(launcher._docker, "run_container", lambda **kw: runs.append(kw))
     monkeypatch.setenv("HF_TOKEN", "private-test-token")
+    monkeypatch.delenv(launcher._docker.TEST_SESSION_ENV, raising=False)
     launcher.run()
     assert f"TORCH_CUDA_ARCH_LIST={arch}" in builds[0]
     assert "--provenance=false" in builds[0]
@@ -359,6 +360,16 @@ def test_local_launcher_uses_shared_lifecycle_and_image_fingerprint(monkeypatch,
     monkeypatch.setattr(launcher.subprocess, "check_output", lambda *a, **kw: "sha256:second")
     launcher.run()
     assert runs[0]["argv"] != runs[1]["argv"]
+    # The same creation-time ownership contract as vLLM, independent of the
+    # model fingerprint and absent from ordinary user launches.
+    monkeypatch.setenv(launcher._docker.TEST_SESSION_ENV, "ocr-test-session")
+    launcher.run()
+    label = f"{launcher._docker.TEST_SESSION_LABEL}=ocr-test-session"
+    plain, tagged = runs[1]["argv"], runs[2]["argv"]
+    assert not any(arg.startswith(f"{launcher._docker.TEST_SESSION_LABEL}=") for arg in plain)
+    label_index = tagged.index(label)
+    assert tagged[label_index - 1] == "--label"
+    assert tagged[:label_index - 1] + tagged[label_index + 1:] == plain
 
 
 @pytest.mark.parametrize("merge_level", ["word", "sentence", "paragraph"])

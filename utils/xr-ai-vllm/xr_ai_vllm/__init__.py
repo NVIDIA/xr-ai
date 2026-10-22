@@ -54,6 +54,7 @@ from ._config import (
     resolve_model_cache,
     setup_hf_env,
 )
+from ._docker import container_label_args
 
 log = logging.getLogger(__name__)
 
@@ -303,6 +304,7 @@ def stop_persistent_servers(
 
 
 __all__ = [
+    "container_label_args",
     "serve",
     "stop_persistent_servers",
     "DEFAULT_IMAGE",
