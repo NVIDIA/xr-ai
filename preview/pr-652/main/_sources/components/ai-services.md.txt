@@ -418,9 +418,10 @@ sends `SIGTERM` or `SIGKILL`. Pocket TTS records the dedicated process group
 created by the launcher without leaving that group. Cleanup signals the
 complete group only after verifying both the listener marker and, when
 separate, the launcher's group-leader marker, so inference descendants cannot
-survive as orphans and launcher abort-time escalation can still reach Pocket
-TTS. It falls back to PID-only cleanup if group ownership cannot be verified;
-other local servers always retain PID-only cleanup. Unknown listeners and
+survive as orphans. Launcher abort-time escalation can reach Pocket TTS before
+it signals readiness; once its ready file exists when cleanup begins, the
+launcher preserves it. Explicit stop falls back to PID-only cleanup if group
+ownership cannot be verified; other local servers always retain PID-only cleanup. Unknown listeners and
 failed inspection abort cleanup without sending a signal, and
 the sample's model command with `--stop` exits nonzero if any target could not be stopped. Absent
 servers are silently skipped.
@@ -590,7 +591,10 @@ cleanup.
   wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message. Without either phrase, this model reasons by default; the reasoning
-  preamble is **not** stripped server-side. To swap checkpoints, change `model`
+  preamble is **not** stripped server-side. The `llama_nemotron` client preset
+  therefore sends `detailed thinking off` unless a call passes
+  `enable_thinking=True`; refer to {ref}`agent-sdk-models-thinking`. To swap
+  checkpoints, change `model`
   only to one with a compatible chat template, and update `tool_call_parser`
   for the replacement model's tool syntax. Revisit `max_model_len`,
   `gpu_memory_utilization`, and `tensor_parallel_size` for its context and GPU

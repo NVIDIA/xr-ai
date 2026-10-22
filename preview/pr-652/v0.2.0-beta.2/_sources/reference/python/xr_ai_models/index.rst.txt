@@ -35,6 +35,7 @@ Attributes
    xr_ai_models.KIND_SYSTEMONE
    xr_ai_models.ModelKind
    xr_ai_models.Spec
+   xr_ai_models.ThinkingControl
 
 
 Exceptions
@@ -83,6 +84,7 @@ Classes
    xr_ai_models.STTSpec
    xr_ai_models.TTSSpec
    xr_ai_models.VLMSpec
+   xr_ai_models.ThinkingSpec
    xr_ai_models.RivaSTT
    xr_ai_models.RivaTTS
 
@@ -503,6 +505,11 @@ Package Contents
 
    Structural interface for text chat-completion services.
 
+   ``enable_thinking`` requests or suppresses model reasoning for one call;
+   ``None`` uses the endpoint's configured default.  The endpoint renders it
+   in the model's own dialect, and models without a switch ignore it.
+   ``thinking_budget`` caps reasoning tokens where the model supports it.
+
 
    .. py:attribute:: capabilities
       :type:  Capabilities
@@ -511,7 +518,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
+   .. py:method:: chat(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> ChatResponse
       :async:
 
 
@@ -519,13 +526,13 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
 
       Stream user-visible response text for a sequence of chat messages.
 
 
 
-   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
+   .. py:method:: stream_events(messages: Sequence[ChatMessage], *, tools: Sequence[ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[ChatStreamEvent]
 
       Stream text, reasoning, complete tool calls, and finish events.
 
@@ -783,7 +790,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatLLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, reasoning_field: str | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible ``/v1/chat/completions`` client.
 
@@ -805,7 +812,7 @@ Package Contents
 
 
 
-   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
+   .. py:method:: chat(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> xr_ai_models.ChatResponse
       :async:
 
 
@@ -817,7 +824,7 @@ Package Contents
 
 
 
-   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
+   .. py:method:: stream(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[str]
       :async:
 
 
@@ -828,7 +835,7 @@ Package Contents
 
 
 
-   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool = False, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
+   .. py:method:: stream_events(messages: Sequence[xr_ai_models.ChatMessage], *, tools: Sequence[xr_ai_models.ToolDef] | None = None, max_tokens: int | None = None, temperature: float | None = None, enable_thinking: bool | None = None, thinking_budget: int | None = None, timeout: float | None = None, headers: Mapping[str, str] | None = None) -> AsyncIterator[xr_ai_models.ChatStreamEvent]
       :async:
 
 
@@ -989,7 +996,7 @@ Package Contents
 
 
 
-.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
+.. py:class:: OpenAICompatVLM(base_url: str, model_name: str, *, capabilities: xr_ai_models.Capabilities | None = None, default_extras: dict[str, Any] | None = None, thinking: xr_ai_models.ThinkingSpec | None = None, api_key_env: str | None = None, timeout: float = 60.0, health_check: bool = True, health_path: str = '/health', client: httpx.AsyncClient | None = None)
 
    OpenAI-compatible client for image- and video-bearing chat requests.
 
@@ -1172,6 +1179,13 @@ Package Contents
 
 
 
+   .. py:attribute:: thinking
+      :type:  xr_ai_models.ThinkingSpec
+
+      How the model switches reasoning, and its default state.
+
+
+
 .. py:data:: Category
 
    A model role supported by :class:`ModelsConfig`.
@@ -1348,7 +1362,7 @@ Package Contents
    The adapter kind for typed Clef SystemOne decision endpoints.
 
 
-.. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+.. py:class:: LLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, reasoning_field: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None, thinking: xr_ai_models.ThinkingSpec | None = None)
 
 
 
@@ -1498,7 +1512,7 @@ Package Contents
 
 
 
-.. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None)
+.. py:class:: VLMSpec(kind: ModelKind = KIND_OPENAI_COMPAT, base_url: str = '', model_name: str = '', api_key_env: str | None = None, capabilities: dict[str, Any] | None = None, default_extras: dict[str, Any] | None = None, timeout: float = 60.0, health_check: bool = True, deployment: DeploymentSpec | None = None, *, adapter: AdapterSpec | None = None, endpoint: EndpointSpec | None = None, thinking: xr_ai_models.ThinkingSpec | None = None)
 
 
 
@@ -1541,6 +1555,55 @@ Package Contents
 
    ``source`` labels validation errors and is useful when the mapping did not
    originate from a file.
+
+
+.. py:data:: ThinkingControl
+
+   How a model receives the reasoning switch.
+
+
+.. py:class:: ThinkingSpec
+
+   How a model endpoint switches reasoning, and its default state.
+
+
+   .. py:attribute:: control
+      :type:  ThinkingControl | None
+      :value: None
+
+
+      The model's switch dialect.
+
+      ``chat_template`` sends ``chat_template_kwargs.enable_thinking`` (and
+      ``thinking_budget``), as vLLM and NIM Nemotron/Qwen-style templates expect.
+      ``system_prompt`` puts a ``detailed thinking on|off`` line at the start of
+      the system message, as Llama-Nemotron expects.  ``none`` leaves requests
+      unchanged for models without a switch or endpoints that reject template
+      arguments.  ``None`` (unset) uses ``chat_template`` when ``default`` is
+      set; otherwise only a call that enables thinking sends the switch, and an
+      explicit off adds nothing to the request.
+
+
+
+   .. py:attribute:: default
+      :type:  bool | None
+      :value: None
+
+
+      Reasoning state when a call leaves ``enable_thinking`` unset.
+
+      ``None`` sends no switch, so the model's own template default applies.
+
+
+
+   .. py:method:: from_mapping(value: Mapping[str, Any]) -> ThinkingSpec
+      :classmethod:
+
+
+      Build a spec from a ``thinking`` configuration mapping.
+
+      Raises :class:`ValueError` for unknown keys or invalid values.
+
 
 
 .. py:function:: make_decision(config: xr_ai_models.ModelsConfig, name: str) -> xr_ai_models.DecisionService
